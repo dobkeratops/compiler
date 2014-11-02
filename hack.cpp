@@ -1,62 +1,6 @@
-#include <stdio.h>
-#include <iostream>
-#include <vector>
-#include <map>
-
-#ifdef DEBUG
-#define ASSERT(x) if (!(auto p=(x))) {printf("error %s:%d:%d %s\n",__FILE__,__LINE__,p, #X );exit(0);}
-#else
-#define ASSERT(x)
-#endif
-/*
-
-struct Foo {
-	Vertex& vertices	//& = non-zero-pointer
-	Vertex* vertices	// *= zero pointer
-	Vertex~ vertices	// ~ Owning pointer.
-	int[]~	indices		// Slice
-	int[..]	indices		// growable array
-}
-// you see.. you start needing names for all these.
-
-slice<int>	indices
-vector<int>	indices;
-pwn<Foo>	other_object;	// another object we refer to.		
- */
-
-#define ilist initializer_list
-
-using std::string;
-using std::vector;
-using std::cout;
-using std::map;
-using std::initializer_list;
-template<typename T,typename S>
-T& operator<<(T& dst, const vector<S>&src) { for (auto &x:src){dst<<x;};return dst;};
+#include "hack.hpp"
 
 
-template<class T,class Y> T* isa(const Y& src){ return dynamic_cast<T>(src);}
-
-enum Token {
-	NONE=0,
-	// top level structs & keywords
-	PRINT,FN,STRUCT,LET,SET,VAR,WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
-	INT,FLOAT,STR,VOID,
-	// delimiters
-	OPEN_PAREN,CLOSE_PAREN,
-	OPEN_BRACE,CLOSE_BRACE,
-	OPEN_BRACKET,CLOSE_BRACKET,
-	// operators
-	LETASSIGN,ARROW,
-	COLON,ASSIGN,
-	ADD,SUB,MUL,DIV,DOT,
-	LT,GT,LE,GE,EQ,NE,LOGAND,LOGOR,
-	AND,OR,XOR,MOD,SHL,SHR,
-	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
-	COMMA,SEMICOLON,
-	// after these indices, comes indents
-	IDENT
-};
 
 //(sourcecode "hack.cpp")
 //(normalize (lerp (obj:zaxis)(normalize(sub(target(obj:pos)))) //(settings:angle_rate)) (sloc 512 40 20))
@@ -64,8 +8,8 @@ enum Token {
 
 const char* g_token_str[]={
 	"",
-	"print","fn","struct","let","set","var","while","if","else","do","for","in","return","break",
-	"int","float","str","void",
+	"int","float","str","void","auto","one","zero","voidptr",
+	"print","fn","struct","tuple","variant","let","set","var","while","if","else","do","for","in","return","break",
 	"(",")",
 	"{","}",
 	"[","]",
@@ -74,6 +18,7 @@ const char* g_token_str[]={
 	"<",">","<=",">=","==","!=","&&","||",
 	"&","|","^","%","<<",">>",
 	"+=","-=","*=","/=","<<=",">>=","&=","|=",
+	"++","--",
 	",",";",
 	NULL,	
 };
@@ -82,35 +27,27 @@ int g_precedence[]={
     0, 1,2,2,3,3,4
 };
 
-struct StringTable {
-	int	nextId= 0;
-	bool verbose;
-	map<string,int>	names;
-	vector<string> index_to_name; //one should be index into other lol
-
-	StringTable(const char** initial){
-		verbose=false;
-		nextId=0;
-		for (int i=0; g_token_str[i];i++) {
-			auto tmp=g_token_str[i];
-			get_index(tmp,tmp+strlen(tmp));
-		}
-		ASSERT(nextId==IDENT);
+StringTable::StringTable(const char** initial){
+	verbose=false;
+	nextId=0;
+	for (int i=0; g_token_str[i];i++) {
+		auto tmp=g_token_str[i];
+		get_index(tmp,tmp+strlen(tmp));
 	}
-	int get_index(const char* str, const char* end) {
-		int len=end-str;
-		string s; s.resize(len);memcpy((char*)s.c_str(),str,len);((char*)s.c_str())[len]=0;
-		auto ret=names.find(s);
-		if (ret!=names.end())	return ret->second;		
-		names.insert(std::make_pair(s,nextId));
-		index_to_name.resize(nextId+1);
-		index_to_name[nextId]=s;
+	ASSERT(nextId==IDENT);
+}
+int StringTable::get_index(const char* str, const char* end) {
+	int len=end-str;
+	string s; s.resize(len);memcpy((char*)s.c_str(),str,len);((char*)s.c_str())[len]=0;
+	auto ret=names.find(s);
+	if (ret!=names.end())	return ret->second;		
+	names.insert(std::make_pair(s,nextId));
+	index_to_name.resize(nextId+1);
+	index_to_name[nextId]=s;
 //		std::cout<<s <<index_to_name[nextId];
-		if (verbose)
-			printf("insert[%d]%s\n",nextId,index_to_name[nextId].c_str());
-		return	nextId++;
-	};
-	void dump();
+	if (verbose)
+		printf("insert[%d]%s\n",nextId,index_to_name[nextId].c_str());
+	return	nextId++;
 };
 
 void StringTable::dump(){
@@ -122,7 +59,7 @@ void StringTable::dump(){
 
 
 StringTable g_Names(g_token_str);
-int getStringIndex(const char* str,const char* end=0) {
+int getStringIndex(const char* str,const char* end) {
 	if (!end) end=str+strlen(str);
 	return g_Names.get_index(str, end);
 }
@@ -132,238 +69,163 @@ const char* getString(int index) {
 
 
 
-
-// (tuple x y z) // grabs these fuckers as a felcher.
-//
-// its not going to be so bad.
-// 1000 lines: AST boiler-plate
-// 1000 lines: parser
-// 1000 lines: inference
-// 1000 lines: convert to C++
-// 1000 lines: error messages. 
-// Its just a code-generator for C++
-// with a syntax a little like rust.
 void indent(int depth) {
 	for (int i=0; i<depth; i++){printf("\t");};
 }
-// todo: path malarchy.
-typedef int Name;
-
-struct CallScope;
-class Node {
-public:
-	virtual  ~Node(){}; // node ID'd by vtable.
-	virtual void dump(int depth=0) const{};
-	virtual void resolve_calls(CallScope* scope){printf("empty?");};
-	virtual const char* kind_str(){return"node";}
-	virtual int get_name() const{return 0;}
-	const char* get_name_str()const{return getString(get_name());}
-};
 // Even a block is an evaluatable expression.
 // it may contain outer level statements.
 
-struct Expr : Node{
-	void dump(int depth) const {
-		indent(depth);printf("?\n");
-	}
-	virtual const char* kind_str()const{return"expr";}
-};
-// (do..) (fname ...) (operator....)
-// todo: specialize those cases.
-struct ExprScopeBlock : public Expr{};
-struct ExprIdent;
-struct Call;
-struct ExprIdent :Expr{
-	int get_name()const{return ident;}
-	int ident;
-	void dump(int depth) const {
-		indent(depth);printf("%s\n",getString(ident));
-	}
-	virtual const char* kind_str()const{return"ident";}
-	ExprIdent(int i){ident=i;}
-};
+void Expr::dump(int depth) const {
+	indent(depth);printf("?\n");
+}
 
-struct ExprBlock :public ExprScopeBlock{
-	vector<Expr*>	args;
-	Call* calls;
-	int get_name()const{
-		if (args.size()>0) return args[0]->get_name();
-		else return 0;	
-	}
-	void dump(int depth) const {
-		indent(depth);printf("(\n");
-		for (const auto x:args) { x->dump(depth+1);}
-		indent(depth);printf(")\n");
-	}
-	void resolve_calls(CallScope* scope);
-	virtual const char* kind_str()const{return"block";}
-	ExprBlock(){calls=0;}
-};
+Expr::Expr(){ type=0;}
+
+Type* ExprIdent::resolve(CallScope* scope) {
+	if (auto p=scope->get_variable(this->name)){ return p->get_type();}
+	else return this->type;
+}
+
+int ExprBlock::get_name()const{
+	if (args.size()>0) return args[0]->get_name();
+	else return 0;	
+}
+void ExprBlock::dump(int depth) const {
+	indent(depth);printf("(\n");
+	for (const auto x:args) { x->dump(depth+1);}
+	indent(depth);printf(")\n");
+}
+
+ExprBlock::ExprBlock(){call_target=0;}
 
 
-enum TypeId{
-	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
-};
-struct StructDef;
-struct Type : Node{
-	TypeId type;
-	int ident;
-	StructDef* struct_def;
-	Type* sub;
+const char* CallScope::name() const {
+	if (!parent){
+		return"global";
+	} 
+	else return getString(outer->name);
+}
 
-	virtual const char* kind_str()const{return"type";}
-	Type(TypeId tid,int i){ struct_def=0; sub=0; type=tid;ident=i; //todo: resolve-type should happen here.
-	}
-	void dump(int depth)const{
-		indent(depth);
-		printf("%s",getString(ident));
-		if (depth>=0) printf("\n");
-	}
-};
 
-bool g_lisp_mode=true;
-struct Module;
-// module base: struct(holds fns,structs), function(local fns), raw module.
-struct StructDef;
-struct ExprFnDef;
-struct VarDecl;
-struct ModuleBase : Expr {
-	Name	name;
-	ModuleBase* parent;
-	Module*	modules;
-	StructDef* structs;
-	ExprFnDef*	functions;
-	VarDecl* vars;
-	ModuleBase(){
-		vars=0;functions=0;structs=0;modules=0;
-		parent=0;
-	};
-	virtual ModuleBase* get_next_of_module()const{ASSERT(0);return nullptr;}
-	virtual const char* kind_str()const{return"mod";}
-};
-struct Module : ModuleBase {
-	Module* next_of_module;
-	Module* get_next_of_module()const{return next_of_module;}
-};
-struct ExprLiteral : Expr {
-	TypeId	type;
-	union  {int val_int; float val_float; const char* val_str;} u;
-	virtual const char* kind_str()const{return"lit";}
-	void dump(int depth) const{
-		indent(depth);
-		if (type==T_VOID){printf("void");}
-		if (type==T_INT){printf("%d",u.val_int);}
-		if (type==T_FLOAT){printf("%.7f",u.val_float);}
-		if (type==T_CONST_STRING){printf("%s",u.val_str);}
-		if (depth>0)printf("\n");
+void Type::push_back(Type* t) {	
+	if (!sub) sub=t;
+	else {
+		for (auto p=sub; sub->next; sub=sub->next){};
+		sub->next =t;
 	}
-
-	ExprLiteral(float f) {
-		type=T_FLOAT;
-		u.val_float=f;
-		printf("lit float %.3f",f);
-	}
-	ExprLiteral(int i) {
-		type=T_INT;
-		u.val_int=i;
-	}
-	ExprLiteral(const char* start,int length) {
-		type=T_CONST_STRING;
-		auto str=( char*)malloc(length+1); ;
-		u.val_str=str;memcpy(str,(void*)start,length);
-		str[length]=0;
-	}
-	~ExprLiteral(){
-		if (type==T_CONST_STRING) {
-			free((void*)u.val_str);
+}
+const char* Type::kind_str()const{return"type";}
+Type::Type(Name i){ 
+	struct_def=0;
+	sub=0;
+	next=0;
+	type_id=i; //todo: resolve-type should happen here.
+}
+	//todo: generic heirarchy equality test, duplicate code detection?
+bool Type::eq(const Type* other) const{
+	if (!(this && other)) return true;
+	if (!this || !other) return false;
+	if (this->type_id!=other->type_id)return false;
+	if (!this->sub && other->sub) return true;
+	auto p=this->sub,o=other->sub;
+	for (; p && o; p=p->next,o=o->next) { 
+		if (p->type_id!=o->type_id) {
+			return false;
 		}
 	}
-
-};
-
-struct ArgDef :Node{
-	Name name;
-	Type* type;
-	Expr* default_value;
-	ArgDef(){type=0;default_value=0;};
-	ArgDef(int i,Type* t):ArgDef(){name=i;type=t;printf("\nMAKE ARG %d %d\n", i, t?t->ident:0);}
-	void dump(int depth) const {
-		indent(depth);printf("%s ",getString(name));
-		if (type) type->dump(-1);
-		if (default_value) default_value->dump(-1);
-		if (depth>0) printf("\n");
+	if (o || p) return false; // didnt reach both..
+	return true;
+}
+void Type::dump_sub()const{
+	if (!this) return;
+	printf("%s",getString(type_id));
+	if (sub){
+		printf("<");
+		for (auto t=sub; t; t=t->next){t->dump_sub(); if(t->next)printf(",");}; 
+		printf(">");
 	}
-	virtual const char* kind_str()const{return"arg_def";}
-	~ArgDef(){}
-};
-
-struct StructDef : ModuleBase {
-	vector<ArgDef> fields;
-	virtual const char* kind_str()const{return"struct";}
-	StructDef* next_of_module;
-	ModuleBase* get_next_of_module(){return this->next_of_module;}
-};
+}
+void Type::dump(int depth)const{
+	if (!this) return;
+	indent(depth);dump_sub();
+	if (depth>=0) printf("\n");
+}
 
 
+void ExprLiteral::dump(int depth) const{
+	indent(depth);
+	if (type_id==T_VOID){printf("void");}
+	if (type_id==T_INT){printf("%d",u.val_int);}
+	if (type_id==T_FLOAT){printf("%.7f",u.val_float);}
+	if (type_id==T_CONST_STRING){printf("%s",u.val_str);}
+	if (depth>0)printf("\n");
+}
+// TODO : 'type==type' in our type-engine
+//	then we can just make function expressions for types.
 
-
-struct Ident : Expr {
-	Ident(Name n) :name(n){};
-	Name name;
-	void dump(int depth) const {
-		indent(depth);printf("ident:%s\n",getString(name));
+Type* ExprLiteral::resolve(CallScope* ){
+	if (this->type) return this->type;
+	Type* t=nullptr;
+	switch (type_id) {
+	case T_VOID: t=new Type(VOID); break;
+	case T_INT: t=new Type(INT); break;
+	case T_FLOAT: t=new Type(FLOAT); break;
+	case T_CONST_STRING: t=new Type(STR); break;
+	default: break;
 	}
-	~Ident(){}
-};
+	this->type=t;
+	return this->type;
+}
+
+ExprLiteral::ExprLiteral(float f) {
+	type=nullptr;
+	type_id=T_FLOAT;
+	u.val_float=f;
+	printf("lit float %.3f",f);
+}
+ExprLiteral::ExprLiteral(int i) {
+	type=nullptr;
+	type_id=T_INT;
+	u.val_int=i;
+}
+ExprLiteral::ExprLiteral(const char* start,int length) {
+	type=nullptr;
+	type_id=T_CONST_STRING;
+	auto str=( char*)malloc(length+1); ;
+	u.val_str=str;memcpy(str,(void*)start,length);
+	str[length]=0;
+}
+ExprLiteral::~ExprLiteral(){
+	if (type_id==T_CONST_STRING) {
+		free((void*)u.val_str);
+	}
+}
 
 
-
-
+void ArgDef::dump(int depth) const {
+	indent(depth);printf("%s ",getString(name));
+	if (type) type->dump(-1);
+	if (default_value) default_value->dump(-1);
+	if (depth>0) printf("\n");
+}
+const char* ArgDef::kind_str()const{return"arg_def";}
 
 // the operators should all just be functioncalls, really.
 // return type of function definition is of course a functoin object.
 // if we make these things inline, we create Lambdas
 // todo: receivers.
-struct FnInstance;
-struct Call;
-struct FnName;
-struct ExprFnDef :public Module {
-	ExprFnDef*	next_of_module;
-	ExprFnDef*	next_of_name;	//link of all functions of same name...
-	FnName*		fn_name;
 
-	Name name;
-	vector<ArgDef*> args;
-	ExprBlock* body;
-	Call* callers;	// linklist of callers to here
-	int get_name()const {return name;}
-	FnName* get_fn_name();
-	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(Name n, ilist<ArgDef> a, ExprBlock* b):name(n),body(b),instance(0),callers(0){
+void ExprFnDef::dump(int ind) const {
+	indent(ind);printf("(fn %s(",getString(name));
+	for (int i=0; i<args.size();i++){
+		args[i]->dump(-1);
+		printf(", ");
 	}
-	ExprFnDef(){next_of_module=0;name=0;body=0;callers=0;}
-	void dump(int ind) const {
-		indent(ind);printf("(fn %s(",getString(name));
-		for (int i=0; i<args.size();i++){
-			args[i]->dump(-1);
-			printf(", ");
-		}
-		printf(")\n");
-		this->body->dump(ind+1);
-		indent(ind);printf(")\n");
-	}
-	void resolve_calls(CallScope* scope);
-	FnInstance* instance;
-};
+	printf(")\n");
+	this->body->dump(ind+1);
+	indent(ind);printf(")\n");
+}
 
-struct FnName {
-	Name		name;
-	FnName*		next;
-	ExprFnDef*	fn_defs;
-	ExprFnDef*	getByName(Name n);
-	FnInstance* resolve(Call* site);
-	FnName(){ name=0; next=0;fn_defs=0;}
-};
 FnName*	g_fn_names;
 vector<FnName> g_functions;
 FnName* getFnName(int name) {
@@ -383,102 +245,7 @@ FnName* ExprFnDef::get_fn_name() {
 	this->next_of_name=fnm->fn_defs; fnm->fn_defs = this;
 	return	fnm;
 }
-
 /*
-// todo: assoc, precedence here.
-#define BIN_OP(NAME,OP) \
-struct NAME : public ExprBinOp { \
-	const char* name()const{return #OP;}; \
-	~NAME(){}; \
-	NAME(Expr*l, Expr* r):ExprBinOp(l,r){} \
-};
-BIN_OP(ExprAssign,=)
-BIN_OP(ExprLetAssign,:=)
-BIN_OP(ExprAddAssign,+=)
-BIN_OP(ExprSubAssign,-=)
-BIN_OP(ExprMulAssign,*=)
-BIN_OP(ExprDivAssign,/=)
-BIN_OP(ExprAdd,+)
-BIN_OP(ExprSub,-)
-BIN_OP(ExprMul,*)
-BIN_OP(ExprDiv,/)
-BIN_OP(ExprAsl,<<)
-BIN_OP(ExprAsr,>>)
-BIN_OP(ExprAnd,&)
-BIN_OP(ExprOr,|)
-BIN_OP(ExprXor,^)
-BIN_OP(ExprFunction,->)
-BIN_OP(ExprMapTo,=>)
-BIN_OP(ExprSupertype,<:)
-BIN_OP(ExprSubtype,:>)
-BIN_OP(ExprType,:)
-BIN_OP(ExprEq,==)
-BIN_OP(ExprLt,<)
-BIN_OP(ExprGt,>)
-BIN_OP(ExprLe,<=)
-BIN_OP(ExprGe,>=)
-BIN_OP(ExprNe,!=)
-*/
-
-// comma operator makes tuples.
-// Ident[x,y,z](..) = typeparams
-// Ident[]{...}  = typeparams, struct initializer
-// ident(expr) = indexing
-// .[i] is indexing operator.
-// Blah.[i]
-// T[] is dynamic array
-// T[4] is fixed array
-
-struct ExprIf : public Expr {
-	Expr* cond=0;
-	Expr* if_block=0;
-	Expr* else_block=0;
-	void dump(int depth) const {
-		indent(depth);printf("If:\n");
-		cond->dump(depth+1);
-		if_block->dump(depth+1);
-		if (else_block)	{
-			indent(depth);printf("Else:\n");
-			else_block->dump(depth+1); 
-		}
-	};
-	~ExprIf(){}
-	virtual const char* kind_str()const{return"if";}
-};
-
-// struct Foo(x,y,z){ x=..., y=..., z=...} 
-// rolls a default constructor.
-// Could we add that to C++ ??
-
-
-struct Call {
-	// linked through caller->callee & scope block
-	CallScope* scope;
-	Call* next_of_scope;
-
-	Expr*	caller;
-	Call* next_of_caller;
-
-	ExprFnDef*	callee;
-	Call* next_of_fn;
-	Call(){scope=0;next_of_scope=0;caller=0;next_of_caller=0;callee=0;next_of_fn=0;}
-};
-
-struct CallScope {
-	ExprFnDef*	outer;
-	ExprBlock* node;
-	CallScope* parent;
-	CallScope* next;
-	CallScope* child;
-	Call* calls;
-	// locals;
-	// captures.
-	const char* name()const {if (!parent){return"global";} else return getString(outer->name);}
-	CallScope(){outer=0;node=0;parent=0;next=0;child=0;calls=0;}
-	void visit_calls();
-	ExprFnDef* find_fn(Name name) const;
-};
-
 void CallScope::visit_calls() {
 	for (auto call=this->calls;call;call=call->next_of_scope) {
 		printf("%s --> %s\n",this->name(), getString(call->callee->name));
@@ -486,6 +253,7 @@ void CallScope::visit_calls() {
 	for (auto sub=this->child; sub; sub=sub->next)
 		sub->visit_calls();
 }
+*/
 void find_printf(const char*,...){};
 ExprFnDef* find_sub(Expr* n,Name name) {
 	if (auto sb=dynamic_cast<ExprBlock*>(n)) {
@@ -505,68 +273,109 @@ ExprFnDef*	CallScope::find_fn(Name name) const {
 	else if (this->parent) return parent->find_fn(name);
 	else return nullptr;
 }
-
-void ExprBlock::resolve_calls(CallScope* scope) {
-	if (this->args.size()<=0) return;
-	auto p=dynamic_cast<ExprIdent*>(this->args[0]);
-	if (p){// printf("can't resolve non ident call yet - dynamic call, fnptr?\n");
-	// TODO: Use typeparams - first compute types of arguments.
-		printf("resolve call..%s\n",getString(p->ident));
-		ExprFnDef* call_target = scope->find_fn(p->ident);
-		if (call_target) {
-			auto *call = new Call();
-			call->callee=call_target; 
-			call->caller=this;
-		// add to lists: caller knows all calls it makes (polymorphic instantiations)
-			call->next_of_caller=this->calls; this->calls=call;
-		// scope knows all calls it makes
-			call->next_of_scope=scope->calls; scope->calls=call;
-		// function knows all its callers.
-			call->next_of_fn=call_target->callers; call_target->callers=call;
-		}
+Variable* CallScope::get_variable(Name name){
+	for (auto v=this->vars; v; v=v->next) {
+		if (v->name==name) return v;
 	}
-
-
-	// Todo: Process Local Vars.
-	for (int i=1; i<this->args.size(); i++) {
-		this->args[i]->resolve_calls(scope);
+	if (this->parent){
+		if (auto p=this->parent->get_variable(name)) 
+			return	p;
 	}
+	// create a variable;
+	printf("create var %s\n",getString(name));
+	auto v=new Variable(); v->next=this->vars; this->vars=v; v->name=name; v->type=0;
+	return v;
+}
+void CallScope::dump(int depth)const {
+	indent(depth);printf("scope: %s\n{", this->outer?getString(this->outer->ident()):"global");
+	for (auto v=this->vars; v; v=v->next) {
+		printf("%p %d\n",v,v->name);
+		indent(depth); printf("var %d %s:",v->name, getString(v->name)); 
+		if (v->type){ v->type->dump(-1);} else {printf("not_type");}
+		if (depth>=0) printf("\n");
+	}
+	for (auto s=this->child; s; s=s->next){
+		printf("%p \n",s);
+		s->dump(depth+1);
+	}
+	indent(depth);printf("}\n");
 }
 
-void ExprFnDef::resolve_calls(CallScope* parent) {
+Type* ExprBlock::resolve(CallScope* scope) {
+	if (this->args.size()<=0) {
+		if (!this->type) this->type=new Type();this->type->type_id=VOID;//void..
+		return nullptr;
+	}
+	auto p=dynamic_cast<ExprIdent*>(this->args[0]);
+	if (p){
+		auto ident=p->name;
+	// TODO: Use typeparams - first compute types of arguments.
+// special forms:-
+		if (ident==DO) {	// do executes each expr, returns last ..
+			Type* ret=0;
+			for (auto i=1; i<this->args.size(); i++) {
+				ret=this->args[i]->resolve(scope);
+			}
+			return ret;
+		} 
+		else if (ident==SET) {
+			ASSERT(this->args.size()>=3);
+			auto vname=this->args[1]->ident();
+			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
+			this->args[1]->dump(0);
+			auto var= scope->get_variable(vname);
+			Type* t=this->args[2]->resolve(scope);
+			if (var->type) ASSERT(var->type->eq(t));
+			else var->type = t;
+			// todo: 2way inference.
+			// we'd report missing types - then do a pass propogating the opposite direction
+			// and bounce.
+			this->type = t;
+			return var->type;
+		}
+		else {
+			printf("resolve call..%s\n",getString(p->ident()));
+			if (!this->call_target) {
+				// Todo: Process Local Vars.
+				for (int i=1; i<this->args.size(); i++) {
+					this->args[i]->resolve(scope);
+				}
+
+				ExprFnDef* call_target = scope->find_fn(p->ident());
+				if (call_target) {
+				// add this to the targets' list of calls.
+					this->next_of_call_target = call_target->callers;
+					call_target->callers =this;
+					this->call_target=call_target;
+					this->type = call_target->resolve(scope);
+					return this->type;
+				} else {
+					return nullptr;
+				}
+			} else 
+				return this->call_target->type;
+		}
+	}
+	return nullptr;
+}
+
+Type* ExprFnDef::resolve(CallScope* parent) {
 	auto scope=new CallScope;
 	scope->parent=parent; scope->next=parent->child; parent->child=scope;
 	scope->outer=this;
 	scope->node=this->body;
-	this->body->resolve_calls(scope);
+	auto rt=this->body->resolve(scope);
+	if (this->type) {
+		ASSERT(rt==this->type);	
+	}
+	this->type=rt;
+	return rt;
 }
 
 
 void call_graph(Node* root,CallScope* scope) {
 }
 
-// [1] read an AST
-// [2] perform Whole Program Inference:
-//   generic types and implementations.
-//   do we need generics?
-//   we can make intrinsics:
-//   T[]  slice array
-//   T[..] dynamic-array
-//   T[4] fixed array
-//   T[4..] small-array.
-//
-// Why do we want to do this
-// we want (a) Whole Program Type Inference
-//         (b) Ad Hoc Overloading
-//         (c) overloads including src->dst
-/*
-Node* build_test_ast() {
-	return new FCall(new Ident(IDENT),{
-		new Ident(IDENT+1),new Ident(IDENT+2),
-			new ExprAssign(new Ident(IDENT+3),new ExprMul(new Ident(IDENT+4),new Ident(IDENT+5)))
-	});
-}
-*/
 struct Bar { string name="fo"; int x=0;};
 struct Foo {
 	Bar bar;
@@ -579,24 +388,6 @@ T& operator<<(T& dst, const Bar& src) { dst<<src.name<<src.x;return dst;};
 template<typename T>
 T& operator<<(T& dst, const Foo& src) { dst<<src.bar; dst<<src.indices;return dst;};
 
-/*
-struct TokenStream {
-	vector<Token> tokens;
-	int	 pos=0;
-//	struct Save{ TokStream* ts;int pos;~Save(){ts.restore(p);}}
-	int	save() const{ return pos;}
-	void restore(int p) { pos=p;}
-	void fwd(){pos++;};
-	void back(){--pos;};
-	int eat(){ if (pos<tokens.size()) return tokens[pos++]; else return NONE;}
-	bool eat_if(Token t){ if (tokens[pos]==t) {++pos;return true;} else return false;}
-	bool eat_unless(Token t){ if (tokens[pos]!=t) {++pos;return true;} else return false;}
-	int eat_ident() { if (tokens[pos]>=IDENT){ return tokens[pos++];} else return NONE;}
-	bool peek_if(Token t){return tokens[pos]==t;}
-	int peek(){return tokens[pos];}
-	bool peek_ident(){return tokens[pos]>=IDENT;}
-};
-*/
 bool isSymbolStart(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_';}
 bool isSymbol(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || (c>='0' && c<='9');}
 bool isNumStart(char c){return (c>='0'&&c<='9');};
@@ -689,6 +480,7 @@ ExprFnDef* parse_fn(TokenStream&src);
 Expr* parse_expr(TokenStream&src,int close) {
 	printf("\nparse_expr\n");
 	ExprBlock *node=0;
+	
 	while (true) {
 		Expr* sub=nullptr;
 		if (src.is_next_literal()) {
@@ -706,7 +498,10 @@ Expr* parse_expr(TokenStream&src,int close) {
 			break;
 //		std::cout<<tok<<getString(tok)<<"\n";
 		if (tok==FN) return parse_fn(src);		
-		if (!node)node =new ExprBlock;
+		if (!node) {
+			node =new ExprBlock;
+			if (close==0) { node->args.push_back(new ExprIdent(DO));}
+		}
 		if (tok==OPEN_PAREN) {
 			sub=parse_expr(src,CLOSE_PAREN);
 		} else  {
@@ -719,18 +514,28 @@ Expr* parse_expr(TokenStream&src,int close) {
 }
 Type* parse_type(TokenStream& src, int close) {
 	auto tok=src.eat_tok();
-	TypeId tid=T_AUTO;
-	Type* ret=0;
-	if (tok!=close){
-		switch (tok) {
-		case VOID: tid=T_VOID; break;	
-		case INT: tid=T_INT; break;
-		case FLOAT: tid=T_FLOAT; break;
-		case STR: tid=T_CONST_STRING; break;
+	Type* ret=0;	// read the first, its the form..
+	if (tok==close) return nullptr;
+
+	if (tok!=OPEN_PAREN) {
+		while (src.eat_tok()!=close){};
+		return new Type(tok);
+	}
+	else{
+		tok=src.eat_tok();
+		if (tok!=close) {
+			ret = new Type(tok);
+			while (0!=(tok=src.eat_tok())) {
+				if (tok==close) break;
+				printf("1\n");
+				ret->push_back(new Type(tok));
+				printf("2\n");
+			}
 		}
-		ret=new Type(tid,tok);
-	} else ret= new Type(T_AUTO,0);
-	while (close!=src.eat_tok()){};
+	}
+	while (src.eat_tok()!=close){};
+	printf("3\n");
+	ret->dump(-1); 
 	return ret;
 	
 }
@@ -738,8 +543,8 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	auto tok=src.eat_tok();
 	if (tok==close) return nullptr;
 	if (tok==OPEN_PAREN){
-		auto id=src.eat_ident();
-		return new ArgDef(id,parse_type(src,CLOSE_PAREN));
+		auto argname=src.eat_ident();
+		return new ArgDef(argname,parse_type(src,CLOSE_PAREN));
 	} 
 		else return new ArgDef(tok,nullptr);	
 }
@@ -778,21 +583,30 @@ ExprFnDef* parse_fn(TokenStream&src) {
 
 	return fndef;
 }
+// every file is an implicitly a function aswell taking no args
+// when imported, a module inserts a call to that function.
+// that sets up global stuff for it.
 
 const char* g_TestProg=
+/*
 "(fn lerp((a float) (b float) (f float))(+(*(- b a)f)a))"
-"(fn lerp((a int) (b int) (f int))(+(*(- b a)f)a))"
+"(fn lerp((a int) (b int) (f float))(+(*(- b a)f)a))"
 "(fn bilerp(a b c d u v)(lerp(lerp a b )(lerp c d)v))"
 "(fn invlerp(a b x)(/(- x a)(- b a)))"
 "(fn madd(a b f)(+(* b f)a))"
 "(fn min(a b)(if (< a b)a b))"
 "(fn max(a b)(if (> a b)a b))"
+"(fn interleave((a int)(c (map string int))(b (vector float))) (return)) "
 "(fn clamp(a b f)(min b (max a f)))"
-"(print (lerp 10 -20 0))"
-"(print (lerp 10.0 -20.0 0.5))"
+*/
+"(set glob_x 10)"
+"(set glob_y 10)"
+"(set glob_z zzz)"
+//"(print (lerp 10 -20 0.0))"
+//"(print (lerp 10.0 -20.0 0.5))"
 	;
 int main(int argc, const char** argv) {
-
+	
 	TextInput	src(g_TestProg);
 	auto node=parse_expr(src,0);
 //	while (auto ix=src.eat_tok()){}
@@ -802,19 +616,10 @@ int main(int argc, const char** argv) {
 	printf("%p\n",node);
 	node->dump(0);
 	CallScope global; global.node=(ExprBlock*)node;
-	node->resolve_calls(&global);
-	global.visit_calls();
+	node->resolve(&global);
+//	global.visit_calls();
+	global.dump(0);
 
-/*	auto ts=Parser2{{{IDENT,ASSIGN,IDENT,MUL,IDENT,ADD,IDENT,ADD,IDENT,MUL,IDENT,ADD,IDENT,MUL,IDENT,MUL,IDENT},0}};
-	auto prog=ts.parse();
-	prog->dump();
-
-	Foo f{{"felcher"},{1,2,3,4,5}};
-	cout << f;
-	std::cout<<"hello world\n";
-	auto prog2 = build_test_ast();
- 	prog2->dump();
-*/
 }
 
 
