@@ -57,6 +57,11 @@ enum Token {
 	// after these indices, comes indents
 	IDENT
 };
+
+//(sourcecode "hack.cpp")
+//(normalize (lerp (obj:zaxis)(normalize(sub(target(obj:pos)))) //(settings:angle_rate)) (sloc 512 40 20))
+
+
 const char* g_token_str[]={
 	"",
 	"print","fn","struct","let","set","var","while","if","else","do","for","in","return","break",
@@ -70,9 +75,9 @@ const char* g_token_str[]={
 	"&","|","^","%","<<",">>",
 	"+=","-=","*=","/=","<<=",">>=","&=","|=",
 	",",";",
-	NULL,
-	
+	NULL,	
 };
+
 int g_precedence[]={
     0, 1,2,2,3,3,4
 };
@@ -186,7 +191,7 @@ struct ExprBlock :public ExprScopeBlock{
 		else return 0;	
 	}
 	void dump(int depth) const {
-		indent(depth);printf("(\n",args.size());
+		indent(depth);printf("(\n");
 		for (const auto x:args) { x->dump(depth+1);}
 		indent(depth);printf(")\n");
 	}
@@ -211,7 +216,7 @@ struct Type : Node{
 	}
 	void dump(int depth)const{
 		indent(depth);
-		printf(getString(ident));
+		printf("%s",getString(ident));
 		if (depth>=0) printf("\n");
 	}
 };
@@ -233,7 +238,7 @@ struct ModuleBase : Expr {
 		vars=0;functions=0;structs=0;modules=0;
 		parent=0;
 	};
-	virtual ModuleBase* get_next_of_module()const{ASSERT(0);}
+	virtual ModuleBase* get_next_of_module()const{ASSERT(0);return nullptr;}
 	virtual const char* kind_str()const{return"mod";}
 };
 struct Module : ModuleBase {
@@ -319,15 +324,20 @@ struct Ident : Expr {
 // return type of function definition is of course a functoin object.
 // if we make these things inline, we create Lambdas
 // todo: receivers.
-struct FnInstance; struct Call;
+struct FnInstance;
+struct Call;
+struct FnName;
 struct ExprFnDef :public Module {
-	ExprFnDef* next_of_module;
-	
+	ExprFnDef*	next_of_module;
+	ExprFnDef*	next_of_name;	//link of all functions of same name...
+	FnName*		fn_name;
+
 	Name name;
 	vector<ArgDef*> args;
 	ExprBlock* body;
 	Call* callers;	// linklist of callers to here
 	int get_name()const {return name;}
+	FnName* get_fn_name();
 	virtual const char* kind_str()const{return"fn";}
 	ExprFnDef(Name n, ilist<ArgDef> a, ExprBlock* b):name(n),body(b),instance(0),callers(0){
 	}
@@ -347,11 +357,33 @@ struct ExprFnDef :public Module {
 };
 
 struct FnName {
-	ExprFnDef*	defs;
+	Name		name;
+	FnName*		next;
+	ExprFnDef*	fn_defs;
 	ExprFnDef*	getByName(Name n);
 	FnInstance* resolve(Call* site);
+	FnName(){ name=0; next=0;fn_defs=0;}
 };
+FnName*	g_fn_names;
 vector<FnName> g_functions;
+FnName* getFnName(int name) {
+	FnName*	n;
+	for (n=g_fn_names; n; n=n->next) {
+		if (n->name==name) return n;
+	}
+	n=new FnName(); n->name=name; n->next=g_fn_names; g_fn_names=n;
+	return n;
+}
+
+// get a function's list of shared names..
+FnName* ExprFnDef::get_fn_name() {
+	if (this->fn_name)	return	this->fn_name;
+	auto fnm=getFnName(this->name);
+	this->fn_name = fnm;
+	this->next_of_name=fnm->fn_defs; fnm->fn_defs = this;
+	return	fnm;
+}
+
 /*
 // todo: assoc, precedence here.
 #define BIN_OP(NAME,OP) \
@@ -632,9 +664,16 @@ struct TextInput {
 		auto nd=eat_number();
 		return (float)nd.num/(float)nd.denom;
 	}
+	bool is_next_number() const {
+		char c=*tok_start,c1=0;
+		if (c) c1=tok_start[1];
+		if ((c>='0' && c<='9')||(c=='-' && c1>='0' && c1<='9' && g_lisp_mode))
+			return	true;
+		else return false;
+	}
 	bool is_next_literal() const{
 		char c=*tok_start;
-		if ((c>='0' && c<='9')||(c==':' && g_lisp_mode)||(c=='\"'))
+		if (is_next_number() ||(c==':' && g_lisp_mode)||(c=='\"'))
 			return true;
 		return false;
 	}
@@ -653,7 +692,13 @@ Expr* parse_expr(TokenStream&src,int close) {
 	while (true) {
 		Expr* sub=nullptr;
 		if (src.is_next_literal()) {
-			node->args.push_back(new ExprLiteral(src.eat_float()));
+			if (src.is_next_number()) {
+				auto n=src.eat_number();
+				ExprLiteral* ln=0;
+				if (n.denom==1) {ln=new ExprLiteral(n.num);}
+				else {ln=new ExprLiteral((float)n.num/(float)n.denom);}
+				node->args.push_back(ln);		
+			}
 			continue;
 		}
 		auto tok=src.eat_tok();
@@ -708,7 +753,7 @@ ExprFnDef* parse_fn(TokenStream&src) {
 		tok=src.eat_tok();
 		ASSERT(tok==OPEN_PAREN);
 	} else fndef->name=NONE;
-	printf(getString(fndef->name));
+	printf("%s",getString(fndef->name));
 	// read function arguments
 	while (NONE!=(tok=src.peek_tok())) {
 		if (tok==CLOSE_PAREN) {src.eat_tok();break;}
@@ -736,13 +781,15 @@ ExprFnDef* parse_fn(TokenStream&src) {
 
 const char* g_TestProg=
 "(fn lerp((a float) (b float) (f float))(+(*(- b a)f)a))"
+"(fn lerp((a int) (b int) (f int))(+(*(- b a)f)a))"
 "(fn bilerp(a b c d u v)(lerp(lerp a b )(lerp c d)v))"
 "(fn invlerp(a b x)(/(- x a)(- b a)))"
 "(fn madd(a b f)(+(* b f)a))"
 "(fn min(a b)(if (< a b)a b))"
 "(fn max(a b)(if (> a b)a b))"
 "(fn clamp(a b f)(min b (max a f)))"
-"(print (lerp 10 20 0.5))"
+"(print (lerp 10 -20 0))"
+"(print (lerp 10.0 -20.0 0.5))"
 	;
 int main(int argc, const char** argv) {
 
@@ -752,7 +799,7 @@ int main(int argc, const char** argv) {
 //	printf("%d%s",getStringIndex("foo"),getString(IDENT+5));
 //	g_Names.dump();
 //	printf(getString(ADD_ASSIGN));
-	printf("%x\n",node);
+	printf("%p\n",node);
 	node->dump(0);
 	CallScope global; global.node=(ExprBlock*)node;
 	node->resolve_calls(&global);
