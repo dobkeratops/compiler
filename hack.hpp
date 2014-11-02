@@ -194,20 +194,23 @@ struct Variable {
 };
 struct CallScope {
 	ExprFnDef*	outer;
-	ExprBlock* node;
+	Expr* node;
 	CallScope* parent;
 	CallScope* next;
 	CallScope* child;
+	CallScope* global;
 	//Call* calls;
 	Variable* vars;
 	// locals;
 	// captures.
 	const char* name()const;
-	CallScope(){outer=0;node=0;parent=0;next=0;child=0;vars=0;}
+	CallScope(){outer=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
 	void visit_calls();
 	Variable* get_variable(Name ident);
+	Variable* create_variable(Name name);
 	ExprFnDef* find_fn(Name name) const;
 	void dump(int depth) const;
+	void push_child(CallScope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 };
 struct StructDef : ModuleBase {
 	vector<ArgDef> fields;
@@ -244,6 +247,7 @@ struct ExprFnDef :public Module {
 	ExprFnDef*	instances;		// Linklist of it's instanced functions.
 	ExprFnDef*	next_instance;
 	FnName*		fn_name;
+	bool resolved;
 	// Partial specialization may add one specific parameter...
 	// calls from un-instanced routines can partially implement?
 
@@ -253,9 +257,10 @@ struct ExprFnDef :public Module {
 	int get_name()const {return name;}
 	FnName* get_fn_name();
 	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(){next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;}
+	ExprFnDef(){resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;}
 	void dump(int ind) const;
 	Type* resolve(CallScope* scope);
+	Type* resolve_call(CallScope* scope);
 };
 
 struct ExprIdent :Expr{

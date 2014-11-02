@@ -274,6 +274,7 @@ ExprFnDef*	CallScope::find_fn(Name name) const {
 	else return nullptr;
 }
 Variable* CallScope::get_variable(Name name){
+	// todo: This Pointer?
 	for (auto v=this->vars; v; v=v->next) {
 		if (v->name==name) return v;
 	}
@@ -281,27 +282,35 @@ Variable* CallScope::get_variable(Name name){
 		if (auto p=this->parent->get_variable(name)) 
 			return	p;
 	}
+	if (this->global && this->global!=this){
+		if (auto p=this->global->get_variable(name)) 
+			return	p;
+	}
+	return nullptr;
+}
+
+Variable* CallScope::create_variable(Name name){
+	if (auto p=this->get_variable(name)) return p;
 	// create a variable;
-	printf("create var %s\n",getString(name));
+//	printf("create var %s in %p %p\n",getString(name), this ,this->parent);
 	auto v=new Variable(); v->next=this->vars; this->vars=v; v->name=name; v->type=0;
 	return v;
 }
 void CallScope::dump(int depth)const {
-	indent(depth);printf("scope: %s\n{", this->outer?getString(this->outer->ident()):"global");
+	indent(depth);printf("scope: %s {\n", this->outer?getString(this->outer->ident()):"global");
 	for (auto v=this->vars; v; v=v->next) {
-		printf("%p %d\n",v,v->name);
 		indent(depth); printf("var %d %s:",v->name, getString(v->name)); 
 		if (v->type){ v->type->dump(-1);} else {printf("not_type");}
 		if (depth>=0) printf("\n");
 	}
 	for (auto s=this->child; s; s=s->next){
-		printf("%p \n",s);
 		s->dump(depth+1);
 	}
 	indent(depth);printf("}\n");
 }
 
 Type* ExprBlock::resolve(CallScope* scope) {
+	printf("resolve block.. %p\n", scope);
 	if (this->args.size()<=0) {
 		if (!this->type) this->type=new Type();this->type->type_id=VOID;//void..
 		return nullptr;
@@ -321,10 +330,12 @@ Type* ExprBlock::resolve(CallScope* scope) {
 		else if (ident==SET) {
 			ASSERT(this->args.size()>=3);
 			auto vname=this->args[1]->ident();
-			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
+//			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
 			this->args[1]->dump(0);
-			auto var= scope->get_variable(vname);
+	printf("resolve block getvar %p\n", scope);
+			auto var= scope->create_variable(vname);
 			Type* t=this->args[2]->resolve(scope);
+			// If the variable exists - assignments must match it...
 			if (var->type) ASSERT(var->type->eq(t));
 			else var->type = t;
 			// todo: 2way inference.
@@ -335,21 +346,34 @@ Type* ExprBlock::resolve(CallScope* scope) {
 		}
 		else {
 			printf("resolve call..%s\n",getString(p->ident()));
+			// TODO: distinguish 'partially resolved' from fully-resolved.
 			if (!this->call_target) {
 				// Todo: Process Local Vars.
+				// TODO: accumulate types of arguments,
+				// then use them in find_fn to resolve overloading
+				// find_fn should also perform Template Instantiations.
 				for (int i=1; i<this->args.size(); i++) {
 					this->args[i]->resolve(scope);
 				}
 
 				ExprFnDef* call_target = scope->find_fn(p->ident());
 				if (call_target) {
+					if (!call_target->resolved) {
 				// add this to the targets' list of calls.
-					this->next_of_call_target = call_target->callers;
-					call_target->callers =this;
-					this->call_target=call_target;
-					this->type = call_target->resolve(scope);
-					return this->type;
+						CallScope* subscope=new CallScope;
+						scope->push_child(subscope);
+						subscope->outer=call_target;
+						printf("%p %p\n", scope,subscope);
+
+						this->next_of_call_target = call_target->callers;
+						call_target->callers =this;
+						this->call_target=call_target;
+						this->type = call_target->resolve_call(subscope);
+						call_target->resolved=true;
+						return this->type;
+					} else return call_target->type; 
 				} else {
+					
 					return nullptr;
 				}
 			} else 
@@ -359,19 +383,25 @@ Type* ExprBlock::resolve(CallScope* scope) {
 	return nullptr;
 }
 
-Type* ExprFnDef::resolve(CallScope* parent) {
-	auto scope=new CallScope;
-	scope->parent=parent; scope->next=parent->child; parent->child=scope;
-	scope->outer=this;
-	scope->node=this->body;
+Type* ExprFnDef::resolve_call(CallScope* scope) {
+//	auto scope=new CallScope;		
+//	scope->parent=parent; scope->next=parent->child; parent->child=scope;
+//	scope->outer=this;
+//	scope->node=this->body;
+	printf("resolve fn call.. %p\n", scope);
 	auto rt=this->body->resolve(scope);
+	printf("resolve %s yields type:", getString(this->ident()));if (rt)rt->dump(-1);printf("\n");
 	if (this->type) {
 		ASSERT(rt==this->type);	
+		this->resolved=true;
 	}
 	this->type=rt;
 	return rt;
 }
-
+Type* ExprFnDef::resolve(CallScope* scope) {
+// todo: makes a closure taking locals from parent scope
+	return new Type(FN);
+}
 
 void call_graph(Node* root,CallScope* scope) {
 }
@@ -599,9 +629,11 @@ const char* g_TestProg=
 "(fn interleave((a int)(c (map string int))(b (vector float))) (return)) "
 "(fn clamp(a b f)(min b (max a f)))"
 */
-"(set glob_x 10)"
-"(set glob_y 10)"
-"(set glob_z zzz)"
+"(fn they_float()(set tfl 1.0) (they_int))"
+"(fn they_int()(set tfx 1) tfx)"
+"(set glob_x 10.0)"
+"(set glob_y 1)"
+"(set glob_z (they_float))"
 //"(print (lerp 10 -20 0.0))"
 //"(print (lerp 10.0 -20.0 0.5))"
 	;
@@ -615,7 +647,7 @@ int main(int argc, const char** argv) {
 //	printf(getString(ADD_ASSIGN));
 	printf("%p\n",node);
 	node->dump(0);
-	CallScope global; global.node=(ExprBlock*)node;
+	CallScope global; global.node=(ExprBlock*)node; global.global=&global;
 	node->resolve(&global);
 //	global.visit_calls();
 	global.dump(0);
