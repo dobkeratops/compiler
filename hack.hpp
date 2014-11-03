@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <string.h>
 
 #ifdef DEBUG
 #define ASSERT(x) if (!(auto p=(x))) {printf("error %s:%d:%d %s\n",__FILE__,__LINE__,p, #X );exit(0);}
@@ -91,6 +92,7 @@ struct Type : Node{
 	bool eq(const Type* other) const;
 	void dump_sub()const;
 	void dump(int depth)const;
+	const char* get_name_str() const;
 };
 struct Expr : Node{
 	Type* type;
@@ -156,7 +158,7 @@ struct ArgDef :Node{
 	Type* type;
 	Expr* default_value;
 	ArgDef(){type=0;default_value=0;};
-	ArgDef(int i,Type* t):ArgDef(){name=i;type=t;printf("\nMAKE ARG %s", getString(i)); if (type)type->dump(-1); printf("\n");}
+	ArgDef(int n,Type* t):ArgDef(){name=n;type=t;printf("\nMAKE ARG %s", getString(n)); if (type)type->dump(-1); printf("\n");}
 	void dump(int depth) const;
 	virtual const char* kind_str()const;
 	~ArgDef(){}
@@ -207,11 +209,13 @@ struct CallScope {
 	CallScope(){outer=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
 	void visit_calls();
 	Variable* get_variable(Name ident);
-	Variable* create_variable(Name name);
-	ExprFnDef* find_fn(Name name) const;
+	Variable* create_variable(Name name,Type* t);
+	ExprFnDef* find_fn(Name name,Expr** args, int num_args) ;
 	void dump(int depth) const;
 	void push_child(CallScope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 };
+Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope);
+
 struct StructDef : ModuleBase {
 	vector<ArgDef> fields;
 	virtual const char* kind_str()const{return"struct";}
@@ -256,6 +260,7 @@ struct ExprFnDef :public Module {
 	ExprBlock* callers;	// linklist of callers to here
 	int get_name()const {return name;}
 	FnName* get_fn_name();
+	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
 	ExprFnDef(){resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;}
 	void dump(int ind) const;
