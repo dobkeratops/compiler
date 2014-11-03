@@ -20,11 +20,16 @@ const char* g_token_str[]={
 	"<",">","<=",">=","==","!=","&&","||",
 	"&","|","^","%","<<",">>",
 	"+=","-=","*=","/=","<<=",">>=","&=","|=",
-	"++","--",
+	"++","--","++","--","-","*","&","!","~",
 	",",";",
 	NULL,	
 };
 
+#define PRECEDENCE 0xff
+#define PREFIX 0x100
+#define POSTFIX 0x200
+#define FIXITY (PREFIX|POSTFIX)
+#define ASSOC 0x400
 int g_precedence[]={
 	0,
 	0,0,0,0,0,0,0,0,
@@ -35,21 +40,35 @@ int g_precedence[]={
 	0,0,
 	0,0,
 	0,10,	   // assignment, lambda
-	9,0,5,5,6,6,11,
-	4,4,4,4,4,4,3,3,
+	9,0,4,4,6,6,12,
+	3,3,3,3,3,3,2,2,
 	8,7,8,6,9,9,
-	0,0,0,0,0,0,0,0,
-	10,10,
+	ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,
+	PREFIX|10,PREFIX|10,POSTFIX|11,POSTFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,
 	0,0,
 };
+int precedence(int tok){return g_precedence[tok] & PRECEDENCE;}
+int fixity(int tok){return (g_precedence[tok] & (PREFIX|POSTFIX) );}
+int operands(int tok){ if (!(g_precedence[tok]&(FIXITY))) return 2; else return 1;}
+
+
 
 StringTable::StringTable(const char** initial){
 	verbose=false;
 	nextId=0;
-	for (int i=0; g_token_str[i];i++) {
-		auto tmp=g_token_str[i];
-		get_index(tmp,tmp+strlen(tmp));
+//	for (int i=0; g_token_str[i];i++) {
+//		auto tmp=g_token_str[i];
+//		get_index(tmp,tmp+strlen(tmp));
+//	}
+	nextId=IDENT;
+	index_to_name.resize(IDENT);
+	for (int i=0; i<index_to_name.size(); i++) {
+		index_to_name[i]=std::string(g_token_str[i]);
+		names.insert(std::make_pair(index_to_name[i],i));
 	}
+	printf("%d %s\n",COMMA,g_token_str[COMMA]);
+	printf("%d %s\n",SEMICOLON,g_token_str[SEMICOLON]);
+	printf("%d",nextId);
 	ASSERT(nextId==IDENT);
 }
 int StringTable::get_index(const char* str, const char* end) {
@@ -109,14 +128,11 @@ int ExprBlock::get_name()const{
 	if (call_op) return call_op->get_name(); else return 0;
 }
 void ExprBlock::dump(int depth) const {
-	newline(depth); if (this->call_op)print_tok(this->call_op->ident());printf("(");
+	newline(depth); if (this->call_op){print_tok(this->call_op->ident());printf("(");}else printf("{");
 	for (const auto x:this->argls) {
-		if (x) {
-			newline(depth);
-			x->dump(depth+1);}else{printf("(???)");
-		}
+		if (x) {x->dump(depth+1);}else{printf("(???)");}
 	}
-	newline(depth);printf(")");
+	newline(depth);if (this->call_op)printf(")");else printf("}");
 //	newline(depth);
 }
 
@@ -412,52 +428,57 @@ void CallScope::dump(int depth)const {
 	}
 	newline(depth);printf("}");
 }
-
+template<typename T>
+void dump(vector<T*>& src) {
+	for (int i=0; i<src.size(); i++) {
+		printf(src[i]->dump());
+	}
+}
+void print_x(){ int x; x=0;}
 Type* ExprBlock::resolve(CallScope* scope) {
-	printf("resolve block.. %p\n", scope);
+
+	printf("\nresolve block.. %p\n", scope);
 	if (this->argls.size()<=0 && !this->call_op) {
 		if (!this->type) this->type=new Type();this->type->type_id=VOID;//void..
 		return nullptr;
 	}
-	auto p=dynamic_cast<ExprIdent*>(this->call_op);
-	if (p){
-		auto op_ident=p->name;
-	// TODO: Use typeparams - first compute types of arguments.
-// special forms:-
-		if (op_ident==DO) {	// do executes each expr, returns last ..
-			Type* ret=0;
-			for (auto i=0; i<this->argls.size(); i++) {
-				ret=this->argls[i]->resolve(scope);
-			}
-			return ret;
-		} 
-		else if (op_ident==SET) {
-			ASSERT(this->argls.size()>=2);
-			auto vname=this->argls[0]->ident();
+	int op_ident=NONE;
+	ExprIdent* p=nullptr;
+	if(this->call_op){p=dynamic_cast<ExprIdent*>(this->call_op); op_ident=p->name;}
+	if (op_ident==NONE) {	// do executes each expr, returns last ..
+		Type* ret=0;
+		for (auto i=0; i<this->argls.size(); i++) {
+			ret=this->argls[i]->resolve(scope);
+		}
+		return ret;
+	} 
+	else 
+	if (op_ident==SET) {
+		ASSERT(this->argls.size()>=2);
+		auto vname=this->argls[0]->ident();
 //			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
-			this->argls[0]->dump(0);
+		this->argls[0]->dump(0);
 	printf("resolve block getvar %p\n", scope);
-			Type* t=this->argls[1]->resolve(scope);
-			auto var= scope->create_variable(vname, t);
+		Type* t=this->argls[1]->resolve(scope);
+		auto var= scope->create_variable(vname, t);
 			// If the variable exists - assignments must match it...
 			// todo: 2way inference.
 			// we'd report missing types - then do a pass propogating the opposite direction
 			// and bounce.
-			this->type = t;
-			return var->type;
-		}
-		else {
-			printf("resolve call..%s\n",getString(p->ident()));
+		this->type = t;
+		return var->type;
+	}
+	else {
+		printf("resolve call..%s\n",getString(p->ident()));
 			// TODO: distinguish 'partially resolved' from fully-resolved.
-			if (!this->call_target) {
+		if (!this->call_target) {
 				// Todo: Process Local Vars.
 				// TODO: accumulate types of arguments,
 				// then use them in find_fn to resolve overloading
 				// find_fn should also perform Template Instantiations.
-				return resolve_make_fn_call(this, scope);
-			} else 
-				return this->call_target->type;
-		}
+			return resolve_make_fn_call(this, scope);
+		} else 
+			return this->call_target->type;
 	}
 	return nullptr;
 }
@@ -637,10 +658,9 @@ void flush_op_stack(ExprBlock* block, vector<Expr*>& ops,vector<Expr*>& vals) {
 		op->call_op=pop(ops);
 		if (vals.size()>1) {
 			auto arg1=pop(vals);
-			auto arg0=pop(vals);
-			op->argls.push_back(arg0);
+			op->argls.push_back(pop(vals));
 			op->argls.push_back(arg1);
-		} else if (vals.size()>1) {
+		} else if (vals.size()>0) {
 			op->argls.push_back(pop(vals));
 		}
 		vals.push_back(op);
@@ -651,12 +671,13 @@ void flush_op_stack(ExprBlock* block, vector<Expr*>& ops,vector<Expr*>& vals) {
 	}
 }
 
-ExprBlock* parse_call(TokenStream&src,int close, Expr* op) {
+ExprBlock* parse_call(TokenStream&src,int delim,int close, Expr* op) {
 	// shunting yard parserfelchery
 	ExprBlock *node=new ExprBlock; node->call_op=op;
 	vector<Expr*> operators;
 	vector<Expr*> operands;
 	bool	was_operand=false;
+	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 
 	while (true) {
 		if (src.eat_if(close) || !src.peek_tok())
@@ -682,38 +703,46 @@ ExprBlock* parse_call(TokenStream&src,int close, Expr* op) {
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
-				operands.push_back(parse_call(src, CLOSE_PAREN, pop(operands)));
+				operands.push_back(parse_call(src, CLOSE_PAREN,SEMICOLON, pop(operands)));
 				// call result is operand
 			}
-			else operands.push_back(parse_call(src,CLOSE_PAREN,nullptr)); // just a subexpression
-			was_operand=true;
-		} else if (src.eat_if(SEMICOLON)||src.eat_if(COMMA)) {
+			else {operands.push_back(parse_call(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
+				was_operand=true;
+			}
+		} else if (src.eat_if(delim)) {
 				// dump all..
 			//ASSERT(was_operand==true);
 			flush_op_stack(node,operators,operands);
 			was_operand=false;
+		}else if (src.eat_if(wrong_delim)){
+			printf("error expected %s not %s", getString(delim),getString(wrong_delim));
+			flush_op_stack(node,operators,operands);// keep going
+			was_operand=false;
 		} else{
-//			ASSERT(was_operand==false);
 			auto tok=src.eat_tok();
 			if (was_operand) {
-				if (operators.size()>0) {
-					if (g_precedence[operators.back()->ident()]>g_precedence[tok])
-					{ // emit binary
-						auto * p=new ExprBlock();
-						p->call_op=pop(operators);
-						if (operands.size()>2){
+				while (operators.size()>0) {
+					int prev_precedence=precedence(operators.back()->ident());
+					int prec=precedence(tok);
+					if (!(prev_precedence>=prec || prec<0) ) // todo associativity
+						break;
+					auto * p=new ExprBlock();
+					p->call_op=pop(operators);
+					if (operands.size()>=2){
 						auto arg1=pop(operands);
-						auto arg0=pop(operands);
-						p->argls.push_back(arg0);
+						p->argls.push_back(pop(operands));
 						p->argls.push_back(arg1);
-						} else if (operands.size()>1){p->argls.push_back(pop(operands));} else{printf("error operator, no operands\n");}
-						operands.push_back(p);
-						was_operand=true;
-					} //else {
+					} else if (operands.size()>=1){
+						p->argls.push_back(pop(operands));
+					} else{
+						printf("error operator, no operands\n");
+					}
+					operands.push_back(p);
+					was_operand=true;
+				} //else {
 					//operators.push_back(new ExprIdent(tok));
 					//was_operand=false;
 					//}
-				}
 				operators.push_back(new ExprIdent(tok));
 				was_operand=false;
 			} else {// last was operator, we got an operand
@@ -771,7 +800,7 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	// implicit "progn" here..
 	src.expect(OPEN_BRACE);
 	fndef->body = new ExprBlock;
-	fndef->body = parse_call(src, CLOSE_BRACE, new ExprIdent(DO));
+	fndef->body = parse_call(src, CLOSE_BRACE, SEMICOLON, nullptr);
 
 	return fndef;
 }
@@ -794,9 +823,11 @@ const char* g_TestProg=
 "(fn interleave((a int)(c (map string int))(b (vector float))) (return)) "
 "(fn clamp(a b f)(min b (max a f)))"
 */
-	"x=self.pos+self.vel*dt;"
-	"fn they_float(){set(tfl, 1.0); they_int()};"
-	"foo=bar(x*3,y+(self.pos+other.pos)*0.5);"
+
+	"future.pos=self.pos+self.vel*dt;"
+	"x=y=z=3; x+y+z=0;"
+//	"fn they_float(){set(tfl, 1.0); they_int()};"
+//	"foo=bar(x*3,y+(self.pos+other.pos)*0.5);"
 /*
 "set(glob_x, 10.0);"
 "fn they_int(){set(tfx, 1); tfx};"
@@ -813,7 +844,7 @@ const char* g_TestProg=
 int main(int argc, const char** argv) {
 
 	TextInput	src(g_TestProg);
-	auto node=parse_call(src,0, new ExprIdent(DO));
+	auto node=parse_call(src,0, SEMICOLON, nullptr);
 //	while (auto ix=src.eat_tok()){}
 //	printf("%d%s",getStringIndex("foo"),getString(IDENT+5));
 //	g_Names.dump();

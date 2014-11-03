@@ -22,6 +22,7 @@ using std::initializer_list;
 template<typename T,typename S>
 T& operator<<(T& dst, const vector<S>&src) { for (auto &x:src){dst<<x;};return dst;};
 
+void newline(int depth);
 
 template<class T,class Y> T* isa(const Y& src){ return dynamic_cast<T>(src);}
 
@@ -38,10 +39,10 @@ enum Token {
 	LETASSIGN,ARROW,
 	COLON,ASSIGN,
 	ADD,SUB,MUL,DIV,DOT,
-	LT,GT,LE,GE,EQ,NE,LOGAND,LOGOR,
+	LT,GT,LE,GE,EQ,NE,LOG_AND,LOG_OR,
 	AND,OR,XOR,MOD,SHL,SHR,
 	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
-	INC,DEC,
+	PRE_INC,PRE_DEC,POST_INC,POST_DEC,NEG,DEREF,ADDR,NOT,COMPLEMENET,
 	COMMA,SEMICOLON,
 	// after these indices, comes indents
 	IDENT
@@ -273,7 +274,7 @@ struct ExprFnDef :public Module {
 struct ExprIdent :Expr{
 	int name;
 	void dump(int depth) const {
-		indent(depth);printf("%s \n",getString(name));
+		newline(depth);printf("%s ",getString(name));
 	}
 	Name ident()const override{return name;}
 	virtual const char* kind_str()const{return"ident";}
