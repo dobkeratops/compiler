@@ -9,7 +9,9 @@ void print_tok(int i){printf("%s ",getString(i));};
 const char* g_token_str[]={
 	"",
 	"int","float","str","void","auto","one","zero","voidptr",
-	"print","fn","struct","tuple","variant","let","set","var","while","if","else","do","for","in","return","break",
+	"print","fn","struct","tuple","variant",
+	"let","set","var",
+	"while","if","else","do","for","in","return","break",
 	"(",")",
 	"{","}",
 	"[","]",
@@ -24,7 +26,21 @@ const char* g_token_str[]={
 };
 
 int g_precedence[]={
-    0, 1,2,2,3,3,4
+	0,
+	0,0,0,0,0,0,0,0,
+	0,0,0,0,0,
+	0,0,0,
+	0,0,0,0,0,0,0,0,
+	0,0,
+	0,0,
+	0,0,
+	0,10,	   // assignment, lambda
+	9,0,5,5,6,6,11,
+	4,4,4,4,4,4,3,3,
+	8,7,8,6,9,9,
+	0,0,0,0,0,0,0,0,
+	10,10,
+	0,0,
 };
 
 StringTable::StringTable(const char** initial){
@@ -213,8 +229,8 @@ ExprLiteral::~ExprLiteral(){
 
 
 void ArgDef::dump(int depth) const {
-	newline(depth);printf("%s ",getString(name));
-	if (type) type->dump(-1);
+	newline(depth);printf("%s",getString(name));
+	if (type) {printf(":");type->dump(-1);}
 	if (default_value) default_value->dump(-1);
 }
 const char* ArgDef::kind_str()const{return"arg_def";}
@@ -375,7 +391,7 @@ Variable* CallScope::get_variable(Name name){
 Variable* CallScope::create_variable(Name name,Type* t){
 
 	if (auto var=this->get_variable(name)) {
-		if (var->type) ASSERT(var->type->eq(t));
+		if (var->type) {ASSERT(var->type->eq(t));}
 		else var->type = t;
 
 		return var;
@@ -416,7 +432,7 @@ Type* ExprBlock::resolve(CallScope* scope) {
 			return ret;
 		} 
 		else if (op_ident==SET) {
-			ASSERT(this->args.size()>=2);
+			ASSERT(this->argls.size()>=2);
 			auto vname=this->argls[0]->ident();
 //			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
 			this->argls[0]->dump(0);
@@ -611,11 +627,42 @@ typedef TextInput TokenStream;
 Expr* parse_lisp(TokenStream& src);
 ExprFnDef* parse_fn(TokenStream&src);
 
+template<typename T>
+T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
+//#define pop(X) ASSERT(X.size()>0); pop_sub(X);
+
+void flush_op_stack(ExprBlock* block, vector<Expr*>& ops,vector<Expr*>& vals) {
+	while (ops.size()>0) {
+		ExprBlock* op=new ExprBlock;
+		op->call_op=pop(ops);
+		if (vals.size()>1) {
+			auto arg1=pop(vals);
+			auto arg0=pop(vals);
+			op->argls.push_back(arg0);
+			op->argls.push_back(arg1);
+		} else if (vals.size()>1) {
+			op->argls.push_back(pop(vals));
+		}
+		vals.push_back(op);
+//		block->argls.push_back(op);
+	}
+	while (vals.size()) {
+		block->argls.push_back(pop(vals));
+	}
+}
+
 ExprBlock* parse_call(TokenStream&src,int close, Expr* op) {
-	//printf("\nparse_expr in %s\n",getString(op?op->ident():0)); 
+	// shunting yard parserfelchery
 	ExprBlock *node=new ExprBlock; node->call_op=op;
+	vector<Expr*> operators;
+	vector<Expr*> operands;
+	bool	was_operand=false;
 
 	while (true) {
+		if (src.eat_if(close) || !src.peek_tok())
+			break;
+		printf("parse:- %d %d\n",operands.size(),operators.size());
+		print_tok(src.peek_tok());
 		Expr* sub=nullptr;
 		if (src.is_next_literal()) {
 			if (src.is_next_number()) {
@@ -623,32 +670,61 @@ ExprBlock* parse_call(TokenStream&src,int close, Expr* op) {
 				ExprLiteral* ln=0;
 				if (n.denom==1) {ln=new ExprLiteral(n.num);}
 				else {ln=new ExprLiteral((float)n.num/(float)n.denom);}
-				node->argls.push_back(ln);		
+				operands.push_back(ln);		
+				was_operand=true;
 				continue;
 			}
 		}
-		auto tok=src.eat_tok();
-		//printf("tok in %s:",getString(op?op->ident():0));print_tok(tok);printf("\n");
-		if (!tok || tok==close) {
-			//printf("close with ");print_tok(tok);
-			break;
+		if (src.eat_if(FN)) {
+			ASSERT(!was_operand);
+			operands.push_back(parse_fn(src)); was_operand=true;
+			
 		}
-
-		if (tok==FN) sub= parse_fn(src);
-
-		else if (tok==OPEN_PAREN) {
-			sub=parse_call(src,CLOSE_PAREN,nullptr);
-		} else  {
-			if (src.peek_tok()==OPEN_PAREN) {
-				src.eat_tok();
-				//printf("Begin Call ");print_tok(tok);printf("\n");
-				sub=parse_call(src, CLOSE_PAREN, new ExprIdent(tok));
-				//printf("End Call ");print_tok(tok);printf("\n");
-			} else sub=new ExprIdent(tok);
+		else if (src.eat_if(OPEN_PAREN)) {
+			if (was_operand){
+				operands.push_back(parse_call(src, CLOSE_PAREN, pop(operands)));
+				// call result is operand
+			}
+			else operands.push_back(parse_call(src,CLOSE_PAREN,nullptr)); // just a subexpression
+			was_operand=true;
+		} else if (src.eat_if(SEMICOLON)||src.eat_if(COMMA)) {
+				// dump all..
+			//ASSERT(was_operand==true);
+			flush_op_stack(node,operators,operands);
+			was_operand=false;
+		} else{
+//			ASSERT(was_operand==false);
+			auto tok=src.eat_tok();
+			if (was_operand) {
+				if (operators.size()>0) {
+					if (g_precedence[operators.back()->ident()]>g_precedence[tok])
+					{ // emit binary
+						auto * p=new ExprBlock();
+						p->call_op=pop(operators);
+						if (operands.size()>2){
+						auto arg1=pop(operands);
+						auto arg0=pop(operands);
+						p->argls.push_back(arg0);
+						p->argls.push_back(arg1);
+						} else if (operands.size()>1){p->argls.push_back(pop(operands));} else{printf("error operator, no operands\n");}
+						operands.push_back(p);
+						was_operand=true;
+					} //else {
+					//operators.push_back(new ExprIdent(tok));
+					//was_operand=false;
+					//}
+				}
+				operators.push_back(new ExprIdent(tok));
+				was_operand=false;
+			} else {// last was operator, we got an operand
+				operands.push_back(new ExprIdent(tok));
+				was_operand=true;
+			}
 		}
-		ASSERT(sub);
-		node->argls.push_back(sub);
+		//ASSERT(sub);
+		//node->argls.push_back(sub);
 	};
+	flush_op_stack(node,operators,operands);
 	return node;
 }
 
@@ -718,24 +794,20 @@ const char* g_TestProg=
 "(fn interleave((a int)(c (map string int))(b (vector float))) (return)) "
 "(fn clamp(a b f)(min b (max a f)))"
 */
-"set(glob_x 10.0)"
-"fn they_float(){set(tfl 1.0) they_int()}"
-"fn they_int(){set(tfx 1) tfx}"
-//"(fn generic_fn((x int) (y int)) x)"
-//"(fn generic_fn((x int) (y float)) y)"
-"fn generic_fn(x y){y}"
-"fn generic_fn(x y:float){y}"
-"fn generic_fn(x y:int){y}"
-"fn generic_fn(x:float y:float){ y}"
-//"(fn generic_fn(x y) x)"
-"set(glob_y 1)"
-//"(set glob_z (they_float))"
-"set(glob_p generic_fn(0.0 1.3))"
-"set(glob_q generic_fn(0.0 1))"
-//"(set glob_p (generic_fn 2 2))"
-
-//"(print (lerp 10 -20 0.0))"
-//"(print (lerp 10.0 -20.0 0.5))"
+	"x=self.pos+self.vel*dt;"
+	"fn they_float(){set(tfl, 1.0); they_int()};"
+	"foo=bar(x*3,y+(self.pos+other.pos)*0.5);"
+/*
+"set(glob_x, 10.0);"
+"fn they_int(){set(tfx, 1); tfx};"
+"fn generic_fn(x y){y};"
+"fn generic_fn(x y:float){y};"
+	"fn generic_fn(x y:int){y};"
+	"fn generic_fn(x:float y:float){ y};"
+	"set(glob_y ,1);"
+	"set(glob_p, generic_fn(0.0, 1.3));"
+	"set(glob_q, generic_fn(0.0, 1));"
+*/
 	;
 // when this works - it can be like SPECS
 int main(int argc, const char** argv) {
