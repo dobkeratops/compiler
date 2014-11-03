@@ -15,11 +15,11 @@ const char* g_token_str[]={
 	"(",")",
 	"{","}",
 	"[","]",
-	":=","->",
-	":","=","+","-","*","/",".",
+	"->","=>","<-","::",
+	":","+","-","*","/",".",
 	"<",">","<=",">=","==","!=","&&","||",
 	"&","|","^","%","<<",">>",
-	"+=","-=","*=","/=","<<=",">>=","&=","|=",
+	"=",":=","+=","-=","*=","/=","<<=",">>=","&=","|=",
 	"++","--","++","--","-","*","&","!","~",
 	",",";",
 	NULL,	
@@ -30,7 +30,7 @@ const char* g_token_str[]={
 #define POSTFIX 0x200
 #define FIXITY (PREFIX|POSTFIX)
 #define ASSOC 0x400
-int g_precedence[]={
+int g_tok_info[]={
 	0,
 	0,0,0,0,0,0,0,0,
 	0,0,0,0,0,
@@ -39,17 +39,18 @@ int g_precedence[]={
 	0,0,
 	0,0,
 	0,0,
-	0,10,	   // assignment, lambda
-	9,0,4,4,6,6,12,
+	10,10,10,13,	   // assignment, lambda
+	9,4,4,6,6,12,
 	3,3,3,3,3,3,2,2,
 	8,7,8,6,9,9,
-	ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,
+	ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,
 	PREFIX|10,PREFIX|10,POSTFIX|11,POSTFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,
 	0,0,
 };
-int precedence(int tok){return g_precedence[tok] & PRECEDENCE;}
-int fixity(int tok){return (g_precedence[tok] & (PREFIX|POSTFIX) );}
-int operands(int tok){ if (!(g_precedence[tok]&(FIXITY))) return 2; else return 1;}
+int precedence(int tok){return g_tok_info[tok] & PRECEDENCE;}
+int fixity(int tok){return (g_tok_info[tok] & (PREFIX|POSTFIX) );}
+int operands(int tok){ if (!(g_tok_info[tok]&(FIXITY))) return 2; else return 1;}
+int assoc(int tok){return g_tok_info[tok]&ASSOC;}
 
 
 
@@ -130,7 +131,7 @@ int ExprBlock::get_name()const{
 void ExprBlock::dump(int depth) const {
 	newline(depth); if (this->call_op){print_tok(this->call_op->ident());printf("(");}else printf("{");
 	for (const auto x:this->argls) {
-		if (x) {x->dump(depth+1);}else{printf("(???)");}
+		if (x) {x->dump(depth+1);}else{printf("(none)");}
 	}
 	newline(depth);if (this->call_op)printf(")");else printf("}");
 //	newline(depth);
@@ -154,22 +155,22 @@ void Type::push_back(Type* t) {
 		sub->next =t;
 	}
 }
-const char* Type::get_name_str() const{
+const char* Node::get_name_str() const{
 	if (!this) return "(no_type)";
-	return getString(this->type_id);
+	return getString(this->name);
 }
 const char* Type::kind_str()const{return"type";}
 Type::Type(Name i){ 
 	struct_def=0;
 	sub=0;
 	next=0;
-	type_id=i; //todo: resolve-type should happen here.
+	name=i; //todo: resolve-type should happen here.
 }
 	//todo: generic heirarchy equality test, duplicate code detection?
 bool Type::eq(const Type* other) const{
 	if ((!this) && (!other)) return true;
 	if (!(this && other)) return false;
-	if (this->type_id!=other->type_id)return false;
+	if (this->name!=other->name)return false;
 	return true;
 //	if (!this->sub && other->sub)) return true;
 	auto p=this->sub,o=other->sub;
@@ -182,7 +183,7 @@ bool Type::eq(const Type* other) const{
 }
 void Type::dump_sub()const{
 	if (!this) return;
-	printf("%s",getString(type_id));
+	printf("%s",getString(name));
 	if (sub){
 		printf("<");
 		for (auto t=sub; t; t=t->next){t->dump_sub(); if(t->next)printf(",");}; 
@@ -267,10 +268,8 @@ void ExprFnDef::dump(int ind) const {
 		args[i]->dump(-1);
 		printf(",");
 	}
-	printf(")\t{");
-	this->body->dump(ind+1);
-	newline(ind);printf("}");
-}
+	printf(")");
+	this->body->dump(ind);}
 
 FnName*	g_fn_names;
 vector<FnName> g_functions;
@@ -434,12 +433,11 @@ void dump(vector<T*>& src) {
 		printf(src[i]->dump());
 	}
 }
-void print_x(){ int x; x=0;}
 Type* ExprBlock::resolve(CallScope* scope) {
 
 	printf("\nresolve block.. %p\n", scope);
 	if (this->argls.size()<=0 && !this->call_op) {
-		if (!this->type) this->type=new Type();this->type->type_id=VOID;//void..
+		if (!this->type) this->type=new Type();this->type->name=VOID;//void..
 		return nullptr;
 	}
 	int op_ident=NONE;
@@ -671,7 +669,7 @@ void flush_op_stack(ExprBlock* block, vector<Expr*>& ops,vector<Expr*>& vals) {
 	}
 }
 
-ExprBlock* parse_call(TokenStream&src,int delim,int close, Expr* op) {
+ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	// shunting yard parserfelchery
 	ExprBlock *node=new ExprBlock; node->call_op=op;
 	vector<Expr*> operators;
@@ -682,7 +680,8 @@ ExprBlock* parse_call(TokenStream&src,int delim,int close, Expr* op) {
 	while (true) {
 		if (src.eat_if(close) || !src.peek_tok())
 			break;
-		printf("parse:- %d %d\n",operands.size(),operators.size());
+		printf(":%s\n",getString(src.peek_tok()));
+		printf("parse:- %zu %zu\n",operands.size(),operators.size());
 		print_tok(src.peek_tok());
 		Expr* sub=nullptr;
 		if (src.is_next_literal()) {
@@ -697,7 +696,7 @@ ExprBlock* parse_call(TokenStream&src,int delim,int close, Expr* op) {
 			}
 		}
 		if (src.eat_if(FN)) {
-			ASSERT(!was_operand);
+//			ASSERT(!was_operand);
 			operands.push_back(parse_fn(src)); was_operand=true;
 			
 		}
@@ -712,6 +711,7 @@ ExprBlock* parse_call(TokenStream&src,int delim,int close, Expr* op) {
 		} else if (src.eat_if(delim)) {
 				// dump all..
 			//ASSERT(was_operand==true);
+			printf("delimiter\n");
 			flush_op_stack(node,operators,operands);
 			was_operand=false;
 		}else if (src.eat_if(wrong_delim)){
@@ -724,7 +724,7 @@ ExprBlock* parse_call(TokenStream&src,int delim,int close, Expr* op) {
 				while (operators.size()>0) {
 					int prev_precedence=precedence(operators.back()->ident());
 					int prec=precedence(tok);
-					if (!(prev_precedence>=prec || prec<0) ) // todo associativity
+					if (!(prev_precedence>=prec || assoc(tok)) ) // todo associativity
 						break;
 					auto * p=new ExprBlock();
 					p->call_op=pop(operators);
@@ -795,6 +795,7 @@ ExprFnDef* parse_fn(TokenStream&src) {
 		if (tok==CLOSE_PAREN) {src.eat_tok();break;}
 		printf(" arg:%s ",getString(tok));
 		fndef->args.push_back(parse_arg(src,CLOSE_PAREN));
+		src.eat_if(COMMA);
 	}
 	printf("fn body:");
 	// implicit "progn" here..
@@ -826,7 +827,9 @@ const char* g_TestProg=
 
 	"future.pos=self.pos+self.vel*dt;"
 	"x=y=z=3; x+y+z=0;"
-//	"fn they_float(){set(tfl, 1.0); they_int()};"
+	"fn they_float(){set(tfl, 1.0); they_int();};"
+	"fn lerp(a:float,b:float,f:float){(b-a)*f+a}"
+	"fn mad(a:float,b:float,f:float){a+b*f}"
 //	"foo=bar(x*3,y+(self.pos+other.pos)*0.5);"
 /*
 "set(glob_x, 10.0);"

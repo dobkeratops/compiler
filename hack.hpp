@@ -36,12 +36,11 @@ enum Token {
 	OPEN_BRACE,CLOSE_BRACE,
 	OPEN_BRACKET,CLOSE_BRACKET,
 	// operators
-	LETASSIGN,ARROW,
-	COLON,ASSIGN,
-	ADD,SUB,MUL,DIV,DOT,
+	ARROW,FAT_ARROW,REV_ARROW,DOUBLE_COLON,
+	COLON,ADD,SUB,MUL,DIV,DOT,
 	LT,GT,LE,GE,EQ,NE,LOG_AND,LOG_OR,
 	AND,OR,XOR,MOD,SHL,SHR,
-	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
+	ASSIGN,LET_ASSIGN,ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,NEG,DEREF,ADDR,NOT,COMPLEMENET,
 	COMMA,SEMICOLON,
 	// after these indices, comes indents
@@ -74,34 +73,33 @@ struct Type;
 
 class Node {
 public:
+	Name name;
 	int visited;					// anti-recursion flag.
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
 	virtual Type* resolve(CallScope* scope){printf("empty?");return nullptr;};
 	virtual const char* kind_str(){return"node";}
 	virtual int get_name() const{return 0;}
-	const char* get_name_str()const{return getString(get_name());}
+	const char* get_name_str()const;
+	Name ident() const  { if (this)return this->name;else return 0;}
 };
 struct Type : Node{
-	Name	type_id;	
 	StructDef* struct_def;
 	Type*	sub;	// a type is itself a tree
 	Type*	next;
 	void push_back(Type* t);
 	virtual const char* kind_str()const;
 	Type(Name i);
-	Type() { type_id=0;sub=0;next=0; struct_def=0;}
+	Type() { name=0;sub=0;next=0; struct_def=0;}
 	bool eq(const Type* other) const;
 	void dump_sub()const;
 	void dump(int depth)const;
-	const char* get_name_str() const;
 };
 struct Expr : Node{
 	Type* type;
 	void dump(int depth) const;
 	Expr();
 	virtual const char* kind_str()const{return"expr";}
-	virtual Name ident() const  { return VOID;}
 };
 struct ExprScopeBlock : public Expr{};
 struct ExprFnDef;
@@ -128,7 +126,6 @@ struct StructDef;
 struct ExprFnDef;
 struct VarDecl;
 struct ModuleBase : Expr {
-	Name	name;
 	ModuleBase* parent;
 	Module*	modules;
 	StructDef* structs;
@@ -137,7 +134,6 @@ struct ModuleBase : Expr {
 	ModuleBase(){vars=0;functions=0;structs=0;modules=0;parent=0;};
 	virtual ModuleBase* get_next_of_module()const{ASSERT(0);return nullptr;}
 	virtual const char* kind_str()const{return"mod";}
-	Name ident() const {return this->name;}
 };
 struct Module : ModuleBase {
 	Module* next_of_module;
@@ -272,11 +268,9 @@ struct ExprFnDef :public Module {
 };
 
 struct ExprIdent :Expr{
-	int name;
 	void dump(int depth) const {
 		newline(depth);printf("%s ",getString(name));
 	}
-	Name ident()const override{return name;}
 	virtual const char* kind_str()const{return"ident";}
 	ExprIdent(int i){name=i;}
 	Type* resolve(CallScope* scope);
