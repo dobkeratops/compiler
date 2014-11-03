@@ -104,7 +104,8 @@ struct Expr : Node{
 struct ExprScopeBlock : public Expr{};
 struct ExprFnDef;
 struct ExprBlock :public ExprScopeBlock{
-	vector<Expr*>	args;
+	Expr*	call_op;
+	vector<Expr*>	argls;
 	ExprFnDef*	call_target;
 	ExprBlock* next_of_call_target;	// to walk callsites to a function
 	int get_name()const;

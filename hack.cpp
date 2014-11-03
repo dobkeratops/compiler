@@ -4,6 +4,7 @@
 //(sourcecode "hack.cpp")
 //(normalize (lerp (obj:zaxis)(normalize(sub(target(obj:pos)))) //(settings:angle_rate)) (sloc 512 40 20))
 
+void print_tok(int i){printf("%s ",getString(i));};
 
 const char* g_token_str[]={
 	"",
@@ -71,11 +72,14 @@ const char* getString(int index) {
 void indent(int depth) {
 	for (int i=0; i<depth; i++){printf("\t");};
 }
+void newline(int depth) {
+	if (depth>=0) printf("\n"); indent(depth);
+}
 // Even a block is an evaluatable expression.
 // it may contain outer level statements.
 
 void Expr::dump(int depth) const {
-	indent(depth);printf("?\n");
+	newline(depth);printf("(?)");
 }
 
 Expr::Expr(){ type=0;}
@@ -86,13 +90,18 @@ Type* ExprIdent::resolve(CallScope* scope) {
 }
 
 int ExprBlock::get_name()const{
-	if (args.size()>0) return args[0]->get_name();
-	else return 0;	
+	if (call_op) return call_op->get_name(); else return 0;
 }
 void ExprBlock::dump(int depth) const {
-	indent(depth);printf("(\n");
-	for (const auto x:args) { x->dump(depth+1);}
-	indent(depth);printf(")\n");
+	newline(depth); if (this->call_op)print_tok(this->call_op->ident());printf("(");
+	for (const auto x:this->argls) {
+		if (x) {
+			newline(depth);
+			x->dump(depth+1);}else{printf("(???)");
+		}
+	}
+	newline(depth);printf(")");
+//	newline(depth);
 }
 
 ExprBlock::ExprBlock(){call_target=0;}
@@ -150,18 +159,16 @@ void Type::dump_sub()const{
 }
 void Type::dump(int depth)const{
 	if (!this) return;
-	indent(depth);dump_sub();
-	if (depth>=0) printf("\n");
+	newline(depth);dump_sub();
 }
 
 
 void ExprLiteral::dump(int depth) const{
-	indent(depth);
+	newline(depth);
 	if (type_id==T_VOID){printf("void");}
 	if (type_id==T_INT){printf("%d",u.val_int);}
 	if (type_id==T_FLOAT){printf("%.7f",u.val_float);}
 	if (type_id==T_CONST_STRING){printf("%s",u.val_str);}
-	if (depth>0)printf("\n");
 }
 // TODO : 'type==type' in our type-engine
 //	then we can just make function expressions for types.
@@ -206,10 +213,9 @@ ExprLiteral::~ExprLiteral(){
 
 
 void ArgDef::dump(int depth) const {
-	indent(depth);printf("%s ",getString(name));
+	newline(depth);printf("%s ",getString(name));
 	if (type) type->dump(-1);
 	if (default_value) default_value->dump(-1);
-	if (depth>0) printf("\n");
 }
 const char* ArgDef::kind_str()const{return"arg_def";}
 
@@ -224,14 +230,14 @@ bool ExprFnDef::is_generic() const {
 	return false;
 }
 void ExprFnDef::dump(int ind) const {
-	indent(ind);printf("(fn %s(",getString(name));
+	newline(ind);printf("fn %s(",getString(name));
 	for (int i=0; i<args.size();i++){
 		args[i]->dump(-1);
-		printf(", ");
+		printf(",");
 	}
-	printf(")\n");
+	printf(")\t{");
 	this->body->dump(ind+1);
-	indent(ind);printf(")\n");
+	newline(ind);printf("}");
 }
 
 FnName*	g_fn_names;
@@ -286,7 +292,7 @@ void find_printf(const char*,...){};
 void find_sub(Expr* src,Name name,Expr** args, int num_args, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
 		find_printf("look for %s in %s\n",getString(name),src->get_name_str());
-		for (auto x:sb->args) {
+		for (auto x:sb->argls) {
 			find_sub(x,name,args,num_args, best_fn,best_score,ambiguity);
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
@@ -365,6 +371,7 @@ Variable* CallScope::get_variable(Name name){
 	return nullptr;
 }
 
+
 Variable* CallScope::create_variable(Name name,Type* t){
 
 	if (auto var=this->get_variable(name)) {
@@ -379,43 +386,42 @@ Variable* CallScope::create_variable(Name name,Type* t){
 	return v;
 }
 void CallScope::dump(int depth)const {
-	indent(depth);printf("scope: %s {\n", this->outer?getString(this->outer->ident()):"global");
+	newline(depth);printf("scope: %s {", this->outer?getString(this->outer->ident()):"global");
 	for (auto v=this->vars; v; v=v->next) {
-		indent(depth+1); printf("var %d %s:",v->name, getString(v->name)); 
+		newline(depth+1); printf("var %d %s:",v->name, getString(v->name)); 
 		if (v->type){ v->type->dump(-1);} else {printf("not_type");}
-		if (depth>=0) printf("\n");
 	}
 	for (auto s=this->child; s; s=s->next){
 		s->dump(depth+1);
 	}
-	indent(depth);printf("}\n");
+	newline(depth);printf("}");
 }
 
 Type* ExprBlock::resolve(CallScope* scope) {
 	printf("resolve block.. %p\n", scope);
-	if (this->args.size()<=0) {
+	if (this->argls.size()<=0 && !this->call_op) {
 		if (!this->type) this->type=new Type();this->type->type_id=VOID;//void..
 		return nullptr;
 	}
-	auto p=dynamic_cast<ExprIdent*>(this->args[0]);
+	auto p=dynamic_cast<ExprIdent*>(this->call_op);
 	if (p){
-		auto ident=p->name;
+		auto op_ident=p->name;
 	// TODO: Use typeparams - first compute types of arguments.
 // special forms:-
-		if (ident==DO) {	// do executes each expr, returns last ..
+		if (op_ident==DO) {	// do executes each expr, returns last ..
 			Type* ret=0;
-			for (auto i=1; i<this->args.size(); i++) {
-				ret=this->args[i]->resolve(scope);
+			for (auto i=0; i<this->argls.size(); i++) {
+				ret=this->argls[i]->resolve(scope);
 			}
 			return ret;
 		} 
-		else if (ident==SET) {
-			ASSERT(this->args.size()>=3);
-			auto vname=this->args[1]->ident();
+		else if (op_ident==SET) {
+			ASSERT(this->args.size()>=2);
+			auto vname=this->argls[0]->ident();
 //			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
-			this->args[1]->dump(0);
+			this->argls[0]->dump(0);
 	printf("resolve block getvar %p\n", scope);
-			Type* t=this->args[2]->resolve(scope);
+			Type* t=this->argls[1]->resolve(scope);
 			auto var= scope->create_variable(vname, t);
 			// If the variable exists - assignments must match it...
 			// todo: 2way inference.
@@ -441,11 +447,11 @@ Type* ExprBlock::resolve(CallScope* scope) {
 }
 
 Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope) {
-	for (int i=1; i<block->args.size(); i++) {
-		block->args[i]->resolve(scope);
-		printf("arg %d type=",i); cout<<block->args[i]->type<<"\n";//->dump(0); printf("\n");
+	for (int i=0; i<block->argls.size(); i++) {
+		block->argls[i]->resolve(scope);
+		printf("arg %d type=",i); cout<<block->argls[i]->type<<"\n";//->dump(0); printf("\n");
 	}
-	ExprFnDef* call_target = scope->find_fn(block->args[0]->ident(), &block->args[1],block->args.size()-1);
+	ExprFnDef* call_target = scope->find_fn(block->call_op->ident(), &block->argls[0],block->argls.size());
 	auto fnc=call_target;
 	if (call_target) {
 		if (call_target->resolved) {
@@ -455,8 +461,8 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope) {
 		CallScope* subscope=new CallScope;
 
 		// create a local for each supplied argument, using its type..
-		for (int i=0; i<block->args.size()-1 && i<fnc->args.size(); i++) {
-			subscope->create_variable(fnc->args[i]->name, block->args[i+1]->type);
+		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
+			subscope->create_variable(fnc->args[i]->name, block->argls[i]->type);
 		}
 		
 		// TODO: insert expressions for the default arguments
@@ -471,10 +477,7 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope) {
 		return block->type;
 	}
 	else 
-			return nullptr;
-			
-			
-	return nullptr;
+		return nullptr;
 }
 
 
@@ -553,9 +556,13 @@ struct TextInput {
 		advance_tok();
 		return r;
 	}
+	bool eat_if(int i) {	
+		if (peek_tok()==i) {eat_tok(); return true;}
+		else return false;
+	}
 	int eat_ident() {
 		auto r=eat_tok();
-		ASSERT(r>=IDENT);
+		if (r<IDENT) {printf("expected ident found %s",getString(r));exit(0);}
 		return r;
 	}
 	int eat_int() {
@@ -596,16 +603,18 @@ struct TextInput {
 
 	int peek_tok(){return curr_tok;}
 	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
+	int expect(int t){ int x;if (t!=(x=eat_tok())) {printf("expected %s found %s",getString(t), getString(x));exit(0);} return x;}
 };
+void unexpected(int t){printf("unexpected %s\n",getString(t));exit(0);}
 typedef TextInput TokenStream;
 
 Expr* parse_lisp(TokenStream& src);
 ExprFnDef* parse_fn(TokenStream&src);
 
-Expr* parse_expr(TokenStream&src,int close) {
-	printf("\nparse_expr\n");
-	ExprBlock *node=0;
-	
+ExprBlock* parse_call(TokenStream&src,int close, Expr* op) {
+	//printf("\nparse_expr in %s\n",getString(op?op->ident():0)); 
+	ExprBlock *node=new ExprBlock; node->call_op=op;
+
 	while (true) {
 		Expr* sub=nullptr;
 		if (src.is_next_literal()) {
@@ -614,26 +623,31 @@ Expr* parse_expr(TokenStream&src,int close) {
 				ExprLiteral* ln=0;
 				if (n.denom==1) {ln=new ExprLiteral(n.num);}
 				else {ln=new ExprLiteral((float)n.num/(float)n.denom);}
-				node->args.push_back(ln);		
+				node->argls.push_back(ln);		
+				continue;
 			}
-			continue;
 		}
 		auto tok=src.eat_tok();
-		if (!tok || tok==close)
+		//printf("tok in %s:",getString(op?op->ident():0));print_tok(tok);printf("\n");
+		if (!tok || tok==close) {
+			//printf("close with ");print_tok(tok);
 			break;
-//		std::cout<<tok<<getString(tok)<<"\n";
-		if (tok==FN) return parse_fn(src);		
-		if (!node) {
-			node =new ExprBlock;
-			if (close==0) { node->args.push_back(new ExprIdent(DO));}
 		}
-		if (tok==OPEN_PAREN) {
-			sub=parse_expr(src,CLOSE_PAREN);
+
+		if (tok==FN) sub= parse_fn(src);
+
+		else if (tok==OPEN_PAREN) {
+			sub=parse_call(src,CLOSE_PAREN,nullptr);
 		} else  {
-			sub=new ExprIdent(tok);
+			if (src.peek_tok()==OPEN_PAREN) {
+				src.eat_tok();
+				//printf("Begin Call ");print_tok(tok);printf("\n");
+				sub=parse_call(src, CLOSE_PAREN, new ExprIdent(tok));
+				//printf("End Call ");print_tok(tok);printf("\n");
+			} else sub=new ExprIdent(tok);
 		}
-		if (sub)
-			node->args.push_back(sub);
+		ASSERT(sub);
+		node->argls.push_back(sub);
 	};
 	return node;
 }
@@ -642,47 +656,33 @@ Type* parse_type(TokenStream& src, int close) {
 	auto tok=src.eat_tok();
 	Type* ret=0;	// read the first, its the form..
 	if (tok==close) return nullptr;
-
-	if (tok!=OPEN_PAREN) {
-		while (src.eat_tok()!=close){};
-		return new Type(tok);
+	ret = new Type(tok);
+	if (src.eat_if(OPEN_BRACKET)) {
+		while (auto sub=parse_type(src, CLOSE_BRACKET))
+			ret->push_back(sub);
 	}
-	else{
-		tok=src.eat_tok();
-		if (tok!=close) {
-			ret = new Type(tok);
-			while (0!=(tok=src.eat_tok())) {
-				if (tok==close) break;
-				printf("1\n");
-				ret->push_back(new Type(tok));
-				printf("2\n");
-			}
-		}
-	}
-	while (src.eat_tok()!=close){};
 	printf("3\n");
 	ret->dump(-1); 
 	return ret;
 	
 }
 ArgDef* parse_arg(TokenStream& src, int close) {
-	auto tok=src.eat_tok();
-	if (tok==close) return nullptr;
-	if (tok==OPEN_PAREN){
-		auto argname=src.eat_ident();
+	auto argname=src.eat_ident();
+	if (argname==close) return nullptr;
+	if (src.eat_if(COLON)) {
 		return new ArgDef(argname,parse_type(src,CLOSE_PAREN));
 	} 
-		else return new ArgDef(tok,nullptr);	
+	else return new ArgDef(argname,nullptr);
 }
 ExprFnDef* parse_fn(TokenStream&src) {
 	auto *fndef=new ExprFnDef();
 	printf("parse_fn");
 	// read function name or blank
 	auto tok=src.eat_tok(); 
+	print_tok(tok);
 	if (tok!=OPEN_PAREN) {
 		fndef->name=tok;
-		tok=src.eat_tok();
-		ASSERT(tok==OPEN_PAREN);
+		tok=src.expect(OPEN_PAREN);
 	} else fndef->name=NONE;
 	printf("%s",getString(fndef->name));
 	// read function arguments
@@ -693,19 +693,9 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	}
 	printf("fn body:");
 	// implicit "progn" here..
+	src.expect(OPEN_BRACE);
 	fndef->body = new ExprBlock;
-	fndef->body->args.push_back(new ExprIdent(DO));
-	while (NONE!=(tok=src.eat_tok())) {
-		printf("fn body..");
-		if (tok==CLOSE_PAREN)
-			break;
-		if (tok==OPEN_PAREN) {
-			fndef->body->args.push_back(parse_expr(src,CLOSE_PAREN));
-		} else {
-			printf("parse_raw_ident\n");
-			fndef->body->args.push_back(new ExprIdent(tok));
-		}
-	}
+	fndef->body = parse_call(src, CLOSE_BRACE, new ExprIdent(DO));
 
 	return fndef;
 }
@@ -716,38 +706,42 @@ ExprFnDef* parse_fn(TokenStream&src) {
 const char* g_TestProg=
 /*
 "(fn lerp((a float) (b float) (f float))(+(*(- b a)f)a))"
+"(fn lerp(a b f)(mad a (sub b a) f)
 "(fn lerp((a int) (b int) (f float))(+(*(- b a)f)a))"
 "(fn bilerp(a b c d u v)(lerp(lerp a b )(lerp c d)v))"
 "(fn invlerp(a b x)(/(- x a)(- b a)))"
-"(fn madd(a b f)(+(* b f)a))"
+"(fn madd(a b f)(+a (* b f)))"
 "(fn min(a b)(if (< a b)a b))"
 "(fn max(a b)(if (> a b)a b))"
+"(fn addto(a b)(set a(add a b)))
+"(fn madto(a b f)(set a(add a (mul b f))))
 "(fn interleave((a int)(c (map string int))(b (vector float))) (return)) "
 "(fn clamp(a b f)(min b (max a f)))"
 */
-"(fn they_float()(set tfl 1.0) (they_int))"
-"(fn they_int()(set tfx 1) tfx)"
+"set(glob_x 10.0)"
+"fn they_float(){set(tfl 1.0) they_int()}"
+"fn they_int(){set(tfx 1) tfx}"
 //"(fn generic_fn((x int) (y int)) x)"
 //"(fn generic_fn((x int) (y float)) y)"
-"(fn generic_fn(x y) y)"
-"(fn generic_fn(x (y float)) y)"
-"(fn generic_fn(x (y int)) y)"
-"(fn generic_fn((x float) (y float)) y)"
+"fn generic_fn(x y){y}"
+"fn generic_fn(x y:float){y}"
+"fn generic_fn(x y:int){y}"
+"fn generic_fn(x:float y:float){ y}"
 //"(fn generic_fn(x y) x)"
-"(set glob_x 10.0)"
-"(set glob_y 1)"
+"set(glob_y 1)"
 //"(set glob_z (they_float))"
-"(set glob_p (generic_fn 0.0 1.3))"
-"(set glob_q (generic_fn 0.0 1))"
+"set(glob_p generic_fn(0.0 1.3))"
+"set(glob_q generic_fn(0.0 1))"
 //"(set glob_p (generic_fn 2 2))"
 
 //"(print (lerp 10 -20 0.0))"
 //"(print (lerp 10.0 -20.0 0.5))"
 	;
+// when this works - it can be like SPECS
 int main(int argc, const char** argv) {
-	
+
 	TextInput	src(g_TestProg);
-	auto node=parse_expr(src,0);
+	auto node=parse_call(src,0, new ExprIdent(DO));
 //	while (auto ix=src.eat_tok()){}
 //	printf("%d%s",getStringIndex("foo"),getString(IDENT+5));
 //	g_Names.dump();
