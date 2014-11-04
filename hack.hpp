@@ -30,7 +30,9 @@ enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
 	INT,FLOAT,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,
-	PRINT,FN,STRUCT,TUPLE,VARIANT,LET,SET,VAR,WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
+	PRINT,FN,STRUCT,TUPLE,VARIANT,WITH,MATCH,
+	LET,SET,VAR,
+	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
 	// delimiters
 	OPEN_PAREN,CLOSE_PAREN,
 	OPEN_BRACE,CLOSE_BRACE,
@@ -98,6 +100,7 @@ struct Type : Node{
 struct Expr : Node{
 	Type* type;
 	void dump(int depth) const;
+	void dump_top()const;
 	Expr();
 	virtual const char* kind_str()const{return"expr";}
 };
@@ -118,8 +121,7 @@ enum TypeId{
 	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
 };
 struct StructDef;
-
-bool g_lisp_mode=true;
+extern bool g_lisp_mode;
 struct Module;
 // module base: struct(holds fns,structs), function(local fns), raw module.
 struct StructDef;

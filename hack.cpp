@@ -1,24 +1,25 @@
 #include "hack.hpp"
-
+#include "codegen.h"
 
 //(sourcecode "hack.cpp")
 //(normalize (lerp (obj:zaxis)(normalize(sub(target(obj:pos)))) //(settings:angle_rate)) (sloc 512 40 20))
 
 void print_tok(int i){printf("%s ",getString(i));};
 
+bool g_lisp_mode=true;
 const char* g_token_str[]={
 	"",
 	"int","float","str","void","auto","one","zero","voidptr",
-	"print","fn","struct","tuple","variant",
+	"print","fn","struct","tuple","variant","with","match",
 	"let","set","var",
 	"while","if","else","do","for","in","return","break",
 	"(",")",
 	"{","}",
 	"[","]",
-	"->","=>","<-","::",
-	":","+","-","*","/",".",
-	"<",">","<=",">=","==","!=","&&","||",
-	"&","|","^","%","<<",">>",
+	"->","=>","<-","::",			//arrows
+	":","+","-","*","/",".",					//arithmetic
+	"<",">","<=",">=","==","!=","&&","||",		//compares/logical
+	"&","|","^","%","<<",">>",					//bitwise
 	"=",":=","+=","-=","*=","/=","<<=",">>=","&=","|=",
 	"++","--","++","--","-","*","&","!","~",
 	",",";",
@@ -27,32 +28,53 @@ const char* g_token_str[]={
 
 #define PRECEDENCE 0xff
 #define PREFIX 0x100
-#define POSTFIX 0x200
-#define FIXITY (PREFIX|POSTFIX)
+#define UNARY 0x200
 #define ASSOC 0x400
 int g_tok_info[]={
 	0,
 	0,0,0,0,0,0,0,0,
-	0,0,0,0,0,
+	0,0,0,0,0,0,0,
 	0,0,0,
 	0,0,0,0,0,0,0,0,
 	0,0,
 	0,0,
 	0,0,
-	10,10,10,13,	   // assignment, lambda
-	9,4,4,6,6,12,
-	3,3,3,3,3,3,2,2,
-	8,7,8,6,9,9,
-	ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,ASSOC|0,
-	PREFIX|10,PREFIX|10,POSTFIX|11,POSTFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,PREFIX|11,
+	10,10,10,13,	   // arrows
+	9,6,6,5,5,2,		//arithmetic
+	8,8,8,8,9,9,13,14,	//compares/logical
+	8,7,8,6,9,9,		//bitwise
+	ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,
+	PREFIX|UNARY|2,PREFIX|UNARY|2,UNARY|ASSOC|3,UNARY|ASSOC|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,
 	0,0,
 };
-int precedence(int tok){return g_tok_info[tok] & PRECEDENCE;}
-int fixity(int tok){return (g_tok_info[tok] & (PREFIX|POSTFIX) );}
-int operands(int tok){ if (!(g_tok_info[tok]&(FIXITY))) return 2; else return 1;}
-int assoc(int tok){return g_tok_info[tok]&ASSOC;}
-
-
+int is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
+int precedence(int tok){return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
+int is_prefix(int tok){return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
+int arity(int tok){return  (tok<IDENT)?((g_tok_info[tok] & (UNARY) )?1:2):-1;}
+int is_right_assoc(int tok){return (tok<IDENT)?(g_tok_info[tok]&ASSOC):0;}
+int is_left_assoc(int tok){return (tok<IDENT)?(!(g_tok_info[tok]&ASSOC)):0;}
+int get_prefix_operator(int tok) {
+	if (tok>IDENT) return tok;
+	switch (tok){
+	case POST_INC: return PRE_INC;
+	case POST_DEC: return PRE_DEC;
+	case SUB: return NEG;
+	case MUL: return DEREF;
+	case AND: return ADDR;
+	default: return tok;
+	}
+}
+int get_infix_operator(int tok) {
+	if (tok>IDENT) return tok;
+	switch (tok){
+	case PRE_INC: return POST_INC;
+	case PRE_DEC: return POST_DEC;
+	case NEG: return SUB;
+	case DEREF: return MUL;
+	case ADDR: return AND;
+	default: return tok;
+	}
+}
 
 StringTable::StringTable(const char** initial){
 	verbose=false;
@@ -117,6 +139,9 @@ void newline(int depth) {
 void Expr::dump(int depth) const {
 	newline(depth);printf("(?)");
 }
+void Expr::dump_top() const {
+	printf("%s ", getString(name));
+}
 
 Expr::Expr(){ type=0;}
 
@@ -129,7 +154,7 @@ int ExprBlock::get_name()const{
 	if (call_op) return call_op->get_name(); else return 0;
 }
 void ExprBlock::dump(int depth) const {
-	newline(depth); if (this->call_op){print_tok(this->call_op->ident());printf("(");}else printf("{");
+newline(depth); if (this->call_op){int id=this->call_op->ident();if (is_prefix(id))printf("prefix");print_tok(id);printf("(");}else printf("{");
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{printf("(none)");}
 	}
@@ -572,6 +597,24 @@ struct TextInput {
 	}
 
 	void advance_sub(bool (*sub)(char c)){while ( *tok_end && sub(*tok_end)) tok_end++;}
+	void advance_operator() {
+		int match=0;
+		int longest=0;
+		for (int i=0; i<IDENT; i++) {
+			int len=0;
+			const char* cmp=g_token_str[i];
+//			printf("%c %c\n",tok_start[0],cmp[0]);
+			int j=0;
+			for (; cmp[j] ; j++,len++) {
+				if (tok_start[j]!=cmp[j]) break;
+			}
+			if (!cmp[j]) {// got all?
+				if (len>longest){longest=len;match=i;}
+			}
+		}
+//		printf("op len=%d",longest);
+		tok_end=tok_start+longest;
+	}
 
 	void advance_tok() {
 		auto pos=tok_start;
@@ -581,7 +624,8 @@ struct TextInput {
 		auto c=*tok_end;
 		if (isSymbolStart(c))	advance_sub(isSymbol);
 		else if (isNumStart(c)) advance_sub(isNum);
-		else tok_end++;
+		else advance_operator();
+//		else tok_end++;
 		this->curr_tok = getStringIndex(tok_start,tok_end);
 	}
 	int eat_tok() {
@@ -650,16 +694,30 @@ template<typename T>
 T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
 //#define pop(X) ASSERT(X.size()>0); pop_sub(X);
 
+void dump(vector<Expr*>& v) {
+	for (int i=0; i<v.size(); i++) {
+		v[i]->dump_top();
+	}
+	printf("\n");
+}
+
 void flush_op_stack(ExprBlock* block, vector<Expr*>& ops,vector<Expr*>& vals) {
 	while (ops.size()>0) {
 		ExprBlock* op=new ExprBlock;
 		op->call_op=pop(ops);
-		if (vals.size()>1) {
+		int op_tok=op->call_op->ident();
+		int op_arity=arity(op_tok);
+		if (vals.size()>= 2 && op_arity==2 ) {
 			auto arg1=pop(vals);
 			op->argls.push_back(pop(vals));
 			op->argls.push_back(arg1);
-		} else if (vals.size()>0) {
+		} else if (vals.size()>=1 && op_arity==1) {
 			op->argls.push_back(pop(vals));
+		} else {
+			printf("operators:");dump(ops);
+			printf("\nvalues:");dump(vals);
+			printf("\n%s arity %zu %zu given\n",getString(op_tok), op_arity, op->argls.size());
+			exit(0);
 		}
 		vals.push_back(op);
 //		block->argls.push_back(op);
@@ -674,14 +732,22 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	ExprBlock *node=new ExprBlock; node->call_op=op;
 	vector<Expr*> operators;
 	vector<Expr*> operands;
-	bool	was_operand=false;
+	bool	was_operand=false,was_operator=true;
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
+	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
 
 	while (true) {
 		if (src.eat_if(close) || !src.peek_tok())
 			break;
+		if (src.eat_if(wrong_close)) {
+			printf("unexpected %s, expected %s",getString(close),getString(wrong_close));
+			exit(0);
+		}
 		printf(":%s\n",getString(src.peek_tok()));
 		printf("parse:- %zu %zu\n",operands.size(),operators.size());
+		printf("operands:");dump(operands);
+		printf("operators:");dump(operators);printf("\n");
+
 		print_tok(src.peek_tok());
 		Expr* sub=nullptr;
 		if (src.is_next_literal()) {
@@ -692,12 +758,15 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 				else {ln=new ExprLiteral((float)n.num/(float)n.denom);}
 				operands.push_back(ln);		
 				was_operand=true;
+				was_operator=false;
 				continue;
 			}
 		}
 		if (src.eat_if(FN)) {
 //			ASSERT(!was_operand);
-			operands.push_back(parse_fn(src)); was_operand=true;
+			operands.push_back(parse_fn(src)); 
+			was_operand=true;
+			was_operator=false;
 			
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
@@ -707,6 +776,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			}
 			else {operands.push_back(parse_call(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
+				was_operator=false;
 			}
 		} else if (src.eat_if(delim)) {
 				// dump all..
@@ -714,40 +784,55 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			printf("delimiter\n");
 			flush_op_stack(node,operators,operands);
 			was_operand=false;
+			was_operator=true;
 		}else if (src.eat_if(wrong_delim)){
 			printf("error expected %s not %s", getString(delim),getString(wrong_delim));
 			flush_op_stack(node,operators,operands);// keep going
 			was_operand=false;
+			was_operator=true;
 		} else{
 			auto tok=src.eat_tok();
-			if (was_operand) {
+			auto ot=tok;
+			if (was_operand) tok=get_infix_operator(tok);
+			else if (was_operator)tok=get_prefix_operator(tok);
+			else {ASSERT(was_operand!=was_operator); ASSERT(0)}
+
+			if (is_operator(tok)) {
+				printf(" op:%s%s  (following:%s) %d->%d\n",getString(tok),is_prefix(tok)?"prefix":arity(tok)>1?"infix":"postfix",was_operand?"operand":"operator",ot,tok);
 				while (operators.size()>0) {
 					int prev_precedence=precedence(operators.back()->ident());
 					int prec=precedence(tok);
-					if (!(prev_precedence>=prec || assoc(tok)) ) // todo associativity
+					if (prev_precedence>prec
+						||(is_right_assoc(tok)&&prec==prev_precedence))
 						break;
 					auto * p=new ExprBlock();
 					p->call_op=pop(operators);
-					if (operands.size()>=2){
+					auto op=p->call_op->ident();
+					if (operands.size()>=2 && (arity(op)==2)){
 						auto arg1=pop(operands);
 						p->argls.push_back(pop(operands));
 						p->argls.push_back(arg1);
-					} else if (operands.size()>=1){
+					} else if (operands.size()>=1 && arity(op)==1){
 						p->argls.push_back(pop(operands));
 					} else{
-						printf("error operator, no operands\n");
+						printf("\noperands:");dump(operands);
+						printf("operators");dump(operators);
+						printf("\nerror: %s arity %d, %d operands given\n",getString(op),arity(op),operands.size());
+						exit(0);
 					}
 					operands.push_back(p);
-					was_operand=true;
+					was_operand=true;//was_operator=
 				} //else {
 					//operators.push_back(new ExprIdent(tok));
 					//was_operand=false;
 					//}
 				operators.push_back(new ExprIdent(tok));
 				was_operand=false;
+				was_operator=true;
 			} else {// last was operator, we got an operand
 				operands.push_back(new ExprIdent(tok));
 				was_operand=true;
+				was_operator=false;
 			}
 		}
 		//ASSERT(sub);
@@ -822,14 +907,22 @@ const char* g_TestProg=
 "(fn addto(a b)(set a(add a b)))
 "(fn madto(a b f)(set a(add a (mul b f))))
 "(fn interleave((a int)(c (map string int))(b (vector float))) (return)) "
-"(fn clamp(a b f)(min b (max a f)))"
 */
 
+	"*++x=*--y;"
+	"self.pos+self.vel*dt;"
 	"future.pos=self.pos+self.vel*dt;"
-	"x=y=z=3; x+y+z=0;"
-	"fn they_float(){set(tfl, 1.0); they_int();};"
+	"x=y=z=3; x+y+z=0;"	
+	"p=&self.pos;"
+	"*d++=s;"
+	"q=(++10+*p);"
+	"fn do_they_float(){set(tfl, 1.0); do_they_int();};"
+	"fn min(a,b){if(a<b,a,b)}"
+	"fn max(a,b){if(a>b,a,b)}"
+	"fn clamp(a,b,f){ min(b,max(a,f)) }"
 	"fn lerp(a:float,b:float,f:float){(b-a)*f+a}"
 	"fn mad(a:float,b:float,f:float){a+b*f}"
+
 //	"foo=bar(x*3,y+(self.pos+other.pos)*0.5);"
 /*
 "set(glob_x, 10.0);"
@@ -857,8 +950,9 @@ int main(int argc, const char** argv) {
 	CallScope global; global.node=(ExprBlock*)node; global.global=&global;
 	node->resolve(&global);
 //	global.visit_calls();
+	output_code(stdout, &global);
 	global.dump(0);
-
 }
+
 
 
