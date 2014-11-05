@@ -73,6 +73,11 @@ struct CallScope;
 struct StructDef;
 struct ExprIdent;
 struct Type;
+struct ResolveType{
+	enum Status {COMPLETE,INCOMPLETE,ERROR};
+	Type* type;
+	Status status;
+};
 
 class Node {
 public:
