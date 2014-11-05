@@ -1,5 +1,6 @@
 #include "hack.hpp"
 #include "codegen.h"
+#include "repl.h"
 
 //(sourcecode "hack.cpp")
 //(normalize (lerp (obj:zaxis)(normalize(sub(target(obj:pos)))) //(settings:angle_rate)) (sloc 512 40 20))
@@ -16,12 +17,13 @@ const char* g_token_str[]={
 	"(",")",
 	"{","}",
 	"[","]",
-	"->","=>","<-","::",			//arrows
+	"->","=>","<-","::","<->",			//arrows
 	":","+","-","*","/",".",					//arithmetic
 	"<",">","<=",">=","==","!=","&&","||",		//compares/logical
 	"&","|","^","%","<<",">>",					//bitwise
 	"=",":=","+=","-=","*=","/=","<<=",">>=","&=","|=",
 	"++","--","++","--","-","*","&","!","~",
+	"*?","*!","&?","[]","&[]",
 	",",";",
 	NULL,	
 };
@@ -39,14 +41,16 @@ int g_tok_info[]={
 	0,0,
 	0,0,
 	0,0,
-	10,10,10,13,	   // arrows
+	10,10,10,13,10,	   // arrows
 	9,6,6,5,5,2,		//arithmetic
 	8,8,8,8,9,9,13,14,	//compares/logical
 	8,7,8,6,9,9,		//bitwise
 	ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,
-	PREFIX|UNARY|2,PREFIX|UNARY|2,UNARY|ASSOC|3,UNARY|ASSOC|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,
+	PREFIX|UNARY|2,PREFIX|UNARY|2,UNARY|ASSOC|3,UNARY|ASSOC|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3, 
+	UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3,
 	0,0,
 };
+bool is_type(int tok){return tok<T_NUM_TYPES;}
 int is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
 int precedence(int tok){return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
 int is_prefix(int tok){return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
@@ -76,6 +80,8 @@ int get_infix_operator(int tok) {
 	}
 }
 
+
+
 StringTable::StringTable(const char** initial){
 	verbose=false;
 	nextId=0;
@@ -95,7 +101,7 @@ StringTable::StringTable(const char** initial){
 	ASSERT(nextId==IDENT);
 }
 int StringTable::get_index(const char* str, const char* end) {
-	int len=end-str;
+	auto len=end-str;
 	string s; s.resize(len);memcpy((char*)s.c_str(),str,len);((char*)s.c_str())[len]=0;
 	auto ret=names.find(s);
 	if (ret!=names.end())	return ret->second;		
@@ -145,16 +151,32 @@ void Expr::dump_top() const {
 
 Expr::Expr(){ type=0;}
 
-Type* ExprIdent::resolve(CallScope* scope) {
-	if (auto p=scope->get_variable(this->name)){ return p->get_type();}
-	else return this->type;
+Type* ExprIdent::resolve(CallScope* scope,const Type* desired) {
+	// todo: not if its' a typename,argname?
+	if (auto v=scope->get_variable(this->name)){
+		if (desired && v->type) ASSERT(desired->eq(v->type));
+		if (!v->type) v->type=(Type*)desired;
+		if (!this->type) this->type=v->type;
+		return v->type;
+	}
+	else {
+		if (desired && this->type) {ASSERT(desired->eq(v->type));}
+		else if (!v->type) { v->type=(Type*)desired; }
+		if (!this->type) this->type=v->type;
+		return this->type;
+	}
+}
+void ExprIdent::dump(int depth) const {
+	newline(depth);printf("%s:",getString(name));
+	if (this->type) {this->type->dump(-1);}
 }
 
 int ExprBlock::get_name()const{
 	if (call_op) return call_op->get_name(); else return 0;
 }
 void ExprBlock::dump(int depth) const {
-newline(depth); if (this->call_op){int id=this->call_op->ident();if (is_prefix(id))printf("prefix");print_tok(id);printf("(");}else printf("{");
+newline(depth); if (this->call_op){int id=this->call_op->ident();if (is_prefix(id))printf("prefix");print_tok(id);
+	if (this->type) {printf(":");this->type->dump(-1);} printf("(");}else printf("{");
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{printf("(none)");}
 	}
@@ -176,8 +198,9 @@ const char* CallScope::name() const {
 void Type::push_back(Type* t) {	
 	if (!sub) sub=t;
 	else {
-		for (auto p=sub; sub->next; sub=sub->next){};
-		sub->next =t;
+		auto s=sub;
+		for (; s->next!=0; s=s->next){};
+		s->next =t;
 	}
 }
 const char* Node::get_name_str() const{
@@ -196,7 +219,6 @@ bool Type::eq(const Type* other) const{
 	if ((!this) && (!other)) return true;
 	if (!(this && other)) return false;
 	if (this->name!=other->name)return false;
-	return true;
 //	if (!this->sub && other->sub)) return true;
 	auto p=this->sub,o=other->sub;
 		
@@ -226,13 +248,18 @@ void ExprLiteral::dump(int depth) const{
 	if (type_id==T_VOID){printf("void");}
 	if (type_id==T_INT){printf("%d",u.val_int);}
 	if (type_id==T_FLOAT){printf("%.7f",u.val_float);}
-	if (type_id==T_CONST_STRING){printf("%s",u.val_str);}
+	if (type_id==T_CONST_STRING){
+		printf("\"%s\"",u.val_str);
+	}
 }
 // TODO : 'type==type' in our type-engine
 //	then we can just make function expressions for types.
 
-Type* ExprLiteral::resolve(CallScope* ){
-	if (this->type) return this->type;
+Type* ExprLiteral::resolve(CallScope* , const Type* desired){
+	if (this->type) {
+		ASSERT(this->type==desired);
+		return this->type;
+	}
 	Type* t=nullptr;
 	switch (type_id) {
 	case T_VOID: t=new Type(VOID); break;
@@ -241,6 +268,7 @@ Type* ExprLiteral::resolve(CallScope* ){
 	case T_CONST_STRING: t=new Type(STR); break;
 	default: break;
 	}
+	if (desired && t) ASSERT(t->eq(desired));
 	this->type=t;
 	return this->type;
 }
@@ -256,12 +284,17 @@ ExprLiteral::ExprLiteral(int i) {
 	type_id=T_INT;
 	u.val_int=i;
 }
-ExprLiteral::ExprLiteral(const char* start,int length) {
+ExprLiteral::ExprLiteral(const char* start,int length) {//copy
 	type=nullptr;
 	type_id=T_CONST_STRING;
 	auto str=( char*)malloc(length+1); ;
 	u.val_str=str;memcpy(str,(void*)start,length);
 	str[length]=0;
+}
+ExprLiteral::ExprLiteral(const char* src) {//take ownership
+	u.val_str=src;
+	type=nullptr;
+	type_id=T_CONST_STRING;
 }
 ExprLiteral::~ExprLiteral(){
 	if (type_id==T_CONST_STRING) {
@@ -291,9 +324,10 @@ void ExprFnDef::dump(int ind) const {
 	newline(ind);printf("fn %s(",getString(name));
 	for (int i=0; i<args.size();i++){
 		args[i]->dump(-1);
-		printf(",");
+		if (i<args.size()-1) printf(",");
 	}
 	printf(")");
+	if (this->type) {printf("->");this->type->dump(-1);};
 	this->body->dump(ind);}
 
 FnName*	g_fn_names;
@@ -324,7 +358,7 @@ void CallScope::visit_calls() {
 		sub->visit_calls();
 }
 */
-ExprFnDef* instantiate_generic_function(CallScope* s,ExprFnDef* src, Expr** call_args, int num_args) {
+ExprFnDef* instantiate_generic_function(CallScope* s,ExprFnDef* src, vector<Expr*>& call_args) {
 	ExprFnDef* f = new ExprFnDef();
 	f->name = src->name;
 	if (src->fn_name) {
@@ -345,28 +379,28 @@ ExprFnDef* instantiate_generic_function(CallScope* s,ExprFnDef* src, Expr** call
 
 
 void find_printf(const char*,...){};
-void find_sub(Expr* src,Name name,Expr** args, int num_args, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
+void find_sub(Expr* src,Name name,vector<Expr*>& args, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
 		find_printf("look for %s in %s\n",getString(name),src->get_name_str());
 		for (auto x:sb->argls) {
-			find_sub(x,name,args,num_args, best_fn,best_score,ambiguity);
+			find_sub(x,name,args, best_fn,best_score,ambiguity);
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
 		if (f->name!=name)
 			return ;
 
 		// Find max number of matching arguments
-		if (num_args >f->args.size())	// if not enough args, dont even try.
+		if (args.size() >f->args.size())	// if not enough args, dont even try.
 			return;
-		if (num_args !=f->args.size())	// TODO: bring default arguments into the picture.
+		if (args.size() !=f->args.size())	// TODO: bring default arguments into the picture.
 			return;
 
 		find_printf("candidate:");
-		for (int i=0; i<num_args; i++) {
+		for (int i=0; i<args.size(); i++) {
 			find_printf("%s ",f->args[i]->type->get_name_str());		 }
 		find_printf("\n");
 		int score=0;
-		for (int i=0; i<num_args; i++) {
+		for (int i=0; i<args.size(); i++) {
 			if (f->args[i]->type->eq(args[i]->type)) {
 				find_printf("match %s %s\n",f->args[i]->type->get_name_str(), args[i]->type->get_name_str());
 				score++;
@@ -374,7 +408,7 @@ void find_sub(Expr* src,Name name,Expr** args, int num_args, ExprFnDef** best_fn
 		}
 		// for any argument not matched, zero the score if its the *wrong* argument?
 		// TODO: this is where we'd bring conversion operators into play.
-		for (int i=0; i<num_args; i++) {
+		for (int i=0; i<args.size(); i++) {
 			if ((!f->args[i]->type->eq(args[i]->type)) && f->args[i]->type!=0) score=-1;
 		}
 		find_printf("score is %d\n",score);
@@ -386,32 +420,33 @@ void find_sub(Expr* src,Name name,Expr** args, int num_args, ExprFnDef** best_fn
 	}
 	return ;
 }
-ExprFnDef*	CallScope::find_fn(Name name, Expr** args, int num_args)  {
+ExprFnDef*	CallScope::find_fn(Name name, vector<Expr*>& args)  {
 	find_printf("\nfind call with args(");
-	for (int i=0; i<num_args; i++) {find_printf(" %d:",i);args[i]->type->dump(-1);}
+	for (int i=0; i<args.size(); i++) {find_printf(" %d:",i);printf("%p\n",args[i]);if (args[i]->type) args[i]->type->dump(-1);}
 	find_printf(")\n");
 
 	ExprFnDef*	best=0;
 	int best_score=-1;
 	int	ambiguity=0;
 	for (auto src=this; src; src=src->parent) {
-		find_sub(this->node,name, args,num_args,&best,&best_score,&ambiguity);
+		find_sub(this->node,name, args,&best,&best_score,&ambiguity);
 	}
-	find_printf("match score=%d/%d\n", best_score, num_args);
+	find_printf("match score=%d/%d\n", best_score, args.size());
 	if (!best)  {
 		printf("No match found\n");
+		return nullptr;
 	}
 	if (ambiguity){
 		printf("ambiguous matches for function\n");
 	}
 	if (best->is_generic()) {
 		printf("matched generic function: instanting\n");
-		return instantiate_generic_function(this, best, args, num_args);
+		return instantiate_generic_function(this, best, args);
 	}
 	
 	return best;
 }
-Variable* CallScope::get_variable(Name name){
+Variable* CallScope::find_variable(Name name){
 	// todo: This Pointer?
 	for (auto v=this->vars; v; v=v->next) {
 		if (v->name==name) return v;
@@ -421,24 +456,19 @@ Variable* CallScope::get_variable(Name name){
 			return	p;
 	}
 	if (this->global && this->global!=this){
-		if (auto p=this->global->get_variable(name)) 
+		if (auto p=this->global->find_variable(name))
 			return	p;
 	}
 	return nullptr;
 }
 
 
-Variable* CallScope::create_variable(Name name,Type* t){
+Variable* CallScope::get_variable(Name name){
 
-	if (auto var=this->get_variable(name)) {
-		if (var->type) {ASSERT(var->type->eq(t));}
-		else var->type = t;
-
-		return var;
+	if (auto v=this->find_variable(name)) {
+		return v;
 	}
-	// create a variable;
-//	printf("create var %s in %p %p\n",getString(name), this ,this->parent);
-	auto v=new Variable(); v->next=this->vars; this->vars=v; v->name=name; v->type=t;
+	auto v=new Variable(); v->next=this->vars; this->vars=v; v->name=name;
 	return v;
 }
 void CallScope::dump(int depth)const {
@@ -458,9 +488,28 @@ void dump(vector<T*>& src) {
 		printf(src[i]->dump());
 	}
 }
-Type* ExprBlock::resolve(CallScope* scope) {
+void propogate_type(Type*& a,Type*& b) {
+	if (!a && b) {a=b;}
+	else if (!b && a) {b=a;}
+	else {ASSERT(b->eq(a));}
+}
+void propogate_type_fwd(const Type*& a,Type*& b) {
+	if (!b && a) b=(Type*)a;
+	else {if (a && b)ASSERT(b->eq(a));}
+}
+void propogate_type(Type*& a,Type*& b,Type*& c) {
+	propogate_type(a,b);
+	propogate_type(b,c);
+	propogate_type(a,c);
+}
+void propogate_type_fwd(const Type*& a,Type*& b,Type*& c) {
+	propogate_type(b,c);
+	propogate_type_fwd(a,b);
+	propogate_type_fwd(a,c);
+}
+Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 
-	printf("\nresolve block.. %p\n", scope);
+	printf("\nresolve block.. %p\n", sc);
 	if (this->argls.size()<=0 && !this->call_op) {
 		if (!this->type) this->type=new Type();this->type->name=VOID;//void..
 		return nullptr;
@@ -468,28 +517,60 @@ Type* ExprBlock::resolve(CallScope* scope) {
 	int op_ident=NONE;
 	ExprIdent* p=nullptr;
 	if(this->call_op){p=dynamic_cast<ExprIdent*>(this->call_op); op_ident=p->name;}
+	printf("%s %s\n",getString(this->name),getString(op_ident));
 	if (op_ident==NONE) {	// do executes each expr, returns last ..
 		Type* ret=0;
-		for (auto i=0; i<this->argls.size(); i++) {
-			ret=this->argls[i]->resolve(scope);
+		for (auto i=0; i<this->argls.size()-1; i++) {
+			this->argls[i]->resolve(sc,0);
 		}
+		// last expression - type bounce
+		if (auto i=this->argls.size()) {
+			ret=this->argls[i-1]->resolve(sc,desired);
+			if (!ret) ret=(Type*)desired;
+		}
+		if (!this->type) this->type=ret;
 		return ret;
 	} 
 	else 
-	if (op_ident==SET) {
-		ASSERT(this->argls.size()>=2);
-		auto vname=this->argls[0]->ident();
+	if (op_ident==ASSIGN) {
+		ASSERT(this->argls.size()==2);
+		auto vname=this->argls[0]->ident();	//todo: rvalue malarchy.
 //			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
 		this->argls[0]->dump(0);
-	printf("resolve block getvar %p\n", scope);
-		Type* t=this->argls[1]->resolve(scope);
-		auto var= scope->create_variable(vname, t);
+		printf("resolve block getvar %p %s\n", sc, getString(vname));
+		auto v= sc->get_variable(vname);
+		Type* t=this->argls[1]->resolve(sc,desired?desired:v->type);
+		propogate_type_fwd(desired,t,v->type);
+		
 			// If the variable exists - assignments must match it...
 			// todo: 2way inference.
 			// we'd report missing types - then do a pass propogating the opposite direction
 			// and bounce.
-		this->type = t;
-		return var->type;
+		this->type = v->type;//t?t:(Type*)desired;
+		return v->type;
+	} else if (is_operator(op_ident)){
+		// todo: &t gets adress. *t removes pointer, [i] takes index,
+		// comparisons yield bool, ...
+		// but for now, we just say any unset types flow thru the operator.
+		Type* ret=0;
+		for (auto i=0; i<this->argls.size();i++){ auto r=this->argls[i]->resolve(sc,desired);
+			if (!ret) ret=r;
+			if (ret && desired)
+				ASSERT(ret==desired);
+		}
+		if (ret) {printf("got type");ret->dump(-1);printf("\n");}
+		// now propogate types back.
+		for (auto i=0; i<this->argls.size();i++) {
+			if (this->argls[i]->type) {
+				if (ret){
+					ASSERT(ret->eq(this->argls[i]->type));
+				}
+			} else {
+				this->argls[i]->resolve(sc,ret);
+			}
+		}
+		return ret;
+		
 	}
 	else {
 		printf("resolve call..%s\n",getString(p->ident()));
@@ -499,30 +580,55 @@ Type* ExprBlock::resolve(CallScope* scope) {
 				// TODO: accumulate types of arguments,
 				// then use them in find_fn to resolve overloading
 				// find_fn should also perform Template Instantiations.
-			return resolve_make_fn_call(this, scope);
+			return resolve_make_fn_call(this, sc,desired);
 		} else 
 			return this->call_target->type;
 	}
 	return nullptr;
 }
 
-Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope) {
+Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope,const Type* desired) {
 	for (int i=0; i<block->argls.size(); i++) {
-		block->argls[i]->resolve(scope);
+		block->argls[i]->resolve(scope,desired);
 		printf("arg %d type=",i); cout<<block->argls[i]->type<<"\n";//->dump(0); printf("\n");
 	}
-	ExprFnDef* call_target = scope->find_fn(block->call_op->ident(), &block->argls[0],block->argls.size());
+	ExprFnDef* call_target = scope->find_fn(block->call_op->ident(), block->argls);
 	auto fnc=call_target;
 	if (call_target) {
 		if (call_target->resolved) {
+			if (desired) ASSERT(desired->eq(call_target->type));
 			return block->type=call_target->type;
 		}
 			// add this to the targets' list of calls.
-		CallScope* subscope=new CallScope;
-
-		// create a local for each supplied argument, using its type..
+		int num_known_types=desired?1:0;
 		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
-			subscope->create_variable(fnc->args[i]->name, block->argls[i]->type);
+			if (block->argls[i]->type) num_known_types++;
+		}
+		if (!(fnc->is_generic() && num_known_types)) {
+			if (fnc->type && desired) {ASSERT(desired->eq(fnc->type));};
+			
+			block->type = fnc->type?fnc->type:(Type*)desired;
+			return block->type;
+			//return fnc->
+		}
+
+		// generic function, and we have some types to throw in...
+		if (!block->scope) {block->scope=new CallScope;}
+		// create a local for each supplied argument, using its type..
+		// note that vars should be able to propogate inside too???
+		CallScope* subscope=block->scope;
+		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
+			auto input_type=block->argls[i]->type;
+			auto v=subscope->get_variable(fnc->args[i]->name);
+			auto argtype=fnc->args[i]->type;
+			if (!v->type){
+				v->type=argtype?argtype:input_type;
+			} else {
+				// read the type out from the function invocation, really.
+				if (block->argls[i]->type) {ASSERT(input_type->eq(v->type));}
+				else block->argls[i]->type=v->type;
+			}
+			// and stuff a default expression in for any not called..
 		}
 		
 		// TODO: insert expressions for the default arguments
@@ -532,8 +638,8 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope) {
 		block->next_of_call_target = call_target->callers;
 		call_target->callers =block;
 		block->call_target=call_target;
-		block->type = call_target->resolve_call(subscope);
-		call_target->resolved=true;
+		block->type = call_target->resolve_call(subscope,desired);
+//		call_target->resolved=true;
 		return block->type;
 	}
 	else 
@@ -541,26 +647,63 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope) {
 }
 
 
-Type* ExprFnDef::resolve_call(CallScope* scope) {
+Type* ExprFnDef::resolve_call(CallScope* scope,const Type* desired) {
 //	auto scope=new CallScope;		
 //	scope->parent=parent; scope->next=parent->child; parent->child=scope;
 //	scope->outer=this;
 //	scope->node=this->body;
 	printf("resolve fn call.. %p\n", scope);
-	auto rt=this->body->resolve(scope);
+	//if (this->type && )
+	auto rt=this->body->resolve(scope,desired);
 	printf("resolve %s yields type:", getString(this->ident()));if (rt)rt->dump(-1);printf("\n");
 	if (this->type) {
 		ASSERT(rt==this->type);	
 		this->resolved=true;
 	}
+	// todo: disambiguate, 'resolve_call_return_type' - otherwise if its a lambda function, means much less.
 	this->type=rt;
 	return rt;
 }
-Type* ExprFnDef::resolve(CallScope* scope) {
+Type* ExprFnDef::resolve(CallScope* scope, const Type* desired) {
 // todo: makes a closure taking locals from parent scope
+	if (!this->name) return new Type(FN);
+	if (!this->scope){ this->scope=new CallScope; this->scope->global=scope;}
+	auto sc=this->scope;
+	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
+		auto v=sc->get_variable(this->args[i]->name);
+		propogate_type(v->type, this->args[i]->type);
+	}
+	this->type=this->body->resolve(sc,desired);
+	
+	printf("RESOLVE FN - TODO\n");
 	return new Type(FN);
 }
 
+FnName* find_fn_name(CallScope* scope,Name n) {
+	auto global=scope->global;
+	for (auto f=global->fn_names; f;f=f->next) {
+		if (f->name==n) return f;
+	}
+	auto f=new FnName; f->next=global->fn_names; global->fn_names=f;
+	f->name=n; f->fn_defs=0;
+	return	f;
+}
+void link_fn_name(CallScope* global,ExprFnDef* f) {
+	if (f->fn_name) return;
+	auto n=find_fn_name(global, f->name);
+	f->next_of_name=n->fn_defs; n->fn_defs=f;
+	f->fn_name=n;
+}
+void gather_functions(Node* node, CallScope* global) {
+	if (auto f=dynamic_cast<ExprFnDef*>(node)) {
+		// todo: local functions should only be findable inside.
+		link_fn_name(global, f);
+	} else if (auto b=dynamic_cast<ExprBlock*>(node)) {
+		for (auto sub:b->argls) {
+			gather_functions(sub,global);
+		}		
+	}
+}
 void call_graph(Node* root,CallScope* scope) {
 }
 
@@ -615,22 +758,31 @@ struct TextInput {
 //		printf("op len=%d",longest);
 		tok_end=tok_start+longest;
 	}
+	void advance_string() {
+		tok_end++;
+		while (*tok_end && *tok_end!='\"') {
+			if (*tok_end=='\\' && tok_end[1]) tok_end++; //skip backslashed quotes inside..
+			tok_end++;
+		}
+		if (*tok_end)
+			tok_end++; // step past last.
+	}
 
 	void advance_tok() {
-		auto pos=tok_start;
 		while (isWhitespace(*tok_end)&&*tok_end) tok_end++;
 		tok_start=tok_end;
 		if (!*tok_end) { this->curr_tok=0; return;}
 		auto c=*tok_end;
 		if (isSymbolStart(c))	advance_sub(isSymbol);
 		else if (isNumStart(c)) advance_sub(isNum);
+		else if (c=='\"') advance_string();
 		else advance_operator();
 //		else tok_end++;
 		this->curr_tok = getStringIndex(tok_start,tok_end);
 	}
 	int eat_tok() {
 		prev_start=tok_start;
-		char tok[512]; for (const char* c=tok_start; c!=tok_end;c++) {}
+		for (const char* c=tok_start; c!=tok_end;c++) {}
 		int r=curr_tok;
 		advance_tok();
 		return r;
@@ -647,6 +799,14 @@ struct TextInput {
 	int eat_int() {
 		auto nd=eat_number();
 		return nd.num/nd.denom;
+	}
+	const char* eat_string() {
+		auto len=(tok_end-tok_start)-2;
+		ASSERT(len>=0);
+		auto ret=(char*)malloc(len+1);
+		memcpy((void*)ret,(void*)(tok_start+1),len+1);
+		ret[len]=0;
+		return ret;
 	}
 	NumDenom eat_number()  {
 		int	val=0;
@@ -679,6 +839,9 @@ struct TextInput {
 			return true;
 		return false;
 	}
+	bool is_next_string() const {
+		return *tok_start=='\"';
+	}
 
 	int peek_tok(){return curr_tok;}
 	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
@@ -701,27 +864,31 @@ void dump(vector<Expr*>& v) {
 	printf("\n");
 }
 
-void flush_op_stack(ExprBlock* block, vector<Expr*>& ops,vector<Expr*>& vals) {
-	while (ops.size()>0) {
-		ExprBlock* op=new ExprBlock;
-		op->call_op=pop(ops);
-		int op_tok=op->call_op->ident();
-		int op_arity=arity(op_tok);
-		if (vals.size()>= 2 && op_arity==2 ) {
-			auto arg1=pop(vals);
-			op->argls.push_back(pop(vals));
-			op->argls.push_back(arg1);
-		} else if (vals.size()>=1 && op_arity==1) {
-			op->argls.push_back(pop(vals));
-		} else {
-			printf("operators:");dump(ops);
-			printf("\nvalues:");dump(vals);
-			printf("\n%s arity %zu %zu given\n",getString(op_tok), op_arity, op->argls.size());
-			exit(0);
-		}
-		vals.push_back(op);
-//		block->argls.push_back(op);
+void pop_operator_call( vector<int>& operators,vector<Expr*>& operands) {
+	//takes the topmost operator from the operator stack
+	//creates an expression node calling it, consumes operands,
+	//places result on operand stack
+									 
+	auto * p=new ExprBlock();
+	auto op=pop(operators);
+	p->call_op=new ExprIdent(op);
+	if (operands.size()>=2 && (arity(op)==2)){
+		auto arg1=pop(operands);
+		p->argls.push_back(pop(operands));
+		p->argls.push_back(arg1);
+	} else if (operands.size()>=1 && arity(op)==1){
+		p->argls.push_back(pop(operands));
+	} else{
+//						printf("\noperands:");dump(operands);
+//						printf("operators");dump(operators);
+		printf("\nerror: %s arity %d, %lu operands given\n",getString(op),arity(op),operands.size());
+		exit(0);
 	}
+	operands.push_back(p);
+}
+//   void fn(x:(int,int),y:(int,int))
+void flush_op_stack(ExprBlock* block, vector<int>& ops,vector<Expr*>& vals) {
+	while (ops.size()>0) pop_operator_call(ops,vals);
 	while (vals.size()) {
 		block->argls.push_back(pop(vals));
 	}
@@ -730,9 +897,9 @@ void flush_op_stack(ExprBlock* block, vector<Expr*>& ops,vector<Expr*>& vals) {
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	// shunting yard parserfelchery
 	ExprBlock *node=new ExprBlock; node->call_op=op;
-	vector<Expr*> operators;
+	vector<int> operators;
 	vector<Expr*> operands;
-	bool	was_operand=false,was_operator=true;
+	bool	was_operand=false;
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
 
@@ -745,8 +912,8 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 		}
 		printf(":%s\n",getString(src.peek_tok()));
 		printf("parse:- %zu %zu\n",operands.size(),operators.size());
-		printf("operands:");dump(operands);
-		printf("operators:");dump(operators);printf("\n");
+//		printf("operands:");dump(operands);
+//		printf("operators:");dump(operators);printf("\n");
 
 		print_tok(src.peek_tok());
 		Expr* sub=nullptr;
@@ -758,15 +925,15 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 				else {ln=new ExprLiteral((float)n.num/(float)n.denom);}
 				operands.push_back(ln);		
 				was_operand=true;
-				was_operator=false;
 				continue;
+			} else if (src.is_next_string()) {
+				ExprLiteral(src.eat_string());
 			}
 		}
 		if (src.eat_if(FN)) {
 //			ASSERT(!was_operand);
 			operands.push_back(parse_fn(src)); 
 			was_operand=true;
-			was_operator=false;
 			
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
@@ -776,63 +943,37 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			}
 			else {operands.push_back(parse_call(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
-				was_operator=false;
 			}
 		} else if (src.eat_if(delim)) {
-				// dump all..
-			//ASSERT(was_operand==true);
-			printf("delimiter\n");
 			flush_op_stack(node,operators,operands);
 			was_operand=false;
-			was_operator=true;
 		}else if (src.eat_if(wrong_delim)){
 			printf("error expected %s not %s", getString(delim),getString(wrong_delim));
 			flush_op_stack(node,operators,operands);// keep going
 			was_operand=false;
-			was_operator=true;
 		} else{
 			auto tok=src.eat_tok();
-			auto ot=tok;
-			if (was_operand) tok=get_infix_operator(tok);
-			else if (was_operator)tok=get_prefix_operator(tok);
-			else {ASSERT(was_operand!=was_operator); ASSERT(0)}
-
 			if (is_operator(tok)) {
-				printf(" op:%s%s  (following:%s) %d->%d\n",getString(tok),is_prefix(tok)?"prefix":arity(tok)>1?"infix":"postfix",was_operand?"operand":"operator",ot,tok);
+				if (was_operand) tok=get_infix_operator(tok);
+				else tok=get_prefix_operator(tok);
+
 				while (operators.size()>0) {
-					int prev_precedence=precedence(operators.back()->ident());
+					int prev_precedence=precedence(operators.back());
 					int prec=precedence(tok);
 					if (prev_precedence>prec
 						||(is_right_assoc(tok)&&prec==prev_precedence))
 						break;
-					auto * p=new ExprBlock();
-					p->call_op=pop(operators);
-					auto op=p->call_op->ident();
-					if (operands.size()>=2 && (arity(op)==2)){
-						auto arg1=pop(operands);
-						p->argls.push_back(pop(operands));
-						p->argls.push_back(arg1);
-					} else if (operands.size()>=1 && arity(op)==1){
-						p->argls.push_back(pop(operands));
-					} else{
-						printf("\noperands:");dump(operands);
-						printf("operators");dump(operators);
-						printf("\nerror: %s arity %d, %d operands given\n",getString(op),arity(op),operands.size());
-						exit(0);
-					}
-					operands.push_back(p);
-					was_operand=true;//was_operator=
-				} //else {
-					//operators.push_back(new ExprIdent(tok));
-					//was_operand=false;
-					//}
-				operators.push_back(new ExprIdent(tok));
+					pop_operator_call(operators,operands);
+				}
+				operators.push_back(tok);
 				was_operand=false;
-				was_operator=true;
-			} else {// last was operator, we got an operand
+			} else {
+				if (was_operand==true) {
+					printf("warning undeliminated expression parsing anyway");
+					flush_op_stack(node,operators,operands);// keep going
+				}
 				operands.push_back(new ExprIdent(tok));
 				was_operand=true;
-				was_operator=false;
 			}
 		}
 		//ASSERT(sub);
@@ -909,7 +1050,14 @@ const char* g_TestProg=
 "(fn interleave((a int)(c (map string int))(b (vector float))) (return)) "
 */
 
-	"*++x=*--y;"
+// semantically we pass something, its' immutable
+// doesn't matter if its' value or reference-let compiler decide
+// 2 words-pass in regs. any more.. pass adress.
+// however you can say pass ownership, move struct
+// or pass a mutable reference - mut 
+// eg...
+/*
+	"*++x=*--y e+r:int foo(e,r);"
 	"self.pos+self.vel*dt;"
 	"future.pos=self.pos+self.vel*dt;"
 	"x=y=z=3; x+y+z=0;"	
@@ -922,8 +1070,10 @@ const char* g_TestProg=
 	"fn clamp(a,b,f){ min(b,max(a,f)) }"
 	"fn lerp(a:float,b:float,f:float){(b-a)*f+a}"
 	"fn mad(a:float,b:float,f:float){a+b*f}"
-
-//	"foo=bar(x*3,y+(self.pos+other.pos)*0.5);"
+	"fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}"
+*/
+//	"x=y; y=z; z=0.0;"
+	"fn lerp(a:float,b,f){(b-a)*f+a};"
 /*
 "set(glob_x, 10.0);"
 "fn they_int(){set(tfx, 1); tfx};"
@@ -938,17 +1088,18 @@ const char* g_TestProg=
 	;
 // when this works - it can be like SPECS
 int main(int argc, const char** argv) {
-
 	TextInput	src(g_TestProg);
-	auto node=parse_call(src,0, SEMICOLON, nullptr);
-//	while (auto ix=src.eat_tok()){}
-//	printf("%d%s",getStringIndex("foo"),getString(IDENT+5));
-//	g_Names.dump();
-//	printf(getString(ADD_ASSIGN));
+	auto node=parse_call(src,0,SEMICOLON,nullptr);
 	printf("%p\n",node);
 	node->dump(0);
 	CallScope global; global.node=(ExprBlock*)node; global.global=&global;
-	node->resolve(&global);
+	gather_functions(node,&global);
+	node->resolve(&global,nullptr);
+	node->resolve(&global,nullptr);
+	node->resolve(&global,nullptr);
+	node->resolve(&global,nullptr);
+	node->resolve(&global,nullptr);
+	node->dump(0);
 //	global.visit_calls();
 	output_code(stdout, &global);
 	global.dump(0);

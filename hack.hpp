@@ -38,12 +38,12 @@ enum Token {
 	OPEN_BRACE,CLOSE_BRACE,
 	OPEN_BRACKET,CLOSE_BRACKET,
 	// operators
-	ARROW,FAT_ARROW,REV_ARROW,DOUBLE_COLON,
+	ARROW,FAT_ARROW,REV_ARROW,DOUBLE_COLON,SWAP,
 	COLON,ADD,SUB,MUL,DIV,DOT,
 	LT,GT,LE,GE,EQ,NE,LOG_AND,LOG_OR,
 	AND,OR,XOR,MOD,SHL,SHR,
 	ASSIGN,LET_ASSIGN,ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
-	PRE_INC,PRE_DEC,POST_INC,POST_DEC,NEG,DEREF,ADDR,NOT,COMPLEMENET,
+	PRE_INC,PRE_DEC,POST_INC,POST_DEC,NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR,SLICE,
 	COMMA,SEMICOLON,
 	// after these indices, comes indents
 	IDENT
@@ -79,7 +79,7 @@ public:
 	int visited;					// anti-recursion flag.
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
-	virtual Type* resolve(CallScope* scope){printf("empty?");return nullptr;};
+	virtual Type* resolve(CallScope* scope, const Type* desired){printf("empty?");return nullptr;};
 	virtual const char* kind_str(){return"node";}
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
@@ -110,16 +110,21 @@ struct ExprBlock :public ExprScopeBlock{
 	Expr*	call_op;
 	vector<Expr*>	argls;
 	ExprFnDef*	call_target;
+	CallScope* scope;
 	ExprBlock* next_of_call_target;	// to walk callsites to a function
 	int get_name()const;
 	void dump(int depth) const;
-	Type* resolve(CallScope* scope);
+	Type* resolve(CallScope* scope, const Type* desired);
 	virtual const char* kind_str()const{return"block";}
 	ExprBlock();
 };
 enum TypeId{
-	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
+//	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
+	T_NONE,
+	T_INT,T_FLOAT,T_CONST_STRING,T_VOID,T_AUTO,T_ONE,T_ZERO,T_VOIDPTR,
+	T_WRONG_PRINT,T_FN,T_STRUCT,T_TUPLE,T_VARIANT,T_NUM_TYPES,
 };
+bool is_type(int tok);
 struct StructDef;
 extern bool g_lisp_mode;
 struct Module;
@@ -150,9 +155,10 @@ struct ExprLiteral : Expr {
 	ExprLiteral(float f);
 	ExprLiteral(int i);
 	ExprLiteral(const char* start,int length);
+	ExprLiteral(const char* start);// take ownership
 	~ExprLiteral();
 
-	Type* resolve(CallScope* scope);
+	Type* resolve(CallScope* scope, const Type* desired);
 };
 struct ArgDef :Node{
 	Name name;
@@ -172,9 +178,6 @@ struct FnName {
 //	ExprFnDef* resolve(Call* site);
 	FnName(){ name=0; next=0;fn_defs=0;}
 };
-extern FnName*	g_fn_names;
-extern vector<FnName> g_functions;
-FnName* getFnName(int name);
 /*
 struct Call {
 	// linked through caller->callee & scope block
@@ -204,18 +207,19 @@ struct CallScope {
 	CallScope* global;
 	//Call* calls;
 	Variable* vars;
+	FnName*	fn_names;
 	// locals;
 	// captures.
 	const char* name()const;
-	CallScope(){outer=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
+	CallScope(){fn_names=0; outer=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
 	void visit_calls();
-	Variable* get_variable(Name ident);
-	Variable* create_variable(Name name,Type* t);
-	ExprFnDef* find_fn(Name name,Expr** args, int num_args) ;
+	Variable* find_variable(Name ident);
+	Variable* get_variable(Name name);
+	ExprFnDef* find_fn(Name name,vector<Expr*>& args) ;
 	void dump(int depth) const;
 	void push_child(CallScope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 };
-Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope);
+Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope,const Type* desired);
 
 struct StructDef : ModuleBase {
 	vector<ArgDef> fields;
@@ -252,6 +256,7 @@ struct ExprFnDef :public Module {
 	ExprFnDef*	instances;		// Linklist of it's instanced functions.
 	ExprFnDef*	next_instance;
 	FnName*		fn_name;
+	CallScope*	scope;
 	bool resolved;
 	// Partial specialization may add one specific parameter...
 	// calls from un-instanced routines can partially implement?
@@ -263,19 +268,17 @@ struct ExprFnDef :public Module {
 	FnName* get_fn_name();
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(){resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;}
+	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;}
 	void dump(int ind) const;
-	Type* resolve(CallScope* scope);
-	Type* resolve_call(CallScope* scope);
+	Type* resolve(CallScope* scope,const Type* desired);
+	Type* resolve_call(CallScope* scope,const Type* desired);
 };
 
 struct ExprIdent :Expr{
-	void dump(int depth) const {
-		newline(depth);printf("%s ",getString(name));
-	}
+	void dump(int depth) const;
 	virtual const char* kind_str()const{return"ident";}
 	ExprIdent(int i){name=i;}
-	Type* resolve(CallScope* scope);
+	Type* resolve(CallScope* scope, const Type* desired);
 };
 
 
