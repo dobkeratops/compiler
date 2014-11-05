@@ -73,10 +73,13 @@ struct CallScope;
 struct StructDef;
 struct ExprIdent;
 struct Type;
-struct ResolveType{
-	enum Status {COMPLETE,INCOMPLETE,ERROR};
+enum Status :int {COMPLETE=0,INCOMPLETE=1,ERROR=3};// complete is zero, ERROR is 3 so we can start 0 and OR the bad news in.
+struct ResolvedType{
+	// carries information from type propogation
 	Type* type;
 	Status status;
+	ResolvedType(Type*t=nullptr,Status s=INCOMPLETE){type=t; status=s;}
+	operator Type* ()const {return type;}
 };
 
 class Node {
@@ -85,7 +88,7 @@ public:
 	int visited;					// anti-recursion flag.
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
-	virtual Type* resolve(CallScope* scope, const Type* desired){printf("empty?");return nullptr;};
+	virtual ResolvedType resolve(CallScope* scope, const Type* desired){printf("empty?");return ResolvedType(nullptr);};
 	virtual const char* kind_str(){return"node";}
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
@@ -122,7 +125,7 @@ struct ExprBlock :public ExprScopeBlock{
 	ExprBlock* next_of_call_target;	// to walk callsites to a function
 	int get_name()const;
 	void dump(int depth) const;
-	Type* resolve(CallScope* scope, const Type* desired);
+	ResolvedType resolve(CallScope* scope, const Type* desired);
 	virtual const char* kind_str()const{return"block";}
 	ExprBlock();
 	Node* clone() const;
@@ -168,26 +171,29 @@ struct ExprLiteral : Expr {
 	~ExprLiteral();
 	Node* clone() const;
 	bool is_string() const { return type_id==T_CONST_STRING;}
-	Type* resolve(CallScope* scope, const Type* desired);
+	ResolvedType resolve(CallScope* scope, const Type* desired);
 };
 struct ArgDef :Node{
 	Name name;
 	Type* type;
-	Expr* default_value;
-	ArgDef(){type=0;default_value=0;};
-	ArgDef(int n,Type* t):ArgDef(){name=n;type=t;printf("\nMAKE ARG %s", getString(n)); if (type)type->dump(-1); printf("\n");}
+	Expr* default_expr;
+	ArgDef(){type=0;default_expr=0;};
+	ArgDef(int n):ArgDef(){name=n;type=0;default_expr=0;printf("\nMAKE ARG %s", getString(n)); if (type)type->dump(-1); printf("\n");}
 	void dump(int depth) const;
 	virtual const char* kind_str()const;
 	~ArgDef(){}
 	Node* clone() const;
 };
-struct FnName {
+struct ExprStructDef;
+
+struct FnName {		// everything defined under a name.
 	Name		name;
 	FnName*		next;
 	ExprFnDef*	fn_defs;
+	ExprStructDef*	structs; // also typedefs?
 	ExprFnDef*	getByName(Name n);
 //	ExprFnDef* resolve(Call* site);
-	FnName(){ name=0; next=0;fn_defs=0;}
+	FnName(){ name=0; next=0;fn_defs=0;structs=0;}
 };
 /*
 struct Call {
@@ -261,6 +267,21 @@ struct ExprIf : public Expr {
 
 struct Call;
 struct FnName;
+
+struct ExprStructDef:public Module {
+	// lots of similarity to a function actually.
+	// but its' backwards.
+	// it'll want TypeParams aswell.
+	vector<ArgDef*> fields;
+	ExprFnDef* constructor_fn;
+	FnName* fn_name;
+	ExprStructDef* next_of_name;
+	ExprStructDef(){constructor_fn=0;fn_name=0;next_of_name=0;}
+	void dump(int depth)const;
+	ResolvedType resolve(CallScope* scope, const Type* desired);
+	Node* clone()const {printf("warning,leak\n");return (Node*) this;};
+};
+
 struct ExprFnDef :public Module {
 	ExprFnDef*	next_of_module;
 	ExprFnDef*	next_of_name;	//link of all functions of same name...
@@ -269,6 +290,7 @@ struct ExprFnDef :public Module {
 	ExprFnDef*	next_instance;
 	FnName*		fn_name;
 	CallScope*	scope;
+	Type* fn_type;				// eg (args)->return
 	bool resolved;
 	// Partial specialization may add one specific parameter...
 	// calls from un-instanced routines can partially implement?
@@ -280,10 +302,10 @@ struct ExprFnDef :public Module {
 	FnName* get_fn_name();
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;}
+	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;}
 	void dump(int ind) const;
-	Type* resolve(CallScope* scope,const Type* desired);
-	Type* resolve_call(CallScope* scope,const Type* desired);
+	ResolvedType resolve(CallScope* scope,const Type* desired);
+	ResolvedType resolve_call(CallScope* scope,const Type* desired);
 	Node* clone() const;
 };
 
@@ -291,7 +313,7 @@ struct ExprIdent :Expr{
 	void dump(int depth) const;
 	virtual const char* kind_str()const{return"ident";}
 	ExprIdent(int i){name=i;type=0;}
-	Type* resolve(CallScope* scope, const Type* desired);
+	ResolvedType resolve(CallScope* scope, const Type* desired);
 	Node* clone() const;
 	bool is_placeholder()const{return name==PLACEHOLDER;}
 };

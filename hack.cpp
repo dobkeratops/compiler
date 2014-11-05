@@ -134,7 +134,6 @@ const char* getString(int index) {
 }
 
 
-
 void indent(int depth) {
 	for (int i=0; i<depth; i++){printf("\t");};
 }
@@ -152,44 +151,63 @@ void Expr::dump_top() const {
 }
 
 Expr::Expr(){ type=0;}
-void assert_type_eq(const Type* a,const Type* b) {
-	if (!a->eq(b))
+Status assert_types_eq(const Type* a,const Type* b) {
+	if (!a->eq(b)){
 		printf("type error"); a->dump(-1);b->dump(-1);printf("\n");
+		return ERROR;
+	}
+	return COMPLETE;
 }
-void propogate_type(Type*& a,Type*& b) {
-	if (!a && b) {a=b;}
-	else if (!b && a) {b=a;}
-	else if (a && b){//ASSERT(b->eq(a));
-		assert_type_eq(a,b);
+Status propogate_type(Type*& a,Type*& b) {
+	if (!(a || b)) return INCOMPLETE;
+	if (!a && b) {a=b; return INCOMPLETE;}
+	else if (!b && a) {b=a; return INCOMPLETE;}
+	else {ASSERT(a && b);
+		return assert_types_eq(a,b);
 	}
 }
-void propogate_type_fwd(const Type*& a,Type*& b) {
-	if (!b && a) b=(Type*)a;
-	else {if (a && b)assert_type_eq(a,b);}
+Status propogate_type_fwd(const Type*& a,Type*& b) {
+	if (!(a || b)) return INCOMPLETE;
+	if (!a && b){return INCOMPLETE;}
+	if (!b && a) {b=(Type*)a;return INCOMPLETE;}
+	else {ASSERT(a && b); return assert_types_eq(a,b);  }
 }
-void propogate_type(Type*& a,Type*& b,Type*& c) {
-	propogate_type(a,b);
-	propogate_type(b,c);
-	propogate_type(a,c);
+Status propogate_type(Type*& a,Type*& b,Type*& c) {
+	int ret=COMPLETE;
+	ret|=propogate_type(a,b);
+	ret|=propogate_type(b,c);
+	ret|=propogate_type(a,c);
+	return (Status)ret;
 }
-void propogate_type_fwd(const Type*& a,Type*& b,Type*& c) {
-	propogate_type(b,c);
-	propogate_type_fwd(a,b);
-	propogate_type_fwd(a,c);
+Status propogate_type_fwd(const Type*& a,Type*& b,Type*& c) {
+	int ret=COMPLETE;
+	ret|=propogate_type(b,c);
+	ret|=propogate_type_fwd(a,b);
+	ret|=propogate_type_fwd(a,c);
+	return (Status)ret;
+}
+Status propogate_type(ResolvedType& a,Type*& b) {
+	a.status=(Status)(propogate_type(a.type,b)|(int)a.status);
+	return a.status;
+}
+Status propogate_type(ResolvedType& a,ResolvedType& b) {
+	// propogate all errors between them?
+	b.status=a.status=(Status)(propogate_type(a.type,b.type)|(int)a.status|(int)b.status);
+	return a.status;
 }
 
 
-Type* ExprIdent::resolve(CallScope* scope,const Type* desired) {
+ResolvedType ExprIdent::resolve(CallScope* scope,const Type* desired) {
 	// todo: not if its' a typename,argname?
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled out.
-		this->type=(Type*)desired; return this->type;
+		this->type=(Type*)desired; return ResolvedType(this->type,COMPLETE);
 	}
 	propogate_type_fwd(desired,this->type);
 	if (auto v=scope->get_variable(this->name)){
 		propogate_type(this->type,v->type);
 	}
-	return this->type;
+	return ResolvedType(this->type);
 }
 void ExprIdent::dump(int depth) const {
 	newline(depth);printf("%s:",getString(name));
@@ -294,13 +312,13 @@ void ExprLiteral::dump(int depth) const{
 // TODO : 'type==type' in our type-engine
 //	then we can just make function expressions for types.
 
-Type* ExprLiteral::resolve(CallScope* , const Type* desired){
+ResolvedType ExprLiteral::resolve(CallScope* , const Type* desired){
 	if (this->type) {
 		if (desired && this->type) {
 			desired->dump(-1); this->type->dump(-1);
 			ASSERT(this->type->eq(desired));
 		}
-		return this->type;
+		return ResolvedType(this->type);
 	}
 	Type* t=nullptr;
 	switch (type_id) {
@@ -312,7 +330,7 @@ Type* ExprLiteral::resolve(CallScope* , const Type* desired){
 	}
 	propogate_type(t,this->type);
 	propogate_type_fwd(desired,this->type);
-	return this->type;
+	return ResolvedType(this->type,COMPLETE);
 }
 
 ExprLiteral::ExprLiteral(float f) {
@@ -348,7 +366,7 @@ ExprLiteral::~ExprLiteral(){
 void ArgDef::dump(int depth) const {
 	newline(depth);printf("%s",getString(name));
 	if (type) {printf(":");type->dump(-1);}
-	if (default_value) default_value->dump(-1);
+	if (default_expr) {printf("=");default_expr->dump(-1);}
 }
 const char* ArgDef::kind_str()const{return"arg_def";}
 
@@ -465,8 +483,8 @@ ArgDef::clone() const{
 		r->name=this->name;
 		if (this->type)
 			r->type=(Type*)this->type->clone();
-		if (this->default_value)
-			r->default_value=(Expr*)this->default_value->clone();
+		if (this->default_expr)
+			r->default_expr=(Expr*)this->default_expr->clone();
 	}
 	return r;
 }
@@ -628,12 +646,12 @@ void dump(vector<T*>& src) {
 		printf(src[i]->dump());
 	}
 }
-Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
+ResolvedType ExprBlock::resolve(CallScope* sc, const Type* desired) {
 
 	printf("\nresolve block.. %p\n", sc);
 	if (this->argls.size()<=0 && !this->call_op) {
 		if (!this->type) this->type=new Type(VOID);
-		return this->type;
+		return ResolvedType(this->type);
 	}
 	int op_ident=NONE;
 	ExprIdent* p=nullptr;
@@ -650,7 +668,7 @@ Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 			propogate_type_fwd(desired,ret);
 		}
 		propogate_type(ret,this->type);
-		return ret;
+		return ResolvedType(ret);
 	} 
 	else 
 	if (op_ident==ASSIGN) {
@@ -668,7 +686,7 @@ Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 			// we'd report missing types - then do a pass propogating the opposite direction
 			// and bounce.
 		this->type = v->type;//t?t:(Type*)desired;
-		return v->type;
+		return ResolvedType(v->type);
 	} else if (is_operator(op_ident)){
 		// todo: &t gets adress. *t removes pointer, [i] takes index,
 		// comparisons yield bool, ...
@@ -687,7 +705,7 @@ Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 				this->argls[i]->resolve(sc,ret);
 			}
 		}
-		return ret;
+		return ResolvedType(ret);
 	} else if (op_ident==PLACEHOLDER) {
 		propogate_type_fwd(desired,this->type);
 		// dump given types here...
@@ -713,12 +731,12 @@ Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 			return resolve_make_fn_call(this, sc,desired);
 		} else if (this->call_target){
 			this->call_target->resolve(this->scope, desired);
-			return this->call_target->type;
+			return ResolvedType(this->call_target->type);
 		} else {
-			return nullptr;
+			return ResolvedType();
 		}
 	}
-	return nullptr;
+	return ResolvedType();
 }
 
 Type* resolve_make_fn_call(ExprBlock* block/*caller*/,CallScope* scope,const Type* desired) {
@@ -752,7 +770,7 @@ Type* resolve_make_fn_call(ExprBlock* block/*caller*/,CallScope* scope,const Typ
 			};
 			
 			block->type = fnc->type?fnc->type:(Type*)desired;
-			return block->type;
+			return ResolvedType(block->type);
 			//return fnc->
 		}
 
@@ -784,14 +802,14 @@ Type* resolve_make_fn_call(ExprBlock* block/*caller*/,CallScope* scope,const Typ
 		
 		auto ret=call_target->resolve_call(sc,desired);
 		propogate_type(ret,block->type);
-		return block->type;
+		return ResolvedType(block->type);
 	}
 	else 
-		return nullptr;
+		return ResolvedType();
 }
 
 
-Type* ExprFnDef::resolve_call(CallScope* scope,const Type* desired) {
+ResolvedType ExprFnDef::resolve_call(CallScope* scope,const Type* desired) {
 //	auto scope=new CallScope;		
 //	scope->parent=parent; scope->next=parent->child; parent->child=scope;
 //	scope->outer=this;
@@ -801,11 +819,13 @@ Type* ExprFnDef::resolve_call(CallScope* scope,const Type* desired) {
 	propogate_type_fwd(desired,this->type);
 	
 	auto rt=this->body->resolve(scope,desired);
-	printf("resolve %s yields type:", getString(this->ident()));if (rt)rt->dump(-1);printf("\n");
-	propogate_type(this->type,rt);
-	return rt;
+	printf("resolve %s yields type:", getString(this->ident()));if (rt.type) rt.type->dump(-1);printf("\n");
+	// awkwardness says: type error return is more like an enum that doesn't return a type?
+	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
+	auto s=propogate_type(rt,this->type);
+	return ResolvedType(rt,s);
 }
-Type* ExprFnDef::resolve(CallScope* scope, const Type* desired) {
+ResolvedType ExprFnDef::resolve(CallScope* scope, const Type* desired) {
 // todo: makes a closure taking locals from parent scope
 	if (!this->name) return new Type(FN);
 	if (!this->scope){ this->scope=new CallScope; this->scope->global=scope;}
@@ -814,18 +834,20 @@ Type* ExprFnDef::resolve(CallScope* scope, const Type* desired) {
 		auto arg=this->args[i];
 		auto v=sc->get_variable(arg->name);
 		propogate_type(arg->type,v->type);
-		if (arg->default_value){static int warn=0; if (!warn){warn=1;
+		if (arg->default_expr){static int warn=0; if (!warn){warn=1;
 			printf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
 		}
 	}
 	auto ret=this->body->resolve(sc,desired);
 	propogate_type(ret,this->type);
 	
+	if (!this->fn_type)
+		this->fn_type=new Type(FN);
 	printf("RESOLVE FN - TODO\n");
-	return new Type(FN);
+	return ResolvedType(fn_type);
 }
 
-FnName* find_fn_name(CallScope* scope,Name n) {
+FnName* find_global_fn_name(CallScope* scope,Name n) {
 	auto global=scope->global;
 	for (auto f=global->fn_names; f;f=f->next) {
 		if (f->name==n) return f;
@@ -836,7 +858,7 @@ FnName* find_fn_name(CallScope* scope,Name n) {
 }
 void link_fn_name(CallScope* global,ExprFnDef* f) {
 	if (f->fn_name) return;
-	auto n=find_fn_name(global, f->name);
+	auto n=find_global_fn_name(global,f->name);
 	f->next_of_name=n->fn_defs; n->fn_defs=f;
 	f->fn_name=n;
 }
@@ -1001,6 +1023,7 @@ typedef TextInput TokenStream;
 
 Expr* parse_lisp(TokenStream& src);
 ExprFnDef* parse_fn(TokenStream&src);
+ExprStructDef* parse_struct(TokenStream& src);
 
 template<typename T>
 T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
@@ -1078,7 +1101,6 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 //		printf("operators:");dump(operators);printf("\n");
 
 		print_tok(src.peek_tok());
-		Expr* sub=nullptr;
 		if (src.is_next_literal()) {
 			if (src.is_next_number()) {
 				auto n=src.eat_number();
@@ -1094,11 +1116,14 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 				printf("error parsing literal\n");
 			}
 		}
+		else if (src.eat_if(STRUCT)){
+			operands.push_back(parse_struct(src));
+			was_operand=true;
+		}
 		else if (src.eat_if(FN)) {
 //			ASSERT(!was_operand);
 			operands.push_back(parse_fn(src)); 
 			was_operand=true;
-			
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
@@ -1173,11 +1198,51 @@ Type* parse_type(TokenStream& src, int close) {
 ArgDef* parse_arg(TokenStream& src, int close) {
 	auto argname=src.eat_ident();
 	if (argname==close) return nullptr;
+	auto a=new ArgDef(argname);
 	if (src.eat_if(COLON)) {
-		return new ArgDef(argname,parse_type(src,CLOSE_PAREN));
-	} 
-	else return new ArgDef(argname,nullptr);
+		a->type=parse_type(src,CLOSE_PAREN);
+	}
+	if (src.eat_if(ASSIGN)){
+		a->default_expr=parse_expr(src);
+	}
+	return a;
 }
+ExprStructDef* parse_struct(TokenStream& src) {
+	auto sd=new ExprStructDef();
+	printf("parse_struct");
+	auto tok=src.eat_ident();
+	sd->name=tok;
+
+	if (!src.eat_if(OPEN_BRACE))
+		return sd;
+	// todo: type-params.
+	while (NONE!=(tok=src.peek_tok())){
+		if (tok==CLOSE_BRACE){src.eat_tok(); break;}
+		auto arg=parse_arg(src,CLOSE_PAREN);
+		src.eat_if(COMMA); src.eat_if(SEMICOLON);
+		sd->fields.push_back(arg);
+	}
+	return sd;
+}
+void ExprStructDef::dump(int depth) const{
+	newline(depth);printf("struct %s {",getString(this->name));
+	for (auto f:this->fields){f->dump(depth+1);}
+	newline(depth);printf("}");
+}
+
+ResolvedType ExprStructDef::resolve(CallScope* scope,const Type* desired){
+	if (!this->fn_name ) {
+		auto fnm=find_global_fn_name(scope, this->name);
+		this->next_of_name=fnm->structs; fnm->structs=this;
+	}
+	if (!this->type) {
+		this->type = new Type(this->name);	// name selects this struct.
+	}
+	auto s=propogate_type_fwd(desired,this->type);
+	return ResolvedType(this->type,s);
+}
+
+
 ExprFnDef* parse_fn(TokenStream&src) {
 	auto *fndef=new ExprFnDef();
 	printf("parse_fn");
@@ -1195,9 +1260,6 @@ ExprFnDef* parse_fn(TokenStream&src) {
 		printf(" arg:%s ",getString(tok));
 		auto arg=parse_arg(src,CLOSE_PAREN);
 		fndef->args.push_back(arg);
-		if (src.eat_if(ASSIGN)){
-			arg->default_value=parse_expr(src);
-		}
 		src.eat_if(COMMA);
 	}
 	// TODO: multiple argument blocks for currying?.
@@ -1259,14 +1321,19 @@ const char* g_TestProg=
 	"fn foo(x:float)->float{_};"
 	"fn lerp(i:int,j:int,k:int){(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
+	"fn render(m:Mesh){}"
 	"x=1.0; y=2.0; z=3.0; w=0.5;"
 	"foo=lerp(x,add(y,z),w);"
+	"struct Mesh{ vertices;triangles};"
 	"i=20;"
+	"fn Mesh()->Mesh{_}"
+	"mesh = Mesh();"
 	"i=10; j=20.0; k=j+i;"
 	"fn itof(i:int)->float{_}"
 	"fn make()->tuple[int,int]{_}"
 	"obj=make();"
 	"i=lerp(p,q,r);"
+	"render(mesh);"
 	"f1=foo(obj);"
 	"f2=foo(y);"
 	//"lerp(1,2,0);"
