@@ -257,18 +257,12 @@ struct StructDef : ModuleBase {
 };
 struct ExprIf : public Expr {
 	Expr* cond=0;
-	Expr* if_block=0;
+	Expr* body=0;
 	Expr* else_block=0;
-	void dump(int depth) const {
-		indent(depth);printf("If:\n");
-		cond->dump(depth+1);
-		if_block->dump(depth+1);
-		if (else_block)	{
-			indent(depth);printf("Else:\n");
-			else_block->dump(depth+1); 
-		}
-	};
+	void dump(int depth) const;
+	ExprIf(){name=0;cond=0;body=0;else_block=0;}
 	~ExprIf(){}
+	Node* clone() const;
 	virtual const char* kind_str()const{return"if";}
 	ResolvedType resolve(CallScope* scope,Type*) ;
 };
@@ -283,7 +277,7 @@ struct ExprFor : public Expr {
 	void dump(int depth) const;
 	bool is_c_for()const{return !pattern;}
 	bool is_for_in()const{return pattern && cond==0 && incr==0;}
-	ExprFor(){pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;}
+	ExprFor(){name=0;pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;}
 	~ExprFor(){}
 	virtual const char* kind_str()const{return"if";}
 	ResolvedType resolve(CallScope* scope,Type*) {return ResolvedType(nullptr);};

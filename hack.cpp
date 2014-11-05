@@ -1106,6 +1106,18 @@ ExprBlock* parse_expr(TokenStream&src) {
 	return parse_call(src,0,0,nullptr);
 }
 
+void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
+					  vector<int>& operators,
+					  vector<Expr*>& operands
+
+					  ){
+	if (was_operand==true) {
+		printf("warning undeliminated expression parsing anyway");
+		flush_op_stack(node,operators,operands);// keep going
+	}
+	was_operand=true;
+}
+
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	// shunting yard parserfelchery
 	ExprBlock *node=new ExprBlock; node->call_op=op;
@@ -1153,21 +1165,22 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			}
 		}
 		else if (src.eat_if(STRUCT)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_struct(src));
-			was_operand=true;
 		}
 		else if (src.eat_if(FN)) {
 //			ASSERT(!was_operand);
-			operands.push_back(parse_fn(src)); 
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			operands.push_back(parse_fn(src));
 		}
 		else if (src.eat_if(FOR)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_for(src));
-			was_operand=true;
 		}
-//		else if (src.eat_if(IF)){
-//			operands.push_back(parse_if(src));
-//			was_operand=true;
-//		}
+		else if (src.eat_if(IF)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			operands.push_back(parse_if(src));
+		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
 				operands.push_back(parse_call(src, CLOSE_PAREN,SEMICOLON, pop(operands)));
@@ -1203,12 +1216,8 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 				operators.push_back(tok);
 				was_operand=false;
 			} else {
-				if (was_operand==true) {
-					printf("warning undeliminated expression parsing anyway");
-					flush_op_stack(node,operators,operands);// keep going
-				}
+				another_operand_so_maybe_flush(was_operand,node,operators,operands);
 				operands.push_back(new ExprIdent(tok));
-				was_operand=true;
 			}
 		}
 		//ASSERT(sub);
@@ -1339,6 +1348,42 @@ Node* ExprFor::clone()const{
 	n->else_block=(Expr*)cond->clone_if();
 	return n;
 }
+// make a flag for c or rust mode
+// exact c parser
+// add := gets rid of auto noise
+// add postfix : alternate functoin syntax
+ExprIf* parse_if(TokenStream& src){
+	auto p=new ExprIf;
+	p->cond=parse_call(src, OPEN_BRACE, 0, 0);
+	p->body=parse_call(src, CLOSE_BRACE,SEMICOLON,0);
+
+	if (src.eat_if(ELSE)) {
+		if (src.eat_if(IF)) {
+			p->else_block= parse_if(src);
+		} else if (src.eat_if(OPEN_BRACE)){
+			p->else_block=parse_call(src, CLOSE_BRACE, SEMICOLON, 0);
+		} else {
+			printf("if { }else {} expected\n");
+		}
+	}
+	return p;
+}
+Node* ExprIf::clone()const {
+	auto p=new ExprIf; p->cond=(Expr*)this->cond->clone_if(); p->body=(Expr*)this->body->clone_if(); p->else_block=(Expr*)this->else_block->clone_if();
+	return p;
+}
+void ExprIf::dump(int depth) const {
+	newline(depth);printf("if\n");
+	cond->dump(depth+1);
+	newline(depth);printf("{\n");
+	body->dump(depth+1);
+	if (else_block)	{
+		indent(depth);printf("} else{\n");
+		else_block->dump(depth+1);
+	}
+	newline(depth);printf("}\n");
+};
+
 
 void ExprFor::dump(int d) const {
 	newline(d);printf("for ");
@@ -1474,9 +1519,10 @@ const char* g_TestProg=
 	"render(mesh);"
 	"f1=foo(obj);"
 	"f2=foo(y);"
- 
+ 	"if i<10 {printf(1)} else {printf(2)}"
 	"for i in foo {print(loop stuff);} else {printf(); madd(1,2,3);}"
 	"for x=0; x<10; x++ { printf(x); }"
+	"if i<10 {printf(1)} else {printf(2)}"
 //	"	printf(\"hello world\");"
 //	"}"
 	"lerp(1,2,0);"
