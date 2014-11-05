@@ -94,8 +94,13 @@ public:
 	const char* get_name_str()const;
 	Name ident() const  { if (this)return this->name;else return 0;}
 	virtual Node* clone() const=0;
+	Node* clone_if()const { if(this) return this->clone();else return nullptr;}
+	void dump_if(int d)const{if (this) this->dump(d);}
 };
+struct TypeParam{int name; int defaultv;};
+
 struct Type : Node{
+	vector<TypeParam> typeparams;
 	StructDef* struct_def;
 	Type*	sub;	// a type is itself a tree
 	Type*	next;
@@ -143,6 +148,8 @@ struct Module;
 // module base: struct(holds fns,structs), function(local fns), raw module.
 struct StructDef;
 struct ExprFnDef;
+struct TypeDef;
+struct ExprIf;
 struct VarDecl;
 struct ModuleBase : Expr {
 	ModuleBase* parent;
@@ -189,12 +196,14 @@ struct ExprStructDef;
 struct FnName {		// everything defined under a name.
 	Name		name;
 	FnName*		next;
+	Type*		types;
 	ExprFnDef*	fn_defs;
 	ExprStructDef*	structs; // also typedefs?
 	ExprFnDef*	getByName(Name n);
 //	ExprFnDef* resolve(Call* site);
-	FnName(){ name=0; next=0;fn_defs=0;structs=0;}
+	FnName(){ name=0; next=0;fn_defs=0;structs=0;types=0;}
 };
+
 /*
 struct Call {
 	// linked through caller->callee & scope block
@@ -215,6 +224,7 @@ struct Variable {
 	Type*	type;
 	Type* get_type() const { if(this)return this->type;else return nullptr;}
 };
+// scopes are created when resolving; generic functions are evaluated
 struct CallScope {
 	ExprFnDef*	outer;
 	Expr* node;
@@ -245,9 +255,6 @@ struct StructDef : ModuleBase {
 	StructDef* next_of_module;
 	ModuleBase* get_next_of_module(){return this->next_of_module;}
 };
-
-
-
 struct ExprIf : public Expr {
 	Expr* cond=0;
 	Expr* if_block=0;
@@ -263,6 +270,25 @@ struct ExprIf : public Expr {
 	};
 	~ExprIf(){}
 	virtual const char* kind_str()const{return"if";}
+	ResolvedType resolve(CallScope* scope,Type*) ;
+};
+// 'if' is sugar for "for (;
+struct ExprFor : public Expr {
+	Expr* pattern=0;
+	Expr* init=0;
+	Expr* cond=0;
+	Expr* incr=0;
+	Expr* body=0;
+	Expr* else_block=0;
+	void dump(int depth) const;
+	bool is_c_for()const{return !pattern;}
+	bool is_for_in()const{return pattern && cond==0 && incr==0;}
+	ExprFor(){pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;}
+	~ExprFor(){}
+	virtual const char* kind_str()const{return"if";}
+	ResolvedType resolve(CallScope* scope,Type*) {return ResolvedType(nullptr);};
+	Expr* find_break_expr();
+	Node* clone()const;
 };
 
 struct Call;
@@ -272,6 +298,7 @@ struct ExprStructDef:public Module {
 	// lots of similarity to a function actually.
 	// but its' backwards.
 	// it'll want TypeParams aswell.
+	vector<TypeParam> typeparams;
 	vector<ArgDef*> fields;
 	ExprFnDef* constructor_fn;
 	FnName* fn_name;
@@ -295,6 +322,7 @@ struct ExprFnDef :public Module {
 	// Partial specialization may add one specific parameter...
 	// calls from un-instanced routines can partially implement?
 
+	vector<TypeParam> typeparams;
 	vector<ArgDef*> args;
 	ExprBlock* body;
 	ExprBlock* callers;	// linklist of callers to here

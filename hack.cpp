@@ -52,8 +52,9 @@ int g_tok_info[]={
 	0,0,
 	0,0,
 };
+bool is_ident(int tok){return tok>=IDENT;}
 bool is_type(int tok){return tok<T_NUM_TYPES;}
-int is_operator(int tok){ return tok>=ARROW && tok<PLACEHOLDER;}
+int is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
 int precedence(int tok){return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
 int is_prefix(int tok){return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
 int arity(int tok){return  (tok<IDENT)?((g_tok_info[tok] & (UNARY) )?1:2):-1;}
@@ -144,9 +145,11 @@ void newline(int depth) {
 // it may contain outer level statements.
 
 void Expr::dump(int depth) const {
+	if (!this) return;
 	newline(depth);printf("(?)");
 }
 void Expr::dump_top() const {
+	if (!this) return;
 	printf("%s ", getString(name));
 }
 
@@ -210,6 +213,7 @@ ResolvedType ExprIdent::resolve(CallScope* scope,const Type* desired) {
 	return ResolvedType(this->type);
 }
 void ExprIdent::dump(int depth) const {
+	if (!this) return;
 	newline(depth);printf("%s:",getString(name));
 	if (this->type) {this->type->dump(-1);}
 }
@@ -217,8 +221,8 @@ void ExprIdent::dump(int depth) const {
 int ExprBlock::get_name()const{
 	if (call_op) return call_op->get_name(); else return 0;
 }
-
 void ExprBlock::dump(int depth) const {
+	if (!this) return;
 	newline(depth);
 	if (this->call_op){int id=this->call_op->ident();if (is_operator(id)) {if (is_prefix(id))printf("prefix");else if (this->argls.size()>1)printf("infix");else printf("postfix");};print_tok(id);
 		if (this->type) {printf(":");this->type->dump(-1);};printf("(");} else printf("{");
@@ -231,7 +235,6 @@ void ExprBlock::dump(int depth) const {
 
 ExprBlock::ExprBlock(){call_target=0;}
 
-
 const char* CallScope::name() const {
 	if (!parent){
 		return"global";
@@ -239,6 +242,19 @@ const char* CallScope::name() const {
 	else return getString(outer->name);
 }
 
+// compile time function in type system, available when you use
+// typeparams.
+//
+// type 'grammar' is the same, its just the operators do different things
+//
+// type Option[x]->Some[x]|None;	// union.
+//
+// type WinFrame=Window&Frame;		// get all the methods
+//
+// type Bar=Foo[a,b];  just like typedef.
+// type Mul[a,b]->Vec3[Mul[a,b]]  // like applying a function
+// type Mul[float,float]->float
+// type Foo[a]->tuple[a.node,a.foo] // accessors for associated types?
 
 void Type::push_back(Type* t) {	
 	if (!sub) sub=t;
@@ -301,6 +317,7 @@ void Type::dump(int depth)const{
 
 
 void ExprLiteral::dump(int depth) const{
+	if (!this) return;
 	newline(depth);
 	if (type_id==T_VOID){printf("void");}
 	if (type_id==T_INT){printf("%d",u.val_int);}
@@ -361,7 +378,17 @@ ExprLiteral::~ExprLiteral(){
 		free((void*)u.val_str);
 	}
 }
-
+void dump_typeparams(const vector<TypeParam>& ts) {
+	bool a=false;
+	if (ts.size()==0) return;
+	printf("[");
+	for (auto t:ts){
+		if (a)printf(",");
+		print_tok(t.name);if (t.defaultv){printf("=");print_tok(t.defaultv);}
+		a=true;
+	}
+	printf("]");
+}
 
 void ArgDef::dump(int depth) const {
 	newline(depth);printf("%s",getString(name));
@@ -380,8 +407,10 @@ bool ExprFnDef::is_generic() const {
 		if (!args[i]->type) return true;
 	return false;
 }
+
 void ExprFnDef::dump(int ind) const {
-	newline(ind);printf("fn %s(",getString(name));
+	if (!this) return;
+	newline(ind);printf("fn %s",getString(name));dump_typeparams(this->typeparams);printf("(");
 	for (int i=0; i<args.size();i++){
 		args[i]->dump(-1);
 		if (i<args.size()-1) printf(",");
@@ -899,6 +928,7 @@ struct NumDenom{int num; int denom;};
 struct TextInput {
 	const char* buffer,*tok_start,*tok_end,*prev_start;
 	int curr_tok;
+	char watch_tok[64][12];
 
 	TextInput(const char* src){
 		buffer=src;
@@ -948,6 +978,8 @@ struct TextInput {
 		else advance_operator();
 //		else tok_end++;
 		this->curr_tok = getStringIndex(tok_start,tok_end);
+		for (auto i=10; i>0; i--){strcpy(watch_tok[i],watch_tok[i-1]);}
+		memcpy(watch_tok[0],tok_start,tok_end-tok_start); watch_tok[0][tok_end-tok_start]=0;
 	}
 	int eat_tok() {
 		prev_start=tok_start;
@@ -1023,6 +1055,9 @@ typedef TextInput TokenStream;
 
 Expr* parse_lisp(TokenStream& src);
 ExprFnDef* parse_fn(TokenStream&src);
+ExprFor* parse_for(TokenStream&src);
+ExprIf* parse_if(TokenStream&src);
+TypeDef* parse_typedef(TokenStream&src);
 ExprStructDef* parse_struct(TokenStream& src);
 
 template<typename T>
@@ -1082,6 +1117,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 
 	while (true) {
 		if (!src.peek_tok()) break;
+		if (src.peek_tok()==IN) break;
 		// parsing a single expression TODO split this into 'parse expr()', 'parse_compound'
 		if (close || delim) { // compound expression mode.
 			if (src.eat_if(close))
@@ -1123,8 +1159,15 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 		else if (src.eat_if(FN)) {
 //			ASSERT(!was_operand);
 			operands.push_back(parse_fn(src)); 
+		}
+		else if (src.eat_if(FOR)){
+			operands.push_back(parse_for(src));
 			was_operand=true;
 		}
+//		else if (src.eat_if(IF)){
+//			operands.push_back(parse_if(src));
+//			was_operand=true;
+//		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
 				operands.push_back(parse_call(src, CLOSE_PAREN,SEMICOLON, pop(operands)));
@@ -1136,12 +1179,15 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 		} else if (src.eat_if(delim)) {
 			flush_op_stack(node,operators,operands);
 			was_operand=false;
-		}else if (src.eat_if(wrong_delim)){
-			printf("error expected %s not %s", getString(delim),getString(wrong_delim));
+		}
+		else if (src.eat_if(wrong_delim) && delim){ //allows ,,;,,;,,  TODO. more precise.
+//			printf("error expected %s not %s", getString(delim),getString(wrong_delim));
 			flush_op_stack(node,operators,operands);// keep going
 			was_operand=false;
-		} else{
+		}
+		else{
 			auto tok=src.eat_tok();
+			print_tok(tok);printf("<<<<\n");
 			if (is_operator(tok)) {
 				if (was_operand) tok=get_infix_operator(tok);
 				else tok=get_prefix_operator(tok);
@@ -1207,11 +1253,26 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	}
 	return a;
 }
+void parse_typeparams(TokenStream& src,vector<TypeParam>& out) {
+	while (!src.eat_if(CLOSE_BRACKET)){
+//		if (src.eat_if(CLOSE_BRACKET)) break;
+		auto name=src.eat_tok();
+//		int d=0;
+//		if (src.eat_if(ASSIGN)) {
+//			int d=src.eat_tok();
+//		}
+		out.push_back(TypeParam{name,src.eat_if(ASSIGN)?src.eat_tok():0});
+		src.eat_if(COMMA);
+	}
+}
 ExprStructDef* parse_struct(TokenStream& src) {
 	auto sd=new ExprStructDef();
 	printf("parse_struct");
 	auto tok=src.eat_ident();
 	sd->name=tok;
+	if (src.eat_if(OPEN_BRACKET)) {
+		parse_typeparams(src,sd->typeparams);
+	}
 
 	if (!src.eat_if(OPEN_BRACE))
 		return sd;
@@ -1225,7 +1286,8 @@ ExprStructDef* parse_struct(TokenStream& src) {
 	return sd;
 }
 void ExprStructDef::dump(int depth) const{
-	newline(depth);printf("struct %s {",getString(this->name));
+	newline(depth);printf("struct %s",getString(this->name));dump_typeparams(this->typeparams);printf("{");
+	
 	for (auto f:this->fields){f->dump(depth+1);}
 	newline(depth);printf("}");
 }
@@ -1241,16 +1303,91 @@ ResolvedType ExprStructDef::resolve(CallScope* scope,const Type* desired){
 	auto s=propogate_type_fwd(desired,this->type);
 	return ResolvedType(this->type,s);
 }
+// iterator protocol. value.init. increment & end test.
+ExprFor* parse_for(TokenStream& src){
+	auto p=new ExprFor;
+	auto first=parse_expr(src);
+	if (src.eat_if(IN)){
+		p->pattern=first;
+		p->init=parse_call(src, OPEN_BRACE, 0, 0);
+//		src.expect(OPEN_BRACE);
+	} else if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
+		p->pattern=0;
+		p->init=first;
+		p->cond=parse_expr(src);
+		src.expect(SEMICOLON);
+		p->incr=parse_call(src,OPEN_BRACE,0,0);
+	} else {
+		printf("c style for loop, expect for init;cond;incr{body}");
+		exit(0);
+	}
+	p->body=parse_call(src, CLOSE_BRACE, SEMICOLON, nullptr);
+	if (src.eat_if(ELSE)){
+		src.expect(OPEN_BRACE);
+		p->else_block=parse_call(src,CLOSE_BRACE, SEMICOLON, nullptr);
+	}
+	return p;
+}
 
+Node* ExprFor::clone()const{
+	auto n=new ExprFor;
+	n->pattern=(Expr*)pattern->clone_if();
+	n->init=(Expr*)init->clone_if();
+	n->cond=(Expr*)cond->clone_if();
+	n->incr=(Expr*)cond->clone_if();
+	n->body=(Expr*)cond->clone_if();
+	n->else_block=(Expr*)cond->clone_if();
+	return n;
+}
+
+void ExprFor::dump(int d) const {
+	newline(d);printf("for ");
+	if (this->is_c_for()) {
+		this->init->dump(d+1); newline(d);printf(";");
+		this->cond->dump(d+1); newline(d);printf(";");
+		this->incr->dump(d+1); newline(d);printf(" {");
+	} else {
+		this->pattern->dump(d+1);
+		newline(d);printf(" in ");
+		this->init->dump(d+1); newline(d);printf(" {");
+	}
+	this->body->dump_if(d+1);
+	newline(d);printf("}");
+	if (this->else_block){
+		newline(d);printf("else{");
+		this->else_block->dump_if(d+1);
+		newline(d);printf("}");
+	}
+}
+
+// default ++p  is {next(p); p}
+// default p++ is {let r=p; next(p); r}
+//
+// for (x,y) in stuff {
+// }
+// copy how rust iteration works.
+// for iter=begin(stuff); valid(iter); next(iter) { (x,y)=extract(iter);   }
+//
+// desugars same as c++ for (auto p:rhs)
+// for (auto p=rhs.begin(); p!=rhs.end(); ++p)
+// no; crap idea.
+//
+//
 
 ExprFnDef* parse_fn(TokenStream&src) {
 	auto *fndef=new ExprFnDef();
 	printf("parse_fn");
 	// read function name or blank
+
 	auto tok=src.eat_tok(); 
 	print_tok(tok);
+
 	if (tok!=OPEN_PAREN) {
+		ASSERT(is_ident(tok));
 		fndef->name=tok;
+		if (src.eat_if(OPEN_BRACKET)) {
+			parse_typeparams(src,fndef->typeparams);
+		}
 		tok=src.expect(OPEN_PAREN);
 	} else fndef->name=NONE;
 	printf("%s",getString(fndef->name));
@@ -1319,12 +1456,13 @@ const char* g_TestProg=
 	"fn add(a,b){a+b}"
 	"fn foo(x:tuple[int,int])->int{_};"
 	"fn foo(x:float)->float{_};"
+	"fn do_what[X=int](x:X,y:X)->X{_};"
 	"fn lerp(i:int,j:int,k:int){(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
 	"fn render(m:Mesh){}"
 	"x=1.0; y=2.0; z=3.0; w=0.5;"
 	"foo=lerp(x,add(y,z),w);"
-	"struct Mesh{ vertices;triangles};"
+	"struct Mesh[VERTEX,MAT]{ vertices;triangles};"
 	"i=20;"
 	"fn Mesh()->Mesh{_}"
 	"mesh = Mesh();"
@@ -1336,7 +1474,12 @@ const char* g_TestProg=
 	"render(mesh);"
 	"f1=foo(obj);"
 	"f2=foo(y);"
-	//"lerp(1,2,0);"
+ 
+	"for i in foo {print(loop stuff);} else {printf(); madd(1,2,3);}"
+	"for x=0; x<10; x++ { printf(x); }"
+//	"	printf(\"hello world\");"
+//	"}"
+	"lerp(1,2,0);"
 /*
 "set(glob_x, 10.0);"
 "fn they_int(){set(tfx, 1); tfx};"
