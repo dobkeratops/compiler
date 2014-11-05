@@ -10,8 +10,8 @@ void print_tok(int i){printf("%s ",getString(i));};
 bool g_lisp_mode=true;
 const char* g_token_str[]={
 	"",
-	"int","float","str","void","auto","one","zero","voidptr",
-	"print","fn","struct","tuple","variant","with","match",
+	"int","float","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
+	"print","fn","struct","enum","array","union","variant","with","match",
 	"let","set","var",
 	"while","if","else","do","for","in","return","break",
 	"(",")",
@@ -25,6 +25,7 @@ const char* g_token_str[]={
 	"++","--","++","--","-","*","&","!","~",
 	"*?","*!","&?","[]","&[]",
 	",",";",
+	"_",
 	NULL,	
 };
 
@@ -49,9 +50,10 @@ int g_tok_info[]={
 	PREFIX|UNARY|2,PREFIX|UNARY|2,UNARY|ASSOC|3,UNARY|ASSOC|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3, 
 	UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3,
 	0,0,
+	0,0,
 };
 bool is_type(int tok){return tok<T_NUM_TYPES;}
-int is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
+int is_operator(int tok){ return tok>=ARROW && tok<PLACEHOLDER;}
 int precedence(int tok){return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
 int is_prefix(int tok){return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
 int arity(int tok){return  (tok<IDENT)?((g_tok_info[tok] & (UNARY) )?1:2):-1;}
@@ -150,21 +152,44 @@ void Expr::dump_top() const {
 }
 
 Expr::Expr(){ type=0;}
+void assert_type_eq(const Type* a,const Type* b) {
+	if (!a->eq(b))
+		printf("type error"); a->dump(-1);b->dump(-1);printf("\n");
+}
+void propogate_type(Type*& a,Type*& b) {
+	if (!a && b) {a=b;}
+	else if (!b && a) {b=a;}
+	else if (a && b){//ASSERT(b->eq(a));
+		assert_type_eq(a,b);
+	}
+}
+void propogate_type_fwd(const Type*& a,Type*& b) {
+	if (!b && a) b=(Type*)a;
+	else {if (a && b)assert_type_eq(a,b);}
+}
+void propogate_type(Type*& a,Type*& b,Type*& c) {
+	propogate_type(a,b);
+	propogate_type(b,c);
+	propogate_type(a,c);
+}
+void propogate_type_fwd(const Type*& a,Type*& b,Type*& c) {
+	propogate_type(b,c);
+	propogate_type_fwd(a,b);
+	propogate_type_fwd(a,c);
+}
+
 
 Type* ExprIdent::resolve(CallScope* scope,const Type* desired) {
 	// todo: not if its' a typename,argname?
+	if (this->is_placeholder()) {
+		//PLACEHOLDER type can be anything asked by environment, but can't be compiled out.
+		this->type=(Type*)desired; return this->type;
+	}
+	propogate_type_fwd(desired,this->type);
 	if (auto v=scope->get_variable(this->name)){
-		if (desired && v->type) ASSERT(desired->eq(v->type));
-		if (!v->type) v->type=(Type*)desired;
-		if (!this->type) this->type=v->type;
-		return v->type;
+		propogate_type(this->type,v->type);
 	}
-	else {
-		if (desired && this->type) {ASSERT(desired->eq(v->type));}
-		else if (!v->type) { v->type=(Type*)desired; }
-		if (!this->type) this->type=v->type;
-		return this->type;
-	}
+	return this->type;
 }
 void ExprIdent::dump(int depth) const {
 	newline(depth);printf("%s:",getString(name));
@@ -174,9 +199,11 @@ void ExprIdent::dump(int depth) const {
 int ExprBlock::get_name()const{
 	if (call_op) return call_op->get_name(); else return 0;
 }
+
 void ExprBlock::dump(int depth) const {
-newline(depth); if (this->call_op){int id=this->call_op->ident();if (is_prefix(id))printf("prefix");print_tok(id);
-	if (this->type) {printf(":");this->type->dump(-1);} printf("(");}else printf("{");
+	newline(depth);
+	if (this->call_op){int id=this->call_op->ident();if (is_operator(id)) {if (is_prefix(id))printf("prefix");else if (this->argls.size()>1)printf("infix");else printf("postfix");};print_tok(id);
+		if (this->type) {printf(":");this->type->dump(-1);};printf("(");} else printf("{");
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{printf("(none)");}
 	}
@@ -230,11 +257,23 @@ bool Type::eq(const Type* other) const{
 }
 void Type::dump_sub()const{
 	if (!this) return;
-	printf("%s",getString(name));
-	if (sub){
-		printf("<");
-		for (auto t=sub; t; t=t->next){t->dump_sub(); if(t->next)printf(",");}; 
-		printf(">");
+	if (this->name==TUPLE) {
+		printf("(");
+		for (auto t=sub; t; t=t->next){
+			t->dump_sub();
+			if(t->next)printf(",");
+		};
+		printf(")");
+	} else{
+		printf("%s",getString(name));
+		if (sub){
+			printf("[");
+			for (auto t=sub; t; t=t->next){
+				t->dump_sub();
+				if(t->next)printf(",");
+			};
+			printf("]");
+		}
 	}
 }
 void Type::dump(int depth)const{
@@ -271,8 +310,8 @@ Type* ExprLiteral::resolve(CallScope* , const Type* desired){
 	case T_CONST_STRING: t=new Type(STR); break;
 	default: break;
 	}
-	if (desired && t) ASSERT(t->eq(desired));
-	this->type=t;
+	propogate_type(t,this->type);
+	propogate_type_fwd(desired,this->type);
 	return this->type;
 }
 
@@ -589,31 +628,12 @@ void dump(vector<T*>& src) {
 		printf(src[i]->dump());
 	}
 }
-void propogate_type(Type*& a,Type*& b) {
-	if (!a && b) {a=b;}
-	else if (!b && a) {b=a;}
-	else {ASSERT(b->eq(a));}
-}
-void propogate_type_fwd(const Type*& a,Type*& b) {
-	if (!b && a) b=(Type*)a;
-	else {if (a && b)ASSERT(b->eq(a));}
-}
-void propogate_type(Type*& a,Type*& b,Type*& c) {
-	propogate_type(a,b);
-	propogate_type(b,c);
-	propogate_type(a,c);
-}
-void propogate_type_fwd(const Type*& a,Type*& b,Type*& c) {
-	propogate_type(b,c);
-	propogate_type_fwd(a,b);
-	propogate_type_fwd(a,c);
-}
 Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 
 	printf("\nresolve block.. %p\n", sc);
 	if (this->argls.size()<=0 && !this->call_op) {
-		if (!this->type) this->type=new Type();this->type->name=VOID;//void..
-		return nullptr;
+		if (!this->type) this->type=new Type(VOID);
+		return this->type;
 	}
 	int op_ident=NONE;
 	ExprIdent* p=nullptr;
@@ -627,9 +647,9 @@ Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 		// last expression - type bounce
 		if (auto i=this->argls.size()) {
 			ret=this->argls[i-1]->resolve(sc,desired);
-			if (!ret) ret=(Type*)desired;
+			propogate_type_fwd(desired,ret);
 		}
-		if (!this->type) this->type=ret;
+		propogate_type(ret,this->type);
 		return ret;
 	} 
 	else 
@@ -655,24 +675,23 @@ Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 		// but for now, we just say any unset types flow thru the operator.
 		Type* ret=0;
 		for (auto i=0; i<this->argls.size();i++){ auto r=this->argls[i]->resolve(sc,desired);
-			if (!ret) ret=r;
-			if (ret && desired) {
-				ret->dump(-1); desired->dump(-1);
-				ASSERT(ret->eq(desired));
-			}
+			propogate_type(r,ret);
+			propogate_type_fwd(desired,ret);
 		}
 		if (ret) {printf("got type");ret->dump(-1);printf("\n");}
 		// now propogate types back.
 		for (auto i=0; i<this->argls.size();i++) {
 			if (this->argls[i]->type) {
-				if (ret){
-					ASSERT(ret->eq(this->argls[i]->type));
-				}
+				propogate_type(ret,this->argls[i]->type);
 			} else {
 				this->argls[i]->resolve(sc,ret);
 			}
 		}
 		return ret;
+	} else if (op_ident==PLACEHOLDER) {
+		propogate_type_fwd(desired,this->type);
+		// dump given types here...
+		// report candidate functions...
 	}
 	else {
 		printf("resolve call..%s\n",getString(p->ident()));
@@ -763,10 +782,8 @@ Type* resolve_make_fn_call(ExprBlock* block/*caller*/,CallScope* scope,const Typ
 			// and stuff a default expression in for any not called..
 		}
 		
-		// TODO: insert expressions for the default arguments
-		
-		block->type = call_target->resolve_call(sc,desired);
-//		call_target->resolved=true;
+		auto ret=call_target->resolve_call(sc,desired);
+		propogate_type(ret,block->type);
 		return block->type;
 	}
 	else 
@@ -780,15 +797,12 @@ Type* ExprFnDef::resolve_call(CallScope* scope,const Type* desired) {
 //	scope->outer=this;
 //	scope->node=this->body;
 	printf("resolve fn call.. %p\n", scope);
-	//if (this->type && )
+	
+	propogate_type_fwd(desired,this->type);
+	
 	auto rt=this->body->resolve(scope,desired);
 	printf("resolve %s yields type:", getString(this->ident()));if (rt)rt->dump(-1);printf("\n");
-	if (this->type) {
-		ASSERT(rt==this->type);	
-		this->resolved=true;
-	}
-	// todo: disambiguate, 'resolve_call_return_type' - otherwise if its a lambda function, means much less.
-	this->type=rt;
+	propogate_type(this->type,rt);
 	return rt;
 }
 Type* ExprFnDef::resolve(CallScope* scope, const Type* desired) {
@@ -797,10 +811,15 @@ Type* ExprFnDef::resolve(CallScope* scope, const Type* desired) {
 	if (!this->scope){ this->scope=new CallScope; this->scope->global=scope;}
 	auto sc=this->scope;
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
-		auto v=sc->get_variable(this->args[i]->name);
-		propogate_type(v->type, this->args[i]->type);
+		auto arg=this->args[i];
+		auto v=sc->get_variable(arg->name);
+		propogate_type(arg->type,v->type);
+		if (arg->default_value){static int warn=0; if (!warn){warn=1;
+			printf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
+		}
 	}
-	this->type=this->body->resolve(sc,desired);
+	auto ret=this->body->resolve(sc,desired);
+	propogate_type(ret,this->type);
 	
 	printf("RESOLVE FN - TODO\n");
 	return new Type(FN);
@@ -847,7 +866,7 @@ template<typename T>
 T& operator<<(T& dst, const Foo& src) { dst<<src.bar; dst<<src.indices;return dst;};
 
 bool isSymbolStart(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_';}
-bool isSymbol(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || (c>='0' && c<='9');}
+bool isSymbolCont(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || (c>='0' && c<='9');}
 bool isNumStart(char c){return (c>='0'&&c<='9');};
 bool isNum(char c){return (c>='0'&&c<='9') ||c=='.';};
 bool isWhitespace(char c){return  c==' '||c=='\n'||c=='\a'||c=='\t';};
@@ -900,7 +919,8 @@ struct TextInput {
 		tok_start=tok_end;
 		if (!*tok_end) { this->curr_tok=0; return;}
 		auto c=*tok_end;
-		if (isSymbolStart(c))	advance_sub(isSymbol);
+		if (c=='_' && tok_end[1] && !isSymbolCont(tok_end[1])) tok_end++; //placeholder
+		else if (isSymbolStart(c))	advance_sub(isSymbolCont);
 		else if (isNumStart(c)) advance_sub(isNum);
 		else if (c=='\"') advance_string();
 		else advance_operator();
@@ -918,6 +938,8 @@ struct TextInput {
 		if (peek_tok()==i) {eat_tok(); return true;}
 		else return false;
 	}
+	bool is_placeholder()const {return  ((*tok_start=='_') && !isSymbolCont(*tok_end));}
+	int eat_if_placeholder(){if (is_placeholder()){advance_tok(); return PLACEHOLDER;} else return 0;}
 	int eat_ident() {
 		auto r=eat_tok();
 		if (r<IDENT) {printf("expected ident found %s",getString(r));exit(0);}
@@ -1020,6 +1042,11 @@ void flush_op_stack(ExprBlock* block, vector<int>& ops,vector<Expr*>& vals) {
 		block->argls.push_back(pop(vals));
 	}
 }
+ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op);
+
+ExprBlock* parse_expr(TokenStream&src) {
+	return parse_call(src,0,0,nullptr);
+}
 
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	// shunting yard parserfelchery
@@ -1031,11 +1058,19 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
 
 	while (true) {
-		if (src.eat_if(close) || !src.peek_tok())
-			break;
-		if (src.eat_if(wrong_close)) {
-			printf("unexpected %s, expected %s",getString(close),getString(wrong_close));
-			exit(0);
+		if (!src.peek_tok()) break;
+		// parsing a single expression TODO split this into 'parse expr()', 'parse_compound'
+		if (close || delim) { // compound expression mode.
+			if (src.eat_if(close))
+				break;
+			if (src.eat_if(wrong_close)) {
+				printf("unexpected %s, expected %s",getString(close),getString(wrong_close));
+				exit(0);
+			}
+		} else { // single expression mode - we dont consume delimiter.
+			auto peek=src.peek_tok();
+			if (peek==CLOSE_BRACKET || peek==CLOSE_BRACE || peek==COMMA || peek==SEMICOLON)
+				break;
 		}
 		printf(":%s\n",getString(src.peek_tok()));
 		printf("parse:- %zu %zu\n",operands.size(),operators.size());
@@ -1055,9 +1090,11 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 				continue;
 			} else if (src.is_next_string()) {
 				ExprLiteral(src.eat_string());
+			} else {
+				printf("error parsing literal\n");
 			}
 		}
-		if (src.eat_if(FN)) {
+		else if (src.eat_if(FN)) {
 //			ASSERT(!was_operand);
 			operands.push_back(parse_fn(src)); 
 			was_operand=true;
@@ -1114,13 +1151,22 @@ Type* parse_type(TokenStream& src, int close) {
 	auto tok=src.eat_tok();
 	Type* ret=0;	// read the first, its the form..
 	if (tok==close) return nullptr;
-	ret = new Type(tok);
-	if (src.eat_if(OPEN_BRACKET)) {
-		while (auto sub=parse_type(src, CLOSE_BRACKET))
+	if (tok==OPEN_PAREN) {
+		ret=new Type(TUPLE);
+		while (auto sub=parse_type(src, CLOSE_PAREN)){
 			ret->push_back(sub);
+			src.eat_if(COMMA);
+		}
+	} else {
+		ret = new Type(tok);
+		if (src.eat_if(OPEN_BRACKET)) {
+			while (auto sub=parse_type(src, CLOSE_BRACKET)){
+				ret->push_back(sub);
+				src.eat_if(COMMA);
+			}
+		}
 	}
-	printf("3\n");
-	ret->dump(-1); 
+	ret->dump(-1);
 	return ret;
 	
 }
@@ -1147,15 +1193,23 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	while (NONE!=(tok=src.peek_tok())) {
 		if (tok==CLOSE_PAREN) {src.eat_tok();break;}
 		printf(" arg:%s ",getString(tok));
-		fndef->args.push_back(parse_arg(src,CLOSE_PAREN));
+		auto arg=parse_arg(src,CLOSE_PAREN);
+		fndef->args.push_back(arg);
+		if (src.eat_if(ASSIGN)){
+			arg->default_value=parse_expr(src);
+		}
 		src.eat_if(COMMA);
+	}
+	// TODO: multiple argument blocks for currying?.
+	if (src.eat_if(ARROW) || src.eat_if(COLON)) {
+		fndef->type = parse_type(src, 0);
 	}
 	printf("fn body:");
 	// implicit "progn" here..
 	src.expect(OPEN_BRACE);
 	fndef->body = new ExprBlock;
 	fndef->body = parse_call(src, CLOSE_BRACE, SEMICOLON, nullptr);
-
+	fndef->dump(0);
 	return fndef;
 }
 // every file is an implicitly a function aswell taking no args
@@ -1201,12 +1255,20 @@ const char* g_TestProg=
 */
 //	"x=y; y=z; z=0.0;"
 	"fn add(a,b){a+b}"
+	"fn foo(x:tuple[int,int])->int{_};"
+	"fn foo(x:float)->float{_};"
 	"fn lerp(i:int,j:int,k:int){(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
 	"x=1.0; y=2.0; z=3.0; w=0.5;"
 	"foo=lerp(x,add(y,z),w);"
 	"i=20;"
+	"i=10; j=20.0; k=j+i;"
+	"fn itof(i:int)->float{_}"
+	"fn make()->tuple[int,int]{_}"
+	"obj=make();"
 	"i=lerp(p,q,r);"
+	"f1=foo(obj);"
+	"f2=foo(y);"
 	//"lerp(1,2,0);"
 /*
 "set(glob_x, 10.0);"

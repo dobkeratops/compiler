@@ -29,8 +29,8 @@ template<class T,class Y> T* isa(const Y& src){ return dynamic_cast<T>(src);}
 enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
-	INT,FLOAT,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,
-	PRINT,FN,STRUCT,TUPLE,VARIANT,WITH,MATCH,
+	INT,FLOAT,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,
+	PRINT,FN,STRUCT,ENUM,ARRAY,UNION,VARIANT,WITH,MATCH,
 	LET,SET,VAR,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
 	// delimiters
@@ -46,6 +46,7 @@ enum Token {
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR,SLICE,
 	COMMA,SEMICOLON,
 	// after these indices, comes indents
+	PLACEHOLDER,
 	IDENT
 };
 
@@ -287,6 +288,7 @@ struct ExprIdent :Expr{
 	ExprIdent(int i){name=i;type=0;}
 	Type* resolve(CallScope* scope, const Type* desired);
 	Node* clone() const;
+	bool is_placeholder()const{return name==PLACEHOLDER;}
 };
 
 
