@@ -333,7 +333,7 @@ void ExprFnDef::dump(int ind) const {
 	if (this->type) {printf("->");this->type->dump(-1);};
 	this->body->dump(ind);
 	if (auto p=this->instances){
-		printf("instantiations");
+		printf("instantiations:");
 		for (;p;p=p->next_instance){
 			p->dump(ind);
 		}
@@ -455,7 +455,7 @@ void find_printf(const char*,...){};
 void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
 	if (f->name!=name)
 		return ;
-		
+	// TODO: may need to continually update the function match, eg during resolving, as more types are found, more specific peices may appear?
 	// Find max number of matching arguments
 	if (args.size() >f->args.size())	// if not enough args, dont even try.
 		return;
@@ -658,7 +658,6 @@ Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 			}
 		}
 		return ret;
-		
 	}
 	else {
 		printf("resolve call..%s\n",getString(p->ident()));
@@ -669,8 +668,10 @@ Type* ExprBlock::resolve(CallScope* sc, const Type* desired) {
 				// then use them in find_fn to resolve overloading
 				// find_fn should also perform Template Instantiations.
 			return resolve_make_fn_call(this, sc,desired);
-		} else 
+		} else {
+			this->call_target->resolve(this->scope, desired);
 			return this->call_target->type;
+		}
 	}
 	return nullptr;
 }
@@ -680,8 +681,11 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope,const Type* desired
 		block->argls[i]->resolve(scope,desired);
 		printf("arg %d type=",i); cout<<block->argls[i]->type<<"\n";//->dump(0); printf("\n");
 	}
+	ASSERT(block->call_target==0);
+
 	ExprFnDef* call_target = scope->find_fn(block->call_op->ident(), block->argls);
 	auto fnc=call_target;
+	block->call_target=call_target;
 	if (call_target) {
 		if (call_target->resolved) {
 			if (desired) ASSERT(desired->eq(call_target->type));
@@ -713,7 +717,6 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope,const Type* desired
 			sc->outer=call_target;
 			block->next_of_call_target = call_target->callers;
 			call_target->callers =block;
-			block->call_target=call_target;
 		}
 		// create a local for each supplied argument, using its type..
 		// note that vars should be able to propogate inside too???
