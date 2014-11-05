@@ -257,7 +257,10 @@ void ExprLiteral::dump(int depth) const{
 
 Type* ExprLiteral::resolve(CallScope* , const Type* desired){
 	if (this->type) {
-		ASSERT(this->type==desired);
+		if (desired && this->type) {
+			desired->dump(-1); this->type->dump(-1);
+			ASSERT(this->type->eq(desired));
+		}
 		return this->type;
 	}
 	Type* t=nullptr;
@@ -328,7 +331,14 @@ void ExprFnDef::dump(int ind) const {
 	}
 	printf(")");
 	if (this->type) {printf("->");this->type->dump(-1);};
-	this->body->dump(ind);}
+	this->body->dump(ind);
+	if (auto p=this->instances){
+		printf("instantiations");
+		for (;p;p=p->next_instance){
+			p->dump(ind);
+		}
+	}
+}
 
 FnName*	g_fn_names;
 vector<FnName> g_functions;
@@ -359,26 +369,122 @@ void CallScope::visit_calls() {
 }
 */
 ExprFnDef* instantiate_generic_function(CallScope* s,ExprFnDef* src, vector<Expr*>& call_args) {
-	ExprFnDef* f = new ExprFnDef();
-	f->name = src->name;
-	if (src->fn_name) {
+	ExprFnDef* f =(ExprFnDef*) src->clone();
+	if (src->fn_name && !f->fn_name) {
 		f->fn_name = src->fn_name;
 		f->next_of_name = src->fn_name->fn_defs;
 		src->fn_name->fn_defs = f;
 	}
+	// fill any args we can
+	for (auto i=0; i<f->args.size(); i++){
+		if (!f->args[i]->type) {f->args[i]->type=(Type*)call_args[i]->type->clone();}
+	}
 	f->next_instance = src->instances;
 	src->instances=f;
 	f->resolved=false;
-	for (auto i=0; i<src->args.size(); i++) {
-		f->args.push_back(new ArgDef(src->args[i]->name, call_args[i]->type));
-	}
-	//f->body = src->body->clone();
-	printf("todo - clone fn body");
+	printf("generic instantiation:-\n");
+	f->dump(0);
 	return f;	// welcome new function!
 }
-
+Node* ExprBlock::clone() const {
+	if (!this) return nullptr;
+	auto r=new ExprBlock();
+	if (this->call_op) {
+		r->call_op = (ExprBlock*) this->call_op->clone();
+	}
+	r->name=this->name;
+	r->argls.resize(this->argls.size());
+	for (int i=0; i<this->argls.size(); i++) {
+		r->argls[i]=(Expr*)(this->argls[i]->clone());
+	}
+	return r;
+}
+Node*
+ExprLiteral::clone() const{
+	if (!this) return nullptr;
+	auto r=new ExprLiteral(0); if (this->is_string()){r->u.val_str=strdup(this->u.val_str);}else r->u=this->u;
+	r->type_id=this->type_id;
+	r->name=this->name;
+	return r;
+}
+Node*
+ExprFnDef::clone() const{
+	if (!this) return nullptr;
+	auto r=new ExprFnDef;
+	r->name=this->name;
+	r->body=(ExprBlock*)this->body->clone();
+	r->args.resize(this->args.size());
+	for (int i=0; i<this->args.size(); i++) {
+		r->args[i]=(ArgDef*)this->args[i]->clone();
+	}
+	return r;
+}
+Node*
+ArgDef::clone() const{
+	if (!this) return nullptr;
+	auto r=new ArgDef; {
+		r->name=this->name;
+		if (this->type)
+			r->type=(Type*)this->type->clone();
+		if (this->default_value)
+			r->default_value=(Expr*)this->default_value->clone();
+	}
+	return r;
+}
+Node*
+Type::clone() const{
+	if (!this) return nullptr;
+	auto r= new Type(this->name);
+	auto *src=this->sub;
+	Type** p=&r->sub;
+	while (src) {
+		*p= (Type*)src->clone();
+		p=&((*p)->next);
+		src=src->next;
+	}
+	return r;
+}
+Node*
+ExprIdent::clone() const {
+	auto r=new ExprIdent(this->name);
+	return r;
+}
 
 void find_printf(const char*,...){};
+
+void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
+	if (f->name!=name)
+		return ;
+		
+	// Find max number of matching arguments
+	if (args.size() >f->args.size())	// if not enough args, dont even try.
+		return;
+	if (args.size() !=f->args.size())	// TODO: bring default arguments into the picture.
+		return;
+
+	find_printf("candidate:");
+	for (int i=0; i<args.size(); i++) {
+		find_printf("%s ",f->args[i]->type->get_name_str());		 }
+	find_printf("\n");
+	int score=0;
+	for (int i=0; i<args.size(); i++) {
+		if (f->args[i]->type->eq(args[i]->type)) {
+			find_printf("match %s %s\n",f->args[i]->type->get_name_str(), args[i]->type->get_name_str());
+			score++;
+		}
+	}
+	// for any argument not matched, zero the score if its the *wrong* argument?
+	// TODO: this is where we'd bring conversion operators into play.
+	for (int i=0; i<args.size(); i++) {
+		if ((!f->args[i]->type->eq(args[i]->type)) && f->args[i]->type!=0) score=-1;
+	}
+	find_printf("score is %d\n",score);
+	if (score >*best_score) {
+		*best_score=score;
+		*best_fn=f;
+		ambiguity=0;
+	} else if (score==*best_score) ambiguity++;
+}
 void find_sub(Expr* src,Name name,vector<Expr*>& args, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
 		find_printf("look for %s in %s\n",getString(name),src->get_name_str());
@@ -386,39 +492,18 @@ void find_sub(Expr* src,Name name,vector<Expr*>& args, ExprFnDef** best_fn, int*
 			find_sub(x,name,args, best_fn,best_score,ambiguity);
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
-		if (f->name!=name)
-			return ;
-
-		// Find max number of matching arguments
-		if (args.size() >f->args.size())	// if not enough args, dont even try.
-			return;
-		if (args.size() !=f->args.size())	// TODO: bring default arguments into the picture.
-			return;
-
-		find_printf("candidate:");
-		for (int i=0; i<args.size(); i++) {
-			find_printf("%s ",f->args[i]->type->get_name_str());		 }
-		find_printf("\n");
-		int score=0;
-		for (int i=0; i<args.size(); i++) {
-			if (f->args[i]->type->eq(args[i]->type)) {
-				find_printf("match %s %s\n",f->args[i]->type->get_name_str(), args[i]->type->get_name_str());
-				score++;
-			}
-		}
-		// for any argument not matched, zero the score if its the *wrong* argument?
-		// TODO: this is where we'd bring conversion operators into play.
-		for (int i=0; i<args.size(); i++) {
-			if ((!f->args[i]->type->eq(args[i]->type)) && f->args[i]->type!=0) score=-1;
-		}
-		find_printf("score is %d\n",score);
-		if (score >*best_score) {
-			*best_score=score;
-			*best_fn=f;
-			ambiguity=0;
-		} else if (score==*best_score) ambiguity++;
+		compare_candidate_function(f,name,args,best_fn,best_score,ambiguity);
 	}
-	return ;
+}
+
+FnName* CallScope::find_fn_name(Name name){
+	// search the name buckets.
+	for (auto fname=this->fn_names;fname;fname=fname->next){
+		if (fname->name==name) {
+			return fname;
+		}
+	}
+	return nullptr;
 }
 ExprFnDef*	CallScope::find_fn(Name name, vector<Expr*>& args)  {
 	find_printf("\nfind call with args(");
@@ -429,7 +514,10 @@ ExprFnDef*	CallScope::find_fn(Name name, vector<Expr*>& args)  {
 	int best_score=-1;
 	int	ambiguity=0;
 	for (auto src=this; src; src=src->parent) {
-		find_sub(this->node,name, args,&best,&best_score,&ambiguity);
+		auto fname=src->find_fn_name(name);
+		for (auto f=fname->fn_defs; f;f=f->next_of_name) {
+			find_sub(f,name, args,&best,&best_score,&ambiguity);
+		}
 	}
 	find_printf("match score=%d/%d\n", best_score, args.size());
 	if (!best)  {
@@ -604,8 +692,13 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope,const Type* desired
 		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
 			if (block->argls[i]->type) num_known_types++;
 		}
-		if (!(fnc->is_generic() && num_known_types)) {
-			if (fnc->type && desired) {ASSERT(desired->eq(fnc->type));};
+		bool isg=fnc->is_generic();
+		if (!(isg && num_known_types)) {
+			if (fnc->type && desired) {
+				fnc->type->dump(-1); desired->dump(-1);
+				printf("%d vs %d\n",fnc->type->name,desired->name);
+				ASSERT(desired->eq(fnc->type));
+			};
 			
 			block->type = fnc->type?fnc->type:(Type*)desired;
 			return block->type;
@@ -613,13 +706,21 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope,const Type* desired
 		}
 
 		// generic function, and we have some types to throw in...
-		if (!block->scope) {block->scope=new CallScope;}
+		if (!block->scope) {
+			auto sc=new CallScope;
+			block->scope=sc;
+			scope->push_child(sc);
+			sc->outer=call_target;
+			block->next_of_call_target = call_target->callers;
+			call_target->callers =block;
+			block->call_target=call_target;
+		}
 		// create a local for each supplied argument, using its type..
 		// note that vars should be able to propogate inside too???
-		CallScope* subscope=block->scope;
+		CallScope* sc=block->scope;
 		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
 			auto input_type=block->argls[i]->type;
-			auto v=subscope->get_variable(fnc->args[i]->name);
+			auto v=sc->get_variable(fnc->args[i]->name);
 			auto argtype=fnc->args[i]->type;
 			if (!v->type){
 				v->type=argtype?argtype:input_type;
@@ -633,12 +734,7 @@ Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope,const Type* desired
 		
 		// TODO: insert expressions for the default arguments
 		
-		scope->push_child(subscope);
-		subscope->outer=call_target;
-		block->next_of_call_target = call_target->callers;
-		call_target->callers =block;
-		block->call_target=call_target;
-		block->type = call_target->resolve_call(subscope,desired);
+		block->type = call_target->resolve_call(sc,desired);
 //		call_target->resolved=true;
 		return block->type;
 	}
@@ -1073,7 +1169,9 @@ const char* g_TestProg=
 	"fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}"
 */
 //	"x=y; y=z; z=0.0;"
-	"fn lerp(a:float,b,f){(b-a)*f+a};"
+	"fn lerp(a,b,f){(b-a)*f+a};"
+	"lerp(1.0,2.0,0.5);"
+	//"lerp(1,2,0);"
 /*
 "set(glob_x, 10.0);"
 "fn they_int(){set(tfx, 1); tfx};"

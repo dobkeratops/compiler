@@ -84,6 +84,7 @@ public:
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
 	Name ident() const  { if (this)return this->name;else return 0;}
+	virtual Node* clone() const=0;
 };
 struct Type : Node{
 	StructDef* struct_def;
@@ -96,6 +97,7 @@ struct Type : Node{
 	bool eq(const Type* other) const;
 	void dump_sub()const;
 	void dump(int depth)const;
+	Node* clone() const;
 };
 struct Expr : Node{
 	Type* type;
@@ -117,6 +119,7 @@ struct ExprBlock :public ExprScopeBlock{
 	Type* resolve(CallScope* scope, const Type* desired);
 	virtual const char* kind_str()const{return"block";}
 	ExprBlock();
+	Node* clone() const;
 };
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
@@ -157,7 +160,8 @@ struct ExprLiteral : Expr {
 	ExprLiteral(const char* start,int length);
 	ExprLiteral(const char* start);// take ownership
 	~ExprLiteral();
-
+	Node* clone() const;
+	bool is_string() const { return type_id==T_CONST_STRING;}
 	Type* resolve(CallScope* scope, const Type* desired);
 };
 struct ArgDef :Node{
@@ -169,6 +173,7 @@ struct ArgDef :Node{
 	void dump(int depth) const;
 	virtual const char* kind_str()const;
 	~ArgDef(){}
+	Node* clone() const;
 };
 struct FnName {
 	Name		name;
@@ -216,6 +221,7 @@ struct CallScope {
 	Variable* find_variable(Name ident);
 	Variable* get_variable(Name name);
 	ExprFnDef* find_fn(Name name,vector<Expr*>& args) ;
+	FnName* find_fn_name(Name name);
 	void dump(int depth) const;
 	void push_child(CallScope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 };
@@ -272,13 +278,15 @@ struct ExprFnDef :public Module {
 	void dump(int ind) const;
 	Type* resolve(CallScope* scope,const Type* desired);
 	Type* resolve_call(CallScope* scope,const Type* desired);
+	Node* clone() const;
 };
 
 struct ExprIdent :Expr{
 	void dump(int depth) const;
 	virtual const char* kind_str()const{return"ident";}
-	ExprIdent(int i){name=i;}
+	ExprIdent(int i){name=i;type=0;}
 	Type* resolve(CallScope* scope, const Type* desired);
+	Node* clone() const;
 };
 
 
