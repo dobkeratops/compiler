@@ -220,7 +220,7 @@ struct CallScope {
 	void visit_calls();
 	Variable* find_variable(Name ident);
 	Variable* get_variable(Name name);
-	ExprFnDef* find_fn(Name name,vector<Expr*>& args) ;
+	ExprFnDef* find_fn(Name name,vector<Expr*>& args, const Type* ret_type) ;
 	FnName* find_fn_name(Name name);
 	void dump(int depth) const;
 	void push_child(CallScope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
