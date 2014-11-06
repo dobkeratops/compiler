@@ -426,6 +426,15 @@ void ExprFnDef::dump(int ind) const {
 	}
 }
 
+Expr* ExprFnDef::get_return_value() const{
+	if (this->body){
+		if (this->body->argls.size()>0){
+			return this->body->argls.back();
+		}
+	}
+	return 0;
+}
+
 FnName*	g_fn_names;
 vector<FnName> g_functions;
 FnName* getFnName(int name) {

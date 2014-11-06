@@ -70,7 +70,8 @@ const char* getString(int index);
 void indent(int depth);
 
 // todo: path malarchy.
-typedef int Name;
+typedef int32_t Name;
+typedef int32_t RegisterName;
 struct CallScope;
 struct StructDef;
 struct ExprIdent;
@@ -83,10 +84,10 @@ struct ResolvedType{
 	ResolvedType(Type*t=nullptr,Status s=INCOMPLETE){type=t; status=s;}
 	operator Type* ()const {return type;}
 };
-
 class Node {
 public:
-	Name name;
+	Name name;						// identifier index
+	RegisterName regname;			// temporary for llvm SSA calc.
 	int visited;					// anti-recursion flag.
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
@@ -98,7 +99,11 @@ public:
 	virtual Node* clone() const=0;
 	Node* clone_if()const { if(this) return this->clone();else return nullptr;}
 	void dump_if(int d)const{if (this) this->dump(d);}
+	virtual void clear_reg(){regname=0;};
+	RegisterName get_reg(RegisterName* curr){if (!regname){return regname=(*curr)++;} else return regname;}
+	RegisterName get_new_reg(RegisterName* curr){return regname=(*curr)++;}
 };
+
 struct TypeParam{int name; int defaultv;};
 
 struct Type : Node{
@@ -114,6 +119,7 @@ struct Type : Node{
 	void dump_sub()const;
 	void dump(int depth)const;
 	Node* clone() const;
+	void clear_reg(){regname=0;};
 };
 struct Expr : Node{
 	Type* type;
@@ -121,8 +127,9 @@ struct Expr : Node{
 	void dump_top()const;
 	Expr();
 	virtual const char* kind_str()const{return"expr";}
+	Type* get_type() const { if(this)return this->type;else return nullptr;}
 };
-struct ExprScopeBlock : public Expr{};
+struct ExprScopeBlock : Expr{};
 struct ExprFnDef;
 struct ExprBlock :public ExprScopeBlock{
 	Expr*	call_op;
@@ -136,6 +143,7 @@ struct ExprBlock :public ExprScopeBlock{
 	virtual const char* kind_str()const{return"block";}
 	ExprBlock();
 	Node* clone() const;
+	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_op)call_op->clear_reg(); regname=0;};
 };
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
@@ -181,6 +189,7 @@ struct ExprLiteral : Expr {
 	Node* clone() const;
 	bool is_string() const { return type_id==T_CONST_STRING;}
 	ResolvedType resolve(CallScope* scope, const Type* desired);
+	
 };
 struct ArgDef :Node{
 	uint32_t size,offset;
@@ -222,11 +231,9 @@ struct Call {
 	Call(){scope=0;next_of_scope=0;caller=0;next_of_caller=0;callee=0;next_of_fn=0;}
 };
 */
-struct Variable {
+struct Variable : Expr{
 	Variable* next;
-	Name name;
-	Type*	type;
-	Type* get_type() const { if(this)return this->type;else return nullptr;}
+	Node* clone() const { auto v=new Variable(); v->next=0; v->name=this->name; v->type=this->type; return v;}
 };
 // scopes are created when resolving; generic functions are evaluated
 struct CallScope {
@@ -332,8 +339,14 @@ struct ExprFnDef : Module {
 	void dump(int ind) const;
 	ResolvedType resolve(CallScope* scope,const Type* desired);
 	ResolvedType resolve_call(CallScope* scope,const Type* desired);
+	Expr* get_return_value() const;
 	Node* clone() const;
 };
+#define link(obj,owner,link) obj->link=owner; owner=obj;
+
+
+// What details did we miss ?
+// Codegen is a big issue.
 
 struct ExprIdent :Expr{
 	void dump(int depth) const;
