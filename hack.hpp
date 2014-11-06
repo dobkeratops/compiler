@@ -12,6 +12,8 @@
 #define ASSERT(x)
 #endif
 
+// todo: seperate Parser.
+
 #define ilist initializer_list
 
 using std::string;
@@ -181,6 +183,7 @@ struct ExprLiteral : Expr {
 	ResolvedType resolve(CallScope* scope, const Type* desired);
 };
 struct ArgDef :Node{
+	uint32_t size,offset;
 	Name name;
 	Type* type;
 	Expr* default_expr;
@@ -190,6 +193,7 @@ struct ArgDef :Node{
 	virtual const char* kind_str()const;
 	~ArgDef(){}
 	Node* clone() const;
+	void render_object();
 };
 struct ExprStructDef;
 
@@ -255,7 +259,7 @@ struct StructDef : ModuleBase {
 	StructDef* next_of_module;
 	ModuleBase* get_next_of_module(){return this->next_of_module;}
 };
-struct ExprIf : public Expr {
+struct ExprIf :  Expr {
 	Expr* cond=0;
 	Expr* body=0;
 	Expr* else_block=0;
@@ -266,8 +270,7 @@ struct ExprIf : public Expr {
 	virtual const char* kind_str()const{return"if";}
 	ResolvedType resolve(CallScope* scope,Type*) ;
 };
-// 'if' is sugar for "for (;
-struct ExprFor : public Expr {
+struct ExprFor :  Expr {
 	Expr* pattern=0;
 	Expr* init=0;
 	Expr* cond=0;
@@ -288,10 +291,11 @@ struct ExprFor : public Expr {
 struct Call;
 struct FnName;
 
-struct ExprStructDef:public Module {
+struct ExprStructDef: Module {
 	// lots of similarity to a function actually.
 	// but its' backwards.
 	// it'll want TypeParams aswell.
+	uint32_t size;
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> fields;
 	ExprFnDef* constructor_fn;
@@ -303,7 +307,7 @@ struct ExprStructDef:public Module {
 	Node* clone()const {printf("warning,leak\n");return (Node*) this;};
 };
 
-struct ExprFnDef :public Module {
+struct ExprFnDef : Module {
 	ExprFnDef*	next_of_module;
 	ExprFnDef*	next_of_name;	//link of all functions of same name...
 	ExprFnDef*	instance_of;	// Original function, when this is a template instance

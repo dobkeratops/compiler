@@ -956,14 +956,15 @@ struct TextInput {
 //		printf("op len=%d",longest);
 		tok_end=tok_start+longest;
 	}
-	void advance_string() {
+	void advance_string(char quote) {
+		tok_start=tok_end;
 		tok_end++;
-		while (*tok_end && *tok_end!='\"') {
+		while (*tok_end && *tok_end!=quote) {
 			if (*tok_end=='\\' && tok_end[1]) tok_end++; //skip backslashed quotes inside..
 			tok_end++;
 		}
 		if (*tok_end)
-			tok_end++; // step past last.
+			tok_end++; // step past last quote.
 	}
 
 	void advance_tok() {
@@ -974,7 +975,10 @@ struct TextInput {
 		if (c=='_' && tok_end[1] && !isSymbolCont(tok_end[1])) tok_end++; //placeholder
 		else if (isSymbolStart(c))	advance_sub(isSymbolCont);
 		else if (isNumStart(c)) advance_sub(isNum);
-		else if (c=='\"') advance_string();
+		else if (c=='\"')
+			advance_string('\"');
+		else if (c=='\'')
+			advance_string('\'');
 		else advance_operator();
 //		else tok_end++;
 		this->curr_tok = getStringIndex(tok_start,tok_end);
@@ -1009,6 +1013,7 @@ struct TextInput {
 		auto ret=(char*)malloc(len+1);
 		memcpy((void*)ret,(void*)(tok_start+1),len+1);
 		ret[len]=0;
+		advance_tok();
 		return ret;
 	}
 	NumDenom eat_number()  {
@@ -1038,12 +1043,15 @@ struct TextInput {
 	}
 	bool is_next_literal() const{
 		char c=*tok_start;
-		if (is_next_number() ||(c==':' && g_lisp_mode)||(c=='\"'))
+		if (is_next_number() ||(c==':' && g_lisp_mode)|| is_next_string())
 			return true;
 		return false;
 	}
 	bool is_next_string() const {
 		return *tok_start=='\"';
+	}
+	bool is_next_char() const {
+		return *tok_start=='\'';
 	}
 
 	int peek_tok(){return curr_tok;}
@@ -1150,19 +1158,20 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 
 		print_tok(src.peek_tok());
 		if (src.is_next_literal()) {
+			ExprLiteral* ln=0;
 			if (src.is_next_number()) {
 				auto n=src.eat_number();
-				ExprLiteral* ln=0;
 				if (n.denom==1) {ln=new ExprLiteral(n.num);}
 				else {ln=new ExprLiteral((float)n.num/(float)n.denom);}
-				operands.push_back(ln);		
-				was_operand=true;
-				continue;
 			} else if (src.is_next_string()) {
-				ExprLiteral(src.eat_string());
+				ln=new ExprLiteral(src.eat_string());
 			} else {
 				printf("error parsing literal\n");
+				exit(0);
 			}
+			operands.push_back(ln);
+			was_operand=true;
+			continue;
 		}
 		else if (src.eat_if(STRUCT)){
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
@@ -1502,12 +1511,18 @@ const char* g_TestProg=
 	"fn foo(x:tuple[int,int])->int{_};"
 	"fn foo(x:float)->float{_};"
 	"fn do_what[X=int](x:X,y:X)->X{_};"
-	"fn lerp(i:int,j:int,k:int){(b-a)*f+a};"
+	"fn lerp(a:int,b:int,f:int){(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
+    "struct Vec[T]{data:*T,num:i32,cap:i32};"
+//	"fn push_back[T](s:Vec[T],val:&T){"
+//	"    resize(num+1);"
+//  "    data[num]=val;"
+//	"};"
 	"fn render(m:Mesh){}"
 	"x=1.0; y=2.0; z=3.0; w=0.5;"
 	"foo=lerp(x,add(y,z),w);"
 	"struct Mesh[VERTEX,MAT]{ vertices;triangles};"
+	"lambda = fn(x){ print(\"foo_bar_baz\");};"
 	"i=20;"
 	"fn Mesh()->Mesh{_}"
 	"mesh = Mesh();"
@@ -1517,6 +1532,7 @@ const char* g_TestProg=
 	"obj=make();"
 	"i=lerp(p,q,r);"
 	"render(mesh);"
+	"my_str=\"foobar\";"
 	"f1=foo(obj);"
 	"f2=foo(y);"
  	"if i<10 {printf(1)} else {printf(2)}"
@@ -1538,6 +1554,8 @@ const char* g_TestProg=
 	"set(glob_q, generic_fn(0.0, 1));"
 */
 	;
+
+
 // when this works - it can be like SPECS
 int main(int argc, const char** argv) {
 	TextInput	src(g_TestProg);
@@ -1553,8 +1571,8 @@ int main(int argc, const char** argv) {
 	node->resolve(&global,nullptr);
 	node->dump(0);
 //	global.visit_calls();
-	output_code(stdout, &global);
 	global.dump(0);
+	output_code(stdout, &global);
 }
 
 
