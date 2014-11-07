@@ -24,9 +24,25 @@ using std::initializer_list;
 template<typename T,typename S>
 T& operator<<(T& dst, const vector<S>&src) { for (auto &x:src){dst<<x;};return dst;};
 
+template<typename T,typename U>
+T verify_cast(U src){auto p=dynamic_cast<T>(src);ASSERT(p);return p;}
 void newline(int depth);
 
 template<class T,class Y> T* isa(const Y& src){ return dynamic_cast<T>(src);}
+
+#define PRECEDENCE 0xff
+#define PREFIX 0x100
+#define UNARY 0x200
+#define ASSOC 0x400
+#define WRITE_LHS 0x1000
+#define WRITE_RHS 0x2000
+#define WRITE (WRITE_LHS|WRITE_RHS)
+#define READ_LHS 0x4000
+#define READ_RHS 0x8000
+#define READ (READ_LHS|READ_RHS)
+#define MODIFY (READ_LHS|WRITE_LHS|READ_RHS|WRITE_RHS)
+#define RWFLAGS (WRITE_LHS|READ_LHS|WRITE_RHS|READ_RHS)
+extern int operator_flags(int tok);
 
 enum Token {
 	NONE=0,
@@ -44,8 +60,10 @@ enum Token {
 	COLON,ADD,SUB,MUL,DIV,DOT,
 	LT,GT,LE,GE,EQ,NE,LOG_AND,LOG_OR,
 	AND,OR,XOR,MOD,SHL,SHR,
-	ASSIGN,LET_ASSIGN,ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
-	PRE_INC,PRE_DEC,POST_INC,POST_DEC,NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR,SLICE,
+	ASSIGN,LET_ASSIGN,
+	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
+	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
+	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR,SLICE,
 	COMMA,SEMICOLON,
 	// after these indices, comes indents
 	PLACEHOLDER,
@@ -53,7 +71,7 @@ enum Token {
 };
 
 extern const char* g_token_str[];
-extern int g_precedence[];
+extern int g_tok_info[];
 
 struct StringTable {
 	int	nextId= 0;
@@ -89,6 +107,7 @@ public:
 	Name name;						// identifier index
 	RegisterName regname;			// temporary for llvm SSA calc.
 	int visited;					// anti-recursion flag.
+	Node(){name=0;visited=0;regname=0;}
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
 	virtual ResolvedType resolve(CallScope* scope, const Type* desired){printf("empty?");return ResolvedType(nullptr);};
@@ -100,8 +119,9 @@ public:
 	Node* clone_if()const { if(this) return this->clone();else return nullptr;}
 	void dump_if(int d)const{if (this) this->dump(d);}
 	virtual void clear_reg(){regname=0;};
-	RegisterName get_reg(RegisterName* curr){if (!regname){return regname=(*curr)++;} else return regname;}
-	RegisterName get_new_reg(RegisterName* curr){return regname=(*curr)++;}
+	RegisterName get_reg(Name baseName, int* new_index, bool force_new);
+	RegisterName get_reg_new(Name baseName, int* new_index);
+	RegisterName get_reg_existing();
 };
 
 struct TypeParam{int name; int defaultv;};
@@ -121,6 +141,10 @@ struct Type : Node{
 	Node* clone() const;
 	void clear_reg(){regname=0;};
 };
+struct LLVMType {
+	int name;
+	bool is_pointer;
+};
 struct Expr : Node{
 	Type* type;
 	void dump(int depth) const;
@@ -128,15 +152,31 @@ struct Expr : Node{
 	Expr();
 	virtual const char* kind_str()const{return"expr";}
 	Type* get_type() const { if(this)return this->type;else return nullptr;}
+	LLVMType get_type_llvm() const {
+		if (!this) return LLVMType{0,0};
+		if (!this->type) return LLVMType{0,0};
+		auto tn=this->type->name;
+		if (!this->type->sub) return LLVMType{tn,0};
+		if (tn==PTR || tn==DEREF ||tn==ADDR) return LLVMType{this->type->sub->name,true};
+		// todo structs, etc - llvm DOES know about these.
+		return LLVMType{0,0};
+	}
 };
 struct ExprScopeBlock : Expr{};
 struct ExprFnDef;
 struct ExprBlock :public ExprScopeBlock{
+	// used for operators, function calls and compound statement
+	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
+	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
+	// the similarity between all is
 	Expr*	call_op;
 	vector<Expr*>	argls;
 	ExprFnDef*	call_target;
 	CallScope* scope;
 	ExprBlock* next_of_call_target;	// to walk callsites to a function
+	bool is_compound_expression()const {return (!name && !call_op);}
+	Name get_fn_name()const;
+	int get_operator()const{if (call_op){return call_op->name;}else{return 0;}}
 	int get_name()const;
 	void dump(int depth) const;
 	ResolvedType resolve(CallScope* scope, const Type* desired);
@@ -233,7 +273,13 @@ struct Call {
 */
 struct Variable : Expr{
 	Variable* next;
-	Node* clone() const { auto v=new Variable(); v->next=0; v->name=this->name; v->type=this->type; return v;}
+	Expr* initialize; // if its an argdef, we instantiate an initializer list
+	Variable(Name n){name=n; initialize=0;}
+	Node* clone() const {
+		auto v=new Variable(name);
+		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
+		v->next=0; v->type=this->type; return v;
+	}
 };
 // scopes are created when resolving; generic functions are evaluated
 struct CallScope {
@@ -255,6 +301,7 @@ struct CallScope {
 	Variable* get_variable(Name name);
 	ExprFnDef* find_fn(Name name,vector<Expr*>& args, const Type* ret_type) ;
 	FnName* find_fn_name(Name name);
+	void add_fn_def(ExprFnDef*);
 	void dump(int depth) const;
 	void push_child(CallScope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 };
@@ -332,7 +379,7 @@ struct ExprFnDef : Module {
 	ExprBlock* body;
 	ExprBlock* callers;	// linklist of callers to here
 	int get_name()const {return name;}
-	FnName* get_fn_name();
+	FnName* get_fn_name(CallScope* scope);
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
 	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;}

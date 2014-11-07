@@ -21,40 +21,45 @@ const char* g_token_str[]={
 	":","+","-","*","/",".",					//arithmetic
 	"<",">","<=",">=","==","!=","&&","||",		//compares/logical
 	"&","|","^","%","<<",">>",					//bitwise
-	"=",":=","+=","-=","*=","/=","<<=",">>=","&=","|=",
-	"++","--","++","--","-","*","&","!","~",
-	"*?","*!","&?","[]","&[]",
+	"=",":=",
+	"+=","-=","*=","/=","<<=",">>=","&=","|=", // assign-op
+	"++","--","++","--", //inc/dec
+	"-","*","&","!","~", // unary ops
+	"*?","*!","&?","[]","&[]", // special pointers
 	",",";",
 	"_",
 	NULL,	
 };
 
-#define PRECEDENCE 0xff
-#define PREFIX 0x100
-#define UNARY 0x200
-#define ASSOC 0x400
+
 int g_tok_info[]={
 	0,
-	0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,
-	0,0,0,
-	0,0,0,0,0,0,0,0,
-	0,0,
-	0,0,
-	0,0,
-	10,10,10,13,10,	   // arrows
-	9,6,6,5,5,2,		//arithmetic
-	8,8,8,8,9,9,13,14,	//compares/logical
-	8,7,8,6,9,9,		//bitwise
-	ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,ASSOC|16,
-	PREFIX|UNARY|2,PREFIX|UNARY|2,UNARY|ASSOC|3,UNARY|ASSOC|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3,UNARY|PREFIX|3, 
-	UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3, UNARY|ASSOC|3,
-	0,0,
-	0,0,
+	0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,
+	0,0,0,			// let,set,var
+	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
+	0,0, //( )
+	0,0, //{ }
+	0,0, // [ ]
+	READ|10,READ|10,READ|10,READ|13,WRITE|10,	   // arrows
+	READ|9,READ|6,READ|6,READ|5,READ|5,READ|2,		//arithmetic
+	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,READ|13,READ|14,	//compares/logical
+	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,		//bitwise
+	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
+	
+	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|16,WRITE_LHS|READ|ASSOC|16, // assign-op
+	
+	MODIFY|PREFIX|UNARY|2,MODIFY|PREFIX|UNARY|2,MODIFY|UNARY|ASSOC|3,MODIFY|UNARY|ASSOC|3, // post/pre inc/dec
+	READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3, //unary ops
+	READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, /// special pointers
+	0,0, // delim
+	0,
+	0, //placeholder
 };
 bool is_ident(int tok){return tok>=IDENT;}
 bool is_type(int tok){return tok<T_NUM_TYPES;}
 int is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
+int operator_flags(int tok){return g_tok_info[tok];}
 int precedence(int tok){return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
 int is_prefix(int tok){return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
 int arity(int tok){return  (tok<IDENT)?((g_tok_info[tok] & (UNARY) )?1:2):-1;}
@@ -104,7 +109,7 @@ StringTable::StringTable(const char** initial){
 	ASSERT(nextId==IDENT);
 }
 int StringTable::get_index(const char* str, const char* end) {
-	auto len=end-str;
+	auto len=(end)?(end-str):strlen(str);
 	string s; s.resize(len);memcpy((char*)s.c_str(),str,len);((char*)s.c_str())[len]=0;
 	auto ret=names.find(s);
 	if (ret!=names.end())	return ret->second;		
@@ -161,6 +166,23 @@ Status assert_types_eq(const Type* a,const Type* b) {
 	}
 	return COMPLETE;
 }
+RegisterName Node::get_reg_existing(){ASSERT(regname); return regname;}
+RegisterName Node::get_reg(Name baseName, int *new_index, bool force_new){
+	// variable might be in a local scope shadowing others, so it still needs a unique name
+	// names are also modified by writes, for llvm SSA
+	if (!regname || force_new){
+		return get_reg_new(baseName,new_index);
+	} else
+		return regname;
+}
+RegisterName Node::get_reg_new(Name baseName, int* new_index) {
+	char name[256];
+	sprintf(name, "r%d%s",(*new_index)++,baseName>=IDENT?getString(baseName):"");
+	return this->regname=g_Names.get_index(name,0);
+}
+
+
+
 Status propogate_type(Type*& a,Type*& b) {
 	if (!(a || b)) return INCOMPLETE;
 	if (!a && b) {a=b; return INCOMPLETE;}
@@ -217,6 +239,14 @@ void ExprIdent::dump(int depth) const {
 	newline(depth);printf("%s:",getString(name));
 	if (this->type) {this->type->dump(-1);}
 }
+
+Name ExprBlock::get_fn_name()const
+{	if (call_op){
+		ASSERT(dynamic_cast<ExprIdent*>(call_op)&& "TODO: distinguish expression with computed function name");
+		return call_op->name;}
+	else{return 0;}
+}
+
 
 int ExprBlock::get_name()const{
 	if (call_op) return call_op->get_name(); else return 0;
@@ -434,7 +464,7 @@ Expr* ExprFnDef::get_return_value() const{
 	}
 	return 0;
 }
-
+/*
 FnName*	g_fn_names;
 vector<FnName> g_functions;
 FnName* getFnName(int name) {
@@ -445,11 +475,11 @@ FnName* getFnName(int name) {
 	n=new FnName(); n->name=name; n->next=g_fn_names; g_fn_names=n;
 	return n;
 }
-
+*/
 // get a function's list of shared names..
-FnName* ExprFnDef::get_fn_name() {
+FnName* ExprFnDef::get_fn_name(CallScope* scope) {
 	if (this->fn_name)	return	this->fn_name;
-	auto fnm=getFnName(this->name);
+	auto fnm=scope->find_fn_name(this->name);
 	this->fn_name = fnm;
 	this->next_of_name=fnm->fn_defs; fnm->fn_defs = this;
 	return	fnm;
@@ -485,14 +515,14 @@ Node* ExprBlock::clone() const {
 	if (!this) return nullptr;
 	auto r=new ExprBlock();
 	if (this->call_op) {
-		r->call_op = (ExprBlock*) this->call_op->clone();
+		r->call_op = (Expr*) this->call_op->clone();
 	}
 	r->name=this->name;
 	r->argls.resize(this->argls.size());
 	for (int i=0; i<this->argls.size(); i++) {
 		r->argls[i]=(Expr*)(this->argls[i]->clone());
 	}
-	return r;
+	return (Node*)r;
 }
 Node*
 ExprLiteral::clone() const{
@@ -617,15 +647,18 @@ ExprFnDef*	CallScope::find_fn(Name name, vector<Expr*>& args,const Type* ret_typ
 	int best_score=-1;
 	int	ambiguity=0;
 	for (auto src=this; src; src=src->parent) {
-		auto fname=src->find_fn_name(name);
-		if (!fname) {
-			printf("\ncant find any function  %s\n",getString(name));
-			exit(0);
-			return 0;
+		if (auto fname=src->find_fn_name(name)){
+			for (auto f=fname->fn_defs; f;f=f->next_of_name) {
+				find_sub(f,name, args,ret_type,&best,&best_score,&ambiguity);
+			}
 		}
-		for (auto f=fname->fn_defs; f;f=f->next_of_name) {
-			find_sub(f,name, args,ret_type,&best,&best_score,&ambiguity);
-		}
+	}
+	if (best) {
+		printf("\ncant find any function  %s\n",getString(name));
+		this->global->dump(0);
+		printf("\ncant find any function  %s\n",getString(name));
+		exit(0);
+		return 0;
 	}
 	find_printf("match score=%d/%d\n", best_score, args.size());
 	if (!best)  {
@@ -664,7 +697,7 @@ Variable* CallScope::get_variable(Name name){
 	if (auto v=this->find_variable(name)) {
 		return v;
 	}
-	auto v=new Variable(); v->next=this->vars; this->vars=v; v->name=name;
+	auto v=new Variable(name); v->next=this->vars; this->vars=v;
 	return v;
 }
 void CallScope::dump(int depth)const {
@@ -672,6 +705,9 @@ void CallScope::dump(int depth)const {
 	for (auto v=this->vars; v; v=v->next) {
 		newline(depth+1); printf("var %d %s:",v->name, getString(v->name)); 
 		if (v->type){ v->type->dump(-1);} else {printf("not_type");}
+	}
+	for (auto f=this->fn_names; f;f=f->next){
+		newline(depth+1); printf("fname %s:",getString(f->name));
 	}
 	for (auto s=this->child; s; s=s->next){
 		s->dump(depth+1);
@@ -876,6 +912,13 @@ ResolvedType ExprFnDef::resolve(CallScope* scope, const Type* desired) {
 			printf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
 		}
 	}
+	auto fname=this->get_fn_name(scope);
+	if(!this->fn_name) {
+		this->next_of_name=fname->fn_defs;
+		fname->fn_defs=this;
+		this->fn_name=fname;
+	}
+	
 	auto ret=this->body->resolve(sc,desired);
 	propogate_type(ret,this->type);
 	
@@ -1108,7 +1151,7 @@ void pop_operator_call( vector<int>& operators,vector<Expr*>& operands) {
 		printf("\nerror: %s arity %d, %lu operands given\n",getString(op),arity(op),operands.size());
 		exit(0);
 	}
-	operands.push_back(p);
+	operands.push_back((Expr*)p);
 }
 //   void fn(x:(int,int),y:(int,int))
 void flush_op_stack(ExprBlock* block, vector<int>& ops,vector<Expr*>& vals) {
@@ -1117,6 +1160,7 @@ void flush_op_stack(ExprBlock* block, vector<int>& ops,vector<Expr*>& vals) {
 		block->argls.push_back(pop(vals));
 	}
 }
+
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op);
 
 ExprBlock* parse_expr(TokenStream&src) {
@@ -1516,7 +1560,9 @@ const char* g_TestProg=
 	"fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}"
 */
 //	"x=y; y=z; z=0.0;"
-	"fn add(a,b){a+b}"
+	"fn add(a,b){a+b};"
+	"fn what(a:int,b:int)->int{x=a+b;other(a,b);x-=b;x+b};"
+	"fn other(a:int,b:int)->int{a+b};"
 	"fn foo(x:tuple[int,int])->int{_};"
 	"fn foo(x:float)->float{_};"
 	"fn do_what[X=int](x:X,y:X)->X{_};"
