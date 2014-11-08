@@ -201,7 +201,8 @@ struct ExprFnDef;
 struct TypeDef;
 struct ExprIf;
 struct VarDecl;
-struct ModuleBase : Expr {
+
+struct ModuleBase : Expr { // a node that may contain named definitions
 	ModuleBase* parent;
 	Module*	modules;
 	StructDef* structs;
@@ -229,8 +230,8 @@ struct ExprLiteral : Expr {
 	Node* clone() const;
 	bool is_string() const { return type_id==T_CONST_STRING;}
 	ResolvedType resolve(CallScope* scope, const Type* desired);
-	
 };
+
 struct ArgDef :Node{
 	uint32_t size,offset;
 	Name name;
@@ -244,6 +245,7 @@ struct ArgDef :Node{
 	Node* clone() const;
 	void render_object();
 };
+
 struct ExprStructDef;
 
 struct FnName {		// everything defined under a name.

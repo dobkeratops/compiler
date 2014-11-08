@@ -1,4 +1,4 @@
-#include "hack.hpp"
+ #include "hack.hpp"
 #include "codegen.h"
 #include "repl.h"
 
@@ -128,6 +128,13 @@ void StringTable::dump(){
 		printf("[%d]%s\n",i,this->index_to_name[i].c_str());
 	}
 };
+
+extend ExprFor {
+	void do_something() { // same as putting it in the class.
+	}
+	void do_something() {
+	}
+}
 
 
 StringTable g_Names(g_token_str);
@@ -653,20 +660,20 @@ ExprFnDef*	CallScope::find_fn(Name name, vector<Expr*>& args,const Type* ret_typ
 			}
 		}
 	}
-	if (best) {
-		printf("\ncant find any function  %s\n",getString(name));
-		this->global->dump(0);
-		printf("\ncant find any function  %s\n",getString(name));
-		exit(0);
-		return 0;
-	}
+//	if (!best) {
+//		printf("\ncant find any function  %s\n",getString(name));
+//		this->global->dump(0);
+//		printf("\ncant find any function  %s\n",getString(name));
+//		exit(0);
+//		return 0;
+//	}
 	find_printf("match score=%d/%d\n", best_score, args.size());
 	if (!best)  {
 		printf("No match found\n");
 		return nullptr;
 	}
 	if (ambiguity){
-		printf("ambiguous matches for function\n");
+//		printf("ambiguous matches for function\n");
 	}
 	if (best->is_generic()) {
 		printf("matched generic function: instanting\n");
