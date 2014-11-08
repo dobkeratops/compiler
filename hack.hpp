@@ -47,8 +47,8 @@ extern int operator_flags(int tok);
 enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
-	INT,FLOAT,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,
-	PRINT,FN,STRUCT,ENUM,ARRAY,UNION,VARIANT,WITH,MATCH,
+	INT,UINT,FLOAT,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,
+	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH,
 	LET,SET,VAR,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
 	// delimiters
@@ -63,7 +63,7 @@ enum Token {
 	ASSIGN,LET_ASSIGN,
 	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
-	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR,SLICE,
+	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,
 	COMMA,SEMICOLON,
 	// after these indices, comes indents
 	PLACEHOLDER,
@@ -161,11 +161,12 @@ struct Expr : Node{
 	virtual const char* kind_str()const{return"expr";}
 	Type* get_type() const { if(this)return this->type;else return nullptr;}
 	LLVMType get_type_llvm() const {
-		if (!this) return LLVMType{0,0};
-		if (!this->type) return LLVMType{0,0};
+		if (!this) return LLVMType{VOID,0};
+		if (!this->type) return LLVMType{VOID,0};
 		auto tn=this->type->name;
+		if (tn==VOID) return LLVMType{VOID,0};
 		if (!this->type->sub) return LLVMType{tn,0};
-		if (tn==PTR || tn==DEREF ||tn==ADDR) return LLVMType{this->type->sub->name,true};
+		if (tn==PTR || tn==DEREF ||tn==ADDR ) return LLVMType{this->type->sub->name,true};
 		// todo structs, etc - llvm DOES know about these.
 		return LLVMType{0,0};
 	}
@@ -177,27 +178,28 @@ struct ExprBlock :public ExprScopeBlock{
 	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
 	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
 	// the similarity between all is
-	bool is_compound_expression()const{return !call_op && !name;}
-	Expr*	call_op;
+	bool is_compound_expression()const{return !call_operator &&!call_target && !name;}
+	Expr*	call_operator;
 	vector<Expr*>	argls;
 	ExprFnDef*	call_target;
 	Scope* scope;
 	ExprBlock* next_of_call_target;	// to walk callers to a function
 	Name get_fn_name()const;
-	int get_operator()const{if (call_op){return call_op->name;}else{return 0;}}
+	int get_operator()const{if (call_operator && !call_target){return call_operator->name;}else{return 0;}}
+	ExprFnDef* get_fn_call()const {return this->call_target;}
 	int get_name()const;
 	void dump(int depth) const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	virtual const char* kind_str()const{return"block";}
 	ExprBlock();
 	Node* clone() const;
-	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_op)call_op->clear_reg(); regname=0;};
+	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_operator)call_operator->clear_reg(); regname=0;};
 	bool is_undefined()const ;
 };
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
 	T_NONE,
-	T_INT,T_FLOAT,T_CONST_STRING,T_VOID,T_AUTO,T_ONE,T_ZERO,T_VOIDPTR,
+	T_INT,T_UINT,T_FLOAT,T_CONST_STRING,T_VOID,T_AUTO,T_ONE,T_ZERO,T_VOIDPTR,
 	T_WRONG_PRINT,T_FN,T_STRUCT,T_TUPLE,T_VARIANT,T_NUM_TYPES,
 };
 bool is_type(int tok);
@@ -228,7 +230,7 @@ struct Module : ModuleBase {
 struct ExprLiteral : Expr {
 	TypeId	type_id;
 
-	union  {int val_int; float val_float; const char* val_str;int val_keyword;} u;
+	union  {int val_int; int val_uint; float val_float; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
 	void dump(int depth) const;
 	ExprLiteral(float f);
@@ -295,7 +297,7 @@ struct Variable : Expr{
 };
 // scopes are created when resolving; generic functions are evaluated
 struct Scope {
-	ExprFnDef*	outer;
+	ExprFnDef*	owner;
 	Expr* node;
 	Scope* parent;
 	Scope* next;
@@ -307,7 +309,7 @@ struct Scope {
 	// locals;
 	// captures.
 	const char* name()const;
-	Scope(){fn_names=0; outer=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
+	Scope(){fn_names=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
 	void visit_calls();
 	Variable* find_variable(Name ident);
 	Variable* get_variable(Name name);

@@ -10,8 +10,8 @@ void print_tok(int i){printf("%s ",getString(i));};
 bool g_lisp_mode=true;
 const char* g_token_str[]={
 	"",
-	"int","float","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
-	"print","fn","struct","enum","array","union","variant","with","match",
+	"int","uint","float","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
+	"print","fn","struct","enum","array","vector","union","variant","with","match",
 	"let","set","var",
 	"while","if","else","do","for","in","return","break",
 	"(",")",
@@ -34,8 +34,8 @@ const char* g_token_str[]={
 
 int g_tok_info[]={
 	0,
-	0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,
 	0,0,0,			// let,set,var
 	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
 	0,0, //( )
@@ -161,7 +161,7 @@ Expr::Expr(){ type=0;}
 ResolvedType assert_types_eq(const Type* a,const Type* b) {
 	ASSERT(a && b);
 	if (!a->eq(b)){
-		printf("type error"); a->dump(-1);b->dump(-1);printf("\n");
+		printf("type error:"); a->dump(-1);printf("!=");b->dump(-1);printf("\n");
 		return ResolvedType(a,ResolvedType::ERROR);
 	}
 	return ResolvedType(a,ResolvedType::COMPLETE);
@@ -242,25 +242,37 @@ void ExprIdent::dump(int depth) const {
 }
 
 Name ExprBlock::get_fn_name()const
-{	if (call_op){
-		ASSERT(dynamic_cast<ExprIdent*>(call_op)&& "TODO: distinguish expression with computed function name");
-		return call_op->name;}
-	else{return 0;}
+{	if (call_operator){
+		ASSERT(dynamic_cast<ExprIdent*>(call_operator)&& "TODO: distinguish expression with computed function name");
+		return call_operator->name;
+	}
+	else if (get_fn_call()){return get_fn_call()->name;}
+	else return 0;
 }
 
 
 int ExprBlock::get_name()const{
-	if (call_op) return call_op->get_name(); else return 0;
+	ASSERT(0);
+	if (call_operator) return call_operator->get_name(); else return 0;
 }
 void ExprBlock::dump(int depth) const {
 	if (!this) return;
 	newline(depth);
-	if (this->call_op){int id=this->call_op->ident();if (is_operator(id)) {if (is_prefix(id))printf("prefix");else if (this->argls.size()>1)printf("infix");else printf("postfix");};print_tok(id);
+	if (this->call_operator || this->get_fn_call()){
+		int id=this->call_operator->ident();
+		if (is_operator(id)) {
+			if (is_prefix(id))printf("prefix");
+			else if (this->argls.size()>1)printf("infix");
+			else printf("postfix");print_tok(id);
+		}
+		else if(get_fn_call()){
+			printf("%s",getString(get_fn_call()->name));
+		};
 		if (this->type) {printf(":");this->type->dump(-1);};printf("(");} else printf("{");
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{printf("(none)");}
 	}
-	newline(depth);if (this->call_op)printf(")");else printf("}");
+	newline(depth);if (this->call_operator)printf(")");else printf("}");
 //	newline(depth);
 }
 
@@ -270,7 +282,7 @@ const char* Scope::name() const {
 	if (!parent){
 		return"global";
 	} 
-	else return getString(outer->name);
+	else return getString(owner->name);
 }
 
 // compile time function in type system, available when you use
@@ -478,6 +490,7 @@ FnName* getFnName(int name) {
 */
 // get a function's list of shared names..
 FnName* ExprFnDef::get_fn_name(Scope* scope) {
+//	printf("register fn %s in %p\n",getString(this->name),scope);
 	if (this->fn_name)	return	this->fn_name;
 	auto fnm=scope->find_fn_name(this->name);
 	this->fn_name = fnm;
@@ -514,9 +527,10 @@ ExprFnDef* instantiate_generic_function(Scope* s,ExprFnDef* src, vector<Expr*>& 
 Node* ExprBlock::clone() const {
 	if (!this) return nullptr;
 	auto r=new ExprBlock();
-	if (this->call_op) {
-		r->call_op = (Expr*) this->call_op->clone();
+	if (this->call_operator) {
+		r->call_operator = (Expr*) this->call_operator->clone();
 	}
+	r->call_target=this->call_target;
 	r->name=this->name;
 	r->argls.resize(this->argls.size());
 	for (int i=0; i<this->argls.size(); i++) {
@@ -575,7 +589,8 @@ ExprIdent::clone() const {
 	return r;
 }
 
-void find_printf(const char*,...){};
+//void find_printf(const char*,...){};
+#define find_printf printf
 int num_known_arg_types(vector<Expr*>& args) {
 	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->type) n++;} return n;
 }
@@ -592,7 +607,12 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 
 	find_printf("candidate:");
 	for (int i=0; i<args.size(); i++) {
-		find_printf("%s ",f->args[i]->type->get_name_str());		 }
+//		find_printf("%s ",f->args[i]->type->get_name_str());
+		printf("arg %d %s",i,getString(f->args[i]->name));
+		auto t=f->args[i]->type;
+		if (t) t->dump(-1);
+		printf("\n");
+	}
 	find_printf("\n");
 	int score=0;
 	for (int i=0; i<args.size(); i++) {
@@ -647,6 +667,7 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 	int best_score=-1;
 	int	ambiguity=0;
 	for (auto src=this; src; src=src->parent) {
+		find_printf("in scope %p\n",src);
 		if (auto fname=src->find_fn_name(name)){
 			for (auto f=fname->fn_defs; f;f=f->next_of_name) {
 				find_sub(f,name, args,ret_type,&best,&best_score,&ambiguity);
@@ -660,7 +681,7 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 //		exit(0);
 //		return 0;
 //	}
-	find_printf("match score=%d/%d\n", best_score, args.size());
+	find_printf("match score=%d/%z\n", best_score, args.size());
 	if (!best)  {
 		printf("No match found\n");
 		return nullptr;
@@ -701,7 +722,7 @@ Variable* Scope::get_variable(Name name){
 	return v;
 }
 void Scope::dump(int depth)const {
-	newline(depth);printf("scope: %s {", this->outer?getString(this->outer->ident()):"global");
+	newline(depth);printf("scope: %s {", this->owner?getString(this->owner->ident()):"global");
 	for (auto v=this->vars; v; v=v->next) {
 		newline(depth+1); printf("var %d %s:",v->name, getString(v->name)); 
 		if (v->type){ v->type->dump(-1);} else {printf("not_type");}
@@ -729,9 +750,9 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 	}
 	int op_ident=NONE;
 	ExprIdent* p=nullptr;
-	if(this->call_op){p=dynamic_cast<ExprIdent*>(this->call_op); op_ident=p->name;}
+	if(this->call_operator){p=dynamic_cast<ExprIdent*>(this->call_operator); op_ident=p->name;}
 	printf("%s %s\n",getString(this->name),getString(op_ident));
-	if (op_ident==NONE && !this->call_op) {	// do executes each expr, returns last ..
+	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
 		for (auto i=0; i<this->argls.size()-1; i++) {
 			this->argls[i]->resolve(sc,0);
 		}
@@ -805,11 +826,11 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired) {
 	for (int i=0; i<block->argls.size(); i++) {
 		block->argls[i]->resolve(scope,desired);
-		printf("arg %d type=",i); cout<<block->argls[i]->type<<"\n";//->dump(0); printf("\n");
+		printf("resolve arg %d type=",i); auto t=block->argls[i]->type; if (t) t->dump(-2); printf("\n");
 	}
 	ASSERT(block->call_target==0);
 
-	ExprFnDef* call_target = scope->find_fn(block->call_op->ident(), block->argls, desired);
+	ExprFnDef* call_target = scope->find_fn(block->call_operator->ident(), block->argls, desired);
 	auto fnc=call_target;
 	if (call_target!=block->call_target) {
 		if (block->call_target) {
@@ -849,7 +870,8 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 			auto sc=new Scope;
 			block->scope=sc;
 			scope->push_child(sc);
-			sc->outer=call_target;
+			sc->owner=call_target;//TODO: this is dodgy.
+			// do we need to distinguish an inline instance from a global instance.
 			block->next_of_call_target = call_target->callers;
 			call_target->callers =block;
 		}
@@ -898,7 +920,7 @@ ResolvedType ExprFnDef::resolve(Scope* scope, const Type* desired) {
 //	if (!this->name) {return new Type(FN);
 		
 //	}
-	if (!this->scope){ this->scope=new Scope; this->scope->global=scope;}
+	if (!this->scope){ this->scope=new Scope; this->scope->parent=this->scope->global=scope;}
 	auto sc=this->scope;
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 		auto arg=this->args[i];
@@ -910,11 +932,6 @@ ResolvedType ExprFnDef::resolve(Scope* scope, const Type* desired) {
 	}
 	if (this->name) {
 		auto fname=this->get_fn_name(scope);
-		if(!this->fn_name) {
-			this->next_of_name=fname->fn_defs;
-			fname->fn_defs=this;
-			this->fn_name=fname;
-		}
 	}
 	
 	auto ret=this->body->resolve(sc,this->ret_type);
@@ -1137,7 +1154,7 @@ void pop_operator_call( vector<int>& operators,vector<Expr*>& operands) {
 									 
 	auto * p=new ExprBlock();
 	auto op=pop(operators);
-	p->call_op=new ExprIdent(op);
+	p->call_operator=new ExprIdent(op);
 	if (operands.size()>=2 && (arity(op)==2)){
 		auto arg1=pop(operands);
 		p->argls.push_back(pop(operands));
@@ -1180,7 +1197,7 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	// shunting yard parserfelchery
-	ExprBlock *node=new ExprBlock; node->call_op=op;
+	ExprBlock *node=new ExprBlock; node->call_operator=op;
 	vector<int> operators;
 	vector<Expr*> operands;
 	bool	was_operand=false;
@@ -1559,6 +1576,7 @@ const char* g_TestProg=
 */
 //	"x=y; y=z; z=0.0;"
 
+
 	"fn add(a,b){a+b};"
 	"fn what(a:int,b:int)->int{x=a+b;other(a,b);x-=b;x+b};"
 	"fn other(a:int,b:int)->int{a+b};"
@@ -1571,7 +1589,7 @@ const char* g_TestProg=
 	"fn render(m:Mesh){}"
 	"x=1.0; y=2.0; z=3.0; w=0.5;"
 	"foo=lerp(x,add(y,z),w);"
-	"struct Mesh[VERTEX,MAT]{ vertices;triangles};"
+	"struct Mesh[VERTEX,INDEX]{ vertices:VERTEX;triangles:INDEX[3]};"
 	"lambda = fn(x){ print(\"foo_bar_baz\");};"
 	"i=20;"
 	"fn Mesh()->Mesh{_}"
@@ -1591,7 +1609,9 @@ const char* g_TestProg=
 	"if i<10 {printf(1)} else {printf(2)}"
 	"lerp(1,2,0);"
 
-	"fn foo(a:int,b:int)->int{a}"
+	"fn printf(a:int,b:int,c:int,d:int){}"
+
+	"fn foobar(a:int,b:int)->int{printf(1,2,3,4);0}"
 
 /*
 "set(glob_x, 10.0);"
