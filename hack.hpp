@@ -94,13 +94,20 @@ struct Scope;
 struct StructDef;
 struct ExprIdent;
 struct Type;
-enum Status :int {COMPLETE=0,INCOMPLETE=1,ERROR=3};// complete is zero, ERROR is 3 so we can start 0 and OR the bad news in.
 struct ResolvedType{
+	enum Status:int {COMPLETE=0,INCOMPLETE=1,ERROR=3};
+	// complete is zero, ERROR is 3 so we can
 	// carries information from type propogation
 	Type* type;
 	Status status;
-	ResolvedType(Type*t=nullptr,Status s=INCOMPLETE){type=t; status=s;}
-	operator Type* ()const {return type;}
+	void combine(const ResolvedType& other){
+		status=(Status)((int)status|(int)other.status);
+	}
+	ResolvedType(){type=0;status=INCOMPLETE;}
+	ResolvedType(const Type*t,Status s){type=const_cast<Type*>(t); status=s;}
+	ResolvedType(const Type* t, int s):ResolvedType(t,(Status)s){}
+	//operator Type* ()const {return type;}
+	//operator bool()const { return status==COMPLETE && type!=0;}
 };
 class Node {
 public:
@@ -110,7 +117,7 @@ public:
 	Node(){name=0;visited=0;regname=0;}
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
-	virtual ResolvedType resolve(Scope* scope, const Type* desired){printf("empty?");return ResolvedType(nullptr);};
+	virtual ResolvedType resolve(Scope* scope, const Type* desired){printf("empty?");return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
 	virtual const char* kind_str(){return"node";}
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
@@ -169,12 +176,12 @@ struct ExprBlock :public ExprScopeBlock{
 	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
 	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
 	// the similarity between all is
+	bool is_compound_expression()const{return !call_op && !name;}
 	Expr*	call_op;
 	vector<Expr*>	argls;
 	ExprFnDef*	call_target;
 	Scope* scope;
-	ExprBlock* next_of_call_target;	// to walk callsites to a function
-	bool is_compound_expression()const {return (!name && !call_op);}
+	ExprBlock* next_of_call_target;	// to walk callers to a function
 	Name get_fn_name()const;
 	int get_operator()const{if (call_op){return call_op->name;}else{return 0;}}
 	int get_name()const;
@@ -307,7 +314,7 @@ struct Scope {
 	void dump(int depth) const;
 	void push_child(Scope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 };
-Type* resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
+ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
 
 struct StructDef : ModuleBase {
 	vector<ArgDef> fields;
@@ -339,7 +346,7 @@ struct ExprFor :  Expr {
 	ExprFor(){name=0;pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;}
 	~ExprFor(){}
 	virtual const char* kind_str()const{return"if";}
-	ResolvedType resolve(Scope* scope,Type*) {return ResolvedType(nullptr);};
+	ResolvedType resolve(Scope* scope,Type*) {return ResolvedType();};
 	Expr* find_break_expr();
 	Node* clone()const;
 };
@@ -369,8 +376,11 @@ struct ExprFnDef : Module {
 	ExprFnDef*	instance_of;	// Original function, when this is a template instance
 	ExprFnDef*	instances;		// Linklist of it's instanced functions.
 	ExprFnDef*	next_instance;
+	ExprBlock* callers;	// linklist of callers to here
 	FnName*		fn_name;
 	Scope*	scope;
+	
+	Type* ret_type;
 	Type* fn_type;				// eg (args)->return
 	bool resolved;
 	// Partial specialization may add one specific parameter...
@@ -379,16 +389,16 @@ struct ExprFnDef : Module {
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> args;
 	ExprBlock* body;
-	ExprBlock* callers;	// linklist of callers to here
 	int get_name()const {return name;}
 	FnName* get_fn_name(Scope* scope);
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;}
+	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;ret_type;}
 	void dump(int ind) const;
 	ResolvedType resolve(Scope* scope,const Type* desired);
 	ResolvedType resolve_call(Scope* scope,const Type* desired);
 	Expr* get_return_value() const;
+	Type* return_type()const {auto x=get_return_value();return x?x->type:nullptr;}
 	Node* clone() const;
 };
 #define link(obj,owner,link) obj->link=owner; owner=obj;
