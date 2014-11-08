@@ -129,6 +129,7 @@ public:
 	RegisterName get_reg(Name baseName, int* new_index, bool force_new);
 	RegisterName get_reg_new(Name baseName, int* new_index);
 	RegisterName get_reg_existing();
+	virtual bool is_undefined()const{if (this && name==PLACEHOLDER) return true; return false;}
 };
 
 struct TypeParam{int name; int defaultv;};
@@ -191,6 +192,7 @@ struct ExprBlock :public ExprScopeBlock{
 	ExprBlock();
 	Node* clone() const;
 	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_op)call_op->clear_reg(); regname=0;};
+	bool is_undefined()const ;
 };
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
@@ -237,6 +239,7 @@ struct ExprLiteral : Expr {
 	Node* clone() const;
 	bool is_string() const { return type_id==T_CONST_STRING;}
 	ResolvedType resolve(Scope* scope, const Type* desired);
+	bool is_undefined()const{return false;}
 };
 
 struct ArgDef :Node{
@@ -332,6 +335,7 @@ struct ExprIf :  Expr {
 	Node* clone() const;
 	virtual const char* kind_str()const{return"if";}
 	ResolvedType resolve(Scope* scope,Type*) ;
+	bool is_undefined()const{return cond->is_undefined()||body->is_undefined()||else_block->is_undefined();}
 };
 struct ExprFor :  Expr {
 	Expr* pattern=0;
@@ -349,6 +353,7 @@ struct ExprFor :  Expr {
 	ResolvedType resolve(Scope* scope,Type*) {return ResolvedType();};
 	Expr* find_break_expr();
 	Node* clone()const;
+	bool is_undefined()const{return pattern->is_undefined()||init->is_undefined()||cond->is_undefined()||cond->is_undefined()||incr->is_undefined()||body->is_undefined()||else_block->is_undefined();}
 };
 
 struct Call;
@@ -400,6 +405,7 @@ struct ExprFnDef : Module {
 	Expr* get_return_value() const;
 	Type* return_type()const {auto x=get_return_value();return x?x->type:nullptr;}
 	Node* clone() const;
+	bool is_undefined()const{return body->is_undefined();};
 };
 #define link(obj,owner,link) obj->link=owner; owner=obj;
 
@@ -414,6 +420,7 @@ struct ExprIdent :Expr{
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone() const;
 	bool is_placeholder()const{return name==PLACEHOLDER;}
+	bool is_undefined()const{return is_placeholder();}
 };
 
 

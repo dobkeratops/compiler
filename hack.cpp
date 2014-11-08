@@ -432,6 +432,11 @@ bool ExprFnDef::is_generic() const {
 		if (!args[i]->type) return true;
 	return false;
 }
+bool ExprBlock::is_undefined() const{
+	if (!this) return false; //only presencence of "_" is undefined.
+	for (auto x:argls){if (x->is_undefined()) return true;}
+	return false;
+}
 
 void ExprFnDef::dump(int ind) const {
 	if (!this) return;
@@ -441,7 +446,7 @@ void ExprFnDef::dump(int ind) const {
 		if (i<args.size()-1) printf(",");
 	}
 	printf(")");
-	if (this->type) {printf("->");this->type->dump(-1);};
+	if (this->ret_type) {printf("->");this->ret_type->dump(-1);};
 	this->body->dump(ind);
 	if (auto p=this->instances){
 		printf("instantiations:");
@@ -912,8 +917,8 @@ ResolvedType ExprFnDef::resolve(Scope* scope, const Type* desired) {
 		}
 	}
 	
-	auto ret=this->body->resolve(sc,desired);
-	propogate_type(ret,this->type);
+	auto ret=this->body->resolve(sc,this->ret_type);
+	propogate_type(ret,this->ret_type);
 	
 	if (!this->fn_type)
 		this->fn_type=new Type(FN);
@@ -1501,7 +1506,7 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	}
 	// TODO: multiple argument blocks for currying?.
 	if (src.eat_if(ARROW) || src.eat_if(COLON)) {
-		fndef->type = parse_type(src, 0);
+		fndef->ret_type = parse_type(src, 0);
 	}
 	printf("fn body:");
 	// implicit "progn" here..
