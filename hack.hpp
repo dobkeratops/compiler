@@ -90,7 +90,7 @@ void indent(int depth);
 // todo: path malarchy.
 typedef int32_t Name;
 typedef int32_t RegisterName;
-struct CallScope;
+struct Scope;
 struct StructDef;
 struct ExprIdent;
 struct Type;
@@ -110,7 +110,7 @@ public:
 	Node(){name=0;visited=0;regname=0;}
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
-	virtual ResolvedType resolve(CallScope* scope, const Type* desired){printf("empty?");return ResolvedType(nullptr);};
+	virtual ResolvedType resolve(Scope* scope, const Type* desired){printf("empty?");return ResolvedType(nullptr);};
 	virtual const char* kind_str(){return"node";}
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
@@ -172,14 +172,14 @@ struct ExprBlock :public ExprScopeBlock{
 	Expr*	call_op;
 	vector<Expr*>	argls;
 	ExprFnDef*	call_target;
-	CallScope* scope;
+	Scope* scope;
 	ExprBlock* next_of_call_target;	// to walk callsites to a function
 	bool is_compound_expression()const {return (!name && !call_op);}
 	Name get_fn_name()const;
 	int get_operator()const{if (call_op){return call_op->name;}else{return 0;}}
 	int get_name()const;
 	void dump(int depth) const;
-	ResolvedType resolve(CallScope* scope, const Type* desired);
+	ResolvedType resolve(Scope* scope, const Type* desired);
 	virtual const char* kind_str()const{return"block";}
 	ExprBlock();
 	Node* clone() const;
@@ -229,7 +229,7 @@ struct ExprLiteral : Expr {
 	~ExprLiteral();
 	Node* clone() const;
 	bool is_string() const { return type_id==T_CONST_STRING;}
-	ResolvedType resolve(CallScope* scope, const Type* desired);
+	ResolvedType resolve(Scope* scope, const Type* desired);
 };
 
 struct ArgDef :Node{
@@ -262,7 +262,7 @@ struct FnName {		// everything defined under a name.
 /*
 struct Call {
 	// linked through caller->callee & scope block
-	CallScope* scope;
+	Scope* scope;
 	Call* next_of_scope;
 
 	Expr*	caller;
@@ -284,20 +284,20 @@ struct Variable : Expr{
 	}
 };
 // scopes are created when resolving; generic functions are evaluated
-struct CallScope {
+struct Scope {
 	ExprFnDef*	outer;
 	Expr* node;
-	CallScope* parent;
-	CallScope* next;
-	CallScope* child;
-	CallScope* global;
+	Scope* parent;
+	Scope* next;
+	Scope* child;
+	Scope* global;
 	//Call* calls;
 	Variable* vars;
 	FnName*	fn_names;
 	// locals;
 	// captures.
 	const char* name()const;
-	CallScope(){fn_names=0; outer=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
+	Scope(){fn_names=0; outer=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
 	void visit_calls();
 	Variable* find_variable(Name ident);
 	Variable* get_variable(Name name);
@@ -305,9 +305,9 @@ struct CallScope {
 	FnName* find_fn_name(Name name);
 	void add_fn_def(ExprFnDef*);
 	void dump(int depth) const;
-	void push_child(CallScope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
+	void push_child(Scope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 };
-Type* resolve_make_fn_call(ExprBlock* block,CallScope* scope,const Type* desired);
+Type* resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
 
 struct StructDef : ModuleBase {
 	vector<ArgDef> fields;
@@ -324,7 +324,7 @@ struct ExprIf :  Expr {
 	~ExprIf(){}
 	Node* clone() const;
 	virtual const char* kind_str()const{return"if";}
-	ResolvedType resolve(CallScope* scope,Type*) ;
+	ResolvedType resolve(Scope* scope,Type*) ;
 };
 struct ExprFor :  Expr {
 	Expr* pattern=0;
@@ -339,7 +339,7 @@ struct ExprFor :  Expr {
 	ExprFor(){name=0;pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;}
 	~ExprFor(){}
 	virtual const char* kind_str()const{return"if";}
-	ResolvedType resolve(CallScope* scope,Type*) {return ResolvedType(nullptr);};
+	ResolvedType resolve(Scope* scope,Type*) {return ResolvedType(nullptr);};
 	Expr* find_break_expr();
 	Node* clone()const;
 };
@@ -359,7 +359,7 @@ struct ExprStructDef: Module {
 	ExprStructDef* next_of_name;
 	ExprStructDef(){constructor_fn=0;fn_name=0;next_of_name=0;}
 	void dump(int depth)const;
-	ResolvedType resolve(CallScope* scope, const Type* desired);
+	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone()const {printf("warning,leak\n");return (Node*) this;};
 };
 
@@ -370,7 +370,7 @@ struct ExprFnDef : Module {
 	ExprFnDef*	instances;		// Linklist of it's instanced functions.
 	ExprFnDef*	next_instance;
 	FnName*		fn_name;
-	CallScope*	scope;
+	Scope*	scope;
 	Type* fn_type;				// eg (args)->return
 	bool resolved;
 	// Partial specialization may add one specific parameter...
@@ -381,13 +381,13 @@ struct ExprFnDef : Module {
 	ExprBlock* body;
 	ExprBlock* callers;	// linklist of callers to here
 	int get_name()const {return name;}
-	FnName* get_fn_name(CallScope* scope);
+	FnName* get_fn_name(Scope* scope);
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
 	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;}
 	void dump(int ind) const;
-	ResolvedType resolve(CallScope* scope,const Type* desired);
-	ResolvedType resolve_call(CallScope* scope,const Type* desired);
+	ResolvedType resolve(Scope* scope,const Type* desired);
+	ResolvedType resolve_call(Scope* scope,const Type* desired);
 	Expr* get_return_value() const;
 	Node* clone() const;
 };
@@ -401,7 +401,7 @@ struct ExprIdent :Expr{
 	void dump(int depth) const;
 	virtual const char* kind_str()const{return"ident";}
 	ExprIdent(int i){name=i;type=0;}
-	ResolvedType resolve(CallScope* scope, const Type* desired);
+	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone() const;
 	bool is_placeholder()const{return name==PLACEHOLDER;}
 };

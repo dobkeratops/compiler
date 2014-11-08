@@ -129,14 +129,6 @@ void StringTable::dump(){
 	}
 };
 
-extend ExprFor {
-	void do_something() { // same as putting it in the class.
-	}
-	void do_something() {
-	}
-}
-
-
 StringTable g_Names(g_token_str);
 int getStringIndex(const char* str,const char* end) {
 	if (!end) end=str+strlen(str);
@@ -229,7 +221,7 @@ Status propogate_type(ResolvedType& a,ResolvedType& b) {
 }
 
 
-ResolvedType ExprIdent::resolve(CallScope* scope,const Type* desired) {
+ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired) {
 	// todo: not if its' a typename,argname?
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled out.
@@ -272,7 +264,7 @@ void ExprBlock::dump(int depth) const {
 
 ExprBlock::ExprBlock(){call_target=0;}
 
-const char* CallScope::name() const {
+const char* Scope::name() const {
 	if (!parent){
 		return"global";
 	} 
@@ -366,7 +358,7 @@ void ExprLiteral::dump(int depth) const{
 // TODO : 'type==type' in our type-engine
 //	then we can just make function expressions for types.
 
-ResolvedType ExprLiteral::resolve(CallScope* , const Type* desired){
+ResolvedType ExprLiteral::resolve(Scope* , const Type* desired){
 	if (this->type) {
 		if (desired && this->type) {
 			desired->dump(-1); this->type->dump(-1);
@@ -484,7 +476,7 @@ FnName* getFnName(int name) {
 }
 */
 // get a function's list of shared names..
-FnName* ExprFnDef::get_fn_name(CallScope* scope) {
+FnName* ExprFnDef::get_fn_name(Scope* scope) {
 	if (this->fn_name)	return	this->fn_name;
 	auto fnm=scope->find_fn_name(this->name);
 	this->fn_name = fnm;
@@ -492,7 +484,7 @@ FnName* ExprFnDef::get_fn_name(CallScope* scope) {
 	return	fnm;
 }
 /*
-void CallScope::visit_calls() {
+void Scope::visit_calls() {
 	for (auto call=this->calls;call;call=call->next_of_scope) {
 		printf("%s --> %s\n",this->name(), getString(call->callee->name));
 	}
@@ -500,7 +492,7 @@ void CallScope::visit_calls() {
 		sub->visit_calls();
 }
 */
-ExprFnDef* instantiate_generic_function(CallScope* s,ExprFnDef* src, vector<Expr*>& call_args) {
+ExprFnDef* instantiate_generic_function(Scope* s,ExprFnDef* src, vector<Expr*>& call_args) {
 	ExprFnDef* f =(ExprFnDef*) src->clone();
 	if (src->fn_name && !f->fn_name) {
 		f->fn_name = src->fn_name;
@@ -635,7 +627,7 @@ void find_sub(Expr* src,Name name,vector<Expr*>& args, const Type* ret_type,Expr
 	}
 }
 
-FnName* CallScope::find_fn_name(Name name){
+FnName* Scope::find_fn_name(Name name){
 	// search the name buckets.
 	for (auto fname=this->fn_names;fname;fname=fname->next){
 		if (fname->name==name) {
@@ -645,7 +637,7 @@ FnName* CallScope::find_fn_name(Name name){
 	return nullptr;
 }
 
-ExprFnDef*	CallScope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  {
+ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  {
 	find_printf("\nfind call with args(");
 	for (int i=0; i<args.size(); i++) {find_printf(" %d:",i);printf("%p\n",args[i]);if (args[i]->type) args[i]->type->dump(-1);}
 	find_printf(")\n");
@@ -682,7 +674,7 @@ ExprFnDef*	CallScope::find_fn(Name name, vector<Expr*>& args,const Type* ret_typ
 	
 	return best;
 }
-Variable* CallScope::find_variable(Name name){
+Variable* Scope::find_variable(Name name){
 	// todo: This Pointer?
 	for (auto v=this->vars; v; v=v->next) {
 		if (v->name==name) return v;
@@ -699,7 +691,7 @@ Variable* CallScope::find_variable(Name name){
 }
 
 
-Variable* CallScope::get_variable(Name name){
+Variable* Scope::get_variable(Name name){
 
 	if (auto v=this->find_variable(name)) {
 		return v;
@@ -707,7 +699,7 @@ Variable* CallScope::get_variable(Name name){
 	auto v=new Variable(name); v->next=this->vars; this->vars=v;
 	return v;
 }
-void CallScope::dump(int depth)const {
+void Scope::dump(int depth)const {
 	newline(depth);printf("scope: %s {", this->outer?getString(this->outer->ident()):"global");
 	for (auto v=this->vars; v; v=v->next) {
 		newline(depth+1); printf("var %d %s:",v->name, getString(v->name)); 
@@ -727,7 +719,7 @@ void dump(vector<T*>& src) {
 		printf(src[i]->dump());
 	}
 }
-ResolvedType ExprBlock::resolve(CallScope* sc, const Type* desired) {
+ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 
 	printf("\nresolve block.. %p\n", sc);
 	if (this->argls.size()<=0 && !this->call_op) {
@@ -820,7 +812,7 @@ ResolvedType ExprBlock::resolve(CallScope* sc, const Type* desired) {
 	return ResolvedType();
 }
 
-Type* resolve_make_fn_call(ExprBlock* block/*caller*/,CallScope* scope,const Type* desired) {
+Type* resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired) {
 	for (int i=0; i<block->argls.size(); i++) {
 		block->argls[i]->resolve(scope,desired);
 		printf("arg %d type=",i); cout<<block->argls[i]->type<<"\n";//->dump(0); printf("\n");
@@ -857,7 +849,7 @@ Type* resolve_make_fn_call(ExprBlock* block/*caller*/,CallScope* scope,const Typ
 
 		// generic function, and we have some types to throw in...
 		if (!block->scope) {
-			auto sc=new CallScope;
+			auto sc=new Scope;
 			block->scope=sc;
 			scope->push_child(sc);
 			sc->outer=call_target;
@@ -866,7 +858,7 @@ Type* resolve_make_fn_call(ExprBlock* block/*caller*/,CallScope* scope,const Typ
 		}
 		// create a local for each supplied argument, using its type..
 		// note that vars should be able to propogate inside too???
-		CallScope* sc=block->scope;
+		Scope* sc=block->scope;
 		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
 			auto input_type=block->argls[i]->type;
 			auto v=sc->get_variable(fnc->args[i]->name);
@@ -890,8 +882,8 @@ Type* resolve_make_fn_call(ExprBlock* block/*caller*/,CallScope* scope,const Typ
 }
 
 
-ResolvedType ExprFnDef::resolve_call(CallScope* scope,const Type* desired) {
-//	auto scope=new CallScope;		
+ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired) {
+//	auto scope=new Scope;		
 //	scope->parent=parent; scope->next=parent->child; parent->child=scope;
 //	scope->outer=this;
 //	scope->node=this->body;
@@ -906,10 +898,10 @@ ResolvedType ExprFnDef::resolve_call(CallScope* scope,const Type* desired) {
 	auto s=propogate_type(rt,this->type);
 	return ResolvedType(rt,s);
 }
-ResolvedType ExprFnDef::resolve(CallScope* scope, const Type* desired) {
+ResolvedType ExprFnDef::resolve(Scope* scope, const Type* desired) {
 // todo: makes a closure taking locals from parent scope
 	if (!this->name) return new Type(FN);
-	if (!this->scope){ this->scope=new CallScope; this->scope->global=scope;}
+	if (!this->scope){ this->scope=new Scope; this->scope->global=scope;}
 	auto sc=this->scope;
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 		auto arg=this->args[i];
@@ -935,7 +927,7 @@ ResolvedType ExprFnDef::resolve(CallScope* scope, const Type* desired) {
 	return ResolvedType(fn_type);
 }
 
-FnName* find_global_fn_name(CallScope* scope,Name n) {
+FnName* find_global_fn_name(Scope* scope,Name n) {
 	auto global=scope->global;
 	for (auto f=global->fn_names; f;f=f->next) {
 		if (f->name==n) return f;
@@ -944,13 +936,13 @@ FnName* find_global_fn_name(CallScope* scope,Name n) {
 	f->name=n; f->fn_defs=0;
 	return	f;
 }
-void link_fn_name(CallScope* global,ExprFnDef* f) {
+void link_fn_name(Scope* global,ExprFnDef* f) {
 	if (f->fn_name) return;
 	auto n=find_global_fn_name(global,f->name);
 	f->next_of_name=n->fn_defs; n->fn_defs=f;
 	f->fn_name=n;
 }
-void gather_functions(Node* node, CallScope* global) {
+void gather_functions(Node* node, Scope* global) {
 	if (auto f=dynamic_cast<ExprFnDef*>(node)) {
 		// todo: local functions should only be findable inside.
 		link_fn_name(global, f);
@@ -960,7 +952,7 @@ void gather_functions(Node* node, CallScope* global) {
 		}		
 	}
 }
-void call_graph(Node* root,CallScope* scope) {
+void call_graph(Node* root,Scope* scope) {
 }
 
 struct Bar { string name="fo"; int x=0;};
@@ -1370,7 +1362,7 @@ void ExprStructDef::dump(int depth) const{
 	newline(depth);printf("}");
 }
 
-ResolvedType ExprStructDef::resolve(CallScope* scope,const Type* desired){
+ResolvedType ExprStructDef::resolve(Scope* scope,const Type* desired){
 	if (!this->fn_name ) {
 		auto fnm=find_global_fn_name(scope, this->name);
 		this->next_of_name=fnm->structs; fnm->structs=this;
@@ -1624,7 +1616,7 @@ int main(int argc, const char** argv) {
 	auto node=parse_call(src,0,SEMICOLON,nullptr);
 	printf("%p\n",node);
 	node->dump(0);
-	CallScope global; global.node=(ExprBlock*)node; global.global=&global;
+	Scope global; global.node=(ExprBlock*)node; global.global=&global;
 	gather_functions(node,&global);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
