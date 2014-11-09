@@ -343,7 +343,10 @@ struct Scope {
 	NamedItems* find_named_items_rec(Name name);
 	void add_fn_def(ExprFnDef*);
 	void dump(int depth) const;
-	void push_child(Scope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
+	void push_child(Scope* sub) { sub->owner=this->owner; sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
+	Scope* parent_or_global()const{
+		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
+	}
 };
 ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
 

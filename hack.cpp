@@ -253,6 +253,20 @@ ResolvedType propogate_type(ResolvedType& a,Type*& b,const Type* c) {
 	a.combine(propogate_type(a.type,b));
 	return a;
 }
+StructDef* dump_find_struct(Scope* s, Name name){
+	for (;s;s=s->parent_or_global()){
+		printf("find %s in in scope %s\n",getString(name),s->name());
+		for (auto ni=s->named_items;ni;ni=ni->next){
+			printf("name %s\n",getString(ni->name));
+			for (auto sd=ni->structs; sd;sd=sd->next_of_name) {
+				printf("? %s\n",getString(sd->name));
+				
+			}
+		}
+	}
+	return nullptr;
+}
+
 
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired) {
 	// todo: not if its' a typename,argname?
@@ -262,6 +276,12 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired) {
 		return ResolvedType(this->type,ResolvedType::COMPLETE);
 	}
 	propogate_type_fwd(desired,this->type);
+	if (auto sd=scope->find_struct(this->name)) {
+		if (!this->type){
+			this->type=new Type(sd->name);
+			return propogate_type_fwd(desired,this->type);
+		}
+	}
 	if (auto v=scope->find_variable_rec(this->name)){
 		return propogate_type(this->type,v->type);
 	}
@@ -751,7 +771,7 @@ ExprStructDef* Scope::find_struct(Name name){
 				return st;
 		}
 	}
-	if (parent) return parent->find_struct(name);
+	if (auto p=parent_or_global()) return p->find_struct(name);
 	else return nullptr;
 }
 void Scope::add_fn(ExprFnDef* fnd){
@@ -984,10 +1004,11 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		// if its' a generic function, we have to instantiate it here.
 		
 		if (!block->scope) {
-			auto sc=new Scope;
-			block->scope=sc;
-			scope->push_child(sc);
-			sc->owner=call_target;//TODO: this is dodgy.
+//			ASSERT(0 && "this is bs");
+//			auto sc=new Scope;
+//			block->scope=sc;
+//			scope->push_child(sc);
+//			sc->owner=call_target;//TODO: this is dodgy.
 			// do we need to distinguish an inline instance from a global instance.
 			block->next_of_call_target = call_target->callers;
 			call_target->callers =block;
@@ -1033,12 +1054,13 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired) {
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
 	return propogate_type(rt,this->ret_type);
 }
-ResolvedType ExprFnDef::resolve(Scope* caller_scope, const Type* desired) {
+ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired) {
 // todo: makes a closure taking locals from parent scope
 //	if (!this->name) {return new Type(FN);
 		
 //	}
-	if (!this->scope){ this->scope=new Scope; this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
+	if (!this->scope){ this->scope=new Scope; definer_scope->push_child(this->scope); scope->owner=this; };
+		//this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
 	auto sc=this->scope;
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 		auto arg=this->args[i];
@@ -1730,7 +1752,7 @@ const char* g_TestProg=
 	"struct Mat3{ax:Vec3,ay:Vec3,z:Vec3};"
 
 	"fn foobar(a:int,b:int)->int{"
-	"	m:ptr[Mat3]:=0; m.ax; m.aa; vz:=m.ay.z;"
+	"	m:=Mat3; m.ax; m.aa; vz:=m.ay.z;"
 	"	printf(1,2,3,4);0"
 	"}"
 
