@@ -47,7 +47,7 @@ extern int operator_flags(int tok);
 enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
-	INT,UINT,FLOAT,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,
+	INT,UINT,BOOL,FLOAT,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,
 	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH,
 	LET,SET,VAR,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
@@ -77,7 +77,7 @@ struct LLVMOp {
 };
 
 const LLVMOp* get_op_llvm(int opname,int tyname); // for tokens with 1:1 llvm mapping
-
+const char* get_llvm_type_str(int tname);
 extern const char* g_token_str[];
 extern int g_tok_info[];
 

@@ -10,8 +10,8 @@ void print_tok(int i){printf("%s ",getString(i));};
 bool g_lisp_mode=false;
 const char* g_token_str[]={
 	"",
-	"int","uint","float","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
-	"print","fn","struct","enum","array","vector","union","variant","with","match",
+	"int","uint","bool","float","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
+	"print___","fn","struct","enum","array","vector","union","variant","with","match",
 	"let","set","var",
 	"while","if","else","do","for","in","return","break",
 	"(",")",
@@ -35,7 +35,7 @@ const char* g_token_str[]={
 
 int g_tok_info[]={
 	0,
-	0,0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,
 	0,0,0,			// let,set,var
 	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
@@ -102,6 +102,19 @@ LLVMOp g_llvm_ops[]= {
 	{-1,"and"},
 	{-1,"or"},
 };
+const char* g_llvm_type[]={
+	"i32","i32","i1","float"
+};
+const char* get_llvm_type_str(int tname){
+	switch (tname){
+		case INT:return "i32";
+		case UINT:return "i32";
+		case BOOL:return "bool";
+		case FLOAT:return "float";
+		case VOID:return "void";
+		default: return getString(tname);
+	}
+}
 
 const LLVMOp* get_op_llvm(int tok,int type){
 	if (tok>=ADD && tok<=SHR) return &g_llvm_ops[tok-ADD];
