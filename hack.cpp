@@ -869,21 +869,34 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		ASSERT(this->argls.size()==2);
 		auto vname=this->argls[0]->ident();	//todo: rvalue malarchy.
 //			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
+		auto rhs_t=this->argls[1]->resolve(sc,desired);
 		this->argls[0]->dump(0);
 		printf("resolve block getvar %p %s\n", sc, getString(vname));
-		Variable* v;
-		if (op_ident==LET_ASSIGN)
-			v=sc->get_scope_variable(vname,Local);
+		if (op_ident==LET_ASSIGN){
+			auto new_var=sc->get_scope_variable(vname,Local);
+			ASSERT(new_var);
+			return propogate_type(rhs_t, new_var->type,desired);
+		}
 		else {
-			v=sc->find_variable_rec(name);
-			ASSERT(v);
+			propogate_type_fwd(desired, this->type);
+			propogate_type(this->argls[1]->type, this->type);
+			auto lhs_t=this->argls[0]->resolve(sc,this->type);
+			propogate_type(this->type,this->argls[0]->type);
+			return propogate_type(this->type,this->argls[0]->type);
+			
+//			propogate_type_fwd(desired,lhs_t);
+//			return propogate_type(lhs_t,rhs_t);
 		}
-		auto rhs_t=this->argls[1]->resolve(sc,desired?desired:v->type);
-		propogate_type_fwd(desired,this->type);
-		if (v) { propogate_type(rhs_t, v->type);}else{
-			printf("TODO: there's another error todo - how to resolve complex Lvalue");
-		}
-		return propogate_type(rhs_t,this->type,desired);
+//			return propogate_type(
+//			v=sc->find_variable_rec(name);
+//			ASSERT(v);
+//		}
+//		propogate_type_fwd(desired,this->type);
+//		if (new_var) {
+//		}else{
+//			printf("TODO: there's another error todo - how to resolve complex Lvalue");
+//		}
+//		return propogate_type(rhs_t,this->type,desired);
 		
 	} else if (is_operator(op_ident)){
 		// todo: &t gets adress. *t removes pointer, [i] takes index,
@@ -1752,10 +1765,10 @@ const char* g_TestProg=
 
 	"fn printf(a:int,b:int,c:int,d:int){}"
 	"struct Vec3{x:float,y:float,z:float};"
-	"struct Mat3{ax:Vec3,ay:Vec3,z:Vec3};"
+	"struct Mat3{ax:Vec3,ay:Vec3,az:Vec3};"
 
 	"fn foobar(a:int,b:int)->int{"
-	"	m:=Mat3; m.ax; m.aa; vz:=m.ay.z;"
+"	m:=Mat3; vz:=m.ay.z; vw:=m.az.y;"
 	"	printf(1,2,3,4);0"
 	"}"
 

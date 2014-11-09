@@ -411,6 +411,7 @@ struct ExprStructDef: Module {
 	ExprFnDef* constructor_fn;
 	NamedItems* name_ptr;
 	ArgDef* find_field(int name){ for (auto a:fields){if (a->name==name) return a;} return nullptr;}
+	int field_index(Name name){for (auto i=0; i<fields.size(); i++){if(fields[i]->name==name)return i;} return -1;}
 	
 	ExprStructDef* next_of_name;
 	ExprStructDef(){name_ptr=0;constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_of_instance=0;}
