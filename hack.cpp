@@ -7,7 +7,7 @@
 
 void print_tok(int i){printf("%s ",getString(i));};
 
-bool g_lisp_mode=true;
+bool g_lisp_mode=false;
 const char* g_token_str[]={
 	"",
 	"int","uint","float","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
@@ -272,7 +272,9 @@ Name ExprBlock::get_fn_name()const
 
 int ExprBlock::get_name()const{
 	ASSERT(0);
-	if (call_operator) return call_operator->get_name(); else return 0;
+	if (call_operator!=0)
+		return call_operator->get_name();
+	else return 0;
 }
 void ExprBlock::dump(int depth) const {
 	if (!this) return;
@@ -371,6 +373,12 @@ void Type::dump_sub()const{
 			printf("]");
 		}
 	}
+}
+bool Type::is_struct()const{
+	ASSERT(0);
+}
+bool Type::is_pointer() const {
+	return name==PTR || name==REF;
 }
 void Type::dump(int depth)const{
 	if (!this) return;
@@ -730,7 +738,16 @@ Variable* Scope::find_variable(Name name){
 	}
 	return nullptr;
 }
-
+ExprStructDef* Scope::find_struct(Name name){
+	if (auto fn=this->find_fn_name(name)){
+		for (auto st=fn->structs; st;st=st->next_of_name){
+			if (st->name==name)
+				return st;
+		}
+	}
+	if (parent) return parent->find_struct(name);
+	else return nullptr;
+}
 
 Variable* Scope::get_variable(Name name){
 
@@ -784,13 +801,18 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		else {ASSERT(0);return ResolvedType();}
 	}
 	else 
-	if (op_ident==ASSIGN) {
+	if (op_ident==ASSIGN || op_ident==LET_ASSIGN) {
 		ASSERT(this->argls.size()==2);
 		auto vname=this->argls[0]->ident();	//todo: rvalue malarchy.
 //			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
 		this->argls[0]->dump(0);
 		printf("resolve block getvar %p %s\n", sc, getString(vname));
-		auto v= sc->get_variable(vname);
+		Variable* v;
+		if (op_ident==LET_ASSIGN) v=sc->get_variable(vname);
+		else {
+			v=sc->find_variable(name);
+			ASSERT(v);
+		}
 		auto rhs_t=this->argls[1]->resolve(sc,desired?desired:v->type);
 		propogate_type_fwd(desired,this->type);
 		if (v) { propogate_type(rhs_t, v->type);}else{
@@ -803,11 +825,47 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		// comparisons yield bool, ...
 		// but for now, we just say any unset types flow thru the operator.
 		Type* ret=0;
-		propogate_type_fwd(desired, this->type);
-		for (auto i=0; i<this->argls.size();i++){
-			auto r=this->argls[i]->resolve(sc,desired);
-			propogate_type(r,this->type);
-//			propogate_type_fwd(desired,ret);
+		if (op_ident==COLON){
+			// todo: get this in the main parser
+			ASSERT(dynamic_cast<ExprIdent*>(this->argls[1]));
+			int tname=this->argls[1]->name;
+			auto v=sc->get_variable(this->argls[0]->name);
+			if (!v->type){
+				v->type=new Type(tname);
+			}
+			propogate_type(v->type,this->type);
+		}
+		else
+		if (op_ident==DOT || op_ident==ARROW) {
+			auto lhs=this->argls[0]; auto rhs=this->argls[1];
+			auto lhs_t=this->argls[0]->resolve(sc, desired);
+			auto t=lhs_t.type;
+			printf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);printf("\n");
+
+			// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
+			while (t && t->is_pointer()){
+				t=t->sub;
+			}
+			if (t) {
+			// now we have the elem..
+				ASSERT(dynamic_cast<ExprIdent*>(rhs));
+				if (auto st=sc->find_struct(t->name)){
+					if (auto f=st->find_field(rhs->name)){
+						f->dump(-1);
+						ret=f->type;
+						propogate_type(ret,this->type);
+					}
+				}
+			}
+		}
+		else {
+			// regular operator
+			propogate_type_fwd(desired, this->type);
+			for (auto i=0; i<this->argls.size();i++){
+				auto r=this->argls[i]->resolve(sc,desired);
+				propogate_type(r,this->type);
+//				propogate_type_fwd(desired,ret);
+			}
 		}
 		return propogate_type_fwd(desired, this->type);
 	} else if (op_ident==PLACEHOLDER) {
@@ -1599,7 +1657,7 @@ const char* g_TestProg=
 */
 //	"x=y; y=z; z=0.0;"
 
-
+/*
 	"future.pos=self.pos+self.vel*dt;"
 	"fn add(a,b){a+b};"
 	"fn what(a:int,b:int)->int{x=a+b;other(a,b);x-=b;x+b};"
@@ -1609,7 +1667,6 @@ const char* g_TestProg=
 	"fn do_what[X=int](x:X,y:X)->X{_};"
 	"fn lerp(a:int,b:int,f:int){(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
-	"struct Vec3{x:float,y:float,z:float};"
     "struct VecInt{data:*i32,num:i32,cap:i32};"
 	"fn render(m:Mesh){}"
 	"x=1.0; y=2.0; z=3.0; w=0.5;"
@@ -1633,10 +1690,15 @@ const char* g_TestProg=
 	"for x=0; x<10; x++ { printf(x); }"
 	"if i<10 {printf(1)} else {printf(2)}"
 	"lerp(1,2,0);"
-
+*/
 	"fn printf(a:int,b:int,c:int,d:int){}"
+	"struct Vec3{x:float,y:float,z:float};"
+	"struct Mat3{ax:Vec3,ay:Vec3,z:Vec3};"
 
-	"fn foobar(a:int,b:int)->int{printf(1,2,3,4);0}"
+	"fn foobar(a:int,b:int)->int{"
+	"	m:Mat3; m.ax; m.aa; vz=m.ay.z;"
+	"	printf(1,2,3,4);0"
+	"}"
 
 /*
 "set(glob_x, 10.0);"

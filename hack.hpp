@@ -151,6 +151,8 @@ struct Type : Node{
 	virtual const char* kind_str()const;
 	Type(Name i);
 	Type() { name=0;sub=0;next=0; struct_def=0;}
+	bool is_struct()const;
+	bool is_pointer()const;
 	bool eq(const Type* other) const;
 	void dump_sub()const;
 	void dump(int depth)const;
@@ -178,6 +180,7 @@ struct Expr : Node{
 		// todo structs, etc - llvm DOES know about these.
 		return LLVMType{0,0};
 	}
+	virtual Type* eval_as_type()const{return nullptr;};
 };
 struct ExprScopeBlock : Expr{};
 struct ExprFnDef;
@@ -321,6 +324,7 @@ struct Scope {
 	void visit_calls();
 	Variable* find_variable(Name ident);
 	Variable* get_variable(Name name);
+	ExprStructDef* find_struct(Name name);
 	ExprFnDef* find_fn(Name name,vector<Expr*>& args, const Type* ret_type) ;
 	FnName* find_fn_name(Name name);
 	void add_fn_def(ExprFnDef*);
@@ -380,10 +384,12 @@ struct ExprStructDef: Module {
 	uint32_t size;
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> fields;
-	bool is_generic();
+	bool is_generic() const;
 	ExprStructDef* instances, *instance_of,*next_of_instance;
 	ExprFnDef* constructor_fn;
 	FnName* fn_name;
+	ArgDef* find_field(int name){ for (auto a:fields){if (a->name==name) return a;} return nullptr;}
+	
 	ExprStructDef* next_of_name;
 	ExprStructDef(){constructor_fn=0;fn_name=0;next_of_name=0; instances=0;instance_of=0;next_of_instance=0;}
 	void dump(int depth)const;
