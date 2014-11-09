@@ -764,7 +764,7 @@ Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 		if (auto p=this->global->find_fn_variable(name,f))
 			return	p;
 	}
-	printf("fn %s no var %s in scope\ns",getString(f->name),getString(name));
+	printf(";fn %s no var %s in scope\n",getString(f->name),getString(name));
 	return nullptr;
 }
 ExprStructDef* Scope::find_struct(Name name){
