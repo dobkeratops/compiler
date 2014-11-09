@@ -6,7 +6,7 @@
 #include <string.h>
 
 #ifdef DEBUG
-#define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );exit(0);}
+#define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );*(long*)0=0;exit(0);}
 #define TRACE printf("%s:%d: %s\n",__FILE__,__LINE__,__FUNCTION__);
 #else
 #define ASSERT(x)
@@ -197,10 +197,10 @@ struct ExprBlock :public ExprScopeBlock{
 	ExprFnDef*	call_target;
 	Scope* scope;
 	ExprBlock* next_of_call_target;	// to walk callers to a function
-	Name get_fn_name()const;
 	int get_operator()const{if (call_operator && !call_target){return call_operator->name;}else{return 0;}}
 	ExprFnDef* get_fn_call()const {return this->call_target;}
-	int get_name()const;
+	int get_op_name()const;
+	Name get_fn_name() const;
 	void dump(int depth) const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	virtual const char* kind_str()const{return"block";}
@@ -273,15 +273,17 @@ struct ArgDef :Node{
 
 struct ExprStructDef;
 
-struct NamedItems {		// everything defined under a name.
+struct NamedItems {		// everything defined under a name
+	Scope* owner;
 	Name		name;
 	NamedItems*		next;
 	Type*		types;
 	ExprFnDef*	fn_defs;
 	ExprStructDef*	structs; // also typedefs?
+
 	ExprFnDef*	getByName(Name n);
 //	ExprFnDef* resolve(Call* site);
-	FnName(){ name=0; next=0;fn_defs=0;structs=0;types=0;}
+	NamedItems(Name n,Scope* s){  name=n; owner=s;next=0;fn_defs=0;structs=0;types=0;}
 };
 
 /*
@@ -299,9 +301,10 @@ struct Call {
 };
 */
 struct Variable : Expr{
+	Scope* owner;
 	Variable* next;
 	Expr* initialize; // if its an argdef, we instantiate an initializer list
-	Variable(Name n){name=n; initialize=0;}
+	Variable(Name n){name=n; initialize=0; Scope* owner;}
 	Node* clone() const {
 		auto v=new Variable(name);
 		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
@@ -318,17 +321,26 @@ struct Scope {
 	Scope* global;
 	//Call* calls;
 	Variable* vars;
-	FnName*	fn_names;
+	NamedItems*	named_items;
 	// locals;
 	// captures.
 	const char* name()const;
-	Scope(){fn_names=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
+	Scope(){named_items=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
 	void visit_calls();
-	Variable* find_variable(Name ident);
-	Variable* get_variable(Name name);
+	Variable* find_fn_variable(Name ident,ExprFnDef* f);
+	Variable* get_fn_variable(Name name,ExprFnDef* f);
+	Variable* find_variable_rec(Name ident);
+	Variable* find_scope_variable(Name ident);
+	Variable* get_or_create_variable(Name name);
+	Variable* create_variable(Name name);
+	Variable* get_scope_variable(Name name);
 	ExprStructDef* find_struct(Name name);
 	ExprFnDef* find_fn(Name name,vector<Expr*>& args, const Type* ret_type) ;
-	FnName* find_fn_name(Name name);
+	void add_struct(ExprStructDef*);
+	void add_fn(ExprFnDef*);
+	NamedItems* find_named_items_local(Name name);
+	NamedItems* get_named_items_local(Name name);
+	NamedItems* find_named_items_rec(Name name);
 	void add_fn_def(ExprFnDef*);
 	void dump(int depth) const;
 	void push_child(Scope* sub) { sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
@@ -389,11 +401,11 @@ struct ExprStructDef: Module {
 	bool is_generic() const;
 	ExprStructDef* instances, *instance_of,*next_of_instance;
 	ExprFnDef* constructor_fn;
-	FnName* fn_name;
+	NamedItems* name_ptr;
 	ArgDef* find_field(int name){ for (auto a:fields){if (a->name==name) return a;} return nullptr;}
 	
 	ExprStructDef* next_of_name;
-	ExprStructDef(){constructor_fn=0;fn_name=0;next_of_name=0; instances=0;instance_of=0;next_of_instance=0;}
+	ExprStructDef(){name_ptr=0;constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_of_instance=0;}
 	void dump(int depth)const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone()const {printf("warning,leak\n");return (Node*) this;};
@@ -407,7 +419,7 @@ struct ExprFnDef : Module {
 	ExprFnDef*	instances;		// Linklist of it's instanced functions.
 	ExprFnDef*	next_instance;
 	ExprBlock* callers;	// linklist of callers to here
-	FnName*		fn_name;
+	NamedItems*		name_ptr;
 	Scope*	scope;
 	
 	Type* ret_type;
@@ -420,10 +432,9 @@ struct ExprFnDef : Module {
 	vector<ArgDef*> args;
 	ExprBlock* body;
 	int get_name()const {return name;}
-	FnName* get_fn_name(Scope* scope);
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;ret_type;}
+	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;ret_type;name_ptr=0;}
 	void dump(int ind) const;
 	ResolvedType resolve(Scope* scope,const Type* desired);
 	ResolvedType resolve_call(Scope* scope,const Type* desired);
@@ -439,6 +450,7 @@ struct ExprFnDef : Module {
 // Codegen is a big issue.
 
 struct ExprIdent :Expr{
+	// TODO: definition pointer. (ptr to field,function,struct,typedef..)
 	void dump(int depth) const;
 	virtual const char* kind_str()const{return"ident";}
 	ExprIdent(int i){name=i;type=0;}

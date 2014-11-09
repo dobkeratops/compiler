@@ -262,7 +262,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired) {
 		return ResolvedType(this->type,ResolvedType::COMPLETE);
 	}
 	propogate_type_fwd(desired,this->type);
-	if (auto v=scope->get_variable(this->name)){
+	if (auto v=scope->find_variable_rec(this->name)){
 		return propogate_type(this->type,v->type);
 	}
 	return ResolvedType();
@@ -274,7 +274,8 @@ void ExprIdent::dump(int depth) const {
 }
 
 Name ExprBlock::get_fn_name()const
-{	if (call_operator){
+{	// distinguishes operator &  function call
+	if (call_operator){
 		ASSERT(dynamic_cast<ExprIdent*>(call_operator)&& "TODO: distinguish expression with computed function name");
 		return call_operator->name;
 	}
@@ -283,7 +284,7 @@ Name ExprBlock::get_fn_name()const
 }
 
 
-int ExprBlock::get_name()const{
+int ExprBlock::get_op_name()const{
 	ASSERT(0);
 	if (call_operator!=0)
 		return call_operator->get_name();
@@ -516,15 +517,29 @@ Expr* ExprFnDef::get_return_value() const{
 	}
 	return 0;
 }
-// get a function's list of shared names..
-NamedItems* ExprFnDef::get_fn_name(Scope* scope) {
-//	printf("register fn %s in %p\n",getString(this->name),scope);
-	if (this->fn_name)	return	this->fn_name;
-	auto fnm=scope->find_fn_name(this->name);
-	this->fn_name = fnm;
-	this->next_of_name=fnm->fn_defs; fnm->fn_defs = this;
-	return	fnm;
+NamedItems* Scope::get_named_items_local(Name name){
+	if (auto ni=find_named_items_local(name))
+		return ni;
+	NamedItems* ni=new NamedItems(name,this);
+	ni->next=this->named_items;
+	this->named_items=ni;
+	ni->owner=this;
+	return ni;
 }
+NamedItems* Scope::find_named_items_local(Name name){
+	for (auto ni=this->named_items;ni;ni=ni->next){
+		if (ni->name==name){return ni;}
+	}
+	return nullptr;
+}
+
+NamedItems* Scope::find_named_items_rec(Name name){
+	if (auto ni=find_named_items_local(name))
+		return ni;
+	if (this->parent) return this->parent->find_named_items_rec(name);
+	else return nullptr;
+}
+
 /*
 void Scope::visit_calls() {
 	for (auto call=this->calls;call;call=call->next_of_scope) {
@@ -535,22 +550,20 @@ void Scope::visit_calls() {
 }
 */
 ExprFnDef* instantiate_generic_function(Scope* s,ExprFnDef* src, vector<Expr*>& call_args) {
-	ExprFnDef* f =(ExprFnDef*) src->clone();
-	if (src->fn_name && !f->fn_name) {
-		f->fn_name = src->fn_name;
-		f->next_of_name = src->fn_name->fn_defs;
-		src->fn_name->fn_defs = f;
+	ExprFnDef* new_fn =(ExprFnDef*) src->clone();
+	if (src->name_ptr && !new_fn->name_ptr) {
+		s->add_fn(new_fn);
 	}
 	// fill any args we can
-	for (auto i=0; i<f->args.size(); i++){
-		if (!f->args[i]->type && call_args[i]->type) {f->args[i]->type=(Type*)call_args[i]->type->clone();}
+	for (auto i=0; i<new_fn->args.size(); i++){
+		if (!new_fn->args[i]->type && call_args[i]->type) {new_fn->args[i]->type=(Type*)call_args[i]->type->clone();}
 	}
-	f->next_instance = src->instances;
-	src->instances=f;
-	f->resolved=false;
+	new_fn->next_instance = src->instances;
+	src->instances=new_fn;
+	new_fn->resolved=false;
 	printf("generic instantiation:-\n");
-	f->dump(0);
-	return f;	// welcome new function!
+	new_fn->dump(0);
+	return new_fn;	// welcome new function!
 }
 Node* ExprBlock::clone() const {
 	if (!this) return nullptr;
@@ -665,25 +678,15 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 		ambiguity=0;
 	} else if (score==*best_score) ambiguity++;
 }
-void find_sub(Expr* src,Name name,vector<Expr*>& args, const Type* ret_type,ExprFnDef** best_fn, int* best_score,int* ambiguity) {
+void find_fn_sub(Expr* src,Name name,vector<Expr*>& args, const Type* ret_type,ExprFnDef** best_fn, int* best_score,int* ambiguity) {
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
 		find_printf("look for %s in %s\n",getString(name),src->get_name_str());
 		for (auto x:sb->argls) {
-			find_sub(x,name,args,ret_type,best_fn,best_score,ambiguity);
+			find_fn_sub(x,name,args,ret_type,best_fn,best_score,ambiguity);
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
 		compare_candidate_function(f,name,args,ret_type, best_fn,best_score,ambiguity);
 	}
-}
-
-FnName* Scope::find_fn_name(Name name){
-	// search the name buckets.
-	for (auto fname=this->fn_names;fname;fname=fname->next){
-		if (fname->name==name) {
-			return fname;
-		}
-	}
-	return nullptr;
 }
 
 ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  {
@@ -694,11 +697,11 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 	ExprFnDef*	best=0;
 	int best_score=-1;
 	int	ambiguity=0;
-	for (auto src=this; src; src=src->parent) {
+	for (auto src=this; src; src=src->parent) {// go back thru scopes.
 		find_printf("in scope %p\n",src);
-		if (auto fname=src->find_fn_name(name)){
+		if (auto fname=src->find_named_items_local(name)){
 			for (auto f=fname->fn_defs; f;f=f->next_of_name) {
-				find_sub(f,name, args,ret_type,&best,&best_score,&ambiguity);
+				find_fn_sub(f,name, args,ret_type,&best,&best_score,&ambiguity);
 			}
 		}
 	}
@@ -707,7 +710,7 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 //		this->global->dump(0);
 //		printf("\ncant find any function  %s\n",getString(name));
 //		exit(0);
-//		return 0;
+//		return 0;f
 //	}
 	find_printf("match score=%d/%z\n", best_score, args.size());
 	if (!best)  {
@@ -724,23 +727,25 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 	
 	return best;
 }
-Variable* Scope::find_variable(Name name){
+Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 	// todo: This Pointer?
+	if (this->owner!=f) return nullptr;
 	for (auto v=this->vars; v; v=v->next) {
 		if (v->name==name) return v;
 	}
 	if (this->parent){
-		if (auto p=this->parent->get_variable(name)) 
+		if (auto p=this->parent->find_fn_variable(name,f))
 			return	p;
 	}
 	if (this->global && this->global!=this){
-		if (auto p=this->global->find_variable(name))
+		if (auto p=this->global->find_fn_variable(name,f))
 			return	p;
 	}
+	printf("fn %s no var %s in scope\ns",getString(f->name),getString(name));
 	return nullptr;
 }
 ExprStructDef* Scope::find_struct(Name name){
-	if (auto fn=this->find_fn_name(name)){
+	if (auto fn=this->find_named_items_local(name)){
 		for (auto st=fn->structs; st;st=st->next_of_name){
 			if (st->name==name)
 				return st;
@@ -749,13 +754,51 @@ ExprStructDef* Scope::find_struct(Name name){
 	if (parent) return parent->find_struct(name);
 	else return nullptr;
 }
-
-Variable* Scope::get_variable(Name name){
-
-	if (auto v=this->find_variable(name)) {
+void Scope::add_fn(ExprFnDef* fnd){
+	if (fnd->name_ptr) return;
+	auto ni=get_named_items_local(fnd->name);
+	fnd->name_ptr=ni;
+	fnd->next_of_name=ni->fn_defs;
+	ni->fn_defs=fnd;
+}
+void Scope::add_struct(ExprStructDef* sd){
+	if (sd->name_ptr) return;
+	auto ni=get_named_items_local(sd->name);
+	sd->name_ptr=ni;
+	sd->next_of_name=ni->structs;
+	ni->structs=sd;
+	
+}
+Variable* Scope::find_scope_variable(Name name){
+	for (auto v=this->vars; v;v=v->next){
+		if (v->name==name) return v;
+	}
+	return nullptr;
+}
+Variable* Scope::find_variable_rec(Name name){
+	if (auto v=find_scope_variable(name)) return v;
+	if (this->parent) return this->parent->find_variable_rec(name);
+	return nullptr;
+	
+}
+Variable* Scope::get_or_create_variable(Name name){
+	if (auto v=this->find_variable_rec(name)) {
 		return v;
 	}
+	return this->create_variable(name);
+}
+Variable* Scope::create_variable(Name name){
+	auto exv=this->find_scope_variable(name);
+	ASSERT(exv==0);
 	auto v=new Variable(name); v->next=this->vars; this->vars=v;
+	v->name=name;v->owner=this;
+	return v;
+}
+Variable* Scope::get_scope_variable(Name name){
+	auto exv=this->find_scope_variable(name);
+	if (exv) return exv;
+	auto v=new Variable(name); v->next=this->vars; this->vars=v;v->owner=this;
+	v->name=name;
 	return v;
 }
 void Scope::dump(int depth)const {
@@ -764,8 +807,8 @@ void Scope::dump(int depth)const {
 		newline(depth+1); printf("var %d %s:",v->name, getString(v->name)); 
 		if (v->type){ v->type->dump(-1);} else {printf("not_type");}
 	}
-	for (auto f=this->fn_names; f;f=f->next){
-		newline(depth+1); printf("fname %s:",getString(f->name));
+	for (auto f=this->named_items; f;f=f->next){
+		newline(depth+1); printf("name %s:",getString(f->name));
 	}
 	for (auto s=this->child; s; s=s->next){
 		s->dump(depth+1);
@@ -779,8 +822,6 @@ void dump(vector<T*>& src) {
 	}
 }
 ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
-
-	printf("\nresolve block.. %p\n", sc);
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->type) this->type=new Type(VOID);
 		return propogate_type_fwd(desired,this->type);
@@ -788,7 +829,6 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 	int op_ident=NONE;
 	ExprIdent* p=nullptr;
 	if(this->call_operator){p=dynamic_cast<ExprIdent*>(this->call_operator); op_ident=p->name;}
-	printf("%s %s\n",getString(this->name),getString(op_ident));
 	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
 		for (auto i=0; i<this->argls.size()-1; i++) {
 			this->argls[i]->resolve(sc,0);
@@ -809,9 +849,10 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		this->argls[0]->dump(0);
 		printf("resolve block getvar %p %s\n", sc, getString(vname));
 		Variable* v;
-		if (op_ident==LET_ASSIGN) v=sc->get_variable(vname);
+		if (op_ident==LET_ASSIGN)
+			v=sc->get_scope_variable(vname);
 		else {
-			v=sc->find_variable(name);
+			v=sc->find_variable_rec(name);
 			ASSERT(v);
 		}
 		auto rhs_t=this->argls[1]->resolve(sc,desired?desired:v->type);
@@ -830,7 +871,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 			// todo: get this in the main parser
 			ASSERT(dynamic_cast<ExprIdent*>(this->argls[1]));
 			int tname=this->argls[1]->name;
-			auto v=sc->get_variable(this->argls[0]->name);
+			auto v=sc->find_variable_rec(this->argls[0]->name);
 			if (!v->type){
 				v->type=new Type(tname);
 			}
@@ -844,13 +885,8 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 			printf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);printf("\n");
 
 			// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
-			printf("%s\n",getString(t->name));
-			t=t->deref_all();
-//			if (t && t->is_pointer()){
-//				t=t->sub;
-//				printf("%s\n",getString(t->name));
-//			}
 			if (t) {
+				t=t->deref_all();
 			// now we have the elem..
 				ASSERT(dynamic_cast<ExprIdent*>(rhs));
 				if (auto st=sc->find_struct(t->name)){
@@ -958,10 +994,11 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		}
 		// create a local for each supplied argument, using its type..
 		// note that vars should be able to propogate inside too???
-		Scope* sc=block->scope;
+		// TODO-inlining generic call? or what?
+		Scope* fsc=block->scope;
 		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
 			auto input_type=block->argls[i]->type;
-			auto v=sc->get_variable(fnc->args[i]->name);
+			auto v=fsc->create_variable(fnc->args[i]->name);
 			auto argtype=fnc->args[i]->type;
 			if (!v->type){
 				v->type=argtype?argtype:input_type;
@@ -973,7 +1010,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 			// and stuff a default expression in for any not called..
 		}
 		
-		auto ret=call_target->resolve_call(sc,desired);
+		auto ret=call_target->resolve_call(fsc,desired);
 		return propogate_type(ret,block->type);
 	}
 	else 
@@ -996,23 +1033,21 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired) {
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
 	return propogate_type(rt,this->ret_type);
 }
-ResolvedType ExprFnDef::resolve(Scope* scope, const Type* desired) {
+ResolvedType ExprFnDef::resolve(Scope* caller_scope, const Type* desired) {
 // todo: makes a closure taking locals from parent scope
 //	if (!this->name) {return new Type(FN);
 		
 //	}
-	if (!this->scope){ this->scope=new Scope; this->scope->parent=this->scope->global=scope;}
+	if (!this->scope){ this->scope=new Scope; this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
 	auto sc=this->scope;
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 		auto arg=this->args[i];
-		auto v=sc->get_variable(arg->name);
+		auto v=sc->find_scope_variable(arg->name);
+		if (!v){v=sc->create_variable(arg->name);}
 		propogate_type(arg->type,v->type);
 		if (arg->default_expr){static int warn=0; if (!warn){warn=1;
 			printf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
 		}
-	}
-	if (this->name) {
-		auto fname=this->get_fn_name(scope);
 	}
 	
 	auto ret=this->body->resolve(sc,this->ret_type);
@@ -1020,33 +1055,20 @@ ResolvedType ExprFnDef::resolve(Scope* scope, const Type* desired) {
 	
 	if (!this->fn_type)
 		this->fn_type=new Type(FN);
-	printf("RESOLVE FN - TODO\n");
-	
+	{ int once;if (!once++) printf("RESOLVE FN DEF TYPE PROPERLY- TODO cleanup ambiguity between fn ptr type & fn return type!\n");
+	}
 	return ResolvedType(fn_type,ResolvedType::COMPLETE);
 }
 
-FnName* find_global_fn_name(Scope* scope,Name n) {
-	auto global=scope->global;
-	for (auto f=global->fn_names; f;f=f->next) {
-		if (f->name==n) return f;
-	}
-	auto f=new FnName; f->next=global->fn_names; global->fn_names=f;
-	f->name=n; f->fn_defs=0;
-	return	f;
-}
-void link_fn_name(Scope* global,ExprFnDef* f) {
-	if (f->fn_name) return;
-	auto n=find_global_fn_name(global,f->name);
-	f->next_of_name=n->fn_defs; n->fn_defs=f;
-	f->fn_name=n;
-}
-void gather_functions(Node* node, Scope* global) {
-	if (auto f=dynamic_cast<ExprFnDef*>(node)) {
+void gather_named_items(Node* node, Scope* sc) {
+	if (auto fd=dynamic_cast<ExprFnDef*>(node)) {
 		// todo: local functions should only be findable inside.
-		link_fn_name(global, f);
+		sc->add_fn(fd);
+	} else if (auto sd=dynamic_cast<ExprStructDef*>(node)){
+		sc->add_struct(sd);
 	} else if (auto b=dynamic_cast<ExprBlock*>(node)) {
 		for (auto sub:b->argls) {
-			gather_functions(sub,global);
+			gather_named_items(sub,sc);
 		}		
 	}
 }
@@ -1474,11 +1496,7 @@ bool ExprStructDef::is_generic()const{
 	return false;
 }
 ResolvedType ExprStructDef::resolve(Scope* scope,const Type* desired){
-	if (!this->fn_name ) {
-		auto fnm=find_global_fn_name(scope, this->name);
-		this->next_of_name=fnm->structs; fnm->structs=this;
-		this->fn_name=fnm;
-	}
+	scope->add_struct(this);
 	if (!this->type) {
 		this->type = new Type(this->name);	// name selects this struct.
 	}
@@ -1679,8 +1697,6 @@ const char* g_TestProg=
 	"fn foo(x:tuple[int,int])->int{_};"
 	"fn foo(x:float)->float{_};"
 	"fn do_what[X=int](x:X,y:X)->X{_};"
-	"fn lerp(a:int,b:int,f:int){(b-a)*f+a};"
-	"fn lerp(a,b,f){(b-a)*f+a};"
     "struct VecInt{data:*i32,num:i32,cap:i32};"
 	"fn render(m:Mesh){}"
 	"x=1.0; y=2.0; z=3.0; w=0.5;"
@@ -1705,12 +1721,16 @@ const char* g_TestProg=
 	"if i<10 {printf(1)} else {printf(2)}"
 	"lerp(1,2,0);"
 */
+	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
+	"fn lerp(a:int,b:int,f:int)->int{(b-a)*f+a};"
+	"fn lerp(a,b,f){(b-a)*f+a};"
+
 	"fn printf(a:int,b:int,c:int,d:int){}"
 	"struct Vec3{x:float,y:float,z:float};"
 	"struct Mat3{ax:Vec3,ay:Vec3,z:Vec3};"
 
 	"fn foobar(a:int,b:int)->int{"
-	"	m:ptr[Mat3]; m.ax; m.aa; vz=m.ay.z;"
+	"	m:ptr[Mat3]:=0; m.ax; m.aa; vz:=m.ay.z;"
 	"	printf(1,2,3,4);0"
 	"}"
 
@@ -1735,7 +1755,7 @@ int main(int argc, const char** argv) {
 	printf("%p\n",node);
 	node->dump(0);
 	Scope global; global.node=(ExprBlock*)node; global.global=&global;
-	gather_functions(node,&global);
+	gather_named_items(node,&global);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
