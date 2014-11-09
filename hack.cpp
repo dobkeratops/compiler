@@ -516,20 +516,8 @@ Expr* ExprFnDef::get_return_value() const{
 	}
 	return 0;
 }
-/*
-FnName*	g_fn_names;
-vector<FnName> g_functions;
-FnName* getFnName(int name) {
-	FnName*	n;
-	for (n=g_fn_names; n; n=n->next) {
-		if (n->name==name) return n;
-	}
-	n=new FnName(); n->name=name; n->next=g_fn_names; g_fn_names=n;
-	return n;
-}
-*/
 // get a function's list of shared names..
-FnName* ExprFnDef::get_fn_name(Scope* scope) {
+NamedItems* ExprFnDef::get_fn_name(Scope* scope) {
 //	printf("register fn %s in %p\n",getString(this->name),scope);
 	if (this->fn_name)	return	this->fn_name;
 	auto fnm=scope->find_fn_name(this->name);

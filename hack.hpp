@@ -273,9 +273,9 @@ struct ArgDef :Node{
 
 struct ExprStructDef;
 
-struct FnName {		// everything defined under a name.
+struct NamedItems {		// everything defined under a name.
 	Name		name;
-	FnName*		next;
+	NamedItems*		next;
 	Type*		types;
 	ExprFnDef*	fn_defs;
 	ExprStructDef*	structs; // also typedefs?
