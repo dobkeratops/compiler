@@ -153,6 +153,8 @@ struct Type : Node{
 	Type() { name=0;sub=0;next=0; struct_def=0;}
 	bool is_struct()const;
 	bool is_pointer()const;
+	int num_derefs()const {if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
+	Type* deref_all() const{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
 	bool eq(const Type* other) const;
 	void dump_sub()const;
 	void dump(int depth)const;

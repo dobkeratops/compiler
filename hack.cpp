@@ -843,9 +843,12 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 			printf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);printf("\n");
 
 			// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
-			while (t && t->is_pointer()){
-				t=t->sub;
-			}
+			printf("%s\n",getString(t->name));
+			t=t->deref_all();
+//			if (t && t->is_pointer()){
+//				t=t->sub;
+//				printf("%s\n",getString(t->name));
+//			}
 			if (t) {
 			// now we have the elem..
 				ASSERT(dynamic_cast<ExprIdent*>(rhs));
@@ -1271,6 +1274,7 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 	}
 	was_operand=true;
 }
+Type* parse_type(TokenStream& src, int close);
 
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	// shunting yard parserfelchery
@@ -1368,8 +1372,16 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 						break;
 					pop_operator_call(operators,operands);
 				}
-				operators.push_back(tok);
-				was_operand=false;
+				
+				if (tok==COLON){// special case: : invokes parsing type. TODO: we actually want to get rid of this? type could be read from other nodes, parsed same as rest?
+					Type *t=parse_type(src,0);
+					auto lhs=operands.back();
+					lhs->type=t;
+					was_operand=true;
+				} else {
+					operators.push_back(tok);
+					was_operand=false;
+				}
 			} else {
 				another_operand_so_maybe_flush(was_operand,node,operators,operands);
 				operands.push_back(new ExprIdent(tok));
@@ -1401,6 +1413,7 @@ Type* parse_type(TokenStream& src, int close) {
 			}
 		}
 	}
+	// todo: pointers, adresses, arrays..
 	ret->dump(-1);
 	return ret;
 	
@@ -1696,7 +1709,7 @@ const char* g_TestProg=
 	"struct Mat3{ax:Vec3,ay:Vec3,z:Vec3};"
 
 	"fn foobar(a:int,b:int)->int{"
-	"	m:Mat3; m.ax; m.aa; vz=m.ay.z;"
+	"	m:ptr[Mat3]; m.ax; m.aa; vz=m.ay.z;"
 	"	printf(1,2,3,4);0"
 	"}"
 
