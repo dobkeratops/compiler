@@ -278,7 +278,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired) {
 	propogate_type_fwd(desired,this->type);
 	if (auto sd=scope->find_struct(this->name)) {
 		if (!this->type){
-			this->type=new Type(sd->name);
+			this->type=new Type(sd);
 			return propogate_type_fwd(desired,this->type);
 		}
 	}
@@ -409,7 +409,7 @@ void Type::dump_sub()const{
 	}
 }
 bool Type::is_struct()const{
-	ASSERT(0);
+	return struct_def!=0;
 }
 bool Type::is_pointer() const {
 	return name==PTR || name==REF;
@@ -417,6 +417,9 @@ bool Type::is_pointer() const {
 void Type::dump(int depth)const{
 	if (!this) return;
 	newline(depth);dump_sub();
+}
+Type::Type(ExprStructDef* sd)
+{	struct_def=sd; name=sd->name;
 }
 
 
@@ -801,23 +804,23 @@ Variable* Scope::find_variable_rec(Name name){
 	return nullptr;
 	
 }
-Variable* Scope::get_or_create_variable(Name name){
+Variable* Scope::get_or_create_variable(Name name,VarKind k){
 	if (auto v=this->find_variable_rec(name)) {
 		return v;
 	}
-	return this->create_variable(name);
+	return this->create_variable(name,k);
 }
-Variable* Scope::create_variable(Name name){
+Variable* Scope::create_variable(Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	ASSERT(exv==0);
-	auto v=new Variable(name); v->next=this->vars; this->vars=v;
+	auto v=new Variable(name,k); v->next=this->vars; this->vars=v;
 	v->name=name;v->owner=this;
 	return v;
 }
-Variable* Scope::get_scope_variable(Name name){
+Variable* Scope::get_scope_variable(Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	if (exv) return exv;
-	auto v=new Variable(name); v->next=this->vars; this->vars=v;v->owner=this;
+	auto v=new Variable(name,k); v->next=this->vars; this->vars=v;v->owner=this;
 	v->name=name;
 	return v;
 }
@@ -825,7 +828,7 @@ void Scope::dump(int depth)const {
 	newline(depth);printf("scope: %s {", this->owner?getString(this->owner->ident()):"global");
 	for (auto v=this->vars; v; v=v->next) {
 		newline(depth+1); printf("var %d %s:",v->name, getString(v->name)); 
-		if (v->type){ v->type->dump(-1);} else {printf("not_type");}
+		if (v->type){ v->type->dump(-1);} else {printf("no_type");}
 	}
 	for (auto f=this->named_items; f;f=f->next){
 		newline(depth+1); printf("name %s:",getString(f->name));
@@ -870,7 +873,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		printf("resolve block getvar %p %s\n", sc, getString(vname));
 		Variable* v;
 		if (op_ident==LET_ASSIGN)
-			v=sc->get_scope_variable(vname);
+			v=sc->get_scope_variable(vname,Local);
 		else {
 			v=sc->find_variable_rec(name);
 			ASSERT(v);
@@ -1019,7 +1022,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		Scope* fsc=block->scope;
 		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
 			auto input_type=block->argls[i]->type;
-			auto v=fsc->create_variable(fnc->args[i]->name);
+			auto v=fsc->create_variable(fnc->args[i]->name,VkArg);
 			auto argtype=fnc->args[i]->type;
 			if (!v->type){
 				v->type=argtype?argtype:input_type;
@@ -1065,7 +1068,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired) {
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 		auto arg=this->args[i];
 		auto v=sc->find_scope_variable(arg->name);
-		if (!v){v=sc->create_variable(arg->name);}
+		if (!v){v=sc->create_variable(arg->name,VkArg);}
 		propogate_type(arg->type,v->type);
 		if (arg->default_expr){static int warn=0; if (!warn){warn=1;
 			printf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}

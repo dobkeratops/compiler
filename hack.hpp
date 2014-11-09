@@ -99,7 +99,7 @@ void indent(int depth);
 typedef int32_t Name;
 typedef int32_t RegisterName;
 struct Scope;
-struct StructDef;
+struct ExprStructDef;
 struct ExprIdent;
 struct Type;
 struct ResolvedType{
@@ -144,11 +144,12 @@ struct TypeParam{int name; int defaultv;};
 
 struct Type : Node{
 	vector<TypeParam> typeparams;
-	StructDef* struct_def;
+	ExprStructDef* struct_def;
 	Type*	sub;	// a type is itself a tree
 	Type*	next;
 	void push_back(Type* t);
 	virtual const char* kind_str()const;
+	Type(ExprStructDef* sd);
 	Type(Name i);
 	Type() { name=0;sub=0;next=0; struct_def=0;}
 	bool is_struct()const;
@@ -269,6 +270,8 @@ struct ArgDef :Node{
 	~ArgDef(){}
 	Node* clone() const;
 	void render_object();
+	int alignment() const{ return 4;}//todo, eval templates/other structs, consider pointers, ..
+	
 };
 
 struct ExprStructDef;
@@ -300,13 +303,15 @@ struct Call {
 	Call(){scope=0;next_of_scope=0;caller=0;next_of_caller=0;callee=0;next_of_fn=0;}
 };
 */
+enum VarKind{VkArg,Local,GLobal};
 struct Variable : Expr{
+	VarKind kind;
 	Scope* owner;
 	Variable* next;
 	Expr* initialize; // if its an argdef, we instantiate an initializer list
-	Variable(Name n){name=n; initialize=0; Scope* owner;}
+	Variable(Name n,VarKind k){name=n; initialize=0; Scope* owner;kind=k;}
 	Node* clone() const {
-		auto v=new Variable(name);
+		auto v=new Variable(name,this->kind);
 		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
 		v->next=0; v->type=this->type; return v;
 	}
@@ -331,9 +336,9 @@ struct Scope {
 	Variable* get_fn_variable(Name name,ExprFnDef* f);
 	Variable* find_variable_rec(Name ident);
 	Variable* find_scope_variable(Name ident);
-	Variable* get_or_create_variable(Name name);
-	Variable* create_variable(Name name);
-	Variable* get_scope_variable(Name name);
+	Variable* get_or_create_variable(Name name,VarKind k);
+	Variable* create_variable(Name name,VarKind k);
+	Variable* get_scope_variable(Name name,VarKind k);
 	ExprStructDef* find_struct(Name name);
 	ExprFnDef* find_fn(Name name,vector<Expr*>& args, const Type* ret_type) ;
 	void add_struct(ExprStructDef*);
@@ -412,6 +417,7 @@ struct ExprStructDef: Module {
 	void dump(int depth)const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone()const {printf("warning,leak\n");return (Node*) this;};
+	int alignment() const {int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	// todo.. generic instantiation: typeparam logic, and adhoc mode.
 };
 
