@@ -17,12 +17,13 @@ const char* g_token_str[]={
 	"(",")",
 	"{","}",
 	"[","]",
-	"->","=>","<-","::","<->",			//arrows
-	":","+","-","*","/",".",					//arithmetic
-	"<",">","<=",">=","==","!=","&&","||",		//compares/logical
+	"->",".","=>","<-","::","<->",			//arrows,accessors
+	":",
+	"+","-","*","/",					//arithmetic
 	"&","|","^","%","<<",">>",					//bitwise
+	"<",">","<=",">=","==","!=","&&","||",		//compares/logical
 	"=",":=",
-	"+=","-=","*=","/=","<<=",">>=","&=","|=", // assign-op
+	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
 	"++","--","++","--", //inc/dec
 	"-","*","&","!","~", // unary ops
 	"*?","*!","&?","[]","&[]", // special pointers
@@ -41,13 +42,14 @@ int g_tok_info[]={
 	0,0, //( )
 	0,0, //{ }
 	0,0, // [ ]
-	READ|10,READ|10,READ|10,READ|13,WRITE|10,	   // arrows
-	READ|9,READ|6,READ|6,READ|5,READ|5,READ|2,		//arithmetic
-	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,READ|13,READ|14,	//compares/logical
+	READ|10,READ|2,READ|10,READ|10,READ|13,WRITE|10,	   // arrows
+	READ|9,
+	READ|6,READ|6,READ|5,READ|5,		//arithmetic
 	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,		//bitwise
+	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,READ|13,READ|14,	//compares/logical
 	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
 	
-	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|16,WRITE_LHS|READ|ASSOC|16, // assign-op
+	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16, // assign-op
 	
 	MODIFY|PREFIX|UNARY|2,MODIFY|PREFIX|UNARY|2,MODIFY|UNARY|ASSOC|3,MODIFY|UNARY|ASSOC|3, // post/pre inc/dec
 	READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3, //unary ops
@@ -88,6 +90,23 @@ int get_infix_operator(int tok) {
 	}
 }
 
+LLVMOp g_llvm_ops[]= {
+	{-1,"add"},{-1,"sub"},{-1,"mul"},{-1,"div"},
+	{-1,"and"},{-1,"or"},{-1,"xor"},{-1,"srem"},{-1,"shl"},{-1,"ashr"},
+	{-1,"icmp slt"},
+	{-1,"icmp sgt"},
+	{-1,"icmp sle"},
+	{-1,"icmp sge"},
+	{-1,"icmp eq"},
+	{-1,"icmp ne"},
+	{-1,"and"},
+	{-1,"or"},
+};
+
+const LLVMOp* get_op_llvm(int tok,int type){
+	if (tok>=ADD && tok<=SHR) return &g_llvm_ops[tok-ADD];
+	return 0;
+}
 
 
 StringTable::StringTable(const char** initial){
@@ -1378,11 +1397,15 @@ void ExprStructDef::dump(int depth) const{
 	for (auto f:this->fields){f->dump(depth+1);}
 	newline(depth);printf("}");
 }
-
+bool ExprStructDef::is_generic()const{
+	for (auto f:fields){if (!f->type)return true;}//TODO: is typeparam?
+	return false;
+}
 ResolvedType ExprStructDef::resolve(Scope* scope,const Type* desired){
 	if (!this->fn_name ) {
 		auto fnm=find_global_fn_name(scope, this->name);
 		this->next_of_name=fnm->structs; fnm->structs=this;
+		this->fn_name=fnm;
 	}
 	if (!this->type) {
 		this->type = new Type(this->name);	// name selects this struct.
@@ -1577,6 +1600,7 @@ const char* g_TestProg=
 //	"x=y; y=z; z=0.0;"
 
 
+	"future.pos=self.pos+self.vel*dt;"
 	"fn add(a,b){a+b};"
 	"fn what(a:int,b:int)->int{x=a+b;other(a,b);x-=b;x+b};"
 	"fn other(a:int,b:int)->int{a+b};"
@@ -1585,7 +1609,8 @@ const char* g_TestProg=
 	"fn do_what[X=int](x:X,y:X)->X{_};"
 	"fn lerp(a:int,b:int,f:int){(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
-    "struct Vec[T]{data:*T,num:i32,cap:i32};"
+	"struct Vec3{x:float,y:float,z:float};"
+    "struct VecInt{data:*i32,num:i32,cap:i32};"
 	"fn render(m:Mesh){}"
 	"x=1.0; y=2.0; z=3.0; w=0.5;"
 	"foo=lerp(x,add(y,z),w);"

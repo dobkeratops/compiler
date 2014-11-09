@@ -56,12 +56,13 @@ enum Token {
 	OPEN_BRACE,CLOSE_BRACE,
 	OPEN_BRACKET,CLOSE_BRACKET,
 	// operators
-	ARROW,FAT_ARROW,REV_ARROW,DOUBLE_COLON,SWAP,
-	COLON,ADD,SUB,MUL,DIV,DOT,
-	LT,GT,LE,GE,EQ,NE,LOG_AND,LOG_OR,
+	ARROW,DOT,FAT_ARROW,REV_ARROW,DOUBLE_COLON,SWAP,
+	COLON,
+	ADD,SUB,MUL,DIV,
 	AND,OR,XOR,MOD,SHL,SHR,
+	LT,GT,LE,GE,EQ,NE,LOG_AND,LOG_OR,
 	ASSIGN,LET_ASSIGN,
-	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,AND_ASSIGN,OR_ASSIGN,
+	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,AND_ASSIGN,OR_ASSIGN,XOR_ASSIGN,MOD_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
 	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,
 	COMMA,SEMICOLON,
@@ -69,6 +70,13 @@ enum Token {
 	PLACEHOLDER,
 	IDENT
 };
+struct LLVMOp {
+	int return_type;
+	const char* op_signed;
+	const char* op_unsigned;
+};
+
+const LLVMOp* get_op_llvm(int opname,int tyname); // for tokens with 1:1 llvm mapping
 
 extern const char* g_token_str[];
 extern int g_tok_info[];
@@ -361,6 +369,10 @@ struct ExprFor :  Expr {
 struct Call;
 struct FnName;
 
+// TODO recognize
+//{x=,y=,z=} // struct initializer
+//{foo;bar} // anything else is not.
+
 struct ExprStructDef: Module {
 	// lots of similarity to a function actually.
 	// but its' backwards.
@@ -368,13 +380,16 @@ struct ExprStructDef: Module {
 	uint32_t size;
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> fields;
+	bool is_generic();
+	ExprStructDef* instances, *instance_of,*next_of_instance;
 	ExprFnDef* constructor_fn;
 	FnName* fn_name;
 	ExprStructDef* next_of_name;
-	ExprStructDef(){constructor_fn=0;fn_name=0;next_of_name=0;}
+	ExprStructDef(){constructor_fn=0;fn_name=0;next_of_name=0; instances=0;instance_of=0;next_of_instance=0;}
 	void dump(int depth)const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone()const {printf("warning,leak\n");return (Node*) this;};
+	// todo.. generic instantiation: typeparam logic, and adhoc mode.
 };
 
 struct ExprFnDef : Module {
