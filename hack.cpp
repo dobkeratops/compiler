@@ -1,4 +1,4 @@
- #include "hack.hpp"
+#include "hack.hpp"
 #include "codegen.h"
 #include "repl.h"
 
@@ -1764,12 +1764,14 @@ const char* g_TestProg=
 	"fn lerp(a,b,f){(b-a)*f+a};"
 
 	"fn printf(a:int,b:int,c:int,d:int){}"
+	"fn printf(a:int,b:float,c:int,d:float){}"
 	"struct Vec3{x:float,y:float,z:float};"
 	"struct Mat3{ax:Vec3,ay:Vec3,az:Vec3};"
 
-	"fn foobar(a:int,b:int)->int{"
+	"fn foobar(a:int,b:int)->float{"
 "	m:=Mat3; vz:=m.ay.z; vw:=m.az.y;"
-	"	printf(1,2,3,4);0"
+	"	printf(1,vz,3,vw);"
+	"vz"
 	"}"
 
 /*
