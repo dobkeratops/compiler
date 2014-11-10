@@ -1281,11 +1281,12 @@ struct TextInput {
 		int	val=0;
 		int	frac=0;
 		for (const char* p=tok_start;p<tok_end; p++) {
-			val*=10; 
-			frac*=10;
 			if (*p=='.') { frac=1;}
-			else
+			else {
+				val*=10;
+				frac*=10;
 				val+=*p-'0';
+			}
 		}
 		if (frac==0) {frac=1;}
 		advance_tok();
