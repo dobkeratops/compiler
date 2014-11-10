@@ -31,7 +31,7 @@ void print_tok(int i){dbprintf("%s ",getString(i));};
 bool g_lisp_mode=false;
 const char* g_token_str[]={
 	"",
-	"int","uint","bool","float","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
+	"int","uint","bool","float","char","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
 	"print___","fn","struct","enum","array","vector","union","variant","with","match",
 	"let","set","var",
 	"while","if","else","do","for","in","return","break",
@@ -57,7 +57,7 @@ const char* g_token_str[]={
 
 int g_tok_info[]={
 	0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,
 	0,0,0,			// let,set,var
 	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
@@ -112,18 +112,26 @@ int get_infix_operator(int tok) {
 	default: return tok;
 	}
 }
-
-LLVMOp g_llvm_ops[]= {
-	{-1,"add"},{-1,"sub"},{-1,"mul"},{-1,"div"},
-	{-1,"and"},{-1,"or"},{-1,"xor"},{-1,"srem"},{-1,"shl"},{-1,"ashr"},
-	{-1,"icmp slt"},
-	{-1,"icmp sgt"},
-	{-1,"icmp sle"},
-	{-1,"icmp sge"},
-	{-1,"icmp eq"},
-	{-1,"icmp ne"},
-	{-1,"and"},
-	{-1,"or"},
+typedef LLVMOp LLVMOp2[2];
+LLVMOp2 g_llvm_ops[]= {
+	{{-1,"add"},{-1,"fadd"}},
+	{{-1,"sub"},{-1,"fsub"}},
+	{{-1,"mul"},{-1,"fmul"}},
+	{{-1,"div"},{-1,"fdiv"}},
+	{{-1,"and"},{-1,"fand"}},
+	{{-1,"or"},{-1,"fadd"}},
+	{{-1,"xor"},{-1,"fadd"}},
+	{{-1,"srem"},{-1,"fadd"}},
+	{{-1,"shl"},{-1,"fadd"}},
+	{{-1,"ashr"},{-1,"fadd"}},
+	{{-1,"icmp slt"},{-1,"fcmp slt"}},
+	{{-1,"icmp sgt"},{-1,"fcmp sgt"}},
+	{{-1,"icmp sle"},{-1,"fcmp sle"}},
+	{{-1,"icmp sge"},{-1,"fcmp sge"}},
+	{{-1,"icmp eq"},{-1,"fcmp eq"}},
+	{{-1,"icmp ne"},{-1,"fcmp ne"}},
+	{{-1,"and"},{-1,"fadd"}},
+	{{-1,"or"},{-1,"fadd"}},
 };
 const char* g_llvm_type[]={
 	"i32","i32","i1","float"
@@ -135,15 +143,20 @@ const char* get_llvm_type_str(int tname){
 		case BOOL:return "bool";
 		case FLOAT:return "float";
 		case VOID:return "void";
-		case STR:return "u8*";
+		case STR:return "i8*";
+		case CHAR:return "i8";
 		default: return getString(tname);
 	}
 }
 
 const LLVMOp* get_op_llvm(int tok,int type){
-	if (tok>=ADD && tok<=SHR) return &g_llvm_ops[tok-ADD];
-	if (tok>=ADD_ASSIGN && tok<=SHR_ASSIGN) return&g_llvm_ops[tok-ADD_ASSIGN];
-	if (tok>=GT && tok<=NE) return &g_llvm_ops[tok-GT];
+	int ti=(type==FLOAT)?1:0;
+	if (tok>=ADD && tok<=SHR)
+		return &g_llvm_ops[tok-ADD][ti];
+	if (tok>=ADD_ASSIGN && tok<=SHR_ASSIGN)
+		return&g_llvm_ops[tok-ADD_ASSIGN][ti];
+	if (tok>=GT && tok<=NE)
+		return &g_llvm_ops[tok-GT][ti];
 	return 0;
 }
 
@@ -437,10 +450,10 @@ void Type::dump_sub()const{
 bool Type::is_struct()const{
 	return struct_def!=0;
 }
-int Type::is_pointer() const {
+int Type::num_pointers() const {
 	if (!this) return 0;
 	if (this->name==PTR || this->name==REF)
-		return 1+this->is_pointer();
+		return 1+this->sub->is_pointer();
 	else return 0;
 }
 ExprStructDef* Type::get_struct()const{
@@ -1834,8 +1847,8 @@ const char* g_TestProg=
 */
 	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
 	"fn printf(x:str,...)->int;"
-	"fn main(argc:int,argv:ptr[ptr[char]]){"
-	"	printf(\"hello world %.3f\", lerp(10.0,20.0,0.5));"
+	"fn main(argc:int,argv:ptr[ptr[char]])->int{"
+	"	printf(\"hello world %.3f\", lerp(10.0,20.0,0.5));0"
 	"}"
 
 /*

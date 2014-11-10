@@ -52,7 +52,7 @@ extern int operator_flags(int tok);
 enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
-	INT,UINT,BOOL,FLOAT,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,
+	INT,UINT,BOOL,FLOAT,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,
 	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH,
 	LET,SET,VAR,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
@@ -161,7 +161,8 @@ struct Type : Node{
 	Type(Name i);
 	Type() { name=0;sub=0;next=0; struct_def=0;}
 	bool is_struct()const;
-	int is_pointer()const;
+	int num_pointers()const;
+	bool is_pointer()const {return this && this->name==PTR || this->name==REF;}
 	bool is_void()const {return !this || this->name==VOID;}
 	ExprStructDef* get_struct() const; // strip away all pointers.
 	int num_derefs()const {if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
