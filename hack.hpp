@@ -14,6 +14,9 @@
 #define WARN(x)
 #endif
 
+struct Node;
+extern void dbprintf(const char*,...);
+extern void error(Node*,const char*,...);
 // todo: seperate Parser.
 
 #define ilist initializer_list
@@ -127,7 +130,7 @@ public:
 	Node(){name=0;visited=0;regname=0;}
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
-	virtual ResolvedType resolve(Scope* scope, const Type* desired){printf("empty?");return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
+	virtual ResolvedType resolve(Scope* scope, const Type* desired){dbprintf("empty?");return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
 	virtual const char* kind_str(){return"node";}
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
@@ -245,6 +248,7 @@ struct Module : ModuleBase {
 };
 struct ExprLiteral : Expr {
 	TypeId	type_id;
+	ExprLiteral* next_of_scope;	// collected..
 
 	union  {int val_int; int val_uint; float val_float; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
@@ -258,6 +262,8 @@ struct ExprLiteral : Expr {
 	bool is_string() const { return type_id==T_CONST_STRING;}
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	bool is_undefined()const{return false;}
+	const char* as_str()const{ return type_id==T_CONST_STRING?u.val_str:"";}
+	int strlen() const;
 };
 
 struct ArgDef :Node{
@@ -266,7 +272,7 @@ struct ArgDef :Node{
 	Type* type;
 	Expr* default_expr;
 	ArgDef(){type=0;default_expr=0;};
-	ArgDef(int n):ArgDef(){name=n;type=0;default_expr=0;printf("\nMAKE ARG %s", getString(n)); if (type)type->dump(-1); printf("\n");}
+	ArgDef(int n):ArgDef(){name=n;type=0;default_expr=0;}
 	void dump(int depth) const;
 	virtual const char* kind_str()const;
 	~ArgDef(){}
@@ -326,6 +332,7 @@ struct Scope {
 	Scope* next;
 	Scope* child;
 	Scope* global;
+	ExprLiteral* literals;
 	//Call* calls;
 	Variable* vars;
 	NamedItems*	named_items;
@@ -419,7 +426,7 @@ struct ExprStructDef: Module {
 	ExprStructDef(){name_ptr=0;constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_of_instance=0;}
 	void dump(int depth)const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
-	Node* clone()const {printf("warning,leak\n");return (Node*) this;};
+	Node* clone()const {dbprintf("warning,leak\n");return (Node*) this;};
 	int alignment() const {int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	// todo.. generic instantiation: typeparam logic, and adhoc mode.
 };
@@ -452,8 +459,10 @@ struct ExprFnDef : Module {
 	ResolvedType resolve_call(Scope* scope,const Type* desired);
 	Expr* get_return_value() const;
 	Type* return_type()const {auto x=get_return_value();return x?x->type:nullptr;}
+	bool has_return_value() const{ if (auto r=return_type()){return r->name!=VOID;} else return false;}
 	Node* clone() const;
-	bool is_undefined()const{return body->is_undefined();};
+	bool is_undefined()const{return body==nullptr || body->is_undefined();};
+	bool is_extern()const {return body==nullptr;}
 };
 #define link(obj,owner,link) obj->link=owner; owner=obj;
 
