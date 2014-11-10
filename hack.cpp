@@ -22,6 +22,7 @@ void error(Node* n, const char* str, ... ){
 	va_start( arglist, str );
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
+	printf("%s\n",buffer);
 }
 
 
@@ -48,6 +49,7 @@ const char* g_token_str[]={
 	"-","*","&","!","~", // unary ops
 	"*?","*!","&?","[]","&[]", // special pointers
 	",",";",
+	"...","..",
 	"_",
 	NULL,	
 };
@@ -76,11 +78,12 @@ int g_tok_info[]={
 	READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, /// special pointers
 	0,0, // delim
 	0,
+	0,0,
 	0, //placeholder
 };
 bool is_ident(int tok){return tok>=IDENT;}
 bool is_type(int tok){return tok<T_NUM_TYPES;}
-int is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
+bool is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
 int operator_flags(int tok){return g_tok_info[tok];}
 int precedence(int tok){return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
 int is_prefix(int tok){return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
@@ -434,8 +437,18 @@ void Type::dump_sub()const{
 bool Type::is_struct()const{
 	return struct_def!=0;
 }
-bool Type::is_pointer() const {
-	return name==PTR || name==REF;
+int Type::is_pointer() const {
+	if (!this) return 0;
+	if (this->name==PTR || this->name==REF)
+		return 1+this->is_pointer();
+	else return 0;
+}
+ExprStructDef* Type::get_struct()const{
+	auto p=this;
+	while (p && !p->is_struct()){
+		p=p->sub;
+	}
+	return p?p->struct_def:0;
 }
 void Type::dump(int depth)const{
 	if (!this) return;
@@ -552,6 +565,7 @@ void ExprFnDef::dump(int ind) const {
 		args[i]->dump(-1);
 		if (i<args.size()-1) dbprintf(",");
 	}
+	if (variadic) dbprintf(args.size()?",...":"...");
 	dbprintf(")");
 	if (this->ret_type) {dbprintf("->");this->ret_type->dump(-1);};
 	if (this->body) {
@@ -697,13 +711,13 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 		return ;
 	// TODO: may need to continually update the function match, eg during resolving, as more types are found, more specific peices may appear?
 	// Find max number of matching arguments
-	if (args.size() >f->args.size())	// if not enough args, dont even try.
+	if (args.size() >f->args.size() && !f->variadic)	// if not enough args, dont even try.
 		return;
-	if (args.size() !=f->args.size())	// TODO: bring default arguments into the picture.
+	if (args.size() <f->args.size())	// TODO: bring default arguments into the picture.
 		return;
 
 	find_printf("candidate:");
-	for (int i=0; i<args.size(); i++) {
+	for (int i=0; i<args.size() && i<f->args.size(); i++) {
 //		find_printf("%s ",f->args[i]->type->get_name_str());
 		find_printf("arg %d %s",i,getString(f->args[i]->name));
 		auto t=f->args[i]->type;
@@ -712,10 +726,14 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 	}
 	find_printf("\n");
 	int score=0;
+	if (f->variadic)
+		score=1;	// variadic functoin can match anything?
 	for (int i=0; i<args.size(); i++) {
-		if (f->args[i]->type->eq(args[i]->type)) {
-			find_printf("match %s %s\n",f->args[i]->type->get_name_str(), args[i]->type->get_name_str());
-			score++;
+		if (i<f->args.size()){
+			if (f->args[i]->type->eq(args[i]->type)) {
+				find_printf("match %s %s\n",f->args[i]->type->get_name_str(), args[i]->type->get_name_str());
+				score++;
+			}
 		}
 	}
 
@@ -724,7 +742,7 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 		
 	// for any argument not matched, zero the score if its the *wrong* argument?
 	// TODO: this is where we'd bring conversion operators into play.
-	for (int i=0; i<args.size(); i++) {
+	for (int i=0; i<args.size() && i<f->args.size(); i++) {
 		if ((!f->args[i]->type->eq(args[i]->type)) && f->args[i]->type!=0) score=-1;
 	}
 	find_printf("score is %d\n",score);
@@ -770,11 +788,11 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 //	}
 	find_printf("match score=%d/%z\n", best_score, args.size());
 	if (!best)  {
-		find_printf("No match found\n");
+		error(0,"No match found for %s",getString(name));
 		return nullptr;
 	}
 	if (ambiguity){
-		error(nullptr,"ambiguous matches for %s\n",getString(name));
+		error(nullptr,"ambiguous matches for %s",getString(name));
 	}
 	if (best->is_generic()) {
 		find_printf("matched generic function: instanting\n");
@@ -1700,6 +1718,9 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	dbprintf("%s",getString(fndef->name));
 	// read function arguments
 	while (NONE!=(tok=src.peek_tok())) {
+		if (tok==ELIPSIS){
+			fndef->variadic=true; src.eat_tok(); src.expect(CLOSE_PAREN); break;
+		}
 		if (tok==CLOSE_PAREN) {src.eat_tok();break;}
 		dbprintf(" arg:%s ",getString(tok));
 		auto arg=parse_arg(src,CLOSE_PAREN);
@@ -1796,7 +1817,6 @@ const char* g_TestProg=
 	"if i<10 {printf(1)} else {printf(2)}"
 	"lerp(1,2,0);"
 
-	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
 	"fn lerp(a:int,b:int,f:int)->int{(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
 
@@ -1811,9 +1831,10 @@ const char* g_TestProg=
 	"vz"
 	"}"
 */
-	"fn printf(x:str)->int;"
+	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
+	"fn printf(x:str,...)->int;"
 	"fn main(argc:int,argv:ptr[ptr[char]]){"
-	"	printf(\"hello world\");"
+	"	printf(\"hello world %.3f\", lerp(10.0,20.0,0.5));"
 	"}"
 
 /*

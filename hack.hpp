@@ -72,9 +72,14 @@ enum Token {
 	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,
 	COMMA,SEMICOLON,
 	// after these indices, comes indents
+	ELIPSIS,RANGE,
 	PLACEHOLDER,
 	IDENT
 };
+typedef int32_t Name;
+typedef int32_t RegisterName;
+
+bool is_operator(Name name);
 struct LLVMOp {
 	int return_type;
 	const char* op_signed;
@@ -101,8 +106,6 @@ const char* getString(int index);
 void indent(int depth);
 
 // todo: path malarchy.
-typedef int32_t Name;
-typedef int32_t RegisterName;
 struct Scope;
 struct ExprStructDef;
 struct ExprIdent;
@@ -158,7 +161,9 @@ struct Type : Node{
 	Type(Name i);
 	Type() { name=0;sub=0;next=0; struct_def=0;}
 	bool is_struct()const;
-	bool is_pointer()const;
+	int is_pointer()const;
+	bool is_void()const {return !this || this->name==VOID;}
+	ExprStructDef* get_struct() const; // strip away all pointers.
 	int num_derefs()const {if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
 	Type* deref_all() const{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
 	bool eq(const Type* other) const;
@@ -203,7 +208,14 @@ struct ExprBlock :public ExprScopeBlock{
 	ExprFnDef*	call_target;
 	Scope* scope;
 	ExprBlock* next_of_call_target;	// to walk callers to a function
-	int get_operator()const{if (call_operator && !call_target){return call_operator->name;}else{return 0;}}
+	int get_operator()const{
+		if (call_operator && !call_target){
+			return is_operator(call_operator->name)?call_operator->name:0;
+		}
+		else{
+			return 0;
+		}
+	}
 	ExprFnDef* get_fn_call()const {return this->call_target;}
 	int get_op_name()const;
 	Name get_fn_name() const;
@@ -449,17 +461,25 @@ struct ExprFnDef : Module {
 
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> args;
+	bool variadic;
 	ExprBlock* body;
 	int get_name()const {return name;}
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(){scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;ret_type;name_ptr=0;}
+	ExprFnDef(){variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;ret_type;name_ptr=0;}
 	void dump(int ind) const;
 	ResolvedType resolve(Scope* scope,const Type* desired);
 	ResolvedType resolve_call(Scope* scope,const Type* desired);
 	Expr* get_return_value() const;
-	Type* return_type()const {auto x=get_return_value();return x?x->type:nullptr;}
-	bool has_return_value() const{ if (auto r=return_type()){return r->name!=VOID;} else return false;}
+	Type* return_type()const {
+		auto x=get_return_value();
+		return x?x->type:nullptr;
+	}
+	bool has_return_value() const{
+		if (auto r=return_type()){
+			return r->name!=VOID;}
+		else return false;
+	}
 	Node* clone() const;
 	bool is_undefined()const{return body==nullptr || body->is_undefined();};
 	bool is_extern()const {return body==nullptr;}
