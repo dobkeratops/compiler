@@ -7,9 +7,11 @@
 
 #ifdef DEBUG
 #define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );*(long*)0=0;exit(0);}
+#define WARN(x) if (!(x)) {printf("warning %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );}
 #define TRACE printf("%s:%d: %s\n",__FILE__,__LINE__,__FUNCTION__);
 #else
 #define ASSERT(x)
+#define WARN(x)
 #endif
 
 // todo: seperate Parser.
