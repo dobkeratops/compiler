@@ -118,6 +118,8 @@ const char* get_llvm_type_str(int tname){
 
 const LLVMOp* get_op_llvm(int tok,int type){
 	if (tok>=ADD && tok<=SHR) return &g_llvm_ops[tok-ADD];
+	if (tok>=ADD_ASSIGN && tok<=SHR_ASSIGN) return&g_llvm_ops[tok-ADD_ASSIGN];
+	if (tok>=GT && tok<=NE) return &g_llvm_ops[tok-GT];
 	return 0;
 }
 
@@ -916,7 +918,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		else
 		if (op_ident==DOT || op_ident==ARROW) {
 			auto lhs=this->argls[0]; auto rhs=this->argls[1];
-			auto lhs_t=this->argls[0]->resolve(sc, desired);
+			auto lhs_t=this->argls[0]->resolve(sc, 0);//type doesn't push up- the only info we have is what field it needs
 			auto t=lhs_t.type;
 			printf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);printf("\n");
 
@@ -1769,7 +1771,7 @@ const char* g_TestProg=
 	"struct Mat3{ax:Vec3,ay:Vec3,az:Vec3};"
 
 	"fn foobar(a:int,b:int)->float{"
-"	m:=Mat3; vz:=m.ay.z; vw:=m.az.y; vz+=vw;"
+"	m:=Mat3;v:=Vec3; vz:=m.ay.z; vw:=m.az.y; vz+=vw; q:=v.x; v.x=q;m.az.x=q;"
 	"	printf(1,vz,3,vw);"
 	"vz"
 	"}"
