@@ -1769,7 +1769,7 @@ const char* g_TestProg=
 	"struct Mat3{ax:Vec3,ay:Vec3,az:Vec3};"
 
 	"fn foobar(a:int,b:int)->float{"
-"	m:=Mat3; vz:=m.ay.z; vw:=m.az.y;"
+"	m:=Mat3; vz:=m.ay.z; vw:=m.az.y; vz+=vw;"
 	"	printf(1,vz,3,vw);"
 	"vz"
 	"}"
