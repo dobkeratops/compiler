@@ -474,7 +474,7 @@ struct ExprFnDef : Module {
 	Expr* get_return_value() const;
 	Type* return_type()const {
 		auto x=get_return_value();
-		return x?x->type:nullptr;
+		return x?x->type:this->ret_type;
 	}
 	bool has_return_value() const{
 		if (auto r=return_type()){

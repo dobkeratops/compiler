@@ -1848,7 +1848,7 @@ const char* g_TestProg=
 	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
 	"fn printf(x:str,...)->int;"
 	"fn main(argc:int,argv:ptr[ptr[char]])->int{"
-	"	printf(\"hello world %.3f\", lerp(10.0,20.0,0.5));0"
+	"	printf(\"Hello From My Language %.3f\", lerp(10.0,20.0,0.5));0"
 	"}"
 
 /*
