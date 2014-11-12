@@ -13,7 +13,7 @@ void dbprintf(const char* str, ... )
 	va_start( arglist, str );
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
-	//printf("%s",tmp);
+	printf("%s",tmp);
 }
 // for real compiler errors.
 void error(Node* n, const char* str, ... ){
@@ -1667,11 +1667,26 @@ Type* parse_type(TokenStream& src, int close) {
 			src.eat_if(COMMA);
 		}
 	} else {
-		ret = new Type(tok);
-		if (src.eat_if(OPEN_BRACKET)) {
-			while (auto sub=parse_type(src, CLOSE_BRACKET)){
-				ret->push_back(sub);
-				src.eat_if(COMMA);
+		// prefixes in typegrammar..
+		if (tok==MUL || tok==AND) {
+			ret=new Type(PTR);
+			ret->sub=parse_type(src,close);
+		}else {
+		// main: something[typeparams]..
+			ret = new Type(tok);
+			if (src.eat_if(OPEN_BRACKET)) {
+				while (auto sub=parse_type(src, CLOSE_BRACKET)){
+					ret->push_back(sub);
+					src.eat_if(COMMA);
+				}
+			}
+		// postfixes:  eg FOO|BAR|BAZ todo  FOO*BAR*BAZ   FOO&BAR&BAZ
+			if (src.peek_tok()==OR){
+				Type* sub=ret; ret=new Type(VARIANT); ret->push_back(sub);
+				while (src.eat_if(OR)){
+					auto sub=parse_type(src,close);
+					ret->push_back(sub);
+				}
 			}
 		}
 	}
@@ -1744,17 +1759,18 @@ ResolvedType ExprStructDef::resolve(Scope* scope,const Type* desired){
 // iterator protocol. value.init. increment & end test.
 ExprFor* parse_for(TokenStream& src){
 	auto p=new ExprFor;
-	auto first=parse_expr(src);
-	if (src.eat_if(IN)){
-		p->pattern=first;
-		p->init=parse_call(src, OPEN_BRACE, 0, 0);
+	auto first=parse_call(src,SEMICOLON,COMMA,0);
+//	if (src.eat_if(IN)){
+//		p->pattern=first;
+//		p->init=parse_call(src, OPEN_BRACE, 0, 0);
 //		src.expect(OPEN_BRACE);
-	} else if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
+//	} else if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
+	if (true) {
 		p->pattern=0;
 		p->init=first;
 		p->cond=parse_expr(src);
 		src.expect(SEMICOLON);
-		p->incr=parse_call(src,OPEN_BRACE,0,0);
+		p->incr=parse_call(src,OPEN_BRACE,COMMA,0);
 	} else {
 		error(0,"c style for loop, expect for init;cond;incr{body}");
 		exit(0);
@@ -2001,11 +2017,12 @@ const char* g_TestProg=
 */
 //	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
+	"fn foo(a:*char)->void;"
 	"fn printf(s:str,...)->int;"
 
-	"fn main(argc:int,argv:ptr[ptr[char]])->int{"
+	"fn main(argc:int,argv:**char)->int{"
 	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
-	"	for i:=0; i<10; i+=1{x+=i; printf(\"x=%d\n\",x);}"
+	"	for i:=0,j:=0; i<10; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
 	"	printf(\"Hello From My Language %.3f %d\", lerp(10.0,20.0,0.5),x );0"
 	"}"
 
@@ -2023,7 +2040,6 @@ const char* g_TestProg=
 	;
 
 
-// when this works - it can be like SPECS
 int main(int argc, const char** argv) {
 	TextInput	src(g_TestProg);
 	auto node=parse_call(src,0,SEMICOLON,nullptr);
