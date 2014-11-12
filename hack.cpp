@@ -13,7 +13,7 @@ void dbprintf(const char* str, ... )
 	va_start( arglist, str );
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
-	//printf("%s",tmp);
+//		printf("%s",tmp);
 }
 // for real compiler errors.
 void error(Node* n, const char* str, ... ){
@@ -22,7 +22,7 @@ void error(Node* n, const char* str, ... ){
 	va_start( arglist, str );
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
-	printf("%s\n",buffer);
+//	printf(";%s\n",buffer);
 }
 
 
@@ -42,7 +42,8 @@ const char* g_token_str[]={
 	":",
 	"+","-","*","/",					//arithmetic
 	"&","|","^","%","<<",">>",					//bitwise
-	"<",">","<=",">=","==","!=","&&","||",		//compares/logical
+	"<",">","<=",">=","==","!=",		//compares
+	"&&","||",		//logical
 	"=",":=",
 	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
 	"++","--","++","--", //inc/dec
@@ -68,7 +69,8 @@ int g_tok_info[]={
 	READ|9,
 	READ|6,READ|6,READ|5,READ|5,		//arithmetic
 	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,		//bitwise
-	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,READ|13,READ|14,	//compares/logical
+	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,	// COMPARES
+	READ|13,READ|14,	//logical
 	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
 	
 	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16, // assign-op
@@ -84,6 +86,12 @@ int g_tok_info[]={
 bool is_ident(int tok){return tok>=IDENT;}
 bool is_type(int tok){return tok<T_NUM_TYPES;}
 bool is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
+bool is_condition(int tok){
+	return (tok>=LT && tok<=LOG_OR);
+}
+bool is_comparison(int tok){
+	return (tok>=LT && tok<=NE);
+}
 int operator_flags(int tok){return g_tok_info[tok];}
 int precedence(int tok){return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
 int is_prefix(int tok){return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
@@ -124,17 +132,21 @@ LLVMOp2 g_llvm_ops[]= {
 	{{-1,"srem"},{-1,"fadd"}},
 	{{-1,"shl"},{-1,"fadd"}},
 	{{-1,"ashr"},{-1,"fadd"}},
-	{{-1,"icmp slt"},{-1,"fcmp slt"}},
-	{{-1,"icmp sgt"},{-1,"fcmp sgt"}},
-	{{-1,"icmp sle"},{-1,"fcmp sle"}},
-	{{-1,"icmp sge"},{-1,"fcmp sge"}},
-	{{-1,"icmp eq"},{-1,"fcmp eq"}},
-	{{-1,"icmp ne"},{-1,"fcmp ne"}},
+};
+LLVMOp2 g_llvm_logic_ops[]= {
 	{{-1,"and"},{-1,"fadd"}},
 	{{-1,"or"},{-1,"fadd"}},
 };
+LLVMOp2 g_llvm_cmp_ops[]= {
+	{{-1,"icmp slt"},{-1,"fcmp ult"}},
+	{{-1,"icmp sgt"},{-1,"fcmp ugt"}},
+	{{-1,"icmp sle"},{-1,"fcmp ule"}},
+	{{-1,"icmp sge"},{-1,"fcmp uge"}},
+	{{-1,"icmp eq"},{-1,"fcmp ueq"}},
+	{{-1,"icmp ne"},{-1,"fcmp une"}},
+};
 const char* g_llvm_type[]={
-	"i32","i32","i1","float"
+	"i32","i32","i1","float","i8","i8*"
 };
 const char* get_llvm_type_str(int tname){
 	switch (tname){
@@ -155,8 +167,10 @@ const LLVMOp* get_op_llvm(int tok,int type){
 		return &g_llvm_ops[tok-ADD][ti];
 	if (tok>=ADD_ASSIGN && tok<=SHR_ASSIGN)
 		return&g_llvm_ops[tok-ADD_ASSIGN][ti];
-	if (tok>=GT && tok<=NE)
-		return &g_llvm_ops[tok-GT][ti];
+	if (tok>=LOG_AND && tok<=LOG_OR)
+		return &g_llvm_logic_ops[tok-LT][ti];
+	if (tok>=LT && tok<=NE)
+		return &g_llvm_cmp_ops[tok-LT][ti];
 	return 0;
 }
 
@@ -214,7 +228,7 @@ void indent(int depth) {
 	for (int i=0; i<depth; i++){dbprintf("\t");};
 }
 void newline(int depth) {
-	if (depth>=0) dbprintf("\n"); indent(depth);
+	if (depth>=0) dbprintf("\n;"); indent(depth);
 }
 // Even a block is an evaluatable expression.
 // it may contain outer level statements.
@@ -228,11 +242,15 @@ void Expr::dump_top() const {
 	dbprintf("%s ", getString(name));
 }
 
-Expr::Expr(){ type=0;}
+Expr::Expr(){ m_type=0;}
 ResolvedType assert_types_eq(const Type* a,const Type* b) {
 	ASSERT(a && b);
 	if (!a->eq(b)){
-		error(0,"type error:"); a->dump(-1);error(0,"!=");b->dump(-1);error(0,"\n");
+		error(0,"type error: %p vs %p %d %d",a,b, a->name,b->name);
+		a->dump(-1);
+		error(0,"!=");
+		b->dump(-1);
+		error(0,"\n");
 		return ResolvedType(a,ResolvedType::ERROR);
 	}
 	return ResolvedType(a,ResolvedType::COMPLETE);
@@ -251,10 +269,25 @@ RegisterName Node::get_reg_new(Name baseName, int* new_index) {
 	sprintf(name, "r%d%s",(*new_index)++,baseName>=IDENT?getString(baseName):"");
 	return this->regname=g_Names.get_index(name,0);
 }
-
-
+void verify(const Type* a){
+	if (a){
+		ASSERT(a->name>=0 && a->name<g_Names.nextId);
+		verify(a->sub);
+		verify(a->next);
+	}
+}
+void verify(const Type* a,const Type* b){
+	verify(a);
+	verify(b);
+}
+void verify(const Type* a,const Type* b,const Type* c){
+	verify(a);
+	verify(b);
+	verify(c);
+}
 const Type* any_not_zero(const Type* a, const Type* b){return a?a:b;}
 ResolvedType propogate_type(Type*& a,Type*& b) {
+	verify(a,b);
 	if (!(a || b)) return ResolvedType(0,ResolvedType::INCOMPLETE);
 	if (!a && b) {a=b; return ResolvedType(a,ResolvedType::COMPLETE);}
 	else if (!b && a) {b=a; return ResolvedType(b,ResolvedType::COMPLETE);}
@@ -263,12 +296,15 @@ ResolvedType propogate_type(Type*& a,Type*& b) {
 	}
 }
 ResolvedType propogate_type_fwd(const Type*& a,Type*& b) {
+	verify(a,b);
 	if (!(a || b)) return ResolvedType(0,ResolvedType::INCOMPLETE);
 	if (!a && b){return ResolvedType(b,ResolvedType::INCOMPLETE);}
 	if (!b && a) {b=(Type*)a;return ResolvedType(a,ResolvedType::COMPLETE);}
-	else {return assert_types_eq(a,b);  }
+	if (a && b){return assert_types_eq(a,b);  }
+	ASSERT(0);
 }
 ResolvedType propogate_type(Type*& a,Type*& b,Type*& c) {
+	verify(a,b,c);
 	int ret=ResolvedType::COMPLETE;
 	ret|=propogate_type(a,b).status;
 	ret|=(c)?propogate_type(b,c).status:ResolvedType::INCOMPLETE;
@@ -277,6 +313,7 @@ ResolvedType propogate_type(Type*& a,Type*& b,Type*& c) {
 	return ResolvedType(any,ret);
 }
 ResolvedType propogate_type_fwd(const Type*& a,Type*& b,Type*& c) {
+	verify(a,b,c);
 	int ret=ResolvedType::COMPLETE;
 	ret|=propogate_type_fwd(a,b).status;
 	ret|=propogate_type_fwd(a,c).status;
@@ -284,10 +321,12 @@ ResolvedType propogate_type_fwd(const Type*& a,Type*& b,Type*& c) {
 	return ResolvedType(any_not_zero(a,any_not_zero(b,c)),ret);
 }
 ResolvedType propogate_type(ResolvedType& a,Type*& b) {
+	verify(a.type,b);
 	a.combine(propogate_type(a.type,b));
 	return a;
 }
 ResolvedType propogate_type(ResolvedType& a,Type*& b,const Type* c) {
+	verify(a.type,b,c);
 	a.combine(propogate_type_fwd(c,b));
 	a.combine(propogate_type(a.type,b));
 	return a;
@@ -311,25 +350,25 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired) {
 	// todo: not if its' a typename,argname?
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled .
-		propogate_type_fwd(desired,this->type);
-		return ResolvedType(this->type,ResolvedType::COMPLETE);
+		propogate_type_fwd(desired,this->type_ref());
+		return ResolvedType(this->type_ref(),ResolvedType::COMPLETE);
 	}
-	propogate_type_fwd(desired,this->type);
+	propogate_type_fwd(desired,this->type_ref());
 	if (auto sd=scope->find_struct(this->name)) {
-		if (!this->type){
-			this->type=new Type(sd);
-			return propogate_type_fwd(desired,this->type);
+		if (!this->get_type()){
+			this->set_type(new Type(sd));
+			return propogate_type_fwd(desired,this->type_ref());
 		}
 	}
 	if (auto v=scope->find_variable_rec(this->name)){
-		return propogate_type(this->type,v->type);
+		return propogate_type(this->type_ref(),v->type_ref());
 	}
 	return ResolvedType();
 }
 void ExprIdent::dump(int depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("%s:",getString(name));
-	if (this->type) {this->type->dump(-1);}
+	if (this->get_type()) {this->get_type()->dump(-1);}
 }
 
 Name ExprBlock::get_fn_name()const
@@ -362,7 +401,7 @@ void ExprBlock::dump(int depth) const {
 		else if(get_fn_call()){
 			dbprintf("%s",getString(get_fn_call()->name));
 		};
-		if (this->type) {dbprintf(":");this->type->dump(-1);};dbprintf("(");} else dbprintf("{");
+		if (this->get_type()) {dbprintf(":");this->get_type()->dump(-1);};dbprintf("(");} else dbprintf("{");
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
@@ -407,17 +446,30 @@ const char* Node::get_name_str() const{
 }
 const char* Type::kind_str()const{return"type";}
 Type::Type(Name i){ 
+	marker=1234;
 	struct_def=0;
 	sub=0;
 	next=0;
 	name=i; //todo: resolve-type should happen here.
 }
 	//todo: generic heirarchy equality test, duplicate code detection?
+bool type_compare(const Type* t,int a0, int a1){
+	if (t)
+		if (t->name==a0)
+			if (t->sub)
+				if (t->sub->name==a1)
+					return true;
+	return false;
+}
+
 bool Type::eq(const Type* other) const{
 	if ((!this) && (!other)) return true;
 	if (!(this && other)) return false;
 	if (this->name!=other->name)return false;
 //	if (!this->sub && other->sub)) return true;
+	if (other->name==STR && type_compare(this,PTR,CHAR)) return true;
+	if (this->name==STR && type_compare(other,PTR,CHAR)) return true;
+	
 	auto p=this->sub,o=other->sub;
 		
 	for (; p && o; p=p->next,o=o->next) {
@@ -468,7 +520,8 @@ void Type::dump(int depth)const{
 	newline(depth);dump_sub();
 }
 Type::Type(ExprStructDef* sd)
-{	struct_def=sd; name=sd->name;
+{	struct_def=sd; name=sd->name;sub=0;next=0;
+	marker=123456;
 }
 
 
@@ -486,7 +539,15 @@ void ExprLiteral::dump(int depth) const{
 //	then we can just make function expressions for types.
 
 ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired){
-	if (!this->type) {
+	if (!this->owner_scope){
+		this->next_of_scope=sc->global->literals;
+		sc->global->literals=this;
+		this->owner_scope=sc->global;
+	}
+	if (!this->name){
+		char str[256]; if (!name){sprintf(str,"str%x",(uint32_t)(size_t)this); name=getStringIndex(str);}
+	}
+	if (!this->get_type()) {
 		Type* t=nullptr;
 		switch (type_id) {
 		case T_VOID: t=new Type(VOID); break;
@@ -495,12 +556,9 @@ ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired){
 		case T_CONST_STRING: t=new Type(STR); break;
 		default: break;
 		}
-		this->type=t; // one time resolve event.
-		this->next_of_scope=sc->global->literals;
-		sc->global->literals=this;
-		char str[256]; if (!name){sprintf(str,"str%x",(uint32_t)(size_t)this); name=getStringIndex(str);}
+		this->set_type(t); // one time resolve event.
 	}
-	return propogate_type_fwd(desired,this->type);
+	return propogate_type_fwd(desired,this->type_ref());
 }
 int ExprLiteral::strlen() const{
 	if (type_id==T_CONST_STRING)
@@ -509,26 +567,30 @@ int ExprLiteral::strlen() const{
 }
 
 ExprLiteral::ExprLiteral(float f) {
-	type=nullptr;
+	this->owner_scope=0;
+	set_type(new Type(FLOAT));
 	type_id=T_FLOAT;
 	u.val_float=f;
 	dbprintf("lit float %.3f",f);
 }
 ExprLiteral::ExprLiteral(int i) {
-	type=nullptr;
+	this->owner_scope=0;
+	set_type(new Type(INT));
 	type_id=T_INT;
 	u.val_int=i;
 }
 ExprLiteral::ExprLiteral(const char* start,int length) {//copy
-	type=nullptr;
+	this->owner_scope=0;
+	set_type(new Type(STR));
 	type_id=T_CONST_STRING;
 	auto str=( char*)malloc(length+1); ;
 	u.val_str=str;memcpy(str,(void*)start,length);
 	str[length]=0;
 }
 ExprLiteral::ExprLiteral(const char* src) {//take ownership
+	this->owner_scope=0;
+	set_type(new Type(STR));
 	u.val_str=src;
-	type=nullptr;
 	type_id=T_CONST_STRING;
 }
 ExprLiteral::~ExprLiteral(){
@@ -639,13 +701,14 @@ ExprFnDef* instantiate_generic_function(Scope* s,ExprFnDef* src, vector<Expr*>& 
 	}
 	// fill any args we can
 	for (auto i=0; i<new_fn->args.size(); i++){
-		if (!new_fn->args[i]->type && call_args[i]->type) {new_fn->args[i]->type=(Type*)call_args[i]->type->clone();}
+		if (!new_fn->args[i]->type && call_args[i]->get_type()) {new_fn->args[i]->set_type((Type*)call_args[i]->get_type()->clone());}
 	}
 	new_fn->next_instance = src->instances;
 	src->instances=new_fn;
 	new_fn->resolved=false;
 	dbprintf("generic instantiation:-\n");
 	new_fn->dump(0);
+	new_fn->resolve(s,nullptr);//todo: we can use output type in instantiation too
 	return new_fn;	// welcome new function!
 }
 Node* ExprBlock::clone() const {
@@ -654,6 +717,8 @@ Node* ExprBlock::clone() const {
 	if (this->call_operator) {
 		r->call_operator = (Expr*) this->call_operator->clone();
 	}
+	if (this->get_type()){r->set_type((Type*)this->get_type()->clone());}
+	else{r->set_type(0);}
 	r->call_target=this->call_target;
 	r->name=this->name;
 	r->argls.resize(this->argls.size());
@@ -675,7 +740,7 @@ ExprFnDef::clone() const{
 	if (!this) return nullptr;
 	auto r=new ExprFnDef;
 	r->name=this->name;
-	r->body=(ExprBlock*)this->body->clone();
+	r->body=(ExprBlock*)(this->body?this->body->clone():nullptr);
 	r->args.resize(this->args.size());
 	for (int i=0; i<this->args.size(); i++) {
 		r->args[i]=(ArgDef*)this->args[i]->clone();
@@ -716,7 +781,7 @@ ExprIdent::clone() const {
 //void find_printf(const char*,...){};
 #define find_printf dbprintf
 int num_known_arg_types(vector<Expr*>& args) {
-	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->type) n++;} return n;
+	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
 }
 
 void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const Type* ret_type, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
@@ -743,20 +808,20 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 		score=1;	// variadic functoin can match anything?
 	for (int i=0; i<args.size(); i++) {
 		if (i<f->args.size()){
-			if (f->args[i]->type->eq(args[i]->type)) {
-				find_printf("match %s %s\n",f->args[i]->type->get_name_str(), args[i]->type->get_name_str());
+			if (f->args[i]->get_type()->eq(args[i]->get_type())) {
+				find_printf("match %s %s\n",f->args[i]->get_type()->get_name_str(), args[i]->get_type()->get_name_str());
 				score++;
 			}
 		}
 	}
 
 	// consider return type in call.
-	if (ret_type) if (f->type->eq(ret_type)) score++;
+	if (ret_type) if (f->get_type()->eq(ret_type)) score++;
 		
 	// for any argument not matched, zero the score if its the *wrong* argument?
 	// TODO: this is where we'd bring conversion operators into play.
 	for (int i=0; i<args.size() && i<f->args.size(); i++) {
-		if ((!f->args[i]->type->eq(args[i]->type)) && f->args[i]->type!=0) score=-1;
+		if ((!f->args[i]->get_type()->eq(args[i]->get_type())) && f->args[i]->get_type()!=0) score=-1;
 	}
 	find_printf("score is %d\n",score);
 	if (score >*best_score) {
@@ -778,7 +843,7 @@ void find_fn_sub(Expr* src,Name name,vector<Expr*>& args, const Type* ret_type,E
 
 ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  {
 	find_printf("\nfind call with args(");
-	for (int i=0; i<args.size(); i++) {find_printf(" %d:",i);find_printf("%p\n",args[i]);if (args[i]->type) args[i]->type->dump(-1);}
+	for (int i=0; i<args.size(); i++) {find_printf(" %d:",i);find_printf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
 	find_printf(")\n");
 
 	ExprFnDef*	best=0;
@@ -801,6 +866,9 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 //	}
 	find_printf("match score=%d/%z\n", best_score, args.size());
 	if (!best)  {
+		for (auto i=0; i<args.size(); i++){
+			dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");
+		}
 		error(0,"No match found for %s",getString(name));
 		return nullptr;
 	}
@@ -892,7 +960,7 @@ void Scope::dump(int depth)const {
 	newline(depth);dbprintf("scope: %s {", this->owner?getString(this->owner->ident()):"global");
 	for (auto v=this->vars; v; v=v->next) {
 		newline(depth+1); dbprintf("var %d %s:",v->name, getString(v->name));
-		if (v->type){ v->type->dump(-1);} else {dbprintf("no_type");}
+		if (auto t=v->get_type()) t->dump(-1);
 	}
 	for (auto f=this->named_items; f;f=f->next){
 		newline(depth+1); dbprintf("name %s:",getString(f->name));
@@ -909,22 +977,24 @@ void dump(vector<T*>& src) {
 	}
 }
 ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
+	verify(this->get_type());
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
-		if (!this->type) this->type=new Type(VOID);
-		return propogate_type_fwd(desired,this->type);
+		if (!this->get_type()) this->set_type(new Type(VOID));
+		return propogate_type_fwd(desired,this->type_ref());
 	}
 	int op_ident=NONE;
 	ExprIdent* p=nullptr;
 	if(this->call_operator){p=dynamic_cast<ExprIdent*>(this->call_operator); op_ident=p->name;}
 	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
-		for (auto i=0; i<this->argls.size()-1; i++) {
-			this->argls[i]->resolve(sc,0);
+		auto n=0;
+		for (; n<this->argls.size()-1; n++) {
+			this->argls[n]->resolve(sc,0);
 		}
 		// last expression - type bounce
-		if (auto i=this->argls.size()) {
-			propogate_type_fwd(desired,this->type);
-			auto ret=this->argls[i-1]->resolve(sc,desired);
-			return propogate_type(ret,this->type);
+		if (this->argls.size()) {
+			propogate_type_fwd(desired,this->type_ref());
+			auto ret=this->argls[n]->resolve(sc,desired);
+			return propogate_type(ret,this->type_ref());
 		}
 		else {ASSERT(0);return ResolvedType();}
 	}
@@ -939,14 +1009,14 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		if (op_ident==LET_ASSIGN){
 			auto new_var=sc->get_scope_variable(vname,Local);
 			ASSERT(new_var);
-			return propogate_type(rhs_t, new_var->type,desired);
+			return propogate_type(rhs_t, new_var->type_ref(),desired);
 		}
 		else {
-			propogate_type_fwd(desired, this->type);
-			propogate_type(this->argls[1]->type, this->type);
-			auto lhs_t=this->argls[0]->resolve(sc,this->type);
-			propogate_type(this->type,this->argls[0]->type);
-			return propogate_type(this->type,this->argls[0]->type);
+			propogate_type_fwd(desired, this->type_ref());
+			propogate_type(this->argls[1]->type_ref(), this->type_ref());
+			auto lhs_t=this->argls[0]->resolve(sc,this->type_ref());
+			propogate_type(this->type_ref(),this->argls[0]->type_ref());
+			return propogate_type(this->type_ref(),this->argls[0]->type_ref());
 			
 //			propogate_type_fwd(desired,lhs_t);
 //			return propogate_type(lhs_t,rhs_t);
@@ -972,10 +1042,10 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 			ASSERT(dynamic_cast<ExprIdent*>(this->argls[1]));
 			int tname=this->argls[1]->name;
 			auto v=sc->find_variable_rec(this->argls[0]->name);
-			if (!v->type){
-				v->type=new Type(tname);
+			if (!v->get_type()){
+				v->set_type(new Type(tname));
 			}
-			propogate_type(v->type,this->type);
+			propogate_type(v->type_ref(),this->type_ref());
 		}
 		else
 		if (op_ident==DOT || op_ident==ARROW) {
@@ -993,23 +1063,34 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 					if (auto f=st->find_field(rhs->name)){
 						f->dump(-1);
 						ret=f->type;
-						propogate_type(ret,this->type);
+						propogate_type(ret,this->type_ref());
 					}
 				}
 			}
 		}
+		else if (is_condition(op_ident)){
+			ASSERT(this->argls.size()==2);
+			auto lhst=this->argls[0]->resolve(sc,this->argls[1]->type_ref());
+			auto rhst=this->argls[1]->resolve(sc,this->argls[0]->type_ref());
+			verify(this->argls[0]->get_type());
+			verify(this->argls[1]->get_type());
+			if (!this->get_type()){
+				this->set_type(new Type(BOOL));
+			};
+			return rhst;
+		}
 		else {
 			// regular operator
-			propogate_type_fwd(desired, this->type);
+			propogate_type_fwd(desired, this->type_ref());
 			for (auto i=0; i<this->argls.size();i++){
 				auto r=this->argls[i]->resolve(sc,desired);
-				propogate_type(r,this->type);
+				propogate_type(r,this->type_ref());
 //				propogate_type_fwd(desired,ret);
 			}
 		}
-		return propogate_type_fwd(desired, this->type);
+		return propogate_type_fwd(desired, this->type_ref());
 	} else if (op_ident==PLACEHOLDER) {
-		return propogate_type_fwd(desired,this->type);
+		return propogate_type_fwd(desired,this->type_ref());
 		// dump given types here...
 		// report candidate functions...
 	}
@@ -1043,7 +1124,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired) {
 	for (int i=0; i<block->argls.size(); i++) {
 		block->argls[i]->resolve(scope,desired);
-		dbprintf("resolve arg %d type=",i); auto t=block->argls[i]->type; if (t) t->dump(-2); printf("\n");
+		dbprintf("resolve arg %d type=",i); auto t=block->argls[i]->get_type(); if (t) t->dump(-2); printf("\n");
 	}
 	ASSERT(block->call_target==0);
 
@@ -1059,7 +1140,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		block->call_target=call_target;
 		if (call_target->resolved) {
 			Type * fnr=call_target->return_type();
-			return propogate_type_fwd(desired, block->type,fnr);
+			return propogate_type_fwd(desired, block->type_ref(),fnr);
 		}
 			// add this to the targets' list of calls.
 		int num_known_types=(desired?1:0)+num_known_arg_types(block->argls);
@@ -1067,7 +1148,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		if (!(isg && num_known_types)) {
 			// concrete function: we can just take return type.
 			auto rt=fnc->return_type();
-			return propogate_type_fwd(desired, rt,block->type);
+			return propogate_type_fwd(desired, rt,block->type_ref());
 		}
 		{
 			int once=false; if(!once++){
@@ -1098,21 +1179,21 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		// TODO-inlining generic call? or what?
 		Scope* fsc=block->scope;
 		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
-			auto input_type=block->argls[i]->type;
+			auto input_type=block->argls[i]->get_type();
 			auto v=fsc->create_variable(fnc->args[i]->name,VkArg);
-			auto argtype=fnc->args[i]->type;
-			if (!v->type){
-				v->type=argtype?argtype:input_type;
+			auto argtype=fnc->args[i]->get_type();
+			if (!v->type()){
+				v->type(argtype?argtype:input_type);
 			} else {
 				// read the type out from the function invocation, really.
-				if (block->argls[i]->type) {ASSERT(input_type->eq(v->type));}
-				else block->argls[i]->type=v->type;
+				if (block->argls[i]->get_type()) {ASSERT(input_type->eq(v->type()));}
+				else block->argls[i]->type(v->type());
 			}
 			// and stuff a default expression in for any not called..
 		}
 		
 		auto ret=call_target->resolve_call(fsc,desired);
-		return propogate_type(ret,block->type);
+		return propogate_type(ret,block->type());
 	}
 	else 
 		return ResolvedType();
@@ -1139,14 +1220,18 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired) {
 //	if (!this->name) {return new Type(FN);
 		
 //	}
-	if (!this->scope){ this->scope=new Scope; definer_scope->push_child(this->scope); scope->owner=this; };
+	if (!this->scope){
+		this->scope=new Scope;
+		definer_scope->push_child(this->scope);
+		this->scope->owner=this;
+	};
 		//this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
 	auto sc=this->scope;
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 		auto arg=this->args[i];
 		auto v=sc->find_scope_variable(arg->name);
 		if (!v){v=sc->create_variable(arg->name,VkArg);}
-		propogate_type(arg->type,v->type);
+		propogate_type(arg->type_ref(),v->type_ref());
 		if (arg->default_expr){static int warn=0; if (!warn){warn=1;
 			dbprintf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
 		}
@@ -1404,8 +1489,9 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 Type* parse_type(TokenStream& src, int close);
 
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
-	// shunting yard parserfelchery
+	// shunting yard parser
 	ExprBlock *node=new ExprBlock; node->call_operator=op;
+	verify(node->type());
 	vector<int> operators;
 	vector<Expr*> operands;
 	bool	was_operand=false;
@@ -1503,7 +1589,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 				if (tok==COLON){// special case: : invokes parsing type. TODO: we actually want to get rid of this? type could be read from other nodes, parsed same as rest?
 					Type *t=parse_type(src,0);
 					auto lhs=operands.back();
-					lhs->type=t;
+					lhs->set_type(t);
 					was_operand=true;
 				} else {
 					operators.push_back(tok);
@@ -1518,6 +1604,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 		//node->argls.push_back(sub);
 	};
 	flush_op_stack(node,operators,operands);
+	verify(node->get_type());
 	return node;
 }
 
@@ -1601,10 +1688,10 @@ bool ExprStructDef::is_generic()const{
 }
 ResolvedType ExprStructDef::resolve(Scope* scope,const Type* desired){
 	scope->add_struct(this);
-	if (!this->type) {
-		this->type = new Type(this->name);	// name selects this struct.
+	if (!this->get_type()) {
+		this->set_type(new Type(this->name));	// name selects this struct.
 	}
-	return propogate_type_fwd(desired,this->type);
+	return propogate_type_fwd(desired,this->type_ref());
 }
 // iterator protocol. value.init. increment & end test.
 ExprFor* parse_for(TokenStream& src){
@@ -1647,9 +1734,12 @@ Node* ExprFor::clone()const{
 // add := gets rid of auto noise
 // add postfix : alternate functoin syntax
 ExprIf* parse_if(TokenStream& src){
+	// TODO: assignments inside the 'if ..' should be in-scope
+	// eg if (result,err)=do_something(),err==ok {....}  else {...}
 	auto p=new ExprIf;
 	p->cond=parse_call(src, OPEN_BRACE, 0, 0);
 	p->body=parse_call(src, CLOSE_BRACE,SEMICOLON,0);
+	verify(p->cond->get_type());
 
 	if (src.eat_if(ELSE)) {
 		if (src.eat_if(IF)) {
@@ -1660,13 +1750,21 @@ ExprIf* parse_if(TokenStream& src){
 			error(0,"if { }else {} expected\n");
 		}
 	}
+	if (p->cond) verify(p->cond->get_type());
+	if (p->body) verify(p->body->get_type());
+	if (p->else_block) verify(p->else_block->get_type());
 	return p;
 }
 Node* ExprIf::clone()const {
-	auto p=new ExprIf; p->cond=(Expr*)this->cond->clone_if(); p->body=(Expr*)this->body->clone_if(); p->else_block=(Expr*)this->else_block->clone_if();
+	auto p=new ExprIf;
+	p->cond=(Expr*)this->cond->clone_if();
+	p->body=(Expr*)this->body->clone_if();
+	p->else_block=(Expr*)this->else_block->clone_if();
+	verify(p->cond->get_type());
 	return p;
 }
 void ExprIf::dump(int depth) const {
+	verify(cond->get_type());
 	newline(depth);dbprintf("if\n");
 	cond->dump(depth+1);
 	newline(depth);dbprintf("{\n");
@@ -1677,6 +1775,16 @@ void ExprIf::dump(int depth) const {
 	}
 	newline(depth);dbprintf("}\n");
 };
+
+ResolvedType ExprIf::resolve(Scope* s,const Type* desired){
+	verify(this->cond->get_type());
+	this->cond->resolve(s,nullptr); // condition can  be anything coercible to bool
+	auto body_type=this->body->resolve(s,desired);
+	Type* bt=body_type.type;
+	propogate_type_fwd(desired,bt);
+	if (else_block){ return else_block->resolve(s,bt);}
+	else return body_type;
+}
 
 
 void ExprFor::dump(int d) const {
@@ -1845,10 +1953,13 @@ const char* g_TestProg=
 	"vz"
 	"}"
 */
-	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
-	"fn printf(x:str,...)->int;"
+//	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
+	"fn lerp(a,b,f){(b-a)*f+a};"
+	"fn printf(s:str,...)->int;"
+
 	"fn main(argc:int,argv:ptr[ptr[char]])->int{"
-	"	printf(\"Hello From My Language %.3f\", lerp(10.0,20.0,0.5));0"
+	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
+	"	printf(\"Hello From My Language %.3f %d\", lerp(10.0,20.0,0.5),x );0"
 	"}"
 
 /*

@@ -6,7 +6,7 @@
 #include <string.h>
 
 #ifdef DEBUG
-#define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );*(long*)0=0;exit(0);}
+#define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );*(volatile long*)0=0;exit(0);}
 #define WARN(x) if (!(x)) {printf("warning %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );}
 #define TRACE printf("%s:%d: %s\n",__FILE__,__LINE__,__FUNCTION__);
 #else
@@ -17,6 +17,7 @@
 struct Node;
 extern void dbprintf(const char*,...);
 extern void error(Node*,const char*,...);
+extern bool is_comparison(int t);
 // todo: seperate Parser.
 
 #define ilist initializer_list
@@ -65,7 +66,8 @@ enum Token {
 	COLON,
 	ADD,SUB,MUL,DIV,
 	AND,OR,XOR,MOD,SHL,SHR,
-	LT,GT,LE,GE,EQ,NE,LOG_AND,LOG_OR,
+	LT,GT,LE,GE,EQ,NE,
+	LOG_AND,LOG_OR,
 	ASSIGN,LET_ASSIGN,
 	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,AND_ASSIGN,OR_ASSIGN,XOR_ASSIGN,MOD_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
@@ -104,6 +106,7 @@ extern StringTable g_Names;
 int getStringIndex(const char* str,const char* end=0);
 const char* getString(int index);
 void indent(int depth);
+inline const char* str(int n){return getString(n);}
 
 // todo: path malarchy.
 struct Scope;
@@ -151,6 +154,7 @@ public:
 struct TypeParam{int name; int defaultv;};
 
 struct Type : Node{
+	int marker;
 	vector<TypeParam> typeparams;
 	ExprStructDef* struct_def;
 	Type*	sub;	// a type is itself a tree
@@ -159,7 +163,7 @@ struct Type : Node{
 	virtual const char* kind_str()const;
 	Type(ExprStructDef* sd);
 	Type(Name i);
-	Type() { name=0;sub=0;next=0; struct_def=0;}
+	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
 	bool is_struct()const;
 	int num_pointers()const;
 	bool is_pointer()const {return this && this->name==PTR || this->name==REF;}
@@ -177,20 +181,27 @@ struct LLVMType {
 	int name;
 	bool is_pointer;
 };
+extern void verify(const Type* t);
 struct Expr : Node{
-	Type* type;
+private:Type* m_type;
+public:
 	void dump(int depth) const;
 	void dump_top()const;
 	Expr();
 	virtual const char* kind_str()const{return"expr";}
-	Type* get_type() const { if(this)return this->type;else return nullptr;}
+	Type* get_type() const { if(this) {verify(this->m_type);return this->m_type;}else return nullptr;}
+	Type*& type(){ verify(this->m_type);return this->m_type;}
+	const Type* type()const{ verify(this->m_type);return this->m_type;}
+	void type(const Type* t){ verify(t);this->m_type=(Type*)t;}
+	void set_type(const Type* t){verify(t);this->m_type=(Type*)t;};
+	Type*& type_ref(){return this->m_type;}
 	LLVMType get_type_llvm() const {
 		if (!this) return LLVMType{VOID,0};
-		if (!this->type) return LLVMType{VOID,0};
-		auto tn=this->type->name;
+		if (!this->m_type) return LLVMType{VOID,0};
+		auto tn=this->m_type->name;
 		if (tn==VOID) return LLVMType{VOID,0};
-		if (!this->type->sub) return LLVMType{tn,0};
-		if (tn==PTR || tn==DEREF ||tn==ADDR ) return LLVMType{this->type->sub->name,true};
+		if (!this->m_type->sub) return LLVMType{tn,0};
+		if (tn==PTR || tn==DEREF ||tn==ADDR ) return LLVMType{this->m_type->sub->name,true};
 		// todo structs, etc - llvm DOES know about these.
 		return LLVMType{0,0};
 	}
@@ -262,6 +273,7 @@ struct Module : ModuleBase {
 struct ExprLiteral : Expr {
 	TypeId	type_id;
 	ExprLiteral* next_of_scope;	// collected..
+	Scope* owner_scope;
 
 	union  {int val_int; int val_uint; float val_float; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
@@ -284,6 +296,9 @@ struct ArgDef :Node{
 	Name name;
 	Type* type;
 	Expr* default_expr;
+	Type* get_type()const {return type;}
+	void set_type(Type* t){verify(t);type=t;}
+	Type*& type_ref(){return type;}
 	ArgDef(){type=0;default_expr=0;};
 	ArgDef(int n):ArgDef(){name=n;type=0;default_expr=0;}
 	void dump(int depth) const;
@@ -330,11 +345,11 @@ struct Variable : Expr{
 	Scope* owner;
 	Variable* next;
 	Expr* initialize; // if its an argdef, we instantiate an initializer list
-	Variable(Name n,VarKind k){name=n; initialize=0; Scope* owner;kind=k;}
+	Variable(Name n,VarKind k){name=n; initialize=0; Scope* owner;kind=k;this->set_type(0);}
 	Node* clone() const {
 		auto v=new Variable(name,this->kind);
 		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
-		v->next=0; v->type=this->type; return v;
+		v->next=0; v->set_type(this->get_type()); return v;
 	}
 };
 // scopes are created when resolving; generic functions are evaluated
@@ -392,7 +407,7 @@ struct ExprIf :  Expr {
 	~ExprIf(){}
 	Node* clone() const;
 	virtual const char* kind_str()const{return"if";}
-	ResolvedType resolve(Scope* scope,Type*) ;
+	ResolvedType resolve(Scope* scope,const Type*) ;
 	bool is_undefined()const{return cond->is_undefined()||body->is_undefined()||else_block->is_undefined();}
 };
 struct ExprFor :  Expr {
@@ -408,7 +423,7 @@ struct ExprFor :  Expr {
 	ExprFor(){name=0;pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;}
 	~ExprFor(){}
 	virtual const char* kind_str()const{return"if";}
-	ResolvedType resolve(Scope* scope,Type*) {return ResolvedType();};
+	ResolvedType resolve(Scope* scope,const Type*) {return ResolvedType();};
 	Expr* find_break_expr();
 	Node* clone()const;
 	bool is_undefined()const{return pattern->is_undefined()||init->is_undefined()||cond->is_undefined()||cond->is_undefined()||incr->is_undefined()||body->is_undefined()||else_block->is_undefined();}
@@ -467,14 +482,14 @@ struct ExprFnDef : Module {
 	int get_name()const {return name;}
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(){variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;type=0;fn_type=0;ret_type;name_ptr=0;}
+	ExprFnDef(){variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
 	void dump(int ind) const;
 	ResolvedType resolve(Scope* scope,const Type* desired);
 	ResolvedType resolve_call(Scope* scope,const Type* desired);
 	Expr* get_return_value() const;
 	Type* return_type()const {
 		auto x=get_return_value();
-		return x?x->type:this->ret_type;
+		return x?x->get_type():this->ret_type;
 	}
 	bool has_return_value() const{
 		if (auto r=return_type()){
@@ -495,7 +510,7 @@ struct ExprIdent :Expr{
 	// TODO: definition pointer. (ptr to field,function,struct,typedef..)
 	void dump(int depth) const;
 	virtual const char* kind_str()const{return"ident";}
-	ExprIdent(int i){name=i;type=0;}
+	ExprIdent(int i){name=i;set_type(nullptr);}
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone() const;
 	bool is_placeholder()const{return name==PLACEHOLDER;}
