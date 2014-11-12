@@ -1051,6 +1051,9 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 	int op_ident=NONE;
 	ExprIdent* p=nullptr;
 	if(this->call_operator){p=dynamic_cast<ExprIdent*>(this->call_operator); op_ident=p->name;}
+//	if (this->square_bracket){	// this[args]
+//		this->args[0]
+//	}else
 	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
 		auto n=0;
 		for (; n<this->argls.size()-1; n++) {
@@ -1092,21 +1095,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 			auto lhs_t=this->argls[0]->resolve(sc,this->type_ref());
 			propogate_type(this->type_ref(),this->argls[0]->type_ref());
 			return propogate_type(this->type_ref(),this->argls[0]->type_ref());
-			
-//			propogate_type_fwd(desired,lhs_t);
-//			return propogate_type(lhs_t,rhs_t);
 		}
-//			return propogate_type(
-//			v=sc->find_variable_rec(name);
-//			ASSERT(v);
-//		}
-//		propogate_type_fwd(desired,this->type);
-//		if (new_var) {
-//		}else{
-//			printf("TODO: there's another error todo - how to resolve complex Lvalue");
-//		}
-//		return propogate_type(rhs_t,this->type,desired);
-		
 	} else if (is_operator(op_ident)){
 		// todo: &t gets adress. *t removes pointer, [i] takes index,
 		// comparisons yield bool, ...
@@ -1144,6 +1133,39 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 				}
 			}
 		}
+		else if (op_ident==ADDR){  //result=&lhs
+			// todo: we can assert give type is one less pointer, if given
+			ASSERT(this->argls.size()==1);
+			Type* dt=nullptr;
+			if (desired){
+				ASSERT(desired->name==PTR || desired->name==REF);
+				dt=desired->sub;
+			}
+			auto ret=this->argls[0]->resolve(sc,dt);
+			if (!this->get_type() && ret.type){
+				auto ptr_type=new Type(PTR); ptr_type->sub=(Type*)ret.type->clone();
+				this->set_type(ptr_type);
+				return propogate_type_fwd(desired,ptr_type);
+			}
+			return ret;
+		}
+		else if (op_ident==DEREF){ //result=*lhs
+			// todo: we can assert give type is one less pointer, if given
+			ASSERT(this->argls.size()==1);
+			auto ret=this->argls[0]->resolve(sc,0);
+			// todo: its' a typeparam constraint.  ptr[desired]==argls[0]
+			if (!this->get_type() && ret.type){
+				if (ret.type->name!=PTR) {
+					this->dump(0);
+					this->argls[0]->dump(0);
+					ret.type->dump(0);
+				}
+				ASSERT(ret.type->name==PTR);
+				this->set_type(ret.type->sub);
+				return propogate_type_fwd(desired, this->type_ref());
+			}
+			else return ResolvedType();
+		}
 		else if (is_condition(op_ident)){
 			ASSERT(this->argls.size()==2);
 			auto lhst=this->argls[0]->resolve(sc,this->argls[1]->type_ref());
@@ -1157,6 +1179,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		}
 		else {
 			// regular operator
+			// TODO propogate types for pointer-arithmetic - ptr+int->ptr   int+ptr->ptr  ptr-ptr->int
 			propogate_type_fwd(desired, this->type_ref());
 			for (auto i=0; i<this->argls.size();i++){
 				auto r=this->argls[i]->resolve(sc,desired);
@@ -2097,7 +2120,11 @@ const char* g_TestProg=
 
 	"fn main(argc:int,argv:**char)->int{"
 	"	xs=:array[int,512];"
-	"	xs[1]=20;"
+	"	q:=xs[1];"
+	"	p1:=&xs[1];"
+	"	q:=*p1;"
+//	"	xs[1]=20;"
+//	"   p=30;"
     "	xs[2]=000;"
 	"	xs[2]+=400;"
 	"   z:=5;"
