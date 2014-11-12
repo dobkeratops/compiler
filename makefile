@@ -1,5 +1,5 @@
 try: hack
-	./hack > test.ll
+	./hack 
 	more test.ll
 	clang test.ll
 

@@ -1833,8 +1833,6 @@ ResolvedType ExprIf::resolve(Scope* s,const Type* desired){
 	if (else_block){ return else_block->resolve(s,bt);}
 	else return body_type;
 }
-
-
 void ExprFor::dump(int d) const {
 	newline(d);dbprintf("for ");
 	if (this->is_c_for()) {
@@ -2007,7 +2005,7 @@ const char* g_TestProg=
 
 	"fn main(argc:int,argv:ptr[ptr[char]])->int{"
 	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
-	"	for i:=0; i<10; i+=1{x+=i;}"
+	"	for i:=0; i<10; i+=1{x+=i; printf(\"x=%d\n\",x);}"
 	"	printf(\"Hello From My Language %.3f %d\", lerp(10.0,20.0,0.5),x );0"
 	"}"
 
@@ -2041,7 +2039,10 @@ int main(int argc, const char** argv) {
 	node->dump(0);
 //	global.visit_calls();
 	global.dump(0);
-	output_code(stdout, &global);
+	FILE* ofp=fopen("test.ll","wb");
+	output_code(ofp, &global);
+	fprintf(ofp,"\n;end\0");
+	fclose(ofp);
 }
 
 
