@@ -13,7 +13,7 @@ void dbprintf(const char* str, ... )
 	va_start( arglist, str );
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
-//		printf("%s",tmp);
+	//printf("%s",tmp);
 }
 // for real compiler errors.
 void error(Node* n, const char* str, ... ){
@@ -22,7 +22,7 @@ void error(Node* n, const char* str, ... ){
 	va_start( arglist, str );
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
-//	printf(";%s\n",buffer);
+	printf(";%s\n",buffer);
 }
 
 
@@ -345,6 +345,41 @@ StructDef* dump_find_struct(Scope* s, Name name){
 	return nullptr;
 }
 
+void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const
+{
+	if(auto op=this->get_operator()){
+		auto flags=operator_flags(op);
+		if (flags&WRITE_LHS){
+			if (auto vname=dynamic_cast<ExprIdent*>(this->argls[0])){
+				if (auto var=s->find_variable_rec(vname->name)){
+					vars.insert(var);
+				}
+			}
+		}
+		if (flags&WRITE_RHS){
+			if (auto vname=dynamic_cast<ExprIdent*>(this->argls[1])){
+				if (auto var=s->find_variable_rec(vname->name)){
+					vars.insert(var);
+				}
+			}
+			
+		}
+	}
+	for (auto a:argls)
+		a->find_vars_written(s,vars);
+}
+void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{
+	cond->find_vars_written(s,vars);
+	if (body)body->find_vars_written(s,vars);
+	if (else_block)else_block->find_vars_written(s,vars);
+}
+void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
+	if (incr)incr->find_vars_written(s,vars);
+	if (cond)cond->find_vars_written(s,vars);
+	if (body)body->find_vars_written(s,vars);
+	if (else_block)else_block->find_vars_written(s,vars);
+}
+
 
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired) {
 	// todo: not if its' a typename,argname?
@@ -609,6 +644,16 @@ void dump_typeparams(const vector<TypeParam>& ts) {
 	}
 	dbprintf("]");
 }
+void Variable::dump(int depth) const{
+	newline(depth);dbprintf("%s",getString(name));
+	if (type()) {dbprintf(":");type()->dump(-1);}
+	switch (this->kind){
+		case VkArg:dbprintf("(Arg)");break;
+		case Local:dbprintf("(Local)");break;
+		case Global:dbprintf("(Local)");break;
+		default: break;
+	}
+}
 
 void ArgDef::dump(int depth) const {
 	newline(depth);dbprintf("%s",getString(name));
@@ -842,7 +887,7 @@ void find_fn_sub(Expr* src,Name name,vector<Expr*>& args, const Type* ret_type,E
 }
 
 ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  {
-	find_printf("\nfind call with args(");
+	find_printf("\n;find call with args(");
 	for (int i=0; i<args.size(); i++) {find_printf(" %d:",i);find_printf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
 	find_printf(")\n");
 
@@ -850,7 +895,7 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 	int best_score=-1;
 	int	ambiguity=0;
 	for (auto src=this; src; src=src->parent) {// go back thru scopes.
-		find_printf("in scope %p\n",src);
+		find_printf(";in scope %p\n",src);
 		if (auto fname=src->find_named_items_local(name)){
 			for (auto f=fname->fn_defs; f;f=f->next_of_name) {
 				find_fn_sub(f,name, args,ret_type,&best,&best_score,&ambiguity);
@@ -864,19 +909,19 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 //		exit(0);
 //		return 0;f
 //	}
-	find_printf("match score=%d/%z\n", best_score, args.size());
+	find_printf(";match score=%d/%z\n", best_score, args.size());
 	if (!best)  {
 		for (auto i=0; i<args.size(); i++){
 			dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");
 		}
-		error(0,"No match found for %s",getString(name));
+		error(0,";No match found for %s",getString(name));
 		return nullptr;
 	}
 	if (ambiguity){
-		error(nullptr,"ambiguous matches for %s",getString(name));
+		error(nullptr,";ambiguous matches for %s",getString(name));
 	}
 	if (best->is_generic()) {
-		find_printf("matched generic function: instanting\n");
+		find_printf(";matched generic function: instanting\n");
 		return instantiate_generic_function(this, best, args);
 	}
 	
@@ -1095,7 +1140,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		// report candidate functions...
 	}
 	else {
-		dbprintf("resolve call..%s\n",getString(p->ident()));
+		dbprintf(";resolve call..%s\n",getString(p->ident()));
 			// TODO: distinguish 'partially resolved' from fully-resolved.
 		// at the moment we only pick an fn when we know all our types.
 		// But, some functions may be pure generic? -these are ok to match to nothing.
@@ -1215,18 +1260,22 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired) {
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
 	return propogate_type(rt,this->ret_type);
 }
+ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired){
+	auto sc=outer_scope->make_inner_scope(&this->scope);
+	if (init) init->resolve(sc,0);
+	if (cond) cond->resolve(sc,0);
+	if (body) body->resolve(sc,0);
+	if (else_block) else_block->resolve(sc,0);
+	return ResolvedType();
+}
+
 ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired) {
 // todo: makes a closure taking locals from parent scope
 //	if (!this->name) {return new Type(FN);
 		
 //	}
-	if (!this->scope){
-		this->scope=new Scope;
-		definer_scope->push_child(this->scope);
-		this->scope->owner=this;
-	};
+	auto sc=definer_scope->make_inner_scope(&this->scope,this);
 		//this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
-	auto sc=this->scope;
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 		auto arg=this->args[i];
 		auto v=sc->find_scope_variable(arg->name);
@@ -1514,8 +1563,8 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			if (peek==CLOSE_BRACKET || peek==CLOSE_BRACE || peek==COMMA || peek==SEMICOLON)
 				break;
 		}
-		dbprintf(":%s\n",getString(src.peek_tok()));
-		dbprintf("parse:- %zu %zu\n",operands.size(),operators.size());
+		dbprintf(";:%s\n",getString(src.peek_tok()));
+		dbprintf(";parse:- %zu %zu\n",operands.size(),operators.size());
 //		printf("operands:");dump(operands);
 //		printf("operators:");dump(operators);printf("\n");
 
@@ -1572,7 +1621,6 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 		}
 		else{
 			auto tok=src.eat_tok();
-			print_tok(tok);dbprintf("<<<<\n");
 			if (is_operator(tok)) {
 				if (was_operand) tok=get_infix_operator(tok);
 				else tok=get_prefix_operator(tok);
@@ -1788,7 +1836,7 @@ ResolvedType ExprIf::resolve(Scope* s,const Type* desired){
 
 
 void ExprFor::dump(int d) const {
-	newline(d);printf("for ");
+	newline(d);dbprintf("for ");
 	if (this->is_c_for()) {
 		this->init->dump(d+1); newline(d);dbprintf(";");
 		this->cond->dump(d+1); newline(d);dbprintf(";");
@@ -1959,6 +2007,7 @@ const char* g_TestProg=
 
 	"fn main(argc:int,argv:ptr[ptr[char]])->int{"
 	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
+	"	for i:=0; i<10; i+=1{x+=i;}"
 	"	printf(\"Hello From My Language %.3f %d\", lerp(10.0,20.0,0.5),x );0"
 	"}"
 

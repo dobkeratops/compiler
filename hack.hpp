@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <set>
 #include <string.h>
 
 #ifdef DEBUG
@@ -24,8 +25,10 @@ extern bool is_comparison(int t);
 
 using std::string;
 using std::vector;
+using std::set;
 using std::cout;
 using std::map;
+using std::pair;
 using std::initializer_list;
 template<typename T,typename S>
 T& operator<<(T& dst, const vector<S>&src) { for (auto &x:src){dst<<x;};return dst;};
@@ -113,6 +116,7 @@ struct Scope;
 struct ExprStructDef;
 struct ExprIdent;
 struct Type;
+struct Variable;
 struct ResolvedType{
 	enum Status:int {COMPLETE=0,INCOMPLETE=1,ERROR=3};
 	// complete is zero, ERROR is 3 so we can
@@ -149,6 +153,8 @@ public:
 	RegisterName get_reg_new(Name baseName, int* new_index);
 	RegisterName get_reg_existing();
 	virtual bool is_undefined()const{if (this && name==PLACEHOLDER) return true; return false;}
+	
+	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const{return ;}
 };
 
 struct TypeParam{int name; int defaultv;};
@@ -209,6 +215,7 @@ public:
 };
 struct ExprScopeBlock : Expr{};
 struct ExprFnDef;
+struct Variable;
 struct ExprBlock :public ExprScopeBlock{
 	// used for operators, function calls and compound statement
 	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
@@ -238,6 +245,7 @@ struct ExprBlock :public ExprScopeBlock{
 	Node* clone() const;
 	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_operator)call_operator->clear_reg(); regname=0;};
 	bool is_undefined()const ;
+	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
 };
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
@@ -339,7 +347,7 @@ struct Call {
 	Call(){scope=0;next_of_scope=0;caller=0;next_of_caller=0;callee=0;next_of_fn=0;}
 };
 */
-enum VarKind{VkArg,Local,GLobal};
+enum VarKind{VkArg,Local,Global};
 struct Variable : Expr{
 	VarKind kind;
 	Scope* owner;
@@ -351,6 +359,7 @@ struct Variable : Expr{
 		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
 		v->next=0; v->set_type(this->get_type()); return v;
 	}
+	void dump(int depth) const;
 };
 // scopes are created when resolving; generic functions are evaluated
 struct Scope {
@@ -389,6 +398,16 @@ struct Scope {
 	Scope* parent_or_global()const{
 		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
 	}
+	Scope* make_inner_scope(Scope** pp_scope,ExprFnDef* fn_owner=0){
+		if (!*pp_scope){
+			auto sc=new Scope;
+			push_child(sc);
+			sc->owner=fn_owner;
+			*pp_scope=sc;
+		}
+		return *pp_scope;
+	};
+
 };
 ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
 
@@ -409,6 +428,7 @@ struct ExprIf :  Expr {
 	virtual const char* kind_str()const{return"if";}
 	ResolvedType resolve(Scope* scope,const Type*) ;
 	bool is_undefined()const{return cond->is_undefined()||body->is_undefined()||else_block->is_undefined();}
+	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
 };
 struct ExprFor :  Expr {
 	Expr* pattern=0;
@@ -417,16 +437,18 @@ struct ExprFor :  Expr {
 	Expr* incr=0;
 	Expr* body=0;
 	Expr* else_block=0;
+	Scope* scope;
 	void dump(int depth) const;
 	bool is_c_for()const{return !pattern;}
 	bool is_for_in()const{return pattern && cond==0 && incr==0;}
-	ExprFor(){name=0;pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;}
+	ExprFor(){name=0;pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;scope=0;}
 	~ExprFor(){}
 	virtual const char* kind_str()const{return"if";}
-	ResolvedType resolve(Scope* scope,const Type*) {return ResolvedType();};
+	ResolvedType resolve(Scope* scope,const Type*);
 	Expr* find_break_expr();
 	Node* clone()const;
-	bool is_undefined()const{return pattern->is_undefined()||init->is_undefined()||cond->is_undefined()||cond->is_undefined()||incr->is_undefined()||body->is_undefined()||else_block->is_undefined();}
+	bool is_undefined()const{return (pattern&&pattern->is_undefined())||(init &&init->is_undefined())||(cond&&cond->is_undefined())||(incr&&incr->is_undefined())||(body&& body->is_undefined())||(else_block&&else_block->is_undefined());}
+	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
 };
 
 struct Call;
