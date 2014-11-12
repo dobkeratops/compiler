@@ -13,7 +13,9 @@ void dbprintf(const char* str, ... )
 	va_start( arglist, str );
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
+#ifdef DEBUG
 	printf("%s",tmp);
+#endif
 }
 // for real compiler errors.
 void error(Node* n, const char* str, ... ){
@@ -31,7 +33,7 @@ void print_tok(int i){dbprintf("%s ",getString(i));};
 bool g_lisp_mode=false;
 const char* g_token_str[]={
 	"",
-	"int","uint","bool","float","char","str","void","auto","one","zero","voidptr","ptr","ref","tuple",
+	"int","uint","bool","float","char","str","void","auto","one","zero","voidptr","ptr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	"print___","fn","struct","enum","array","vector","union","variant","with","match",
 	"let","set","var",
 	"while","if","else","do","for","in","return","break",
@@ -44,8 +46,9 @@ const char* g_token_str[]={
 	"&","|","^","%","<<",">>",					//bitwise
 	"<",">","<=",">=","==","!=",		//compares
 	"&&","||",		//logical
-	"=",":=",
+	"=",":=","=:",
 	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
+	".=",	// linklist follow
 	"++","--","++","--", //inc/dec
 	"-","*","&","!","~", // unary ops
 	"*?","*!","&?","[]","&[]", // special pointers
@@ -58,7 +61,7 @@ const char* g_token_str[]={
 
 int g_tok_info[]={
 	0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,
 	0,0,0,			// let,set,var
 	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
@@ -71,10 +74,10 @@ int g_tok_info[]={
 	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,		//bitwise
 	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,	// COMPARES
 	READ|13,READ|14,	//logical
-	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
+	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
 	
 	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16, // assign-op
-	
+	WRITE_LHS|READ|ASSOC|16, // dot-assign
 	MODIFY|PREFIX|UNARY|2,MODIFY|PREFIX|UNARY|2,MODIFY|UNARY|ASSOC|3,MODIFY|UNARY|ASSOC|3, // post/pre inc/dec
 	READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3, //unary ops
 	READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, /// special pointers
@@ -193,7 +196,8 @@ StringTable::StringTable(const char** initial){
 	dbprintf("%d",nextId);
 	ASSERT(nextId==IDENT);
 }
-int StringTable::get_index(const char* str, const char* end) {
+int StringTable::get_index(const char* str, const char* end,char flag) {
+	if (!end) end=str+strlen(str);
 	auto len=(end)?(end-str):strlen(str);
 	string s; s.resize(len);memcpy((char*)s.c_str(),str,len);((char*)s.c_str())[len]=0;
 	auto ret=names.find(s);
@@ -201,6 +205,7 @@ int StringTable::get_index(const char* str, const char* end) {
 	names.insert(std::make_pair(s,nextId));
 	index_to_name.resize(nextId+1);
 	index_to_name[nextId]=s;
+	flags.resize(nextId+1); flags[nextId]=flag;
 //		std::cout<<s <<index_to_name[nextId];
 	if (verbose)
 		dbprintf("insert[%d]%s\n",nextId,index_to_name[nextId].c_str());
@@ -216,13 +221,14 @@ void StringTable::dump(){
 
 StringTable g_Names(g_token_str);
 int getStringIndex(const char* str,const char* end) {
-	if (!end) end=str+strlen(str);
-	return g_Names.get_index(str, end);
+	return g_Names.get_index(str, end,0);
 }
 const char* getString(int index) {
 	return g_Names.index_to_name[index].c_str();
 }
-
+int getNumberIndex(int num){
+	char tmp[32];sprintf(tmp,"%d",num); return g_Names.get_index(tmp,0,StringTable::Number);
+}
 
 void indent(int depth) {
 	for (int i=0; i<depth; i++){dbprintf("\t");};
@@ -260,14 +266,19 @@ RegisterName Node::get_reg(Name baseName, int *new_index, bool force_new){
 	// variable might be in a local scope shadowing others, so it still needs a unique name
 	// names are also modified by writes, for llvm SSA
 	if (!regname || force_new){
-		return get_reg_new(baseName,new_index);
-	} else
+		auto old=regname;
+		auto ret= get_reg_new(baseName,new_index);
+		std::cout<<this<<" "<<str(old)<<" ="<<str(ret)<<" \n";
+		return ret;
+	} else{
+		std::cout<<str(regname)<<" = ok\n";
 		return regname;
+	}
 }
 RegisterName Node::get_reg_new(Name baseName, int* new_index) {
 	char name[256];
 	sprintf(name, "r%d%s",(*new_index)++,baseName>=IDENT?getString(baseName):"");
-	return this->regname=g_Names.get_index(name,0);
+	return this->regname=g_Names.get_index(name,0,0);
 }
 void verify(const Type* a){
 	if (a){
@@ -533,6 +544,11 @@ void Type::dump_sub()const{
 			dbprintf("]");
 		}
 	}
+}
+bool Type::is_complex()const{
+	for (auto a=sub; a;a=a->next)if (a->is_complex()) return true;
+	if (this->is_struct()||this->name==ARRAY||this->name==VARIANT) return true;
+	return false;
 }
 bool Type::is_struct()const{
 	return struct_def!=0;
@@ -914,7 +930,7 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 		for (auto i=0; i<args.size(); i++){
 			dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");
 		}
-		error(0,";No match found for %s",getString(name));
+		dbprintf(0,";No match found for %s",getString(name));
 		return nullptr;
 	}
 	if (ambiguity){
@@ -979,26 +995,31 @@ Variable* Scope::find_variable_rec(Name name){
 	if (auto v=find_scope_variable(name)) return v;
 	if (this->parent) return this->parent->find_variable_rec(name);
 	return nullptr;
-	
 }
+/*
 Variable* Scope::get_or_create_variable(Name name,VarKind k){
 	if (auto v=this->find_variable_rec(name)) {
 		return v;
 	}
 	return this->create_variable(name,k);
 }
+ */
 Variable* Scope::create_variable(Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	ASSERT(exv==0);
 	auto v=new Variable(name,k); v->next=this->vars; this->vars=v;
 	v->name=name;v->owner=this;
+	std::cout<<"create "<<str(name)<<" "<<v<<"\n";
 	return v;
 }
-Variable* Scope::get_scope_variable(Name name,VarKind k){
+Variable* Scope::get_or_create_scope_variable(Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
+	auto shadow_v=find_variable_rec(name);
 	if (exv) return exv;
-	auto v=new Variable(name,k); v->next=this->vars; this->vars=v;v->owner=this;
-	v->name=name;
+	if (shadow_v){
+		std::cout<<"warning shadowing variable "<<str(name)<<" in "<<this->name()<<"\n";
+	}
+	auto v=this->create_variable(name,k);
 	return v;
 }
 void Scope::dump(int depth)const {
@@ -1044,7 +1065,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		else {ASSERT(0);return ResolvedType();}
 	}
 	else 
-	if (op_ident==ASSIGN || op_ident==LET_ASSIGN) {
+	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
 		ASSERT(this->argls.size()==2);
 		auto vname=this->argls[0]->ident();	//todo: rvalue malarchy.
 //			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
@@ -1052,9 +1073,18 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		this->argls[0]->dump(0);
 		dbprintf("resolve block getvar %p %s\n", sc, getString(vname));
 		if (op_ident==LET_ASSIGN){
-			auto new_var=sc->get_scope_variable(vname,Local);
+			auto new_var=sc->get_or_create_scope_variable(vname,Local);
 			ASSERT(new_var);
 			return propogate_type(rhs_t, new_var->type_ref(),desired);
+		}
+		else if (op_ident==ASSIGN_COLON){ // create a var, of given type.
+				// todo: get this in the main parser
+			auto lhs=dynamic_cast<ExprIdent*>(this->argls[0]);
+			auto rhs=dynamic_cast<Type*>(this->argls[1]);
+//			auto v=sc->find_variable_rec(this->argls[0]->name);
+			auto v=sc->get_or_create_scope_variable(lhs->name,Local);
+			v->set_type(rhs);
+			return propogate_type(v->type_ref(),this->type_ref());
 		}
 		else {
 			propogate_type_fwd(desired, this->type_ref());
@@ -1082,13 +1112,14 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		// comparisons yield bool, ...
 		// but for now, we just say any unset types flow thru the operator.
 		Type* ret=0;
-		if (op_ident==COLON){
+		if (op_ident==COLON){ // TYPE ASSERTION,
 			// todo: get this in the main parser
 			ASSERT(dynamic_cast<ExprIdent*>(this->argls[1]));
 			int tname=this->argls[1]->name;
 			auto v=sc->find_variable_rec(this->argls[0]->name);
 			if (!v->get_type()){
-				v->set_type(new Type(tname));
+				v->set_type((const Type*)this->argls[1]);
+				ASSERT(dynamic_cast<Type*>(this->argls[1]))
 			}
 			propogate_type(v->type_ref(),this->type_ref());
 		}
@@ -1172,6 +1203,20 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		dbprintf("resolve arg %d type=",i); auto t=block->argls[i]->get_type(); if (t) t->dump(-2); printf("\n");
 	}
 	ASSERT(block->call_target==0);
+	// is it just an array access.
+	if (block->square_bracket){
+		auto object_t=block->call_operator->resolve(scope,nullptr);
+		auto index_t=block->argls[0]->resolve(scope,nullptr);
+		//find the method "index(t,index_t)"
+		// for the minute, just assume its' an array
+		// TODO: operator overload.
+
+		if (object_t.type && index_t.type) {
+			ASSERT(object_t.type->is_array() || object_t.type->is_pointer());
+			return ResolvedType(object_t.type->sub,ResolvedType::COMPLETE);
+		}
+		return ResolvedType();
+	}
 
 	ExprFnDef* call_target = scope->find_fn(block->call_operator->ident(), block->argls, desired);
 	auto fnc=call_target;
@@ -1537,6 +1582,19 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 }
 Type* parse_type(TokenStream& src, int close);
 
+LLVMType Expr::get_type_llvm() const
+{
+	if (!this) return LLVMType{VOID,0};
+	if (!this->m_type) return LLVMType{VOID,0};
+	auto tn=this->m_type->name;
+	if (tn==VOID) return LLVMType{VOID,0};
+	if (!this->m_type->sub) return LLVMType{tn,0};
+	if (tn==PTR || tn==DEREF ||tn==ADDR ) return LLVMType{this->m_type->sub->name,true};
+	// todo structs, etc - llvm DOES know about these.
+	return LLVMType{0,0};
+}
+
+
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	// shunting yard parser
 	ExprBlock *node=new ExprBlock; node->call_operator=op;
@@ -1546,6 +1604,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	bool	was_operand=false;
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
+	node->square_bracket=close==CLOSE_BRACKET;
 
 	while (true) {
 		if (!src.peek_tok()) break;
@@ -1607,9 +1666,19 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 				operands.push_back(parse_call(src, CLOSE_PAREN,SEMICOLON, pop(operands)));
 				// call result is operand
 			}
-			else {operands.push_back(parse_call(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
+			else {
+				operands.push_back(parse_call(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
 			}
+		} else if (src.eat_if(OPEN_BRACKET)){
+			if (was_operand){
+				operands.push_back(parse_call(src,CLOSE_BRACKET,COMMA,pop(operands)));
+			} else {
+				//dbprintf("TODO: array literal [....]\n");
+				operands.push_back(parse_call(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
+				was_operand=true;
+			}
+		
 		} else if (src.eat_if(delim)) {
 			flush_op_stack(node,operators,operands);
 			was_operand=false;
@@ -1633,13 +1702,19 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 						break;
 					pop_operator_call(operators,operands);
 				}
-				
 				if (tok==COLON){// special case: : invokes parsing type. TODO: we actually want to get rid of this? type could be read from other nodes, parsed same as rest?
 					Type *t=parse_type(src,0);
 					auto lhs=operands.back();
 					lhs->set_type(t);
 					was_operand=true;
-				} else {
+				} else if (tok==ASSIGN_COLON){ //x=:Type  ... creates a var of 'Type'.
+					Type *t=parse_type(src,0);
+					operators.push_back(tok);
+					operands.push_back(t);
+					was_operand=true;
+				}
+
+				else{
 					operators.push_back(tok);
 					was_operand=false;
 				}
@@ -2021,9 +2096,15 @@ const char* g_TestProg=
 	"fn printf(s:str,...)->int;"
 
 	"fn main(argc:int,argv:**char)->int{"
+	"	xs=:array[int,512];"
+	"	xs[1]=20;"
+    "	xs[2]=000;"
+	"	xs[2]+=400;"
+	"   z:=5;"
+	"   y:=xs[1]+z+xs[2];"
 	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
 	"	for i:=0,j:=0; i<10; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
-	"	printf(\"Hello From My Language %.3f %d\", lerp(10.0,20.0,0.5),x );0"
+	"	printf(\"Hello From My Language %.3f %d %d\", lerp(10.0,20.0,0.5),y,x );0"
 	"}"
 
 /*
@@ -2057,7 +2138,7 @@ int main(int argc, const char** argv) {
 	global.dump(0);
 	FILE* ofp=fopen("test.ll","wb");
 	output_code(ofp, &global);
-	fprintf(ofp,"\n;end\0");
+	fprintf(ofp,"\n;end");
 	fclose(ofp);
 }
 

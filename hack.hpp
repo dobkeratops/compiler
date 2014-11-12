@@ -56,7 +56,7 @@ extern int operator_flags(int tok);
 enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
-	INT,UINT,BOOL,FLOAT,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,
+	INT,UINT,BOOL,FLOAT,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,NUMBER,TYPE,NAME,
 	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH,
 	LET,SET,VAR,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
@@ -71,8 +71,9 @@ enum Token {
 	AND,OR,XOR,MOD,SHL,SHR,
 	LT,GT,LE,GE,EQ,NE,
 	LOG_AND,LOG_OR,
-	ASSIGN,LET_ASSIGN,
+	ASSIGN,LET_ASSIGN,ASSIGN_COLON,
 	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,AND_ASSIGN,OR_ASSIGN,XOR_ASSIGN,MOD_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,
+	DOT_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
 	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,
 	COMMA,SEMICOLON,
@@ -97,17 +98,22 @@ extern const char* g_token_str[];
 extern int g_tok_info[];
 
 struct StringTable {
+	enum Flags :char {String,Number};
 	int	nextId= 0;
 	bool verbose;
 	map<string,int>	names;
 	vector<string> index_to_name; //one should be index into other lol
+	vector<char>	flags;
 	StringTable(const char** initial);
-	int get_index(const char* str, const char* end);
+	int get_index(const char* str, const char* end,char flags);
 	void dump();
 };
 extern StringTable g_Names;
-int getStringIndex(const char* str,const char* end=0);
-const char* getString(int index);
+Name getStringIndex(const char* str,const char* end=0);
+Name getNumberIndex(int num);	// ints in the type system stored like so
+int getNumberInt(Name n);
+float getNumberFloat(Name n);
+const char* getString(Name index);
 void indent(int depth);
 inline const char* str(int n){return getString(n);}
 
@@ -159,35 +165,13 @@ public:
 
 struct TypeParam{int name; int defaultv;};
 
-struct Type : Node{
-	int marker;
-	vector<TypeParam> typeparams;
-	ExprStructDef* struct_def;
-	Type*	sub;	// a type is itself a tree
-	Type*	next;
-	void push_back(Type* t);
-	virtual const char* kind_str()const;
-	Type(ExprStructDef* sd);
-	Type(Name i);
-	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
-	bool is_struct()const;
-	int num_pointers()const;
-	bool is_pointer()const {return this && this->name==PTR || this->name==REF;}
-	bool is_void()const {return !this || this->name==VOID;}
-	ExprStructDef* get_struct() const; // strip away all pointers.
-	int num_derefs()const {if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
-	Type* deref_all() const{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
-	bool eq(const Type* other) const;
-	void dump_sub()const;
-	void dump(int depth)const;
-	Node* clone() const;
-	void clear_reg(){regname=0;};
-};
 struct LLVMType {
 	int name;
 	bool is_pointer;
 };
 extern void verify(const Type* t);
+struct Type;
+struct ExprBlock;
 struct Expr : Node{
 private:Type* m_type;
 public:
@@ -201,18 +185,45 @@ public:
 	void type(const Type* t){ verify(t);this->m_type=(Type*)t;}
 	void set_type(const Type* t){verify(t);this->m_type=(Type*)t;};
 	Type*& type_ref(){return this->m_type;}
-	LLVMType get_type_llvm() const {
-		if (!this) return LLVMType{VOID,0};
-		if (!this->m_type) return LLVMType{VOID,0};
-		auto tn=this->m_type->name;
-		if (tn==VOID) return LLVMType{VOID,0};
-		if (!this->m_type->sub) return LLVMType{tn,0};
-		if (tn==PTR || tn==DEREF ||tn==ADDR ) return LLVMType{this->m_type->sub->name,true};
-		// todo structs, etc - llvm DOES know about these.
-		return LLVMType{0,0};
-	}
+	LLVMType get_type_llvm() const;
 	virtual Type* eval_as_type()const{return nullptr;};
+	virtual ExprBlock* is_subscript(){return (ExprBlock*)nullptr;}
+
 };
+struct Type : Expr{
+	int marker;
+	vector<TypeParam> typeparams;
+	ExprStructDef* struct_def;
+	Type*	sub;	// a type is itself a tree
+	Type*	next;
+	void push_back(Type* t);
+	virtual const char* kind_str()const;
+	Type(Name a,Name b): Type(a){push_back(new Type(b));}
+	Type(Name a,Name b,Name c): Type(a){
+		auto tc=new Type(c); auto tb=new Type(b); tb->push_back(tc); push_back(tb);
+	}
+	Type(ExprStructDef* sd);
+	Type(Name i);
+	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
+	int alignment() const{return  4;};
+	int size() const;
+	bool is_register()const{return !is_complex();}
+	bool is_complex()const;
+	bool is_struct()const;
+	bool is_array()const{return name==ARRAY;}
+	int num_pointers()const;
+	bool is_pointer()const {return (this && this->name==PTR) || (this->name==REF);}
+	bool is_void()const {return !this || this->name==VOID;}
+	ExprStructDef* get_struct() const; // strip away all pointers.
+	int num_derefs()const {if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
+	Type* deref_all() const{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
+	bool eq(const Type* other) const;
+	void dump_sub()const;
+	void dump(int depth)const;
+	Node* clone() const;
+	void clear_reg(){regname=0;};
+};
+
 struct ExprScopeBlock : Expr{};
 struct ExprFnDef;
 struct Variable;
@@ -221,6 +232,7 @@ struct ExprBlock :public ExprScopeBlock{
 	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
 	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
 	// the similarity between all is
+	bool square_bracket;  // aka foo[a]  in C desugars as *(foo+a)
 	bool is_compound_expression()const{return !call_operator &&!call_target && !name;}
 	Expr*	call_operator;
 	vector<Expr*>	argls;
@@ -235,6 +247,7 @@ struct ExprBlock :public ExprScopeBlock{
 			return 0;
 		}
 	}
+	virtual ExprBlock* is_subscript(){if (this->square_bracket) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
 	ExprFnDef* get_fn_call()const {return this->call_target;}
 	int get_op_name()const;
 	Name get_fn_name() const;
@@ -356,6 +369,7 @@ struct Variable : Expr{
 	Variable(Name n,VarKind k){name=n; initialize=0; Scope* owner;kind=k;this->set_type(0);}
 	Node* clone() const {
 		auto v=new Variable(name,this->kind);
+		std::cout<<"clone "<<str(name)<<this<<" as "<<v<<"\n";
 		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
 		v->next=0; v->set_type(this->get_type()); return v;
 	}
@@ -382,9 +396,9 @@ struct Scope {
 	Variable* get_fn_variable(Name name,ExprFnDef* f);
 	Variable* find_variable_rec(Name ident);
 	Variable* find_scope_variable(Name ident);
-	Variable* get_or_create_variable(Name name,VarKind k);
+//	Variable* get_or_create_variable(Name name,VarKind k);
 	Variable* create_variable(Name name,VarKind k);
-	Variable* get_scope_variable(Name name,VarKind k);
+	Variable* get_or_create_scope_variable(Name name,VarKind k);
 	ExprStructDef* find_struct(Name name);
 	ExprFnDef* find_fn(Name name,vector<Expr*>& args, const Type* ret_type) ;
 	void add_struct(ExprStructDef*);
