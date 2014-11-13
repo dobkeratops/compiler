@@ -172,6 +172,7 @@ struct LLVMType {
 extern void verify(const Type* t);
 struct Type;
 struct ExprBlock;
+struct ExprOp;
 struct Expr : Node{
 private:Type* m_type;
 public:
@@ -226,37 +227,46 @@ struct Type : Expr{
 struct ExprScopeBlock : Expr{};
 struct ExprFnDef;
 struct Variable;
+struct ExprOp: public Expr{
+	Expr	*lhs,*rhs;
+	int get_operator() const { return this->name;}
+	int get_op_name() const { return this->name;}
+	Node* clone() const;
+	void clear_reg(){ lhs->clear_reg(); rhs->clear_reg();}
+	ExprOp(Name opname) { name=opname; lhs=0; rhs=0;}
+	ExprOp(Name opname, Expr* l, Expr* r){
+		lhs=l; rhs=r;
+		name=opname;
+	}
+	virtual const char* kind_str()const{return"operator";}
+	void dump(int depth) const;
+	virtual void find_vars_written(Scope* s, set<Variable*>& vars) const;
+	bool is_undefined()const{return (lhs?lhs->is_undefined():false)||(rhs?rhs->is_undefined():false);}
+	ResolvedType resolve(Scope* scope, const Type* desired);
+};
+
 struct ExprBlock :public ExprScopeBlock{
 	// used for operators, function calls and compound statement
 	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
 	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
 	// the similarity between all is
 	bool square_bracket;  // aka foo[a]  in C desugars as *(foo+a)
-	bool is_compound_expression()const{return !call_operator &&!call_target && !name;}
+	bool is_compound_expression()const{return !call_expr &&!call_target && !name;}
 
-	Expr*	call_operator;
+	Expr*	call_expr;  //call_expr(argls...)  or {argsls...}
 	vector<Expr*>	argls;
 	ExprFnDef*	call_target;
 	Scope* scope;
 	ExprBlock* next_of_call_target;	// to walk callers to a function
-	int get_operator()const{
-		if (call_operator && !call_target){
-			return is_operator(call_operator->name)?call_operator->name:0;
-		}
-		else{
-			return 0;
-		}
-	}
 	virtual ExprBlock* is_subscript(){if (this->square_bracket) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
 	ExprFnDef* get_fn_call()const {return this->call_target;}
-	int get_op_name()const;
 	Name get_fn_name() const;
 	void dump(int depth) const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	virtual const char* kind_str()const{return"block";}
 	ExprBlock();
 	Node* clone() const;
-	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_operator)call_operator->clear_reg(); regname=0;};
+	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); regname=0;};
 	bool is_undefined()const ;
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
 };
@@ -310,7 +320,7 @@ struct ExprLiteral : Expr {
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	bool is_undefined()const{return false;}
 	const char* as_str()const{ return type_id==T_CONST_STRING?u.val_str:"";}
-	int strlen() const;
+	size_t strlen() const;
 };
 
 struct ArgDef :Node{
@@ -367,7 +377,7 @@ struct Variable : Expr{
 	Scope* owner;
 	Variable* next;
 	Expr* initialize; // if its an argdef, we instantiate an initializer list
-	Variable(Name n,VarKind k){name=n; initialize=0; Scope* owner;kind=k;this->set_type(0);}
+	Variable(Name n,VarKind k){name=n; initialize=0; owner=0;kind=k;this->set_type(0);}
 	Node* clone() const {
 		auto v=new Variable(name,this->kind);
 		std::cout<<"clone "<<str(name)<<this<<" as "<<v<<"\n";

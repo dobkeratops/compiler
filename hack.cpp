@@ -352,26 +352,31 @@ StructDef* dump_find_struct(Scope* s, Name name){
 	}
 	return nullptr;
 }
+void ExprOp::find_vars_written(Scope* s, set<Variable *> &vs) const{
+	auto flags=operator_flags(name);
+	if (lhs) lhs->find_vars_written(s,vs);
+	if (rhs) rhs->find_vars_written(s,vs);
+	if (flags&WRITE_LHS){
+		if (auto vname=dynamic_cast<ExprIdent*>(this->lhs)){
+			if (auto var=s->find_variable_rec(vname->name)){
+				vs.insert(var);
+			}
+		}
+	}
+	if (flags&WRITE_RHS){
+		if (auto vname=dynamic_cast<ExprIdent*>(this->rhs)){
+			if (auto var=s->find_variable_rec(vname->name)){
+				vs.insert(var);
+			}
+		}
+		
+	}
+}
 
 void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const
 {
-	if(auto op=this->get_operator()){
-		auto flags=operator_flags(op);
-		if (flags&WRITE_LHS){
-			if (auto vname=dynamic_cast<ExprIdent*>(this->argls[0])){
-				if (auto var=s->find_variable_rec(vname->name)){
-					vars.insert(var);
-				}
-			}
-		}
-		if (flags&WRITE_RHS){
-			if (auto vname=dynamic_cast<ExprIdent*>(this->argls[1])){
-				if (auto var=s->find_variable_rec(vname->name)){
-					vars.insert(var);
-				}
-			}
-			
-		}
+	if (this->call_expr){
+		this->call_expr->find_vars_written(s, vars);
 	}
 	for (auto a:argls)
 		a->find_vars_written(s,vars);
@@ -416,39 +421,39 @@ void ExprIdent::dump(int depth) const {
 
 Name ExprBlock::get_fn_name()const
 {	// distinguishes operator &  function call
-	if (call_operator){
-		ASSERT(dynamic_cast<ExprIdent*>(call_operator)&& "TODO: distinguish expression with computed function name");
-		return call_operator->name;
+	if (call_expr){
+		ASSERT(dynamic_cast<ExprIdent*>(call_expr)&& "TODO: distinguish expression with computed function name");
+		return call_expr->name;
 	}
 	else if (get_fn_call()){return get_fn_call()->name;}
 	else return 0;
 }
 
 
-int ExprBlock::get_op_name()const{
-	ASSERT(0);
-	if (call_operator!=0)
-		return call_operator->get_name();
-	else return 0;
-}
 void ExprBlock::dump(int depth) const {
 	if (!this) return;
 	newline(depth);
-	if (this->call_operator || this->get_fn_call()){
-		int id=this->call_operator->ident();
-		if (is_operator(id)) {
-			if (is_prefix(id))dbprintf("prefix");
-			else if (this->argls.size()>1)dbprintf("infix");
-			else dbprintf("postfix");print_tok(id);
-		}
-		else if(get_fn_call()){
-			dbprintf("%s",getString(get_fn_call()->name));
-		};
-		if (this->get_type()) {dbprintf(":");this->get_type()->dump(-1);};dbprintf("(");} else dbprintf("{");
+	if (this->get_fn_call()){
+		dbprintf("%s",getString(get_fn_call()->name));
+		if (this->get_type()) {dbprintf(":");this->get_type()->dump(-1);};dbprintf("(");}
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
-	newline(depth);if (this->call_operator)dbprintf(")");else dbprintf("}");
+	newline(depth);if (this->call_expr)dbprintf(")");
+}
+
+void ExprOp::dump(int depth) const {
+	if (!this) return;
+	newline(depth);
+	int id=this->name;
+	if (is_prefix(id))dbprintf("prefix");
+	else if (lhs && rhs)dbprintf("infix");
+	else dbprintf("postfix");print_tok(id);
+
+	if (get_type()) {dbprintf(":");get_type()->dump(-1);};dbprintf("(");
+	if (lhs) {lhs->dump(depth+1);}else{dbprintf("(none)");}
+	if (rhs) {rhs->dump(depth+1);}else{dbprintf("(none)");}
+	newline(depth);dbprintf(")");
 }
 
 ExprBlock::ExprBlock(){call_target=0;}
@@ -592,7 +597,7 @@ ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired){
 		this->owner_scope=sc->global;
 	}
 	if (!this->name){
-		char str[256]; if (!this->name){sprintf(str,"str%x\0",(uint32_t)0xffff&(size_t)this); this->name=getStringIndex(str);}
+		char str[256]; if (!this->name){sprintf(str,"str%x",(uint)(size_t)this); this->name=getStringIndex(str);}
 	}
 	if (!this->get_type()) {
 		Type* t=nullptr;
@@ -607,7 +612,7 @@ ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired){
 	}
 	return propogate_type_fwd(desired,this->type_ref());
 }
-int ExprLiteral::strlen() const{
+size_t ExprLiteral::strlen() const{
 	if (type_id==T_CONST_STRING)
 		return ::strlen(this->u.val_str);
 	else return 0;
@@ -768,14 +773,16 @@ ExprFnDef* instantiate_generic_function(Scope* s,ExprFnDef* src, vector<Expr*>& 
 	new_fn->resolve(s,nullptr);//todo: we can use output type in instantiation too
 	return new_fn;	// welcome new function!
 }
+Node* ExprOp::clone() const {
+	return (Node*) new ExprOp(this->name, (Expr*) this->lhs->clone_if(), (Expr*) this->rhs->clone_if());
+}
 Node* ExprBlock::clone() const {
 	if (!this) return nullptr;
 	auto r=new ExprBlock();
-	if (this->call_operator) {
-		r->call_operator = (Expr*) this->call_operator->clone();
+	if (this->call_expr) {
+		r->call_expr = (Expr*) this->call_expr->clone();
 	}
-	if (this->get_type()){r->set_type((Type*)this->get_type()->clone());}
-	else{r->set_type(0);}
+	r->set_type((Type*)this->get_type()->clone_if());
 	r->call_target=this->call_target;
 	r->name=this->name;
 	r->argls.resize(this->argls.size());
@@ -1037,18 +1044,135 @@ void dump(vector<T*>& src) {
 		dbprintf(src[i]->dump());
 	}
 }
+
+// the fact is, i DO like C++.
+// I just dont like header files.
+
+ResolvedType ExprOp::resolve(Scope* sc, const Type* desired) {
+	Type* ret=0;
+	auto op_ident=name;
+	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
+		ASSERT(this->lhs && this->rhs);
+		auto vname=lhs->ident();	//todo: rvalue malarchy.
+		//			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
+		auto rhs_t=rhs->resolve(sc,desired);
+		lhs->dump(0);
+		dbprintf("resolve block getvar %p %s\n", sc, getString(vname));
+		if (op_ident==LET_ASSIGN){
+			auto new_var=sc->get_or_create_scope_variable(vname,Local);
+			ASSERT(new_var);
+			return propogate_type(rhs_t, new_var->type_ref(),desired);
+		}
+		else if (op_ident==ASSIGN_COLON){ // create a var, of given type.
+			// todo: get this in the main parser
+			auto lhsi=dynamic_cast<ExprIdent*>(lhs);
+			auto rhst=dynamic_cast<Type*>(rhs);
+			//			auto v=sc->find_variable_rec(this->argls[0]->name);
+			auto v=sc->get_or_create_scope_variable(lhsi->name,Local);
+			v->set_type(rhst);
+			return propogate_type(v->type_ref(),type_ref());
+		}
+		else {
+			propogate_type_fwd(desired, type_ref());
+			propogate_type(rhs->type_ref(), type_ref());
+			auto lhs_t=lhs->resolve(sc,type_ref());
+			propogate_type(type_ref(),lhs->type_ref());
+			return propogate_type(this->type_ref(),lhs->type_ref());
+		}
+	}
+	else if (op_ident==COLON){ // TYPE ASSERTION,
+		// todo: get this in the main parser
+		ASSERT(dynamic_cast<ExprIdent*>(rhs));
+		int tname=rhs->name;
+		auto v=sc->find_variable_rec(lhs->name);
+		if (!v->get_type()){
+			v->set_type((const Type*)rhs);
+			ASSERT(dynamic_cast<Type*>(rhs))
+		}
+		return propogate_type(v->type_ref(),type_ref());
+	}
+	else if (op_ident==DOT || op_ident==ARROW) {
+		auto lhs_t=lhs->resolve(sc, 0);//type doesn't push up- the only info we have is what field it needs
+		auto t=lhs_t.type;
+		dbprintf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);dbprintf("\n");
+	
+		// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
+		if (t) {
+			t=t->deref_all();
+			// now we have the elem..
+			ASSERT(dynamic_cast<ExprIdent*>(rhs));
+			if (auto st=sc->find_struct(t->name)){
+				if (auto f=st->find_field(rhs->name)){
+					f->dump(-1);
+					ret=f->type;
+					return propogate_type(ret,this->type_ref());
+				}
+			}
+		}
+		return ResolvedType(this->type(),ResolvedType::INCOMPLETE);
+	}
+	else if (op_ident==ADDR){  //result=&lhs
+		// todo: we can assert give type is one less pointer, if given
+		ASSERT(!lhs && rhs);
+		Type* dt=nullptr;
+		if (desired){
+			ASSERT(desired->name==PTR || desired->name==REF);
+			dt=desired->sub;
+		}
+		auto ret=rhs->resolve(sc,dt);
+		if (!this->get_type() && ret.type){
+			auto ptr_type=new Type(PTR); ptr_type->sub=(Type*)ret.type->clone();
+			this->set_type(ptr_type);
+			return propogate_type_fwd(desired,ptr_type);
+		}
+		return ret;
+	}
+	
+	else if (op_ident==DEREF){ //result=*rhs
+		// todo: we can assert give type is one less pointer, if given
+		auto ret=rhs->resolve(sc,0);
+		// todo: its' a typeparam constraint.  ptr[desired]==argls[0]
+		if (!this->get_type() && ret.type){
+			if (ret.type->name!=PTR) {
+				this->dump(0);
+				rhs->dump(0);
+				ret.type->dump(0);
+			}
+			ASSERT(ret.type->name==PTR);
+			this->set_type(ret.type->sub);
+			return propogate_type_fwd(desired, this->type_ref());
+		}
+		else return ResolvedType();
+	}
+	else if (is_condition(op_ident)){
+		auto lhst=lhs->resolve(sc,rhs->type_ref()); // comparisions take the same type on lhs/rhs
+		auto rhst=rhs->resolve(sc,lhs->type_ref());
+		verify(lhs->get_type());
+		verify(rhs->get_type());
+		if (!this->get_type()){
+			this->set_type(new Type(BOOL));
+		};
+		return rhst;
+	}
+	else {
+		// regular operator
+		// TODO propogate types for pointer-arithmetic - ptr+int->ptr   int+ptr->ptr  ptr-ptr->int
+		// defaults to same types all round.
+		auto lhst=lhs->resolve(sc,desired);
+		auto rhst=lhs->resolve(sc,desired);
+		propogate_type(lhst,type_ref());
+		propogate_type(rhst,type_ref());
+		return propogate_type_fwd(desired, type_ref());
+	}
+}
+
 ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 	verify(this->get_type());
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->get_type()) this->set_type(new Type(VOID));
 		return propogate_type_fwd(desired,this->type_ref());
 	}
-	int op_ident=NONE;
 	ExprIdent* p=nullptr;
-	if(this->call_operator){p=dynamic_cast<ExprIdent*>(this->call_operator); op_ident=p->name;}
-//	if (this->square_bracket){	// this[args]
-//		this->args[0]
-//	}else
 	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
 		auto n=0;
 		for (; n<this->argls.size()-1; n++) {
@@ -1062,135 +1186,9 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		}
 		else {ASSERT(0);return ResolvedType();}
 	}
-	else 
-	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
-		ASSERT(this->argls.size()==2);
-		auto vname=this->argls[0]->ident();	//todo: rvalue malarchy.
-//			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
-		auto rhs_t=this->argls[1]->resolve(sc,desired);
-		this->argls[0]->dump(0);
-		dbprintf("resolve block getvar %p %s\n", sc, getString(vname));
-		if (op_ident==LET_ASSIGN){
-			auto new_var=sc->get_or_create_scope_variable(vname,Local);
-			ASSERT(new_var);
-			return propogate_type(rhs_t, new_var->type_ref(),desired);
-		}
-		else if (op_ident==ASSIGN_COLON){ // create a var, of given type.
-				// todo: get this in the main parser
-			auto lhs=dynamic_cast<ExprIdent*>(this->argls[0]);
-			auto rhs=dynamic_cast<Type*>(this->argls[1]);
-//			auto v=sc->find_variable_rec(this->argls[0]->name);
-			auto v=sc->get_or_create_scope_variable(lhs->name,Local);
-			v->set_type(rhs);
-			return propogate_type(v->type_ref(),this->type_ref());
-		}
-		else {
-			propogate_type_fwd(desired, this->type_ref());
-			propogate_type(this->argls[1]->type_ref(), this->type_ref());
-			auto lhs_t=this->argls[0]->resolve(sc,this->type_ref());
-			propogate_type(this->type_ref(),this->argls[0]->type_ref());
-			return propogate_type(this->type_ref(),this->argls[0]->type_ref());
-		}
-	} else if (is_operator(op_ident)){
-		// todo: &t gets adress. *t removes pointer, [i] takes index,
-		// comparisons yield bool, ...
-		// but for now, we just say any unset types flow thru the operator.
-		Type* ret=0;
-		if (op_ident==COLON){ // TYPE ASSERTION,
-			// todo: get this in the main parser
-			ASSERT(dynamic_cast<ExprIdent*>(this->argls[1]));
-			int tname=this->argls[1]->name;
-			auto v=sc->find_variable_rec(this->argls[0]->name);
-			if (!v->get_type()){
-				v->set_type((const Type*)this->argls[1]);
-				ASSERT(dynamic_cast<Type*>(this->argls[1]))
-			}
-			propogate_type(v->type_ref(),this->type_ref());
-		}
-		else
-		if (op_ident==DOT || op_ident==ARROW) {
-			auto lhs=this->argls[0]; auto rhs=this->argls[1];
-			auto lhs_t=this->argls[0]->resolve(sc, 0);//type doesn't push up- the only info we have is what field it needs
-			auto t=lhs_t.type;
-			dbprintf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);dbprintf("\n");
-
-			// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
-			if (t) {
-				t=t->deref_all();
-			// now we have the elem..
-				ASSERT(dynamic_cast<ExprIdent*>(rhs));
-				if (auto st=sc->find_struct(t->name)){
-					if (auto f=st->find_field(rhs->name)){
-						f->dump(-1);
-						ret=f->type;
-						propogate_type(ret,this->type_ref());
-					}
-				}
-			}
-		}
-		else if (op_ident==ADDR){  //result=&lhs
-			// todo: we can assert give type is one less pointer, if given
-			ASSERT(this->argls.size()==1);
-			Type* dt=nullptr;
-			if (desired){
-				ASSERT(desired->name==PTR || desired->name==REF);
-				dt=desired->sub;
-			}
-			auto ret=this->argls[0]->resolve(sc,dt);
-			if (!this->get_type() && ret.type){
-				auto ptr_type=new Type(PTR); ptr_type->sub=(Type*)ret.type->clone();
-				this->set_type(ptr_type);
-				return propogate_type_fwd(desired,ptr_type);
-			}
-			return ret;
-		}
-		else if (op_ident==DEREF){ //result=*lhs
-			// todo: we can assert give type is one less pointer, if given
-			ASSERT(this->argls.size()==1);
-			auto ret=this->argls[0]->resolve(sc,0);
-			// todo: its' a typeparam constraint.  ptr[desired]==argls[0]
-			if (!this->get_type() && ret.type){
-				if (ret.type->name!=PTR) {
-					this->dump(0);
-					this->argls[0]->dump(0);
-					ret.type->dump(0);
-				}
-				ASSERT(ret.type->name==PTR);
-				this->set_type(ret.type->sub);
-				return propogate_type_fwd(desired, this->type_ref());
-			}
-			else return ResolvedType();
-		}
-		else if (is_condition(op_ident)){
-			ASSERT(this->argls.size()==2);
-			auto lhst=this->argls[0]->resolve(sc,this->argls[1]->type_ref());
-			auto rhst=this->argls[1]->resolve(sc,this->argls[0]->type_ref());
-			verify(this->argls[0]->get_type());
-			verify(this->argls[1]->get_type());
-			if (!this->get_type()){
-				this->set_type(new Type(BOOL));
-			};
-			return rhst;
-		}
-		else {
-			// regular operator
-			// TODO propogate types for pointer-arithmetic - ptr+int->ptr   int+ptr->ptr  ptr-ptr->int
-			propogate_type_fwd(desired, this->type_ref());
-			for (auto i=0; i<this->argls.size();i++){
-				auto r=this->argls[i]->resolve(sc,desired);
-				propogate_type(r,this->type_ref());
-//				propogate_type_fwd(desired,ret);
-			}
-		}
-		return propogate_type_fwd(desired, this->type_ref());
-	} else if (op_ident==PLACEHOLDER) {
-		return propogate_type_fwd(desired,this->type_ref());
-		// dump given types here...
-		// report candidate functions...
-	}
 	else {
 		dbprintf(";resolve call..%s\n",getString(p->ident()));
-			// TODO: distinguish 'partially resolved' from fully-resolved.
+		// TODO: distinguish 'partially resolved' from fully-resolved.
 		// at the moment we only pick an fn when we know all our types.
 		// But, some functions may be pure generic? -these are ok to match to nothing.
 		// todo:
@@ -1223,7 +1221,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 	ASSERT(block->call_target==0);
 	// is it just an array access.
 	if (block->square_bracket){
-		auto object_t=block->call_operator->resolve(scope,nullptr);
+		auto object_t=block->call_expr->resolve(scope,nullptr);
 		auto index_t=block->argls[0]->resolve(scope,nullptr);
 		//find the method "index(t,index_t)"
 		// for the minute, just assume its' an array
@@ -1236,7 +1234,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		return ResolvedType();
 	}
 
-	ExprFnDef* call_target = scope->find_fn(block->call_operator->ident(), block->argls, desired);
+	ExprFnDef* call_target = scope->find_fn(block->call_expr->ident(), block->argls, desired);
 	auto fnc=call_target;
 	if (call_target!=block->call_target) {
 		if (block->call_target) {
@@ -1370,6 +1368,9 @@ void gather_named_items(Node* node, Scope* sc) {
 		for (auto sub:b->argls) {
 			gather_named_items(sub,sc);
 		}		
+	} else if (auto op=dynamic_cast<ExprOp*>(node)){
+		gather_named_items(op->lhs,sc);
+		gather_named_items(op->rhs,sc);
 	}
 }
 void call_graph(Node* root,Scope* scope) {
@@ -1556,16 +1557,16 @@ void pop_operator_call( vector<int>& operators,vector<Expr*>& operands) {
 	//takes the topmost operator from the operator stack
 	//creates an expression node calling it, consumes operands,
 	//places result on operand stack
-									 
-	auto * p=new ExprBlock();
+
 	auto op=pop(operators);
-	p->call_operator=new ExprIdent(op);
+	auto * p=new ExprOp(op);
 	if (operands.size()>=2 && (arity(op)==2)){
 		auto arg1=pop(operands);
-		p->argls.push_back(pop(operands));
-		p->argls.push_back(arg1);
+		p->lhs=pop(operands);
+		p->rhs=arg1;
 	} else if (operands.size()>=1 && arity(op)==1){
-		p->argls.push_back(pop(operands));
+		p->rhs=pop(operands);
+//		p->argls.push_back(pop(operands));
 	} else{
 //						printf("\noperands:");dump(operands);
 //						printf("operators");dump(operators);
@@ -1584,7 +1585,7 @@ void flush_op_stack(ExprBlock* block, vector<int>& ops,vector<Expr*>& vals) {
 
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op);
 
-ExprBlock* parse_expr(TokenStream&src) {
+Expr* parse_expr(TokenStream&src) {
 	return parse_call(src,0,0,nullptr);
 }
 
@@ -1615,8 +1616,8 @@ LLVMType Expr::get_type_llvm() const
 
 
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
-	// shunting yard parser
-	ExprBlock *node=new ExprBlock; node->call_operator=op;
+	// shunting yard expression parser
+	ExprBlock *node=new ExprBlock; node->call_expr=op;
 	verify(node->type());
 	vector<int> operators;
 	vector<Expr*> operands;
@@ -2107,7 +2108,7 @@ const char* g_TestProg=
 	"   z:=5;"
 	"   y:=xs[1]+z+xs[2];"
 	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
-	"	for i:=0,j:=0; i<10; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
+	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
 	"	printf(\"Hello From My Language %.3f %d %d\", lerp(10.0,20.0,0.5),y,x );0"
 	"}\0"
 ;
