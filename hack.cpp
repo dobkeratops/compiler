@@ -449,7 +449,6 @@ void ExprBlock::dump(int depth) const {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
 	newline(depth);if (this->call_operator)dbprintf(")");else dbprintf("}");
-//	newline(depth);
 }
 
 ExprBlock::ExprBlock(){call_target=0;}
@@ -1308,16 +1307,16 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		return ResolvedType();
 }
 
-
 ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired) {
 //	auto scope=new Scope;		
 //	scope->parent=parent; scope->next=parent->child; parent->child=scope;
 //	scope->outer=this;
 //	scope->node=this->body;
 	dbprintf("resolve fn call.. %p\n", scope);
+
 	
 	propogate_type_fwd(desired,this->ret_type);
-	
+
 	auto rt=this->body->resolve(scope,desired);
 	dbprintf("resolve %s yields type:", getString(this->ident()));if (rt.type) rt.type->dump(-1);printf("\n");
 	// awkwardness says: type error return is more like an enum that doesn't return a type?
@@ -1541,11 +1540,12 @@ ExprIf* parse_if(TokenStream&src);
 TypeDef* parse_typedef(TokenStream&src);
 ExprStructDef* parse_struct(TokenStream& src);
 
+
 template<typename T>
 T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
 //#define pop(X) ASSERT(X.size()>0); pop_sub(X);
 
-void dump(vector<Expr*>& v) {
+void dump(vector<Expr*>& v) { 
 	for (int i=0; i<v.size(); i++) {
 		v[i]->dump_top();
 	}
