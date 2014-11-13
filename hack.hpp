@@ -188,12 +188,11 @@ public:
 	LLVMType get_type_llvm() const;
 	virtual Type* eval_as_type()const{return nullptr;};
 	virtual ExprBlock* is_subscript(){return (ExprBlock*)nullptr;}
-
 };
 struct Type : Expr{
 	int marker;
 	vector<TypeParam> typeparams;
-	ExprStructDef* struct_def;
+	ExprStructDef* struct_def;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub;	// a type is itself a tree
 	Type*	next;
 	void push_back(Type* t);
@@ -234,6 +233,7 @@ struct ExprBlock :public ExprScopeBlock{
 	// the similarity between all is
 	bool square_bracket;  // aka foo[a]  in C desugars as *(foo+a)
 	bool is_compound_expression()const{return !call_operator &&!call_target && !name;}
+
 	Expr*	call_operator;
 	vector<Expr*>	argls;
 	ExprFnDef*	call_target;
@@ -295,6 +295,7 @@ struct ExprLiteral : Expr {
 	TypeId	type_id;
 	ExprLiteral* next_of_scope;	// collected..
 	Scope* owner_scope;
+	int llvm_strlen;
 
 	union  {int val_int; int val_uint; float val_float; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
@@ -390,7 +391,7 @@ struct Scope {
 	// locals;
 	// captures.
 	const char* name()const;
-	Scope(){named_items=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;}
+	Scope(){named_items=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
 	void visit_calls();
 	Variable* find_fn_variable(Name ident,ExprFnDef* f);
 	Variable* get_fn_variable(Name name,ExprFnDef* f);
@@ -468,10 +469,6 @@ struct ExprFor :  Expr {
 struct Call;
 struct FnName;
 
-// TODO recognize
-//{x=,y=,z=} // struct initializer
-//{foo;bar} // anything else is not.
-
 struct ExprStructDef: Module {
 	// lots of similarity to a function actually.
 	// but its' backwards.
@@ -483,7 +480,7 @@ struct ExprStructDef: Module {
 	ExprStructDef* instances, *instance_of,*next_of_instance;
 	ExprFnDef* constructor_fn;
 	NamedItems* name_ptr;
-	ArgDef* find_field(int name){ for (auto a:fields){if (a->name==name) return a;} return nullptr;}
+	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} return nullptr;}
 	int field_index(Name name){for (auto i=0; i<fields.size(); i++){if(fields[i]->name==name)return i;} return -1;}
 	
 	ExprStructDef* next_of_name;
@@ -492,9 +489,8 @@ struct ExprStructDef: Module {
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone()const {dbprintf("warning,leak\n");return (Node*) this;};
 	int alignment() const {int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
-	// todo.. generic instantiation: typeparam logic, and adhoc mode.
 };
-
+	// todo.. generic instantiation: typeparam logic, and adhoc mo
 struct ExprFnDef : Module {
 	ExprFnDef*	next_of_module;
 	ExprFnDef*	next_of_name;	//link of all functions of same name...
@@ -536,8 +532,6 @@ struct ExprFnDef : Module {
 	bool is_undefined()const{return body==nullptr || body->is_undefined();};
 	bool is_extern()const {return body==nullptr;}
 };
-#define link(obj,owner,link) obj->link=owner; owner=obj;
-
 
 // What details did we miss ?
 // Codegen is a big issue.

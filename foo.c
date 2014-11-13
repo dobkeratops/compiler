@@ -11,9 +11,10 @@ int main(int argc, const char** argv) {
 	tmp[2]=10;
 	tmp[5]=50;
 	tmp[10]=123456;
-	float x=10.0,y=20.0,z;
+	float x=10.0f,y=20.0f,z;
 	if (argc < 2){
-		printf("hello world %.3f %d\n",tmp[10],z);
+		printf("hello world %.3f %d\n",z,tmp[10]);
 	}
+		printf("<2");
 	return 0;
 }

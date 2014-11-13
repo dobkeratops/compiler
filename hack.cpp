@@ -17,7 +17,7 @@ void dbprintf(const char* str, ... )
 	printf("%s",tmp);
 #endif
 }
-// for real compiler errors.
+// for real compiler errors. todo.. codelocations on nodes
 void error(Node* n, const char* str, ... ){
 	char buffer[1024];
 	va_list arglist;
@@ -206,7 +206,6 @@ int StringTable::get_index(const char* str, const char* end,char flag) {
 	index_to_name.resize(nextId+1);
 	index_to_name[nextId]=s;
 	flags.resize(nextId+1); flags[nextId]=flag;
-//		std::cout<<s <<index_to_name[nextId];
 	if (verbose)
 		dbprintf("insert[%d]%s\n",nextId,index_to_name[nextId].c_str());
 	return	nextId++;
@@ -268,10 +267,8 @@ RegisterName Node::get_reg(Name baseName, int *new_index, bool force_new){
 	if (!regname || force_new){
 		auto old=regname;
 		auto ret= get_reg_new(baseName,new_index);
-		std::cout<<this<<" "<<str(old)<<" ="<<str(ret)<<" \n";
 		return ret;
 	} else{
-		std::cout<<str(regname)<<" = ok\n";
 		return regname;
 	}
 }
@@ -596,7 +593,7 @@ ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired){
 		this->owner_scope=sc->global;
 	}
 	if (!this->name){
-		char str[256]; if (!name){sprintf(str,"str%x",(uint32_t)(size_t)this); name=getStringIndex(str);}
+		char str[256]; if (!this->name){sprintf(str,"str%x\0",(uint32_t)0xffff&(size_t)this); this->name=getStringIndex(str);}
 	}
 	if (!this->get_type()) {
 		Type* t=nullptr;
@@ -1009,7 +1006,6 @@ Variable* Scope::create_variable(Name name,VarKind k){
 	ASSERT(exv==0);
 	auto v=new Variable(name,k); v->next=this->vars; this->vars=v;
 	v->name=name;v->owner=this;
-	std::cout<<"create "<<str(name)<<" "<<v<<"\n";
 	return v;
 }
 Variable* Scope::get_or_create_scope_variable(Name name,VarKind k){
@@ -1017,7 +1013,7 @@ Variable* Scope::get_or_create_scope_variable(Name name,VarKind k){
 	auto shadow_v=find_variable_rec(name);
 	if (exv) return exv;
 	if (shadow_v){
-		std::cout<<"warning shadowing variable "<<str(name)<<" in "<<this->name()<<"\n";
+		dbprintf("warning shadowing variable %s in %s\n",str(name),this->name());
 	}
 	auto v=this->create_variable(name,k);
 	return v;
@@ -2030,26 +2026,6 @@ ExprFnDef* parse_fn(TokenStream&src) {
 
 const char* g_TestProg=
 /*
-"(fn lerp((a float) (b float) (f float))(+(*(- b a)f)a))"
-"(fn lerp(a b f)(mad a (sub b a) f)
-"(fn lerp((a int) (b int) (f float))(+(*(- b a)f)a))"
-"(fn bilerp(a b c d u v)(lerp(lerp a b )(lerp c d)v))"
-"(fn invlerp(a b x)(/(- x a)(- b a)))"
-"(fn madd(a b f)(+a (* b f)))"
-"(fn min(a b)(if (< a b)a b))"
-"(fn max(a b)(if (> a b)a b))"
-"(fn addto(a b)(set a(add a b)))
-"(fn madto(a b f)(set a(add a (mul b f))))
-"(fn interleave((a int)(c (map string int))(b (vector float))) (return)) "
-*/
-
-// semantically we pass something, its' immutable
-// doesn't matter if its' value or reference-let compiler decide
-// 2 words-pass in regs. any more.. pass adress.
-// however you can say pass ownership, move struct
-// or pass a mutable reference - mut 
-// eg...
-/*
 	"*++x=*--y e+r:int foo(e,r);"
 	"self.pos+self.vel*dt;"
 	"future.pos=self.pos+self.vel*dt;"
@@ -2133,8 +2109,8 @@ const char* g_TestProg=
 	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
 	"	for i:=0,j:=0; i<10; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
 	"	printf(\"Hello From My Language %.3f %d %d\", lerp(10.0,20.0,0.5),y,x );0"
-	"}"
-
+	"}\0"
+;
 /*
 "set(glob_x, 10.0);"
 "fn they_int(){set(tfx, 1); tfx};"
@@ -2146,28 +2122,143 @@ const char* g_TestProg=
 	"set(glob_p, generic_fn(0.0, 1.3));"
 	"set(glob_q, generic_fn(0.0, 1));"
 */
-	;
+
+void filename_change_ext(char* dst,const char* src,const char* new_ext){
+	strcpy(dst,src);
+	char* s=dst;
+	for (s=dst;*s;s++){
+		if (*s=='.') break;
+	}
+	strcpy(s+1,new_ext);
+}
+/*
+// format should represent json ok
+{}     // statement
+{ ; ; }  // compound statement
+{ , , } // struct literal
+[ ,  , , ] // array literal
+
+(, , ) // tuple literal  assignments in brackets
+
+foo:={
+	foo:[1,2,3],
+ 	bar:"bar node",
+ 	baz:{
+ 		foo:10.0,
+ 		bar:20.0,
+ 	}
+ 	yada:other
+}
+ 
+other:={
+
+}
+
+should roll an appropriate anonymous struct;
+should reduce types on parsing them - if it finds ones with same fields
+should be able to code assetless
 
 
-int main(int argc, const char** argv) {
-	TextInput	src(g_TestProg);
+ 	for x in struct{  // that gets the record fields - its compile time
+// only if you overload begin/end do you get iteration
+ 		.ident // gives a string of the field.
+ 		.typedef // gives its' type.
+ 	}
+
+
+
+
+*/
+void compile_source(const char *buffer, const char* outname){
+	printf("outname=%s\n",outname);
+	TRACE
+	printf("outname=%s\n",outname);
+	ASSERT(strlen(outname));
+	TextInput	src(buffer);
 	auto node=parse_call(src,0,SEMICOLON,nullptr);
-	dbprintf("%p\n",node);
+	ASSERT(strlen(outname));
+	printf("outname=%s\n",outname);
 	node->dump(0);
+	ASSERT(strlen(outname));
+	printf("outname=%s\n",outname);
 	Scope global; global.node=(ExprBlock*)node; global.global=&global;
+	ASSERT(strlen(outname));
+	printf("outname=%s\n",outname);
 	gather_named_items(node,&global);
+	TRACE
+	ASSERT(strlen(outname));
+	printf("outname=%s\n",outname);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
+	ASSERT(strlen(outname));
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
+	printf("outname=%s\n",outname);
+	ASSERT(strlen(outname));
 	node->dump(0);
-//	global.visit_calls();
+	ASSERT(strlen(outname));
+	printf("outname=%s\n",outname);
+	TRACE
+	//	global.visit_calls();
+	printf("outname=%s\n",outname);
+	TRACE
 	global.dump(0);
-	FILE* ofp=fopen("test.ll","wb");
+	ASSERT(strlen(outname));
+	printf("outname=%s\n",outname);
+	TRACE
+	ASSERT(strlen(outname));
+	TRACE
+	if (outname){
+		ASSERT(strlen(outname));
+	//std::cout<<outname<<"\n";
+		TRACE
+	FILE* ofp=fopen(outname,"wb");
+		if (ofp){
+			TRACE
 	output_code(ofp, &global);
+			TRACE
 	fprintf(ofp,"\n;end");
+			TRACE
 	fclose(ofp);
+			TRACE
+		} else printf("can't open output file %s\n",outname);
+	}
+	TRACE
+}
+
+void compile_source_file(const char* filename) {
+TRACE
+	char outname[256];
+	filename_change_ext(outname,filename,"ll");
+	printf("compiling %s\n",filename);
+	auto fp=fopen(filename,"rb");
+	if (fp){
+		TRACE
+		fseek(fp,0,SEEK_END); auto sz=ftell(fp); fseek(fp,0,SEEK_SET);
+		char* buffer = (char*)malloc(sz+1);
+		fread((void*)buffer,1,sz,fp);
+		buffer[sz]=0;
+		fclose(fp);
+		TRACE
+		compile_source(buffer,outname);
+		TRACE
+		free((void*)buffer);
+		TRACE
+	} else{
+		printf("can't open %s\n",filename);
+	}
+	TRACE
+}
+int main(int argc, const char** argv) {
+	compile_source_file("/Users/walter/hack/hack.rs");
+	for (auto i=1; i<argc; i++) {
+		compile_source_file(argv[i]);
+	}
+	if (argc<=1) {
+		printf("no sources given so running inbuilt test.");
+		compile_source(g_TestProg,"test.ll");
+	}
 }
 
 
