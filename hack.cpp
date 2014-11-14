@@ -353,7 +353,8 @@ RegisterName Node::get_reg(Name baseName, int *new_index, bool force_new){
 }
 RegisterName Node::get_reg_new(Name baseName, int* new_index) {
 	char name[256];
-	sprintf(name, "r%d%s",(*new_index)++,baseName>=IDENT?getString(baseName):"");
+	const char* s=getString(baseName);
+	sprintf(name, "r%d%s",(*new_index)++,isSymbolStart(s[0])?s:"rfv");
 	return this->regname=g_Names.get_index(name,0,0);
 }
 void verify(const Type* a){
@@ -769,8 +770,11 @@ const char* ArgDef::kind_str()const{return"arg_def";}
 // todo: receivers.
 
 bool ExprFnDef::is_generic() const {
+	if(instances!=nullptr)
+		return true;
 	for (auto i=0; i<args.size(); i++)
-		if (!args[i]->type) return true;
+		if (!args[i]->type || args[i]->type->name==AUTO)
+			return true;
 	return false;
 }
 bool ExprBlock::is_undefined() const{
@@ -851,6 +855,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* src, vector<Expr*>& call_args
 	}
 	new_fn->next_instance = src->instances;
 	src->instances=new_fn;
+	new_fn->instance_of = src;
 	new_fn->resolved=false;
 //	dbprintf("generic instantiation:-\n");
 //	new_fn->dump(0);
@@ -989,6 +994,9 @@ void find_fn_sub(Expr* src,Name name,vector<Expr*>& args, const Type* ret_type,E
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
 		compare_candidate_function(f,name,args,ret_type, best_fn,best_score,ambiguity);
+		for (auto ins=f->instances; ins; ins=ins->next_instance) {
+			compare_candidate_function(ins,name,args,ret_type, best_fn,best_score,ambiguity);
+		}
 	}
 }
 void find_fn_rec(Scope* s,Scope* ex,Name name,vector<Expr*>& args, const Type* ret_type,ExprFnDef** best_fn, int* best_score,int* ambiguity)
@@ -1100,6 +1108,7 @@ ExprStructDef* Scope::find_struct_named(Name name){
 }
 
 void Scope::add_fn(ExprFnDef* fnd){
+	if (fnd->instance_of!=0) return; // we compile/match it by instance search.
 	dbprintf("add fn %s to %s\n", str(fnd->name), this->name());
 	if (fnd->name_ptr) return;
 	auto ni=get_named_items_local(fnd->name);
@@ -2142,7 +2151,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, Type* type) {
 }
 
 void ExprStructDef::inherit_from(Scope * sc,Type *base_type){
-	if (inherits!=0) return;// already resolved.
+	if (inherits!=0) return;// already resolved.ø
 	auto base_template=sc->find_struct_named(base_type->name);
 	ExprStructDef* base_instance=base_template;
 	if (base_type->is_template()) {
@@ -2421,7 +2430,7 @@ const char* g_TestProg=
 	"vz"
 	"}"
 */
-/*	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
+	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
 	"fn lerp(a,b,f){(b-a)*f+a};"
 	"fn foo(a:*char)->void;"
 	"fn printf(s:str,...)->int;"
@@ -2445,19 +2454,22 @@ const char* g_TestProg=
 	"	p1:=&xs[1];"
 	"	q:=*p1;"
 	"	xs[1]=20;"
-	"   p=30;"
+//	"   p=30;"
     "	xs[2]=000;"
 	"	xs[2]+=400;"
+	"	xs[2]+=999;"
 	"	*p1=30;"
 	"   z:=5;"
 	"   y:=xs[1]+z+xs[2];"
-	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
+	"   x:=if argc<2{1}else{2};"
 	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
-	"	printf(\"Hello From My Language %.3f %d %d\", lerp(10.0,20.0,0.5),y,x );0"
+	"	xs1:=xs[1]; xs2:=xs[2];"
+	"	printf(\"Hello From My Language %.3f %d %d\", lerp(10.0,20.0,0.5) xs1,xs[2]);0"
 
 	"0"
 	"}\0"
-*/
+
+/*
 	"struct Foo{x:int,y:int, struct Bar{x:float}, fn method(i:int)->int{printf(\"hello from method %d\n\",i);0};};"
 	"fn printf(s:str,...)->int;"
 	"fn main(argc:int, argv:**char)->int{"
@@ -2466,6 +2478,7 @@ const char* g_TestProg=
 	"	local_function(3);"
 	"	0"
 	"}"
+ */
 ;
 /*
 "set(glob_x, 10.0);"
@@ -2520,11 +2533,8 @@ should be able to code assetless
  		.ident // gives a string of the field.
  		.typedef // gives its' type.
  	}
-
-
-
-
 */
+
 void compile_source(const char *buffer, const char* outname){
 	auto p=outname; g_p=p;
 	g_pp=&outname;

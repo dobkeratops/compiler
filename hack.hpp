@@ -53,7 +53,7 @@ template<class T,class Y> T* isa(const Y& src){ return dynamic_cast<T>(src);}
 #define MODIFY (READ_LHS|WRITE_LHS|READ_RHS|WRITE_RHS)
 #define RWFLAGS (WRITE_LHS|READ_LHS|WRITE_RHS|READ_RHS)
 extern int operator_flags(int tok);
-
+bool isSymbolStart(char c);
 enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
