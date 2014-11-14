@@ -838,6 +838,9 @@ ExprFnDef* instantiate_generic_function(Scope* s,ExprFnDef* src, vector<Expr*>& 
 	dbprintf("generic instantiation:-\n");
 	new_fn->dump(0);
 	new_fn->resolve(s,nullptr);//todo: we can use output type in instantiation too
+	new_fn->dump(0);
+	new_fn->resolve(s,nullptr);//todo: we can use output type in instantiation too
+	new_fn->dump(0);
 	return new_fn;	// welcome new function!
 }
 Node* ExprOp::clone() const {
@@ -1300,7 +1303,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		else {ASSERT(0);return ResolvedType();}
 	}
 	else {
-		dbprintf(";resolve call..%s\n",getString(p->ident()));
+		dbprintf(";resolve call..%s->%s\n",str(sc->owner->name),str(p->ident()));
 		// TODO: distinguish 'partially resolved' from fully-resolved.
 		// at the moment we only pick an fn when we know all our types.
 		// But, some functions may be pure generic? -these are ok to match to nothing.
@@ -1316,8 +1319,16 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 			//we need to know some types before we call anything
 //			if (n==this->argls.size())
 //			 && n==this->argls.size()
+			// TODO: DEDUCE FN ARGS FROM LAMBDA TYPE
+			for (auto i=0; i<argls.size(); i++)  {
+				argls[i]->resolve(sc,nullptr );
+			}
 			return resolve_make_fn_call(this, sc,desired);
-		} else if (this->call_target){
+		} else if (auto fnc=this->call_target){
+			for (auto i=0; i<argls.size(); i++)  {
+				auto fnarg=i<fnc->args.size()?fnc->args[i]:nullptr;
+				argls[i]->resolve(sc,fnarg?fnarg->type:nullptr );
+			}
 			return this->call_target->resolve(this->scope, desired);
 		} else {
 			return ResolvedType();
@@ -2321,7 +2332,8 @@ const char* g_TestProg=
 	"fn foo(a:*char)->void;"
 	"fn printf(s:str,...)->int;"
 	"fn push_back(t,v)->int{"
-	"	printf(\"push_back\n\");0"
+	"	a:=t.num; "
+	"	printf(\"push_back %d\n\", a);0"
 	"}"
 	"struct Vec[T]{data:*T, num:int}; "
 	"fn main(argc:int,argv:**char)->int{"
@@ -2329,6 +2341,7 @@ const char* g_TestProg=
 	"	fs=:array[float,512];"
 	"	ys=:Vec[float];"
 //	"	ys.data=&fs[1];"
+	"	ys.num=10; "
 	"	y:=ys.data;"
 	"	push_back(ys,2.0);"
 	"0"
