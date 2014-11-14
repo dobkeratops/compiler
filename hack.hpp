@@ -58,7 +58,7 @@ enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
 	INT,UINT,BOOL,FLOAT,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,NUMBER,TYPE,NAME,
-	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH,
+	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,
 	LET,SET,VAR,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
 	// delimiters
@@ -260,6 +260,9 @@ struct Type : Expr{
 	bool is_struct()const;
 	bool is_array()const{return name==ARRAY;}
 	bool is_template()const { return sub!=0;}
+	bool is_function() const { return name==FN;}
+	Type* fn_return() const { return sub->next;}
+	Type* fn_args() const { return sub->sub;}
 	int num_pointers()const;
 	bool is_pointer()const {return (this && this->name==PTR) || (this->name==REF);}
 	bool is_void()const {return !this || this->name==VOID;}

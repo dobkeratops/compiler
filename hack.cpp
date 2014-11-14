@@ -6,7 +6,20 @@ const char** g_pp,*g_p;
 void CHECK() { ASSERT(*g_pp=g_p);}
 /*
  features needed:-
+
+ VECTOR LITERALS
  
+ COERSIONS
+ 
+ REAL INLINING
+ 
+ LAZY ARGUMENTS
+ 
+ RAII
+ 
+ FUNCTION TYPE PARAMETER INFERENCE (instead of *just* typeless case)
+ 
+ NESTED ENTITY TYPE INFERENCE
  
  SIMD support - codegen - recognize appropriate structs?
  
@@ -95,7 +108,7 @@ bool g_lisp_mode=false;
 const char* g_token_str[]={
 	"",
 	"int","uint","bool","float","char","str","void","auto","one","zero","voidptr","ptr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
-	"print___","fn","struct","enum","array","vector","union","variant","with","match",
+	"print___","fn","struct","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof",
 	"let","set","var",
 	"while","if","else","do","for","in","return","break",
 	"(",")",
@@ -112,7 +125,7 @@ const char* g_token_str[]={
 	".=",	// linklist follow
 	"++","--","++","--", //inc/dec
 	"-","*","&","!","~", // unary ops
-	"*?","*!","&?","[]","&[]", // special pointers
+	"*?","*!","&?","~[]","[]", // special pointers
 	",",";",
 	"...","..",
 	"_",
@@ -123,7 +136,7 @@ const char* g_token_str[]={
 int g_tok_info[]={
 	0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0, 0,0,0,0,
 	0,0,0,			// let,set,var
 	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
 	0,0, //( )
@@ -499,9 +512,11 @@ Name ExprBlock::get_fn_name()const
 void ExprBlock::dump(int depth) const {
 	if (!this) return;
 	newline(depth);
-	if (this->get_fn_call()){
-		dbprintf("%s",getString(get_fn_call()->name));
-		if (this->get_type()) {dbprintf(":");this->get_type()->dump(-1);};dbprintf("(");}
+	if (this->call_expr){
+//		dbprintf("%s",getString(get_fn_call()->name));
+		this->call_expr->dump(depth);
+		if (this->get_type()) {dbprintf(":");this->get_type()->dump(-1);};}
+		dbprintf("(");
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
@@ -1302,29 +1317,41 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		}
 		else {ASSERT(0);return ResolvedType();}
 	}
-	else {
+	else if (this->call_expr){
 		dbprintf(";resolve call..%s->%s\n",str(sc->owner->name),str(p->ident()));
 		// TODO: distinguish 'partially resolved' from fully-resolved.
 		// at the moment we only pick an fn when we know all our types.
 		// But, some functions may be pure generic? -these are ok to match to nothing.
 		// todo:
 //		auto n=num_known_arg_types(this->argls);
+		
+		auto fn_type_r=this->call_expr->resolve(sc,nullptr);
+		auto fn_type=fn_type_r.type;
+		int arg_index=0;
+		if (fn_type) {
+			// propogate types we have into argument expressions
+			for (auto a=fn_type->fn_args(); arg_index<argls.size() && a; arg_index++,a=a->next)  {
+				argls[arg_index]->resolve(sc,a);
+			}
+			for (;arg_index<argls.size(); arg_index++){ // variadic args.
+				argls[arg_index]->resolve(sc,nullptr);
+			}
+			const Type* fr=fn_type->fn_return();
+			return propogate_type_fwd(fr, this->type_ref());
+		} else
+		for (auto i=0; i<argls.size(); i++)  {
+			argls[i]->resolve(sc,nullptr );
+		}
+
 		if (!this->call_target){
 			
 			static bool warn=false; if (!warn){warn=true;dbprintf("TODO try re-testing every time, or waiting for max args to be ready? one way might be: no unknown args, between caller & candidate. ( eg caller (f f _) vs callee (_ f f) would infer the last ones ok\n  dont just wait for all on caller.");}
-				// Todo: Process Local Vars.
-				// TODO: accumulate types of arguments,
-				// then use them in find_fn to resolve overloading
-				// find_fn should also perform Template Instantiations.
-			//we need to know some types before we call anything
-//			if (n==this->argls.size())
-//			 && n==this->argls.size()
-			// TODO: DEDUCE FN ARGS FROM LAMBDA TYPE
 			for (auto i=0; i<argls.size(); i++)  {
 				argls[i]->resolve(sc,nullptr );
 			}
+
 			return resolve_make_fn_call(this, sc,desired);
-		} else if (auto fnc=this->call_target){
+		} else if (auto fnc=this->call_target){ // static call
 			for (auto i=0; i<argls.size(); i++)  {
 				auto fnarg=i<fnc->args.size()?fnc->args[i]:nullptr;
 				argls[i]->resolve(sc,fnarg?fnarg->type:nullptr );
@@ -1475,8 +1502,15 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired) {
 		propogate_type(ret,this->ret_type);
 	}
 
-	if (!this->fn_type)
-		this->fn_type=new Type(FN);
+	if (!this->fn_type) {
+		fn_type=new Type(FN);
+		auto arglist=new Type(TUPLE);
+		fn_type->push_back(arglist);
+		for (auto a:this->args) {
+			arglist->push_back(a->type?((Type*)a->type->clone()):new Type(AUTO));
+		}
+		fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(AUTO));
+	}
 	{ int once;if (!once++) dbprintf("RESOLVE FN DEF TYPE PROPERLY- TODO cleanup ambiguity between fn ptr type & fn return type!\n");
 	}
 	return ResolvedType(fn_type,ResolvedType::COMPLETE);
@@ -2344,6 +2378,9 @@ const char* g_TestProg=
 	"	ys.num=10; "
 	"	y:=ys.data;"
 	"	push_back(ys,2.0);"
+	"	f:=fn(a:float,b:int)->int{printf(\"hello lambda\n\");b};"
+	"	r:=f(0.1,2);"
+	"	"
 	"0"
 /*	"	q:=xs[1];"
 	"	p1:=&xs[1];"
