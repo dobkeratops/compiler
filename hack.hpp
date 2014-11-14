@@ -165,6 +165,10 @@ struct ExprIdent;
 struct Type;
 struct Variable;
 struct ResolvedType{
+	// TODO: This is a misfeature;
+	// return value from Resolve should just be status
+	// we require the result information to stay on the type itself.
+	// we keep getting bugs from not doing that.
 	enum Status:int {COMPLETE=0,INCOMPLETE=1,ERROR=3};
 	// complete is zero, ERROR is 3 so we can
 	// carries information from type propogation
@@ -339,20 +343,7 @@ struct TypeDef;
 struct ExprIf;
 struct VarDecl;
 
-struct ModuleBase : Expr { // a node that may contain named definitions
-	ModuleBase* parent=0;
-	Module*	modules=0;
-	StructDef* structs=0;
-	ExprFnDef*	functions=0;
-	VarDecl* vars=0;
-	ModuleBase(){vars=0;functions=0;structs=0;modules=0;parent=0;};
-	virtual ModuleBase* get_next_of_module()const{ASSERT(0);return nullptr;}
-	virtual const char* kind_str()const{return"mod";}
-};
-struct Module : ModuleBase {
-	Module* next_of_module=0;
-	Module* get_next_of_module()const{return next_of_module;}
-};
+
 struct ExprLiteral : Expr {
 	TypeId	type_id;
 	ExprLiteral* next_of_scope=0;	// collected..
@@ -439,7 +430,7 @@ struct Variable : Expr{
 };
 // scopes are created when resolving; generic functions are evaluated
 struct Scope {
-	ExprFnDef*	owner=0;
+	Expr*	owner=0;	// TODO: eliminate this, owner might be FnDef or Struct.
 	Expr* node=0;
 	Scope* parent=0;
 	Scope* next=0;
@@ -452,7 +443,10 @@ struct Scope {
 	// locals;
 	// captures.
 	const char* name()const;
+private:
 	Scope(){named_items=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
+public:
+	Scope(Scope* p){ASSERT(p==0);named_items=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
 	void visit_calls();
 	Variable* find_fn_variable(Name ident,ExprFnDef* f);
 	Variable* get_fn_variable(Name name,ExprFnDef* f);
@@ -471,15 +465,17 @@ struct Scope {
 	NamedItems* find_named_items_rec(Name name);
 	void add_fn_def(ExprFnDef*);
 	void dump(int depth) const;
+private:
 	void push_child(Scope* sub) { sub->owner=this->owner; sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
+public:
 	Scope* parent_or_global()const{
 		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
 	}
-	Scope* make_inner_scope(Scope** pp_scope,ExprFnDef* fn_owner=0){
+	Scope* make_inner_scope(Scope** pp_scope,Expr* owner=0){
 		if (!*pp_scope){
 			auto sc=new Scope;
 			push_child(sc);
-			sc->owner=fn_owner;
+			sc->owner=owner;
 			*pp_scope=sc;
 		}
 		return *pp_scope;
@@ -487,13 +483,6 @@ struct Scope {
 
 };
 ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
-
-struct StructDef : ModuleBase {
-	vector<ArgDef> fields;
-	virtual const char* kind_str()const{return"struct";}
-	StructDef* next_of_module=0;
-	ModuleBase* get_next_of_module(){return this->next_of_module;}
-};
 struct ExprIf :  Expr {
 	Expr* cond=0;
 	Expr* body=0;
@@ -531,7 +520,7 @@ struct ExprFor :  Expr {
 struct Call;
 struct FnName;
 
-struct ExprStructDef: Module {
+struct ExprStructDef: Expr {
 	// lots of similarity to a function actually.
 	// but its' backwards.
 	// it'll want TypeParams aswell.
@@ -539,9 +528,12 @@ struct ExprStructDef: Module {
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> fields;
 	vector<Type*> instanced_types;
+	vector<ExprStructDef*> structs;
+	vector<ExprFnDef*> functions;
 	Type*	inherits_type=0;
+	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
-	
+
 	bool is_generic() const;
 	ExprStructDef* instances=0, *instance_of=0,*next_instance=0;
 	ExprFnDef* constructor_fn=0;
@@ -557,8 +549,8 @@ struct ExprStructDef: Module {
 	int alignment() const {int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	void inherit_from(Scope* sc, Type* base);
 };
-	// todo.. generic instantiation: typeparam logic, and adhoc mo
-struct ExprFnDef : Module {
+// todo.. generic instantiation: typeparam logic, and adhoc mo
+struct ExprFnDef : Expr {
 	ExprFnDef*	next_of_module=0;
 	ExprFnDef*	next_of_name=0;	//link of all functions of same name...
 	ExprFnDef*	instance_of=0;	// Original function, when this is a template instance
