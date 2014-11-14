@@ -2,6 +2,67 @@
 #include "codegen.h"
 #include "repl.h"
 
+const char** g_pp,*g_p;
+void CHECK() { ASSERT(*g_pp=g_p);}
+/*
+ features needed:-
+ 
+ 
+ SIMD support - codegen - recognize appropriate structs?
+ 
+ LAMBDAS - its not a modern langauge without them.
+
+ UFCS
+
+ TYPEPARAMETERS - structs, functions, bounding in inference
+
+ HKT - type type params
+ INTS IN TYPEPARAMS - buffers like C++
+
+ C++ bindings - emit
+ 
+ C++ bindings - generate
+ 
+ debug information
+ 
+ VARIANTS:
+  - adhoc variants
+  
+ CLASSES
+  - vtable generation
+  - dynamic cast- as variant?
+  -
+ 
+ PATTERN MATCHING?
+ 
+ TUPLES?
+ 
+ DECENT ERROR MESSAGES?
+ 
+ DUMP TYPE INFORMATION
+ 
+ LOCAL FUNCTIONS - NAMED LAMBDAS ? fn foo()
+
+ BREAK EXPRESSIONS
+ 
+ RUST COMPATABILITY
+  -parsing rust syntax
+  -how far could we go there?
+ 
+ C++ COMPATABILITY
+
+if x in {
+	foo=>....
+ 	bar=>....
+	baz=>....
+}
+
+ error reporting.
+ foo.q // error q not available
+ foo.bar()		// bar not available.  available functions:-.....
+
+ */
+
 //(sourcecode "hack.cpp")
 //(normalize (lerp (obj:zaxis)(normalize(sub(target(obj:pos)))) //(settings:angle_rate)) (sloc 512 40 20))
 
@@ -125,28 +186,28 @@ int get_infix_operator(int tok) {
 }
 typedef LLVMOp LLVMOp2[2];
 LLVMOp2 g_llvm_ops[]= {
-	{{-1,"add"},{-1,"fadd"}},
-	{{-1,"sub"},{-1,"fsub"}},
-	{{-1,"mul"},{-1,"fmul"}},
-	{{-1,"div"},{-1,"fdiv"}},
-	{{-1,"and"},{-1,"fand"}},
-	{{-1,"or"},{-1,"fadd"}},
-	{{-1,"xor"},{-1,"fadd"}},
-	{{-1,"srem"},{-1,"fadd"}},
-	{{-1,"shl"},{-1,"fadd"}},
-	{{-1,"ashr"},{-1,"fadd"}},
+	{{-1,"add","add"},{-1,"fadd","fadd"}},
+	{{-1,"sub","sub"},{-1,"fsub","fsub"}},
+	{{-1,"mul","mul"},{-1,"fmul","fmul"}},
+	{{-1,"div","div"},{-1,"fdiv","fdiv"}},
+	{{-1,"and","and"},{-1,"fand","fand"}},
+	{{-1,"or","or"},{-1,"fadd",""}},
+	{{-1,"xor","xor"},{-1,"fadd",""}},
+	{{-1,"srem","rem"},{-1,"fadd",""}},
+	{{-1,"shl","shl"},{-1,"fadd",""}},
+	{{-1,"ashr","shr"},{-1,"fadd",""}},
 };
 LLVMOp2 g_llvm_logic_ops[]= {
-	{{-1,"and"},{-1,"fadd"}},
-	{{-1,"or"},{-1,"fadd"}},
+	{{-1,"and",""},{-1,"fadd",""}},
+	{{-1,"or",""},{-1,"fadd",""}},
 };
 LLVMOp2 g_llvm_cmp_ops[]= {
-	{{-1,"icmp slt"},{-1,"fcmp ult"}},
-	{{-1,"icmp sgt"},{-1,"fcmp ugt"}},
-	{{-1,"icmp sle"},{-1,"fcmp ule"}},
-	{{-1,"icmp sge"},{-1,"fcmp uge"}},
-	{{-1,"icmp eq"},{-1,"fcmp ueq"}},
-	{{-1,"icmp ne"},{-1,"fcmp une"}},
+	{{-1,"icmp slt","icmp ult"},{-1,"fcmp ult","fcmp ult"}},
+	{{-1,"icmp sgt","icmp ult"},{-1,"fcmp ugt","fcmp ugt"}},
+	{{-1,"icmp sle","icmp ult"},{-1,"fcmp ule","fcmp ule"}},
+	{{-1,"icmp sge","icmp ult"},{-1,"fcmp uge","fcmp uge"}},
+	{{-1,"icmp eq","icmp eq"},{-1,"fcmp ueq","fcmp ueq"}},
+	{{-1,"icmp ne","icmp ne"},{-1,"fcmp une","fcmp une"}},
 };
 const char* g_llvm_type[]={
 	"i32","i32","i1","float","i8","i8*"
@@ -656,7 +717,7 @@ void dump_typeparams(const vector<TypeParam>& ts) {
 	dbprintf("[");
 	for (auto t:ts){
 		if (a)dbprintf(",");
-		print_tok(t.name);if (t.defaultv){dbprintf("=");print_tok(t.defaultv);}
+		print_tok(t.name);if (t.defaultv){dbprintf("=");t.defaultv->dump(-1);}
 		a=true;
 	}
 	dbprintf("]");
@@ -1614,8 +1675,8 @@ LLVMType Expr::get_type_llvm() const
 	return LLVMType{0,0};
 }
 
-
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
+	CHECK();
 	// shunting yard expression parser
 	ExprBlock *node=new ExprBlock; node->call_expr=op;
 	verify(node->type());
@@ -1625,8 +1686,9 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
 	node->square_bracket=close==CLOSE_BRACKET;
-
+	CHECK();
 	while (true) {
+		CHECK();
 		if (!src.peek_tok()) break;
 		if (src.peek_tok()==IN) break;
 		// parsing a single expression TODO split this into 'parse expr()', 'parse_compound'
@@ -1748,6 +1810,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	};
 	flush_op_stack(node,operators,operands);
 	verify(node->get_type());
+	CHECK();
 	return node;
 }
 
@@ -1788,7 +1851,6 @@ Type* parse_type(TokenStream& src, int close) {
 	// todo: pointers, adresses, arrays..
 	ret->dump(-1);
 	return ret;
-	
 }
 ArgDef* parse_arg(TokenStream& src, int close) {
 	auto argname=src.eat_ident();
@@ -1810,10 +1872,11 @@ void parse_typeparams(TokenStream& src,vector<TypeParam>& out) {
 //		if (src.eat_if(ASSIGN)) {
 //			int d=src.eat_tok();
 //		}
-		out.push_back(TypeParam{name,src.eat_if(ASSIGN)?src.eat_tok():0});
+		out.push_back(TypeParam{name,src.eat_if(ASSIGN)?parse_type(src,0):0});
 		src.eat_if(COMMA);
 	}
 }
+
 ExprStructDef* parse_struct(TokenStream& src) {
 	auto sd=new ExprStructDef();
 	dbprintf("parse_struct");
@@ -1821,6 +1884,9 @@ ExprStructDef* parse_struct(TokenStream& src) {
 	sd->name=tok;
 	if (src.eat_if(OPEN_BRACKET)) {
 		parse_typeparams(src,sd->typeparams);
+	}
+	if (src.eat_if(COLON)) {
+		sd->inherits_type = parse_type(src,0); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
 	}
 
 	if (!src.eat_if(OPEN_BRACE))
@@ -1834,9 +1900,111 @@ ExprStructDef* parse_struct(TokenStream& src) {
 	}
 	return sd;
 }
-void ExprStructDef::dump(int depth) const{
-	newline(depth);dbprintf("struct %s",getString(this->name));dump_typeparams(this->typeparams);dbprintf("{");
+template<typename T>
+int get_index_in(const vector<T>& src, T& value) { int i=0; for (i=0; i<src.size(); i++) {if (src[i]==value) return i;} return -1;}
+Type* translate_template_type(Scope* sc, vector<TypeParam>&param_format, vector<Type*> given_params, Type* ty){
+/*
+ example:
+ struct vector<T,N=int> {
+ 	data:*T;
+ 	count:N;
+ }
+
+ instantiate vector<string,short>
+	translate_tempalte_type( {T,N}, {string,short}, *T) -> *string
+	translate_tempalte_type( {T,N}, {string,short}, N) -> short.
+ 
+ HKT example
+ struct tree<S,T>{
+ 	S<tree<S,T>>	sub;
+ }
+instantiate tree<vector,int>
+ we want:
+ struct tree {
+    vector< tree<vector,int>> sub;
+ }
+ 
+ translate_tempalte_type( {S,T}, {vector,int}, S<tree<S,T>>)->    vector<tree<vector<int>>> //
+ 
+ */
+	Type* new_type=0;
+	int param_index=0;
+	for (param_index=0; param_index<param_format.size(); param_index++) {
+		if (param_format[param_index].name== ty->name) break;
+	}
+	if (param_index<param_format.size()>=0) {
+		new_type = (Type*) given_params[param_index]->clone();
+	} else {
+		new_type= new Type; new_type->name = ty->name;
+	}
+	//translate the parameters:-
+	for (auto sub=ty->sub; sub; sub=sub->next) {
+		new_type->push_back( translate_template_type(sc,param_format, given_params, sub));
+	}
+	return new_type;
+}
+bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b) {
+	if (a.size()!=b.size()) return false;
+	for (int i=0; i<a.size(); i++) { if (!a[i]->eq(b[i])) return false;}
+	return true;
+}
+ExprStructDef* ExprStructDef::get_instance(Scope* sc, Type* type) {
+//	auto parent = sc->find_struct(type); //parent is this duh
+	auto parent=this;
+	vector<Type*> ty_params;
+	// make the typeparams..
+	Type* tp=type->sub;
+	int i=0;
+	for (i=0; i<parent->typeparams.size() && tp; i++,tp=tp->next){
+		ty_params.push_back(tp);
+	}
+	for (;i<parent->typeparams.size(); i++) {
+		ty_params.push_back(parent->typeparams[i].defaultv);
+	}
+	// search for existing instance
+	ExprStructDef* ins;
+	for (auto ins=parent->instances; ins; ins=ins->next_instance) {
+		if (type_params_eq(ty_params, ins->instanced_types))
+			break;
+	}
+	if (!ins) {
+		ins = new ExprStructDef();
+		ins->name = parent->name;
+		ins->instanced_types=ty_params;
+		ins->instance_of=parent;
+		ins->next_instance = parent->instances; parent->instances=ins;
+		ins->inherits_type= parent->inherits_type; // TODO: typeparams! map 'parent' within context  to make new typeparam vector, and get an instance for that too.
+
+		for (auto i=0; i<fields.size(); i++) {
+			ArgDef* fdef = parent->fields[i];
+			ArgDef* new_field = new ArgDef;
+			new_field->name =fdef->name;
+			new_field->type = translate_template_type(sc, parent->typeparams, ty_params, fdef->type);
+			ins->fields.push_back(new_field);
+		}
+		dbprintf("template instantiation of %s\n for ", str(parent->name));
+		type->dump(0);
+		ins->dump(0);
+	}
+	return ins;
 	
+}
+
+void ExprStructDef::inherit_from(Scope * sc,Type *base_type){
+	if (inherits!=0) return;// already resolved.
+	auto base_template=sc->find_struct(base_type->name);
+	ExprStructDef* base_instance=base_template;
+	if (base_type->is_template()) {
+		base_instance = base_template->get_instance(sc, base_type);
+	}
+	ASSERT(inherits==0); next_of_inherits=base_instance->derived; base_instance->derived=this; this->inherits=base_instance;
+}
+
+void ExprStructDef::dump(int depth) const{
+	newline(depth);
+	dbprintf("struct %s",getString(this->name));dump_typeparams(this->typeparams);
+	if (this->inherits) {dbprintf(" : %s", str(inherits->name));}
+	dbprintf("{");
 	for (auto f:this->fields){f->dump(depth+1);}
 	newline(depth);dbprintf("}");
 }
@@ -2171,85 +2339,60 @@ should be able to code assetless
 
 */
 void compile_source(const char *buffer, const char* outname){
-	printf("outname=%s\n",outname);
-	TRACE
-	printf("outname=%s\n",outname);
-	ASSERT(strlen(outname));
+	auto p=outname; g_p=p;
+	g_pp=&outname;
+	printf("%p \n",outname);
 	TextInput	src(buffer);
+	//ASSERT(p==outname);
 	auto node=parse_call(src,0,SEMICOLON,nullptr);
-	ASSERT(strlen(outname));
-	printf("outname=%s\n",outname);
+	//ASSERT(p==outname);
 	node->dump(0);
-	ASSERT(strlen(outname));
-	printf("outname=%s\n",outname);
+	//ASSERT(p==outname);
 	Scope global; global.node=(ExprBlock*)node; global.global=&global;
-	ASSERT(strlen(outname));
-	printf("outname=%s\n",outname);
+	//ASSERT(p==outname);
 	gather_named_items(node,&global);
-	TRACE
-	ASSERT(strlen(outname));
-	printf("outname=%s\n",outname);
+	//ASSERT(p==outname);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
-	ASSERT(strlen(outname));
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
-	printf("outname=%s\n",outname);
-	ASSERT(strlen(outname));
+	//ASSERT(p==outname);
 	node->dump(0);
-	ASSERT(strlen(outname));
-	printf("outname=%s\n",outname);
-	TRACE
+	//ASSERT(p==outname);
 	//	global.visit_calls();
-	printf("outname=%s\n",outname);
-	TRACE
 	global.dump(0);
-	ASSERT(strlen(outname));
-	printf("outname=%s\n",outname);
-	TRACE
-	ASSERT(strlen(outname));
-	TRACE
-	if (outname){
-		ASSERT(strlen(outname));
+	//ASSERT(p==outname);
 	//std::cout<<outname<<"\n";
-		TRACE
-	FILE* ofp=fopen(outname,"wb");
+	if (outname){
+		FILE* ofp=fopen(outname,"wb");
 		if (ofp){
-			TRACE
-	output_code(ofp, &global);
-			TRACE
-	fprintf(ofp,"\n;end");
-			TRACE
-	fclose(ofp);
-			TRACE
-		} else printf("can't open output file %s\n",outname);
+			output_code(ofp, &global);
+			fprintf(ofp,"\n;end");
+			fclose(ofp);
+		} else {
+			printf("%p %p\n",p, outname);
+			printf("can't open output file %s\n",outname);
+		}
 	}
-	TRACE
 }
 
 void compile_source_file(const char* filename) {
-TRACE
 	char outname[256];
 	filename_change_ext(outname,filename,"ll");
 	printf("compiling %s\n",filename);
 	auto fp=fopen(filename,"rb");
 	if (fp){
-		TRACE
 		fseek(fp,0,SEEK_END); auto sz=ftell(fp); fseek(fp,0,SEEK_SET);
 		char* buffer = (char*)malloc(sz+1);
 		fread((void*)buffer,1,sz,fp);
 		buffer[sz]=0;
 		fclose(fp);
-		TRACE
 		compile_source(buffer,outname);
-		TRACE
 		free((void*)buffer);
-		TRACE
 	} else{
 		printf("can't open %s\n",filename);
 	}
-	TRACE
 }
 int main(int argc, const char** argv) {
 	compile_source_file("/Users/walter/hack/hack.rs");

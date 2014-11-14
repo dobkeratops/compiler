@@ -163,7 +163,12 @@ public:
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const{return ;}
 };
 
-struct TypeParam{int name; int defaultv;};
+struct TypeParam{
+	Name name;
+	Type* defaultv=0;
+	TypeParam(){};
+	TypeParam(Name n, Type* dv):name(n),defaultv(dv){};
+};
 
 struct LLVMType {
 	int name;
@@ -193,9 +198,9 @@ public:
 struct Type : Expr{
 	int marker;
 	vector<TypeParam> typeparams;
-	ExprStructDef* struct_def;	// todo: struct_def & sub are mutually exclusive.
-	Type*	sub;	// a type is itself a tree
-	Type*	next;
+	ExprStructDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
+	Type*	sub=0;	// a type is itself a tree
+	Type*	next=0;
 	void push_back(Type* t);
 	virtual const char* kind_str()const;
 	Type(Name a,Name b): Type(a){push_back(new Type(b));}
@@ -211,6 +216,7 @@ struct Type : Expr{
 	bool is_complex()const;
 	bool is_struct()const;
 	bool is_array()const{return name==ARRAY;}
+	bool is_template()const { return sub!=0;}
 	int num_pointers()const;
 	bool is_pointer()const {return (this && this->name==PTR) || (this->name==REF);}
 	bool is_void()const {return !this || this->name==VOID;}
@@ -228,7 +234,7 @@ struct ExprScopeBlock : Expr{};
 struct ExprFnDef;
 struct Variable;
 struct ExprOp: public Expr{
-	Expr	*lhs,*rhs;
+	Expr	*lhs=0,*rhs=0;
 	int get_operator() const { return this->name;}
 	int get_op_name() const { return this->name;}
 	Node* clone() const;
@@ -253,11 +259,11 @@ struct ExprBlock :public ExprScopeBlock{
 	bool square_bracket;  // aka foo[a]  in C desugars as *(foo+a)
 	bool is_compound_expression()const{return !call_expr &&!call_target && !name;}
 
-	Expr*	call_expr;  //call_expr(argls...)  or {argsls...}
+	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...}
 	vector<Expr*>	argls;
-	ExprFnDef*	call_target;
-	Scope* scope;
-	ExprBlock* next_of_call_target;	// to walk callers to a function
+	ExprFnDef*	call_target=0;
+	Scope* scope=0;
+	ExprBlock* next_of_call_target=0;	// to walk callers to a function
 	virtual ExprBlock* is_subscript(){if (this->square_bracket) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
 	ExprFnDef* get_fn_call()const {return this->call_target;}
 	Name get_fn_name() const;
@@ -288,23 +294,23 @@ struct ExprIf;
 struct VarDecl;
 
 struct ModuleBase : Expr { // a node that may contain named definitions
-	ModuleBase* parent;
-	Module*	modules;
-	StructDef* structs;
-	ExprFnDef*	functions;
-	VarDecl* vars;
+	ModuleBase* parent=0;
+	Module*	modules=0;
+	StructDef* structs=0;
+	ExprFnDef*	functions=0;
+	VarDecl* vars=0;
 	ModuleBase(){vars=0;functions=0;structs=0;modules=0;parent=0;};
 	virtual ModuleBase* get_next_of_module()const{ASSERT(0);return nullptr;}
 	virtual const char* kind_str()const{return"mod";}
 };
 struct Module : ModuleBase {
-	Module* next_of_module;
+	Module* next_of_module=0;
 	Module* get_next_of_module()const{return next_of_module;}
 };
 struct ExprLiteral : Expr {
 	TypeId	type_id;
-	ExprLiteral* next_of_scope;	// collected..
-	Scope* owner_scope;
+	ExprLiteral* next_of_scope=0;	// collected..
+	Scope* owner_scope=0;
 	int llvm_strlen;
 
 	union  {int val_int; int val_uint; float val_float; const char* val_str;int val_keyword;} u;
@@ -326,8 +332,8 @@ struct ExprLiteral : Expr {
 struct ArgDef :Node{
 	uint32_t size,offset;
 	Name name;
-	Type* type;
-	Expr* default_expr;
+	Type* type=0;
+	Expr* default_expr=0;
 	Type* get_type()const {return type;}
 	void set_type(Type* t){verify(t);type=t;}
 	Type*& type_ref(){return type;}
@@ -345,12 +351,12 @@ struct ArgDef :Node{
 struct ExprStructDef;
 
 struct NamedItems {		// everything defined under a name
-	Scope* owner;
+	Scope* owner=0;
 	Name		name;
-	NamedItems*		next;
-	Type*		types;
-	ExprFnDef*	fn_defs;
-	ExprStructDef*	structs; // also typedefs?
+	NamedItems*		next=0;
+	Type*		types=0;
+	ExprFnDef*	fn_defs=0;
+	ExprStructDef*	structs=0; // also typedefs?
 
 	ExprFnDef*	getByName(Name n);
 //	ExprFnDef* resolve(Call* site);
@@ -374,9 +380,9 @@ struct Call {
 enum VarKind{VkArg,Local,Global};
 struct Variable : Expr{
 	VarKind kind;
-	Scope* owner;
-	Variable* next;
-	Expr* initialize; // if its an argdef, we instantiate an initializer list
+	Scope* owner=0;
+	Variable* next=0;
+	Expr* initialize=0; // if its an argdef, we instantiate an initializer list
 	Variable(Name n,VarKind k){name=n; initialize=0; owner=0;kind=k;this->set_type(0);}
 	Node* clone() const {
 		auto v=new Variable(name,this->kind);
@@ -388,16 +394,16 @@ struct Variable : Expr{
 };
 // scopes are created when resolving; generic functions are evaluated
 struct Scope {
-	ExprFnDef*	owner;
-	Expr* node;
-	Scope* parent;
-	Scope* next;
-	Scope* child;
-	Scope* global;
-	ExprLiteral* literals;
+	ExprFnDef*	owner=0;
+	Expr* node=0;
+	Scope* parent=0;
+	Scope* next=0;
+	Scope* child=0;
+	Scope* global=0;
+	ExprLiteral* literals=0;
 	//Call* calls;
-	Variable* vars;
-	NamedItems*	named_items;
+	Variable* vars=0;
+	NamedItems*	named_items=0;
 	// locals;
 	// captures.
 	const char* name()const;
@@ -439,7 +445,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desi
 struct StructDef : ModuleBase {
 	vector<ArgDef> fields;
 	virtual const char* kind_str()const{return"struct";}
-	StructDef* next_of_module;
+	StructDef* next_of_module=0;
 	ModuleBase* get_next_of_module(){return this->next_of_module;}
 };
 struct ExprIf :  Expr {
@@ -462,7 +468,7 @@ struct ExprFor :  Expr {
 	Expr* incr=0;
 	Expr* body=0;
 	Expr* else_block=0;
-	Scope* scope;
+	Scope* scope=0;
 	void dump(int depth) const;
 	bool is_c_for()const{return !pattern;}
 	bool is_for_in()const{return pattern && cond==0 && incr==0;}
@@ -486,33 +492,38 @@ struct ExprStructDef: Module {
 	uint32_t size;
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> fields;
+	vector<Type*> instanced_types;
+	Type*	inherits_type=0;
+	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
+	
 	bool is_generic() const;
-	ExprStructDef* instances, *instance_of,*next_of_instance;
-	ExprFnDef* constructor_fn;
-	NamedItems* name_ptr;
+	ExprStructDef* instances=0, *instance_of=0,*next_instance=0;
+	ExprFnDef* constructor_fn=0;
+	NamedItems* name_ptr=0;
 	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} return nullptr;}
 	int field_index(Name name){for (auto i=0; i<fields.size(); i++){if(fields[i]->name==name)return i;} return -1;}
-	
 	ExprStructDef* next_of_name;
-	ExprStructDef(){name_ptr=0;constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_of_instance=0;}
+	ExprStructDef(){name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
+	ExprStructDef* get_instance(Scope* sc, Type* type); // 'type' includes all the typeparams.
 	void dump(int depth)const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone()const {dbprintf("warning,leak\n");return (Node*) this;};
 	int alignment() const {int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
+	void inherit_from(Scope* sc, Type* base);
 };
 	// todo.. generic instantiation: typeparam logic, and adhoc mo
 struct ExprFnDef : Module {
-	ExprFnDef*	next_of_module;
-	ExprFnDef*	next_of_name;	//link of all functions of same name...
-	ExprFnDef*	instance_of;	// Original function, when this is a template instance
-	ExprFnDef*	instances;		// Linklist of it's instanced functions.
-	ExprFnDef*	next_instance;
-	ExprBlock* callers;	// linklist of callers to here
-	NamedItems*		name_ptr;
-	Scope*	scope;
+	ExprFnDef*	next_of_module=0;
+	ExprFnDef*	next_of_name=0;	//link of all functions of same name...
+	ExprFnDef*	instance_of=0;	// Original function, when this is a template instance
+	ExprFnDef*	instances=0;		// Linklist of it's instanced functions.
+	ExprFnDef*	next_instance=0;
+	ExprBlock* callers=0;	// linklist of callers to here
+	NamedItems*		name_ptr=0;
+	Scope*	scope=0;
 	
-	Type* ret_type;
-	Type* fn_type;				// eg (args)->return
+	Type* ret_type=0;
+	Type* fn_type=0;				// eg (args)->return
 	bool resolved;
 	// Partial specialization may add one specific parameter...
 	// calls from un-instanced routines can partially implement?
@@ -520,7 +531,7 @@ struct ExprFnDef : Module {
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> args;
 	bool variadic;
-	ExprBlock* body;
+	ExprBlock* body=0;
 	int get_name()const {return name;}
 	bool is_generic() const;
 	virtual const char* kind_str()const{return"fn";}
