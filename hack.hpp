@@ -183,6 +183,7 @@ class Node {
 public:
 	Name name;						// identifier index
 	RegisterName regname;			// temporary for llvm SSA calc.
+	bool reg_is_addr=false;
 	int visited;					// anti-recursion flag.
 	Node(){visited=0;regname=0;}
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.

@@ -860,9 +860,11 @@ Node* ExprBlock::clone() const {
 }
 Node*
 ExprLiteral::clone() const{
+	return (Node*)this;	// TODO - ensure this doesn't get into dangling state or anything!
 	if (!this) return nullptr;
 	auto r=new ExprLiteral(0); if (this->is_string()){r->u.val_str=strdup(this->u.val_str);}else r->u=this->u;
 	r->type_id=this->type_id;
+	r->llvm_strlen=this->llvm_strlen; // TODO this should just be a reference!?
 	r->name=this->name;
 	return r;
 }
@@ -1165,6 +1167,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired) {
 			//			auto v=sc->find_variable_rec(this->argls[0]->name);
 			auto v=sc->get_or_create_scope_variable(lhsi->name,Local);
 			v->set_type(rhst);
+			if (v->get_type()) {
+				dbprintf("instantiating a %s\n", str(v->get_type()->name));
+				sc->find_struct(v->get_type());// instantiate
+			}
 			return propogate_type(v->type_ref(),type_ref());
 		}
 		else if (op_ident==ASSIGN){
@@ -2314,14 +2320,18 @@ const char* g_TestProg=
 	"fn lerp(a,b,f){(b-a)*f+a};"
 	"fn foo(a:*char)->void;"
 	"fn printf(s:str,...)->int;"
+	"fn push_back(t,v)->int{"
+	"	printf(\"push_back\n\");0"
+	"}"
 	"struct Vec[T]{data:*T, num:int}; "
-	"struct Collect[C,T] {coll:C[T]}; "
 	"fn main(argc:int,argv:**char)->int{"
 	"	xs=:array[int,512];"
 	"	fs=:array[float,512];"
-	"	ys=:Collect[Vec,float];"
+	"	ys=:Vec[float];"
 //	"	ys.data=&fs[1];"
-	"	y:=ys.coll.data;0"
+	"	y:=ys.data;"
+	"	push_back(ys,2.0);"
+	"0"
 /*	"	q:=xs[1];"
 	"	p1:=&xs[1];"
 //	"	q:=*p1;"
