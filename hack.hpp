@@ -16,9 +16,10 @@
 #endif
 
 struct Node;
+struct Name;
 extern void dbprintf(const char*,...);
 extern void error(Node*,const char*,...);
-extern bool is_comparison(int t);
+extern bool is_comparison(Name n);
 // todo: seperate Parser.
 
 #define ilist initializer_list
@@ -82,7 +83,46 @@ enum Token {
 	PLACEHOLDER,
 	IDENT
 };
-typedef int32_t Name;
+struct Name;
+Name getStringIndex(const char* str,const char* end=0);
+const char* str(int);
+
+#ifdef DEBUG_NAMES
+struct Name {
+	char* str;
+	int32_t index;
+	Name(){index=0;str=0;}
+	Name(const char* a, const char* end=0){
+		if (!end) end=end+strlen(a);
+		size_t len=end-a;
+		str=(char*) malloc(len+1); memcpy(str,a,len); str[len]=0;
+		index=getStringIndex(a,end);
+	}
+	Name(const Name& b){index=b.index; str=b.str;}
+//	operator int32_t(){return index;}
+	operator int()const {return index;}
+	bool operator==(const Name& b)const{return index==b.index;}
+	bool operator==(int b)const{return index==b;}
+};
+#else
+struct Name {
+	int32_t index;
+	Name(){index=0;}
+	Name(const char* a, const char* end=0){
+		if (!end) end=end+strlen(a);
+		index=getStringIndex(a,end);
+	}
+	Name(int i){index=i;}
+	Name(const Name& b){index=b.index; }
+	//	operator int32_t(){return index;}
+	operator int()const {return index;}
+	bool operator==(const Name& b)const{return index==b.index;}
+	bool operator==(int b)const{return index==b;}
+	bool operator<(int b)const{return index<b;}
+	bool operator>=(int b)const{return index>=b;}
+};
+#endif
+
 typedef int32_t RegisterName;
 
 bool is_operator(Name name);
@@ -109,13 +149,14 @@ struct StringTable {
 	void dump();
 };
 extern StringTable g_Names;
-Name getStringIndex(const char* str,const char* end=0);
+Name getStringIndex(const char* str,const char* end);
 Name getNumberIndex(int num);	// ints in the type system stored like so
 int getNumberInt(Name n);
 float getNumberFloat(Name n);
 const char* getString(Name index);
 void indent(int depth);
-inline const char* str(int n){return getString(n);}
+inline const char* str(Name n){return getString(n);}
+inline const char* str(int i){return g_Names.index_to_name[i].c_str();}
 
 // todo: path malarchy.
 struct Scope;
@@ -143,7 +184,7 @@ public:
 	Name name;						// identifier index
 	RegisterName regname;			// temporary for llvm SSA calc.
 	int visited;					// anti-recursion flag.
-	Node(){name=0;visited=0;regname=0;}
+	Node(){visited=0;regname=0;}
 	virtual  ~Node(){visited=0;};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
 	virtual ResolvedType resolve(Scope* scope, const Type* desired){dbprintf("empty?");return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
@@ -185,6 +226,7 @@ public:
 	void dump_top()const;
 	Expr();
 	virtual const char* kind_str()const{return"expr";}
+	Type* expect_type() const;
 	Type* get_type() const { if(this) {verify(this->m_type);return this->m_type;}else return nullptr;}
 	Type*& type(){ verify(this->m_type);return this->m_type;}
 	const Type* type()const{ verify(this->m_type);return this->m_type;}
@@ -331,14 +373,13 @@ struct ExprLiteral : Expr {
 
 struct ArgDef :Node{
 	uint32_t size,offset;
-	Name name;
 	Type* type=0;
 	Expr* default_expr=0;
 	Type* get_type()const {return type;}
 	void set_type(Type* t){verify(t);type=t;}
 	Type*& type_ref(){return type;}
 	ArgDef(){type=0;default_expr=0;};
-	ArgDef(int n):ArgDef(){name=n;type=0;default_expr=0;}
+	ArgDef(Name n){name=n;type=0;default_expr=0;}
 	void dump(int depth) const;
 	virtual const char* kind_str()const;
 	~ArgDef(){}
@@ -413,10 +454,11 @@ struct Scope {
 	Variable* get_fn_variable(Name name,ExprFnDef* f);
 	Variable* find_variable_rec(Name ident);
 	Variable* find_scope_variable(Name ident);
-//	Variable* get_or_create_variable(Name name,VarKind k);
 	Variable* create_variable(Name name,VarKind k);
 	Variable* get_or_create_scope_variable(Name name,VarKind k);
-	ExprStructDef* find_struct(Name name);
+	ExprStructDef* find_struct(Type* t){return this->find_struct_sub(this,t);}//original scope because typarams might use it.
+	ExprStructDef* find_struct_sub(Scope* original, Type* t);
+	ExprStructDef* find_struct_named(Name name);
 	ExprFnDef* find_fn(Name name,vector<Expr*>& args, const Type* ret_type) ;
 	void add_struct(ExprStructDef*);
 	void add_fn(ExprFnDef*);
@@ -561,7 +603,9 @@ struct ExprIdent :Expr{
 	// TODO: definition pointer. (ptr to field,function,struct,typedef..)
 	void dump(int depth) const;
 	virtual const char* kind_str()const{return"ident";}
-	ExprIdent(int i){name=i;set_type(nullptr);}
+	ExprIdent(){};
+	ExprIdent(const char* s,const char* e){name=Name(s,e);set_type(nullptr);}
+	ExprIdent(Name n){name=n;set_type(nullptr);}
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone() const;
 	bool is_placeholder()const{return name==PLACEHOLDER;}

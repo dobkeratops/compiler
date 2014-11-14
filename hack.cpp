@@ -147,13 +147,13 @@ int g_tok_info[]={
 	0,0,
 	0, //placeholder
 };
-bool is_ident(int tok){return tok>=IDENT;}
-bool is_type(int tok){return tok<T_NUM_TYPES;}
-bool is_operator(int tok){ return tok>=ARROW && tok<COMMA;}
-bool is_condition(int tok){
+bool is_ident(Name tok){return tok>=IDENT;}
+bool is_type(Name tok){return tok<T_NUM_TYPES;}
+bool is_operator(Name tok){ return tok>=ARROW && tok<COMMA;}
+bool is_condition(Name tok){
 	return (tok>=LT && tok<=LOG_OR);
 }
-bool is_comparison(int tok){
+bool is_comparison(Name tok){
 	return (tok>=LT && tok<=NE);
 }
 int operator_flags(int tok){return g_tok_info[tok];}
@@ -280,13 +280,13 @@ void StringTable::dump(){
 };
 
 StringTable g_Names(g_token_str);
-int getStringIndex(const char* str,const char* end) {
+Name getStringIndex(const char* str,const char* end) {
 	return g_Names.get_index(str, end,0);
 }
-const char* getString(int index) {
-	return g_Names.index_to_name[index].c_str();
+const char* getString(Name index) {
+	return g_Names.index_to_name[(int)index].c_str();
 }
-int getNumberIndex(int num){
+Name getNumberIndex(int num){
 	char tmp[32];sprintf(tmp,"%d",num); return g_Names.get_index(tmp,0,StringTable::Number);
 }
 
@@ -299,6 +299,11 @@ void newline(int depth) {
 // Even a block is an evaluatable expression.
 // it may contain outer level statements.
 
+Type* Expr::expect_type() const {
+	if (this->m_type) return m_type;
+	error((Node*)this,"%s has no type\n", str(name));
+	return nullptr;
+}
 void Expr::dump(int depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("(?)");
@@ -312,7 +317,7 @@ Expr::Expr(){ m_type=0;}
 ResolvedType assert_types_eq(const Type* a,const Type* b) {
 	ASSERT(a && b);
 	if (!a->eq(b)){
-		error(0,"type error: %p vs %p %d %d",a,b, a->name,b->name);
+		error(0,"type error: %p vs %p %s %s",a,b, str(a->name),str(b->name));
 		a->dump(-1);
 		error(0,"!=");
 		b->dump(-1);
@@ -463,7 +468,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired) {
 		return ResolvedType(this->type_ref(),ResolvedType::COMPLETE);
 	}
 	propogate_type_fwd(desired,this->type_ref());
-	if (auto sd=scope->find_struct(this->name)) {
+	if (auto sd=scope->find_struct_named(this->name)) {
 		if (!this->get_type()){
 			this->set_type(new Type(sd));
 			return propogate_type_fwd(desired,this->type_ref());
@@ -608,6 +613,7 @@ void Type::dump_sub()const{
 	}
 }
 bool Type::is_complex()const{
+	if (sub) return true;	// todo: we assume anything with typeparams is a struct, it might just be calculation
 	for (auto a=sub; a;a=a->next)if (a->is_complex()) return true;
 	if (this->is_struct()||this->name==ARRAY||this->name==VARIANT) return true;
 	return false;
@@ -1024,16 +1030,32 @@ Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 	dbprintf(";fn %s no var %s in scope\n",getString(f->name),getString(name));
 	return nullptr;
 }
-ExprStructDef* Scope::find_struct(Name name){
-	if (auto fn=this->find_named_items_local(name)){
+ExprStructDef* Scope::find_struct_sub(Scope* original,Type* t){
+	if (auto fn=this->find_named_items_local(t->name)){
 		for (auto st=fn->structs; st;st=st->next_of_name){
-			if (st->name==name)
-				return st;
+			if (st->name==t->name) {
+				// find with type-params...
+				if (!st->is_generic())
+					return st;
+				return st->get_instance(original, t);
+			}
 		}
 	}
-	if (auto p=parent_or_global()) return p->find_struct(name);
+	if (auto p=parent_or_global()) return p->find_struct_sub(original,t);
 	else return nullptr;
 }
+ExprStructDef* Scope::find_struct_named(Name name){
+	if (auto fn=this->find_named_items_local(name)){
+		for (auto st=fn->structs; st;st=st->next_of_name){
+			if (st->name==name) {
+				return st;
+			}
+		}
+	}
+	if (auto p=parent_or_global()) return p->find_struct_named(name);
+	else return nullptr;
+}
+
 void Scope::add_fn(ExprFnDef* fnd){
 	if (fnd->name_ptr) return;
 	auto ni=get_named_items_local(fnd->name);
@@ -1071,6 +1093,7 @@ Variable* Scope::get_or_create_variable(Name name,VarKind k){
 Variable* Scope::create_variable(Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	ASSERT(exv==0);
+	dbprintf("create variable %s\n",str(name));
 	auto v=new Variable(name,k); v->next=this->vars; this->vars=v;
 	v->name=name;v->owner=this;
 	return v;
@@ -1088,7 +1111,7 @@ Variable* Scope::get_or_create_scope_variable(Name name,VarKind k){
 void Scope::dump(int depth)const {
 	newline(depth);dbprintf("scope: %s {", this->owner?getString(this->owner->ident()):"global");
 	for (auto v=this->vars; v; v=v->next) {
-		newline(depth+1); dbprintf("var %d %s:",v->name, getString(v->name));
+		newline(depth+1); dbprintf("var %d %s:",(int)v->name, getString(v->name));
 		if (auto t=v->get_type()) t->dump(-1);
 	}
 	for (auto f=this->named_items; f;f=f->next){
@@ -1108,6 +1131,16 @@ void dump(vector<T*>& src) {
 
 // the fact is, i DO like C++.
 // I just dont like header files.
+template<typename T>
+T* expect_cast(Node* n){
+	auto r=dynamic_cast<T*>(n);
+	if (!r) {
+		T t;
+		error(n, "expected %s to be %s not %s", str(n->name),t.kind_str(), n->kind_str());
+		n->dump(-1);
+	}
+	return r;
+}
 
 ResolvedType ExprOp::resolve(Scope* sc, const Type* desired) {
 	Type* ret=0;
@@ -1118,27 +1151,36 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired) {
 		//			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
 		auto rhs_t=rhs->resolve(sc,desired);
 		lhs->dump(0);
-		dbprintf("resolve block getvar %p %s\n", sc, getString(vname));
 		if (op_ident==LET_ASSIGN){
 			auto new_var=sc->get_or_create_scope_variable(vname,Local);
 			ASSERT(new_var);
+			propogate_type(rhs_t, lhs->type_ref());
+			propogate_type(rhs_t, this->type_ref());
 			return propogate_type(rhs_t, new_var->type_ref(),desired);
 		}
 		else if (op_ident==ASSIGN_COLON){ // create a var, of given type.
 			// todo: get this in the main parser
-			auto lhsi=dynamic_cast<ExprIdent*>(lhs);
-			auto rhst=dynamic_cast<Type*>(rhs);
+			auto lhsi=expect_cast<ExprIdent>(lhs);
+			auto rhst=expect_cast<Type>(rhs);
 			//			auto v=sc->find_variable_rec(this->argls[0]->name);
 			auto v=sc->get_or_create_scope_variable(lhsi->name,Local);
 			v->set_type(rhst);
 			return propogate_type(v->type_ref(),type_ref());
 		}
-		else {
+		else if (op_ident==ASSIGN){
 			propogate_type_fwd(desired, type_ref());
-			propogate_type(rhs->type_ref(), type_ref());
-			auto lhs_t=lhs->resolve(sc,type_ref());
-			propogate_type(type_ref(),lhs->type_ref());
-			return propogate_type(this->type_ref(),lhs->type_ref());
+			auto rhs_t=rhs->resolve(sc,desired);
+			auto lhs_t=lhs->resolve(sc,desired);		// might assign to struct-field, ...
+//			rhs->dump(0);rhs->type()->dump_if(-1);newline(0);
+//			lhs->dump(0);lhs->type()->dump_if(-1);newline(0);
+//			desired->dump_if(-1);newline(0);
+			propogate_type(rhs->type_ref(), lhs->type_ref());
+			propogate_type(type_ref(),rhs->type_ref());
+//			lhs->type()->dump_if(-1);newline(0);
+			return propogate_type(type_ref(),lhs->type_ref());
+		} else{
+			ASSERT(0);
+			return ResolvedType();
 		}
 	}
 	else if (op_ident==COLON){ // TYPE ASSERTION,
@@ -1155,14 +1197,14 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired) {
 	else if (op_ident==DOT || op_ident==ARROW) {
 		auto lhs_t=lhs->resolve(sc, 0);//type doesn't push up- the only info we have is what field it needs
 		auto t=lhs_t.type;
-		dbprintf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);dbprintf("\n");
+//		dbprintf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);dbprintf("\n");
 	
 		// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
 		if (t) {
 			t=t->deref_all();
 			// now we have the elem..
 			ASSERT(dynamic_cast<ExprIdent*>(rhs));
-			if (auto st=sc->find_struct(t->name)){
+			if (auto st=sc->find_struct(t)){
 				if (auto f=st->find_field(rhs->name)){
 					f->dump(-1);
 					ret=f->type;
@@ -1177,7 +1219,11 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired) {
 		ASSERT(!lhs && rhs);
 		Type* dt=nullptr;
 		if (desired){
-			ASSERT(desired->name==PTR || desired->name==REF);
+			if (desired->name!=PTR || desired->name!=REF) {
+				dbprintf("taking adr:\n");
+				desired->dump(-1);
+				ASSERT(0&&"incorrect type for grabbing adress");
+			}
 			dt=desired->sub;
 		}
 		auto ret=rhs->resolve(sc,dt);
@@ -1460,7 +1506,7 @@ struct NumDenom{int num; int denom;};
 
 struct TextInput {
 	const char* buffer,*tok_start,*tok_end,*prev_start;
-	int curr_tok;
+	Name curr_tok;
 	char watch_tok[64][12];
 
 	TextInput(const char* src){
@@ -1518,20 +1564,20 @@ struct TextInput {
 		for (auto i=10; i>0; i--){strcpy(watch_tok[i],watch_tok[i-1]);}
 		memcpy(watch_tok[0],tok_start,tok_end-tok_start); watch_tok[0][tok_end-tok_start]=0;
 	}
-	int eat_tok() {
+	Name eat_tok() {
 		prev_start=tok_start;
 		for (const char* c=tok_start; c!=tok_end;c++) {}
-		int r=curr_tok;
+		auto r=curr_tok;
 		advance_tok();
 		return r;
 	}
-	bool eat_if(int i) {	
+	bool eat_if(Name i) {
 		if (peek_tok()==i) {eat_tok(); return true;}
 		else return false;
 	}
 	bool is_placeholder()const {return  ((*tok_start=='_') && !isSymbolCont(*tok_end));}
-	int eat_if_placeholder(){if (is_placeholder()){advance_tok(); return PLACEHOLDER;} else return 0;}
-	int eat_ident() {
+	Name eat_if_placeholder(){if (is_placeholder()){advance_tok(); return PLACEHOLDER;} else return Name();}
+	Name eat_ident() {
 		auto r=eat_tok();
 		if (r<IDENT) {error(0,"expected ident found %s",getString(r));exit(0);}
 		return r;
@@ -1588,9 +1634,9 @@ struct TextInput {
 		return *tok_start=='\'';
 	}
 
-	int peek_tok(){return curr_tok;}
+	Name peek_tok(){return curr_tok;}
 	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
-	int expect(int t){ int x;if (t!=(x=eat_tok())) {error(0,"expected %s found %s",getString(t), getString(x));exit(0);} return x;}
+	Name expect(Name t){ int x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s",str(t), str(x));exit(0);} return x;}
 };
 void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
 typedef TextInput TokenStream;
@@ -1932,7 +1978,7 @@ instantiate tree<vector,int>
 	for (param_index=0; param_index<param_format.size(); param_index++) {
 		if (param_format[param_index].name== ty->name) break;
 	}
-	if (param_index<param_format.size()>=0) {
+	if (param_index<param_format.size()) {
 		new_type = (Type*) given_params[param_index]->clone();
 	} else {
 		new_type= new Type; new_type->name = ty->name;
@@ -1962,8 +2008,8 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, Type* type) {
 		ty_params.push_back(parent->typeparams[i].defaultv);
 	}
 	// search for existing instance
-	ExprStructDef* ins;
-	for (auto ins=parent->instances; ins; ins=ins->next_instance) {
+	ExprStructDef* ins=parent->instances;
+	for (;ins; ins=ins->next_instance) {
 		if (type_params_eq(ty_params, ins->instanced_types))
 			break;
 	}
@@ -1975,6 +2021,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, Type* type) {
 		ins->next_instance = parent->instances; parent->instances=ins;
 		ins->inherits_type= parent->inherits_type; // TODO: typeparams! map 'parent' within context  to make new typeparam vector, and get an instance for that too.
 
+		ins->instanced_types=ty_params;
 		for (auto i=0; i<fields.size(); i++) {
 			ArgDef* fdef = parent->fields[i];
 			ArgDef* new_field = new ArgDef;
@@ -1982,17 +2029,20 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, Type* type) {
 			new_field->type = translate_template_type(sc, parent->typeparams, ty_params, fdef->type);
 			ins->fields.push_back(new_field);
 		}
-		dbprintf("template instantiation of %s\n for ", str(parent->name));
-		type->dump(0);
-		ins->dump(0);
+		dbprintf("template instantiation of %s\n :-{", str(parent->name));
+		type->dump(-1);
+		ins->dump(-1);
+		dbprintf("}template instantiation", str(parent->name));
 	}
+	if (!type->struct_def) { type->struct_def=ins;}
+	else { ASSERT(type->struct_def==ins && "instantiated type should be unique")};
 	return ins;
 	
 }
 
 void ExprStructDef::inherit_from(Scope * sc,Type *base_type){
 	if (inherits!=0) return;// already resolved.
-	auto base_template=sc->find_struct(base_type->name);
+	auto base_template=sc->find_struct_named(base_type->name);
 	ExprStructDef* base_instance=base_template;
 	if (base_type->is_template()) {
 		base_instance = base_template->get_instance(sc, base_type);
@@ -2009,6 +2059,8 @@ void ExprStructDef::dump(int depth) const{
 	newline(depth);dbprintf("}");
 }
 bool ExprStructDef::is_generic()const{
+	if (typeparams.size())
+		return true;
 	for (auto f:fields){if (!f->type)return true;}//TODO: is typeparam?
 	return false;
 }
@@ -2262,10 +2314,15 @@ const char* g_TestProg=
 	"fn lerp(a,b,f){(b-a)*f+a};"
 	"fn foo(a:*char)->void;"
 	"fn printf(s:str,...)->int;"
-
+	"struct Vec[T]{data:*T, num:int}; "
+	"struct Collect[C,T] {coll:C[T]}; "
 	"fn main(argc:int,argv:**char)->int{"
 	"	xs=:array[int,512];"
-	"	q:=xs[1];"
+	"	fs=:array[float,512];"
+	"	ys=:Collect[Vec,float];"
+//	"	ys.data=&fs[1];"
+	"	y:=ys.coll.data;0"
+/*	"	q:=xs[1];"
 	"	p1:=&xs[1];"
 //	"	q:=*p1;"
 //	"	xs[1]=20;"
@@ -2278,7 +2335,9 @@ const char* g_TestProg=
 	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
 	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
 	"	printf(\"Hello From My Language %.3f %d %d\", lerp(10.0,20.0,0.5),y,x );0"
+*/
 	"}\0"
+
 ;
 /*
 "set(glob_x, 10.0);"
@@ -2374,13 +2433,16 @@ void compile_source(const char *buffer, const char* outname){
 			printf("%p %p\n",p, outname);
 			printf("can't open output file %s\n",outname);
 		}
+#ifdef DEBUG
+		output_code(stdout, &global);
+#endif
 	}
 }
 
 void compile_source_file(const char* filename) {
 	char outname[256];
 	filename_change_ext(outname,filename,"ll");
-	printf("compiling %s\n",filename);
+	printf("compiling %s\n -> %s\n",filename,outname);
 	auto fp=fopen(filename,"rb");
 	if (fp){
 		fseek(fp,0,SEEK_END); auto sz=ftell(fp); fseek(fp,0,SEEK_SET);
@@ -2395,7 +2457,7 @@ void compile_source_file(const char* filename) {
 	}
 }
 int main(int argc, const char** argv) {
-	compile_source_file("/Users/walter/hack/hack.rs");
+//	compile_source_file("/Users/walter/hack/hack.rs");
 	for (auto i=1; i<argc; i++) {
 		compile_source_file(argv[i]);
 	}
