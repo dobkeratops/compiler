@@ -513,10 +513,12 @@ void ExprBlock::dump(int depth) const {
 	if (!this) return;
 	newline(depth);
 	if (this->call_expr){
+		dbprintf(this->square_bracket?"subscript: ":"call: ");
+		this->get_type()->dump_if(-1);
+		dbprintf(" (");
 //		dbprintf("%s",getString(get_fn_call()->name));
-		this->call_expr->dump(depth);
+		this->call_expr->dump(depth+1);
 		if (this->get_type()) {dbprintf(":");this->get_type()->dump(-1);};}
-		dbprintf("(");
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
@@ -543,7 +545,7 @@ const char* Scope::name() const {
 	if (!parent){
 		return"global";
 	} 
-	else return getString(owner->name);
+	else return owner?str(owner->name):"<scope_error>";
 }
 
 // compile time function in type system, available when you use
@@ -1244,16 +1246,20 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired) {
 		Type* dt=nullptr;
 		if (desired){
 			if (desired->name!=PTR || desired->name!=REF) {
-				dbprintf("taking adr:\n");
+				dbprintf("taking adr,want:\n");
 				desired->dump(-1);
+				newline(0);
 				ASSERT(0&&"incorrect type for grabbing adress");
 			}
 			dt=desired->sub;
 		}
 		auto ret=rhs->resolve(sc,dt);
 		if (!this->get_type() && ret.type){
+			dbprintf("resolve pointer type\n");
+			ret.type->dump(-1); newline(0);
 			auto ptr_type=new Type(PTR); ptr_type->sub=(Type*)ret.type->clone();
 			this->set_type(ptr_type);
+			ptr_type->dump(-1); newline(0);
 			return propogate_type_fwd(desired,ptr_type);
 		}
 		return ret;
@@ -1317,8 +1323,21 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 		}
 		else {ASSERT(0);return ResolvedType();}
 	}
+	else if (this->square_bracket && this->call_expr) {
+		// array indexing operator TODO: check this isn't itself a Type, if we want templates anywhere.
+		auto array_type=this->call_expr->resolve(sc,nullptr); // todo - it could be _[desired]. forward should give possibilities
+		if (array_type.type){
+			ASSERT(array_type.type->is_array()||array_type.type->is_pointer());
+			for (auto i=0; i<argls.size(); i++)  {
+				argls[i]->resolve(sc,nullptr ); // TODO any indexing type? any type extracted from 'array' ?
+			}
+			const Type* array_elem_type=array_type.type->sub;
+			propogate_type_fwd(array_elem_type,this->type_ref());
+			return propogate_type_fwd(desired,this->type_ref());
+		} else return ResolvedType();
+	}
 	else if (this->call_expr){
-		dbprintf(";resolve call..%s->%s\n",str(sc->owner->name),str(p->ident()));
+		dbprintf(";resolve call..%s->%s\n",sc->name(),str(p->ident()));
 		// TODO: distinguish 'partially resolved' from fully-resolved.
 		// at the moment we only pick an fn when we know all our types.
 		// But, some functions may be pure generic? -these are ok to match to nothing.
@@ -1503,13 +1522,16 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired) {
 	}
 
 	if (!this->fn_type) {
-		fn_type=new Type(FN);
+		this->fn_type=new Type(FN);
 		auto arglist=new Type(TUPLE);
-		fn_type->push_back(arglist);
+		this->fn_type->push_back(arglist);
 		for (auto a:this->args) {
 			arglist->push_back(a->type?((Type*)a->type->clone()):new Type(AUTO));
 		}
-		fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(AUTO));
+		this->fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(AUTO));
+		
+		const Type* t0=this->fn_type; Type*& tr=this->type_ref();
+		propogate_type_fwd(t0,tr);
 	}
 	{ int once;if (!once++) dbprintf("RESOLVE FN DEF TYPE PROPERLY- TODO cleanup ambiguity between fn ptr type & fn return type!\n");
 	}
@@ -2372,6 +2394,7 @@ const char* g_TestProg=
 	"struct Vec[T]{data:*T, num:int}; "
 	"fn main(argc:int,argv:**char)->int{"
 	"	xs=:array[int,512];"
+	"	p2:=&xs[1];"
 	"	fs=:array[float,512];"
 	"	ys=:Vec[float];"
 //	"	ys.data=&fs[1];"
@@ -2380,13 +2403,11 @@ const char* g_TestProg=
 	"	push_back(ys,2.0);"
 	"	f:=fn(a:float,b:int)->int{printf(\"hello lambda\n\");b};"
 	"	r:=f(0.1,2);"
-	"	"
-	"0"
-/*	"	q:=xs[1];"
+	"	q:=xs[1];"
 	"	p1:=&xs[1];"
-//	"	q:=*p1;"
-//	"	xs[1]=20;"
-//	"   p=30;"
+	"	q:=*p1;"
+	"	xs[1]=20;"
+	"   p=30;"
     "	xs[2]=000;"
 	"	xs[2]+=400;"
 	"	*p1=30;"
@@ -2395,7 +2416,8 @@ const char* g_TestProg=
 	"   x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};"
 	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
 	"	printf(\"Hello From My Language %.3f %d %d\", lerp(10.0,20.0,0.5),y,x );0"
-*/
+
+	"0"
 	"}\0"
 
 ;
@@ -2462,27 +2484,20 @@ void compile_source(const char *buffer, const char* outname){
 	g_pp=&outname;
 	printf("%p \n",outname);
 	TextInput	src(buffer);
-	//ASSERT(p==outname);
 	auto node=parse_call(src,0,SEMICOLON,nullptr);
-	//ASSERT(p==outname);
 	node->dump(0);
-	//ASSERT(p==outname);
 	Scope global; global.node=(ExprBlock*)node; global.global=&global;
-	//ASSERT(p==outname);
 	gather_named_items(node,&global);
-	//ASSERT(p==outname);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
-	//ASSERT(p==outname);
-	node->dump(0);
-	//ASSERT(p==outname);
-	//	global.visit_calls();
 	global.dump(0);
-	//ASSERT(p==outname);
-	//std::cout<<outname<<"\n";
+	node->dump(0);
+#ifdef DEBUG
+	output_code(stdout, &global);
+#endif
 	if (outname){
 		FILE* ofp=fopen(outname,"wb");
 		if (ofp){
@@ -2493,9 +2508,6 @@ void compile_source(const char *buffer, const char* outname){
 			printf("%p %p\n",p, outname);
 			printf("can't open output file %s\n",outname);
 		}
-#ifdef DEBUG
-		output_code(stdout, &global);
-#endif
 	}
 }
 
