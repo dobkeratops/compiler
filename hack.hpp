@@ -18,7 +18,8 @@
 struct Node;
 struct Name;
 extern void dbprintf(const char*,...);
-extern void error(Node*,const char*,...);
+extern void error(const Node*,const char*,...);
+extern void error(const char*,...);
 extern bool is_comparison(Name n);
 // todo: seperate Parser.
 
