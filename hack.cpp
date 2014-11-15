@@ -2456,44 +2456,43 @@ const char* g_TestProg=
 	"vz"
 	"}"
 */
-	"fn lerp(a:float,b:float,f:float)->float{(b-a)*f+a};"
-	"fn lerp(a,b,f){(b-a)*f+a};"
-	"fn foo(a:*char)->void;"
-	"fn printf(s:str,...)->int;"
-	"fn push_back(t,v)->int{"
-	"	a:=t.num; "
-	"	printf(\"push_back %d\n\", a);0"
-	"}"
-	"struct Vec[T]{data:*T, num:int}; "
-	"fn main(argc:int,argv:**char)->int{"
-	"	xs=:array[int,512];"
-	"	p2:=&xs[1];"
-	"	fs=:array[float,512];"
-	"	ys=:Vec[int];"
-	"	ys.data=&xs[3];"
-	"	ys.num=10; "
-	"	yp:=ys.data;"
-	"	push_back(ys,2.0);"
-	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\n\");b};"
-	"	r:=f(0.1,2);"
-	"	q:=xs[1];"
-	"	p1:=&xs[1];"
-	"	q:=*p1;"
-	"	xs[1]=20;"
-    "	xs[2]=000;"
-	"	xs[2]+=400;"
-	"	xs[3]=500;"
-	"	*ys.data += 20;"
-	"	*p1=30;"
-	"   z:=5;"
-	"   y:=xs[1]+z+xs[2];"
-	"   x:=if argc<2{1}else{2};"
-	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}"
-	"	xs1:=xs[1]; xs2:=xs[2];"
-	"	printf(\"Hello From My Language %.3f %d %d %d \", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data));0"
-
-	"0"
-	"}\0"
+	"fn lerp(a,b,f){(b-a)*f+a};  \n"
+	"fn foo(a:int)->int{printf(\"foo_int\n\");0};  \n"
+	"fn printf(s:str,...)->int;  \n"
+	"fn push_back(t,v)->int{  \n"
+	"	a:=t.num;   \n"
+	"	printf(\"push_back %d\n\", a);0  \n"
+	"}  \n"
+	"struct Vec[T]{data:*T, num:int};   \n"
+	"fn main(argc:int,argv:**char)->int{  \n"
+	"	xs=:array[int,512];  \n"
+	"	p2:=&xs[1];  \n"
+	"	fs=:array[float,512];  \n"
+	"	ys=:Vec[int];  \n"
+	"	ys.data=&xs[3];  \n"
+	"	ys.num=10;   \n"
+	"	yp:=ys.data;  \n"
+	"	push_back(ys,2.0);  \n"
+	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\n\");b};  \n"
+	"	r:=f(0.1,2);  \n"
+	"	q:=xs[1];  \n"
+	"	p1:=&xs[1];  \n"
+	"	q:=*p1;  \n"
+	"	xs[1]=20;  \n"
+    "	xs[2]=000;  \n"
+	"	xs[2]+=400;  \n"
+	"	xs[3]=500;  \n"
+	"	*ys.data += 20;  \n"
+	"	*p1=30;  \n"
+	"   z:=5;  \n"
+	"   foo(z);  \n"
+	"   y:=xs[1]+z+xs[2];  \n"
+	"   x:=if argc<2{1}else{2};  \n"
+	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}  \n"
+	"	xs1:=xs[1]; xs2:=xs[2];  \n"
+	"	printf(\"Hello From My Language %.3f %d %d %d \", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data)); \n"
+	"	0  \n"
+	"}  \n\0"
 
 /*
 	"struct Foo{x:int,y:int, struct Bar{x:float}, fn method(i:int)->int{printf(\"hello from method %d\n\",i);0};};"
@@ -2564,7 +2563,10 @@ should be able to code assetless
  	}
 */
 
-void compile_source(const char *buffer, const char* outname){
+enum COMPILE_FLAGS {
+	LLVM=0x0001, TYPES=0x0002, EXECUTABLE=0x0008, RUN=0x0010
+};
+int compile_source(const char *buffer, const char* outname, int flags){
 	auto p=outname; g_p=p;
 	g_pp=&outname;
 	printf("%p \n",outname);
@@ -2578,30 +2580,42 @@ void compile_source(const char *buffer, const char* outname){
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
 	node->resolve(&global,nullptr);
-	global.dump(0);
-	node->dump(0);
-#ifdef DEBUG
-	output_code(stdout, &global);
-#endif
+	if (flags & TYPES) {
+		global.dump(0);
+		node->dump(0);
+	}
+	if (flags & LLVM) {
+		output_code(stdout, &global);
+	}
 	if (outname){
 		FILE* ofp=fopen(outname,"wb");
 		if (ofp){
 			output_code(ofp, &global);
 			fprintf(ofp,"\n;end");
 			fclose(ofp);
-			char exename[256];
-			filename_change_ext(exename,outname,"");
-			char compile_cmd[512]; sprintf(compile_cmd,"clang %s -o %s", outname, exename);
-			printf("\n%s\n",compile_cmd);
-			system(compile_cmd);
+			if (flags & EXECUTABLE) {
+				char exename[256];
+				filename_change_ext(exename,outname,"");
+				char compile_cmd[512]; sprintf(compile_cmd,"clang %s -o %s", outname, exename);
+				printf("\n%s\n",compile_cmd);
+				auto ret= system(compile_cmd);
+				if (!ret && (flags & RUN)) {
+					printf("compiled ok, running executable %s ", exename);
+					char invoke[512];sprintf(invoke,"./%s",exename);
+					return system(invoke);
+				}
+				return ret;
+			}
 		} else {
 			printf("%p %p\n",p, outname);
 			printf("can't open output file %s\n",outname);
+			return -1;
 		}
 	}
+	return 0;
 }
 
-void compile_source_file(const char* filename) {
+int compile_source_file(const char* filename, int options) {
 	char outname[256];
 	filename_change_ext(outname,filename,"ll");
 	printf("compiling %s\n -> %s\n",filename,outname);
@@ -2612,20 +2626,41 @@ void compile_source_file(const char* filename) {
 		fread((void*)buffer,1,sz,fp);
 		buffer[sz]=0;
 		fclose(fp);
-		compile_source(buffer,outname);
+		int ret=compile_source(buffer,outname,options);
 		free((void*)buffer);
+		return ret;
 	} else{
 		printf("can't open %s\n",filename);
+		return -1;
 	}
 }
 int main(int argc, const char** argv) {
 //	compile_source_file("/Users/walter/hack/hack.rs");
+	int options=0,given_opts=0;
 	for (auto i=1; i<argc; i++) {
-		compile_source_file(argv[i]);
+		const char* a=argv[i];
+		if (a[0]=='-'){
+			if (a[1]=='t') options|=TYPES;
+			if (a[1]=='l') options|=LLVM;
+			if (a[1]=='r') options|=RUN|EXECUTABLE;
+			if (a[1]=='e') options|=EXECUTABLE;
+		}
+	}
+	if (!options) options=TYPES|LLVM|RUN|EXECUTABLE;
+	
+	for (auto i=1; i<argc; i++) {
+		if (argv[i][0]!='-')
+			compile_source_file(argv[i],options);
 	}
 	if (argc<=1) {
-		printf("no sources given so running inbuilt test.");
-		compile_source(g_TestProg,"test.ll");
+		printf("no sources given so running inbuilt test.\n");
+		auto ret=compile_source(g_TestProg,"test.ll",options);
+		if (!ret) {
+			printf("\nSource we just compiled, use for reference..\n");
+			printf(g_TestProg);
+			printf("\noptions -l emit llvm IR only -e emit executable only -t dump AST with types -r compile & run\n");
+			printf("\ndefault: it will compile & run a source file;\ngenerates srcname.ll & srcname/srcname.out executable");
+		}
 	}
 }
 
