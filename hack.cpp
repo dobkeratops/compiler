@@ -785,6 +785,8 @@ const char* ArgDef::kind_str()const{return"arg_def";}
 bool ExprFnDef::is_generic() const {
 	if(instances!=nullptr)
 		return true;
+	if (typeparams.size())
+		return true;
 	for (auto i=0; i<args.size(); i++)
 		if (!args[i]->type || args[i]->type->name==AUTO)
 			return true;
@@ -859,20 +861,42 @@ void Scope::visit_calls() {
 		sub->visit_calls();
 }
 */
+void ExprFnDef::dump_signature()const{
+	dbprintf("fn %s(",str(name));
+	for (auto a:args) a->dump(-1);
+	dbprintf(")->");
+	this->return_type()->dump_if(-1);
+	dbprintf("\n");
+}
 ExprFnDef* instantiate_generic_function(ExprFnDef* src, vector<Expr*>& call_args) {
 	Scope* src_fn_owner=src->scope->parent_or_global();
 	ExprFnDef* new_fn =(ExprFnDef*) src->clone();
 	// fill any args we can from the callsite.
+	// TODO: translate generic-type-params
+	// because we may infer return from that
 	for (auto i=0; i<new_fn->args.size(); i++){
-		if (!new_fn->args[i]->type && call_args[i]->get_type()) {new_fn->args[i]->set_type((Type*)call_args[i]->get_type()->clone());}
+		if (//!new_fn->args[i]->type &&
+			call_args[i]->get_type()) {
+				new_fn->args[i]->set_type((Type*)call_args[i]->get_type()->clone());
+		}
 	}
+	src->dump_signature();
+	new_fn->dump_signature();
+	new_fn->dump(0);
+	// todo: translate return type. for the minute we discard it..
+	new_fn->ret_type=nullptr;
+	new_fn->body->set_type(nullptr);// todo, inference upward..
 	new_fn->next_instance = src->instances;
 	src->instances=new_fn;
 	new_fn->instance_of = src;
 	new_fn->resolved=false;
 //	dbprintf("generic instantiation:-\n");
 //	new_fn->dump(0);
-	new_fn->resolve(src_fn_owner,nullptr);//todo: we can use output type in instantiation too
+//	new_fn->scope->dump(0);
+	new_fn->resolve(src_fn_owner,nullptr);//todo: we can use output type ininstantiation too
+	dbprintf("instantiated: %s \n",str(new_fn->name));
+	new_fn->dump_signature();
+	dbprintf("%s\n", str(new_fn->ret_type->name));
 //	new_fn->dump(0);
 	return new_fn;	// welcome new function!
 }
@@ -953,6 +977,45 @@ int num_known_arg_types(vector<Expr*>& args) {
 	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
 }
 
+//void match_generic_type_param_sub(const vector<TypeParam>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
+	
+//}
+
+int match_generic_type_params(const vector<TypeParam>& fn_tps, vector<const Type*>& matched_tps, const Type* fn_arg, const Type* given_arg)
+{
+	int ret_score=0;
+	if (!fn_arg && !given_arg) return 0;
+	if (!fn_arg) return 0;// dont care if trying to match given with 'any'
+	for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->next,sub2=sub2->next) {
+		ret_score+=match_generic_type_params(fn_tps, matched_tps, sub1, sub2);
+	}
+	
+	signed int ti=0;
+	for (ti=fn_tps.size()-1; ti>=0; ti--) {
+		if (fn_arg->name==fn_tps[ti].name) {
+			break;
+		}
+	}
+	if (ti>=0) {
+		// Is this a generic typeparam?
+		if (matched_tps[ti]==0){ // new typeparam?
+			dbprintf("typeparam %s is %s\n", str(fn_tps[ti].name), str(given_arg->name));
+			matched_tps[ti]=given_arg;
+			return ret_score+1;
+		}
+		else if (!(matched_tps[ti]->eq(given_arg))) {// or we already found it - match..
+			dbprintf("typeparam %s is %s, !=given %s\n", str(fn_tps[ti].name), str(matched_tps[ti]->name), str(given_arg->name));
+			return ret_score-1000;
+		}
+	} else {
+		// concrete types - compare absolutely
+		if (fn_arg->name != given_arg->name)
+			return ret_score-1000;	// mismatch is instant fail for this candidate.
+	}
+	return ret_score;
+}
+
+
 void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const Type* ret_type, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
 	if (f->name!=name)
 		return ;
@@ -964,6 +1027,10 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 		return;
 
 	find_printf("candidate:");
+	
+	vector<const Type*> matched_type_params;
+	for (int i=0; i<f->typeparams.size(); i++){matched_type_params.push_back(nullptr);}
+
 	for (int i=0; i<args.size() && i<f->args.size(); i++) {
 //		find_printf("%s ",f->args[i]->type->get_name_str());
 		find_printf("arg %d %s",i,getString(f->args[i]->name));
@@ -971,24 +1038,41 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 		if (t) t->dump(-1);
 		find_printf("\n");
 	}
+
 	find_printf("\n");
 	int score=0;
-	if (f->variadic)
+	if (f->variadic && args.size()> f->args.size())
 		score=1;	// variadic functoin can match anything?
-	for (int i=0; i<args.size(); i++) {
-		if (i<f->args.size()){
-			if (f->args[i]->get_type()->eq(args[i]->get_type())) {
-				find_printf("match %s %s\n",f->args[i]->get_type()->get_name_str(), args[i]->get_type()->get_name_str());
+	for (int i=0; i<args.size() && i<f->args.size(); i++) {
+		
+		
+		if (f->args[i]->get_type()->eq(args[i]->get_type())) {
+			find_printf("match %s %s\n",f->args[i]->get_type()->get_name_str(), args[i]->get_type()->get_name_str());
 				score++;
-			}
 		}
 	}
+	// find generic typeparams..
+	if (f->typeparams.size()){
+		for (int i=0; i<args.size() && i<f->args.size(); i++) {
+				score+=match_generic_type_params(f->typeparams, matched_type_params, f->args[i]->get_type(), args[i]->get_type());
+		}
+#ifdef DEBUG
+		dbprintf(" %s score=%d; matched typeparams{:-\n",str(f->name),score);
+		for (auto i=0; i<f->typeparams.size(); i++){
+			dbprintf("%s = %s;", str(f->typeparams[i].name), str(matched_type_params[i]->name) );
+		}
+		dbprintf("}\n");
+		dbprintf("\n");
+#endif
+	}
+	// fill any unmatched with defaults?
 
 	// consider return type in call.
 	if (ret_type) if (f->get_type()->eq(ret_type)) score++;
 		
 	// for any given argument not matched, zero the score if its the *wrong* argument?
 	// TODO: this is where we'd bring conversion operators into play.
+	if (!f->typeparams.size()) // TODO; we need to do this with translated types. for now, we skip this if the signature has typeparams.
 	for (int i=0; i<args.size() && i<f->args.size(); i++) {
 		if (f->args[i]->get_type() && args[i]->get_type())
 			if ((!f->args[i]->get_type()->eq(args[i]->get_type())) && f->args[i]->get_type()!=0) score=-1;
@@ -1060,7 +1144,7 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 //		exit(0);
 //		return 0;f
 //	}
-	find_printf(";match score=%d/%z\n", best_score, args.size());
+	dbprintf(";match %s score=%d/%z\n", best?str(best->name):"" ,best_score, args.size());
 	if (!best)  {
 		for (auto i=0; i<args.size(); i++){
 			dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");
@@ -1072,7 +1156,7 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 		error(this->owner,";ambiguous matches for %s",getString(name));
 	}
 	if (best->is_generic()) {
-		find_printf(";matched generic function: instanting\n");
+		dbprintf(";matched generic function %s instanting\n",str(best->name));
 		return instantiate_generic_function(best, args);
 	}
 	
@@ -1562,6 +1646,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired) {
 
 	auto sc=definer_scope->make_inner_scope(&this->scope,this);
 		//this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
+	if (!this->is_generic()){
 	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 		auto arg=this->args[i];
 		auto v=sc->find_scope_variable(arg->name);
@@ -1574,6 +1659,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired) {
 	if (this->body){
 		auto ret=this->body->resolve(sc,this->ret_type);
 		propogate_type(this, ret,this->ret_type);
+	}
 	}
 
 	if (!this->fn_type) {
@@ -2490,10 +2576,10 @@ const char* g_TestProg=
 	"vz"
 	"}"
 */
-	"fn lerp(a,b,f){(b-a)*f+a};  \n"
+	"fn lerp[T,F](a:T,b:T,f:F){(b-a)*f+a};  \n"
 	"fn foo(a:int)->int{printf(\"foo_int\n\");0};  \n"
 	"fn printf(s:str,...)->int;  \n"
-	"fn push_back(t,v)->int{  \n"
+	"fn push_back[T](t:Vec[T],v:T)->int{  \n"
 	"	a:=t.num;   \n"
 	"	printf(\"push_back %d\n\", a);0  \n"
 	"}  \n"
@@ -2509,23 +2595,17 @@ const char* g_TestProg=
 	"	ys.data=&xs[3];  \n"
 	"	ys.num=10;   \n"
 	"	yp:=ys.data;  \n"
-	"	push_back(ys,2.0);  \n"
+	"	push_back(ys,2);  \n"
 	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\n\");b};  \n"
-	"	my_vec=:Vec3;  \n"
-	"	my_vec.vx=10.0;  \n"
+	"	my_vec=:Vec3;  my_vec.vx=10.0;  \n"
 	"	r:=f(0.1,2);  \n"
-	"	q:=xs[1];  \n"
-	"	p1:=&xs[1];  \n"
-	"	q:=*p1;  \n"
-	"	xs[1]=20;  \n"
-    "	xs[2]=000;  \n"
-	"	xs[2]+=400;  \n"
-	"	xs[3]=500;  \n"
+	"	q:=xs[1];  p1:=&xs[1];  q:=*p1; \n"
+	"	xs[1]=20;  xs[2]+=400;  xs[3]=500;  \n"
 	"	*ys.data += 20;  \n"
 	"	*p1=30;  \n"
-	"   z:=5;  \n"
-	"   foo(z);  \n"
+	"   z:=5;  foo(z);  \n"
 	"   y:=xs[1]+z+xs[2];  \n"
+	"	f0:=lerp(10.0,20.0,0.5);\n"
 	"   x:=if argc<2{1}else{2};  \n"
 	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}  \n"
 	"	xs1:=xs[1]; xs2:=xs[2];  \n"

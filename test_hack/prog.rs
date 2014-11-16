@@ -8,6 +8,13 @@ struct Foo {
 fn something(f){
 	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz);
 }
+struct Variant[A,B] {
+	u:int,
+	a:A,
+	b:B
+}
+
+
 fn main(argc:int,argv:**char)->int{
 	xs=:array[int,512];
 	q:=xs[1]; p1:=&xs[1];
@@ -17,6 +24,7 @@ fn main(argc:int,argv:**char)->int{
 	z:=5;
 	y:=xs[1]+z+xs[2];
 	x:=0;
+	vt:=Variant[int,float];
 
 	fv=:Foo;
 	fv.vx=3; fv.vy=4; fv.vz=5;

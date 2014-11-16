@@ -595,6 +595,7 @@ struct ExprFnDef : Expr {
 	ExprBlock* body=0;
 	int get_name()const {return name;}
 	bool is_generic() const;
+	void dump_signature() const;
 	virtual const char* kind_str()const{return"fn";}
 	ExprFnDef(){variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
 	void dump(int ind) const;
