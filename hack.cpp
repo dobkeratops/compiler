@@ -433,6 +433,13 @@ ResolvedType propogate_type_fwd(const Node* n, const Type*& a,Type*& b) {
 	if (a && b){return assert_types_eq(n, a,b);  }
 	ASSERT(0);
 }
+ResolvedType propogate_type_fwd(Expr* e, const Type*& a) {
+	return propogate_type_fwd(e, a, e->type_ref());
+}
+ResolvedType propogate_type(Expr* e, Type*& a) {
+	return propogate_type(e, a, e->type_ref());
+}
+
 ResolvedType propogate_type(const Node* n, Type*& a,Type*& b,Type*& c) {
 	verify(a,b,c);
 	int ret=ResolvedType::COMPLETE;
@@ -455,6 +462,10 @@ ResolvedType propogate_type(const Node* n, ResolvedType& a,Type*& b) {
 	a.combine(propogate_type(n, a.type,b));
 	return a;
 }
+ResolvedType propogate_type(Expr* e, ResolvedType& a) {
+	return propogate_type(e, a, e->type_ref());
+}
+
 ResolvedType propogate_type(const Node* n,ResolvedType& a,Type*& b,const Type* c) {
 	verify(a.type,b,c);
 	a.combine(propogate_type_fwd(n, c,b));
@@ -1568,8 +1579,8 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 				argls[i]->resolve(sc,nullptr ); // TODO any indexing type? any type extracted from 'array' ?
 			}
 			const Type* array_elem_type=array_type.type->sub;
-			propogate_type_fwd(this, array_elem_type,this->type_ref());
-			return propogate_type_fwd(this, desired,this->type_ref());
+			propogate_type_fwd(this, array_elem_type);
+			return propogate_type_fwd(this, desired);
 		} else return ResolvedType();
 	}
 	else if (this->call_expr){
@@ -1592,7 +1603,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired) {
 				argls[arg_index]->resolve(sc,nullptr);
 			}
 			const Type* fr=fn_type->fn_return();
-			return propogate_type_fwd(this, fr, this->type_ref());
+			return propogate_type_fwd(this, fr);
 		} else
 		for (auto i=0; i<argls.size(); i++)  {
 			argls[i]->resolve(sc,nullptr );
@@ -1706,7 +1717,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		}
 		
 		auto ret=call_target->resolve_call(fsc,desired);
-		return propogate_type(block, ret,block->type());
+		return propogate_type(block, ret);
 	}
 	else 
 		return ResolvedType();
@@ -1731,7 +1742,7 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired) {
 	dbprintf("resolve %s yields type:", getString(this->ident()));if (rt.type) rt.type->dump(-1);printf("\n");
 	// awkwardness says: type error return is more like an enum that doesn't return a type?
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
-	return propogate_type(this, rt,this->ret_type);
+	return propogate_type(this, rt,this->ret_type); // todo: hide FnDef->type. its too confusing
 }
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired){
 	auto sc=outer_scope->make_inner_scope(&this->scope);
@@ -2472,7 +2483,7 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired){
 	for (auto s:structs){ s->resolve(sc,nullptr);}
 	for (auto f:functions){ f->resolve(sc,nullptr);}
 
-	return propogate_type_fwd(this, desired,this->type_ref());
+	return propogate_type_fwd(this, desired);
 }
 // iterator protocol. value.init. increment & end test.
 ExprFor* parse_for(TokenStream& src){
@@ -2566,7 +2577,7 @@ ResolvedType ExprIf::resolve(Scope* s,const Type* desired){
 	Type* bt=body_type.type;
 	if (else_block){
 		propogate_type_fwd(this, desired,bt);
-		propogate_type(this, bt,this->type_ref());
+		propogate_type(this, bt);
 		return else_block->resolve(s,bt);
 	}
 	else {
