@@ -2745,6 +2745,7 @@ const char* g_TestProg=
 	"struct Vec[T]{data:*T, num:int};   \n"
 	"struct Vec3[X=vx,Y=vy,Z=vz]{X:float,Y:float,Z:float};   \n"
 //	"fn F[F,O,X,Y](o:O, x:X,y:Y){ o.vtable.F(o,x,y)   };"
+
 	"fn main(argc:int,argv:**char)->int{  \n"
 	"	t1:=argc<0 && argc>1;\n"
 	"	test_result:=if argc==0 || argc==1 {14} else {13} ;"
@@ -2757,7 +2758,7 @@ const char* g_TestProg=
 	"	yp:=ys.data;  \n"
 	"	push_back(ys,2);  \n"
 	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\n\");b};  \n"
-	"	my_vec=:Vec3[vecx];  my_vec.vecx=10.0;myvec.vy=5.0;  \n"
+	"	my_vec=:Vec3[vecx];  my_vec.vecx=10.0;my_vec.vy=5.0;  \n"
 	"	r:=f(0.1,2);  \n"
 	"	q:=xs[1];  p1:=&xs[1];  q:=*p1; \n"
 	"	xs[1]=20;  xs[2]+=400;  xs[3]=500;  \n"
