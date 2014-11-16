@@ -8,12 +8,12 @@ struct Foo {
 fn something(f){
 	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz);
 }
+
 struct Variant[A,B] {
 	u:int,
 	a:A,
 	b:B
 }
-
 
 fn main(argc:int,argv:**char)->int{
 	xs=:array[int,512];

@@ -7,16 +7,20 @@
 #include <string.h>
 
 #ifdef DEBUG
-#define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );*(volatile long*)0=0;exit(0);}
+#define CRASH {*(volatile long*)0=0;exit(0);}
+#define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );CRASH}
 #define WARN(x) if (!(x)) {printf("warning %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );}
 #define TRACE printf("%s:%d: %s\n",__FILE__,__LINE__,__FUNCTION__);
 #else
 #define ASSERT(x)
 #define WARN(x)
 #define TRACE
+#define CRASH
 #endif
 
 typedef int32_t OneBasedIndex;
+
+
 
 struct SrcPos {
 	OneBasedIndex	line; //1-based line index
@@ -52,6 +56,10 @@ using std::pair;
 using std::initializer_list;
 template<typename T,typename S>
 T& operator<<(T& dst, const vector<S>&src) { for (auto &x:src){dst<<x;};return dst;};
+
+template<typename T>
+int get_index_in(const vector<T>& src, T& value) { int i=0; for (i=0; i<src.size(); i++) {if (src[i]==value) return i;} return -1;}
+
 
 template<typename T,typename U>
 T verify_cast(U src){auto p=dynamic_cast<T>(src);ASSERT(p);return p;}
@@ -106,6 +114,7 @@ struct Name;
 Name getStringIndex(const char* str,const char* end=0);
 const char* str(int);
 
+struct TypeParam; struct Type;
 #ifdef DEBUG_NAMES
 struct Name {
 	char* str;
@@ -122,6 +131,7 @@ struct Name {
 	operator int()const {return index;}
 	bool operator==(const Name& b)const{return index==b.index;}
 	bool operator==(int b)const{return index==b;}
+	void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& given_types);
 };
 #else
 struct Name {
@@ -139,6 +149,7 @@ struct Name {
 	bool operator==(int b)const{return index==b;}
 	bool operator<(int b)const{return index<b;}
 	bool operator>=(int b)const{return index>=b;}
+	void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& given_types);
 };
 #endif
 
@@ -204,6 +215,15 @@ struct ResolvedType{
 };
 class CodeGen;
 class CgValue;
+
+struct TypeParam{
+	Name name;
+	Type* defaultv=0;
+	TypeParam(){};
+	TypeParam(Name n, Type* dv):name(n),defaultv(dv){};
+	void dump(int depth)const;
+};
+
 class Node {
 public:
 	Name name;						// identifier index
@@ -230,14 +250,9 @@ public:
 	virtual bool is_undefined()const{if (this && name==PLACEHOLDER) return true; return false;}
 	
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const{return ;}
+	virtual void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& types){error(this,"not handled for %s",this->kind_str());};
 };
 
-struct TypeParam{
-	Name name;
-	Type* defaultv=0;
-	TypeParam(){};
-	TypeParam(Name n, Type* dv):name(n),defaultv(dv){};
-};
 
 struct LLVMType {
 	int name;
@@ -247,6 +262,7 @@ extern void verify(const Type* t);
 struct Type;
 struct ExprBlock;
 struct ExprOp;
+
 struct Expr : Node{
 private:Type* m_type;
 public:
@@ -279,6 +295,7 @@ struct Type : Expr{
 	}
 	Type(ExprStructDef* sd);
 	Type(Name i);
+	Type(Name i,SrcPos sp);
 	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
 	int alignment() const{return  4;};
 	int size() const;
@@ -301,6 +318,9 @@ struct Type : Expr{
 	void dump(int depth)const;
 	Node* clone() const;
 	void clear_reg(){regname=0;};
+	
+	virtual void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& types);
+
 };
 
 struct ExprScopeBlock : Expr{};
@@ -312,8 +332,9 @@ struct ExprOp: public Expr{
 	int get_op_name() const { return this->name;}
 	Node* clone() const;
 	void clear_reg(){ lhs->clear_reg(); rhs->clear_reg();}
-	ExprOp(Name opname) { name=opname; lhs=0; rhs=0;}
-	ExprOp(Name opname, Expr* l, Expr* r){
+	ExprOp(Name opname,SrcPos sp) { name=opname; lhs=0; rhs=0;pos=sp;}
+	ExprOp(Name opname,SrcPos sp, Expr* l, Expr* r){
+		pos=sp;
 		lhs=l; rhs=r;
 		name=opname;
 	}
@@ -322,6 +343,8 @@ struct ExprOp: public Expr{
 	virtual void find_vars_written(Scope* s, set<Variable*>& vars) const;
 	bool is_undefined()const{return (lhs?lhs->is_undefined():false)||(rhs?rhs->is_undefined():false);}
 	ResolvedType resolve(Scope* scope, const Type* desired);
+	virtual void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& types);
+
 };
 
 struct ExprBlock :public ExprScopeBlock{
@@ -348,6 +371,7 @@ struct ExprBlock :public ExprScopeBlock{
 	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); regname=0;};
 	bool is_undefined()const ;
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
+	virtual void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& types);
 };
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
@@ -404,7 +428,8 @@ struct ArgDef :Node{
 	Node* clone() const;
 	void render_object();
 	int alignment() const{ return 4;}//todo, eval templates/other structs, consider pointers, ..
-	
+	virtual void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& types);
+
 };
 
 struct ExprStructDef;
@@ -463,6 +488,7 @@ struct Scope {
 	//Call* calls;
 	Variable* vars=0;
 	NamedItems*	named_items=0;
+	ExprFnDef* templated_name_fns=0;// eg  fn FNAME[T,FNAME](x:T,y:T)->{...}  if the signature matches anything.. its' used. idea for implementing OOP & variants thru templates..
 	// locals;
 	// captures.
 	const char* name()const;
@@ -518,6 +544,8 @@ struct ExprIf :  Expr {
 	ResolvedType resolve(Scope* scope,const Type*) ;
 	bool is_undefined()const{return cond->is_undefined()||body->is_undefined()||else_block->is_undefined();}
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
+	virtual void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& types);
+
 };
 struct ExprFor :  Expr {
 	Expr* pattern=0;
@@ -538,10 +566,12 @@ struct ExprFor :  Expr {
 	Node* clone()const;
 	bool is_undefined()const{return (pattern&&pattern->is_undefined())||(init &&init->is_undefined())||(cond&&cond->is_undefined())||(incr&&incr->is_undefined())||(body&& body->is_undefined())||(else_block&&else_block->is_undefined());}
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
+	virtual void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& types);
 };
 
 struct Call;
 struct FnName;
+
 
 struct ExprStructDef: Expr {
 	// lots of similarity to a function actually.
@@ -564,13 +594,14 @@ struct ExprStructDef: Expr {
 	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} return nullptr;}
 	int field_index(Name name){for (auto i=0; i<fields.size(); i++){if(fields[i]->name==name)return i;} return -1;}
 	ExprStructDef* next_of_name;
-	ExprStructDef(){name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
+	ExprStructDef(SrcPos sp){pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
 	ExprStructDef* get_instance(Scope* sc, Type* type); // 'type' includes all the typeparams.
 	void dump(int depth)const;
 	ResolvedType resolve(Scope* scope, const Type* desired);
-	Node* clone()const {dbprintf("warning,leak\n");return (Node*) this;};
+	Node* clone()const;
 	int alignment() const {int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	void inherit_from(Scope* sc, Type* base);
+	virtual void translate_typeparams(const vector<TypeParam>& typeparams, const vector<Type*>& types);
 };
 // todo.. generic instantiation: typeparam logic, and adhoc mo
 struct ExprFnDef : Expr {
@@ -596,11 +627,13 @@ struct ExprFnDef : Expr {
 	int get_name()const {return name;}
 	bool is_generic() const;
 	void dump_signature() const;
+	int type_parameter_index(Name n) const;
 	virtual const char* kind_str()const{return"fn";}
-	ExprFnDef(){variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
+	ExprFnDef(SrcPos sp){pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
 	void dump(int ind) const;
 	ResolvedType resolve(Scope* scope,const Type* desired);
 	ResolvedType resolve_call(Scope* scope,const Type* desired);
+	virtual void translate_typeparams(const vector<TypeParam>& tformat, const vector<Type*>& given_types);
 	Expr* get_return_value() const;
 	Type* return_type()const {
 		auto x=get_return_value();
@@ -625,11 +658,12 @@ struct ExprIdent :Expr{
 	virtual const char* kind_str()const{return"ident";}
 	ExprIdent(){};
 	ExprIdent(const char* s,const char* e){name=Name(s,e);set_type(nullptr);}
-	ExprIdent(Name n){name=n;set_type(nullptr);}
+	ExprIdent(Name n,SrcPos sp){pos=sp;name=n;set_type(nullptr);}
 	ResolvedType resolve(Scope* scope, const Type* desired);
 	Node* clone() const;
 	bool is_placeholder()const{return name==PLACEHOLDER;}
 	bool is_undefined()const{return is_placeholder();}
+	virtual void translate_typeparams(const vector<TypeParam>& type_params, const vector<Type*>& given_types);
 };
 
 
