@@ -3,7 +3,7 @@
 #include "repl.h"
 
 const char** g_pp,*g_p;
-void CHECK() { ASSERT(*g_pp=g_p);}
+const char* g_filename=0;
 /*
  features needed:-
 
@@ -114,7 +114,6 @@ void error(const char* str, ... ){
 	ASSERT(0);
 
 }
-
 
 void print_tok(int i){dbprintf("%s ",getString(i));};
 
@@ -243,7 +242,7 @@ const char* get_llvm_type_str(int tname){
 	switch (tname){
 		case INT:return "i32";
 		case UINT:return "i32";
-		case BOOL:return "bool";
+		case BOOL:return "i1";
 		case FLOAT:return "float";
 		case VOID:return "void";
 		case STR:return "i8*";
@@ -259,7 +258,7 @@ const LLVMOp* get_op_llvm(int tok,int type){
 	if (tok>=ADD_ASSIGN && tok<=SHR_ASSIGN)
 		return&g_llvm_ops[tok-ADD_ASSIGN][ti];
 	if (tok>=LOG_AND && tok<=LOG_OR)
-		return &g_llvm_logic_ops[tok-LT][ti];
+		return &g_llvm_logic_ops[tok-LOG_AND][ti];
 	if (tok>=LT && tok<=NE)
 		return &g_llvm_cmp_ops[tok-LT][ti];
 	return 0;
@@ -651,7 +650,7 @@ bool Type::is_complex()const{
 	return false;
 }
 bool Type::is_struct()const{
-	return struct_def!=0;
+	return struct_def!=0 || name>=IDENT; //TODO .. it might be a typedef.
 }
 int Type::num_pointers() const {
 	if (!this) return 0;
@@ -988,10 +987,11 @@ void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const
 	// consider return type in call.
 	if (ret_type) if (f->get_type()->eq(ret_type)) score++;
 		
-	// for any argument not matched, zero the score if its the *wrong* argument?
+	// for any given argument not matched, zero the score if its the *wrong* argument?
 	// TODO: this is where we'd bring conversion operators into play.
 	for (int i=0; i<args.size() && i<f->args.size(); i++) {
-		if ((!f->args[i]->get_type()->eq(args[i]->get_type())) && f->args[i]->get_type()!=0) score=-1;
+		if (f->args[i]->get_type() && args[i]->get_type())
+			if ((!f->args[i]->get_type()->eq(args[i]->get_type())) && f->args[i]->get_type()!=0) score=-1;
 	}
 	find_printf("score is %d\n",score);
 	if (score >*best_score) {
@@ -1238,6 +1238,11 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired) {
 			//			auto v=sc->find_variable_rec(this->argls[0]->name);
 			auto v=sc->get_or_create_scope_variable(lhsi->name,Local);
 			v->set_type(rhst);
+			if (rhst->name>=IDENT && !rhst->sub) {
+				dbprintf(";struct type? %s\n", str(rhst->name));
+				rhst->struct_def = sc->find_struct(rhst);
+				dbprintf("%p\n", rhst->struct_def);
+			}
 			if (v->get_type()) {
 				dbprintf("instantiating a %s\n", str(v->get_type()->name));
 				sc->find_struct(v->get_type());// instantiate
@@ -1628,18 +1633,41 @@ bool isOperator(char c){return c=='+'||c=='-'||c=='*'||c=='/'||c=='.'||c=='='||c
 struct NumDenom{int num; int denom;};
 
 struct TextInput {
-	const char* buffer,*tok_start,*tok_end,*prev_start;
+	char filename[512];
+	SrcPos	pos;
+	const char* buffer,*tok_start,*tok_end,*prev_start,*line_start;
 	Name curr_tok;
+#ifdef WATCH_TOK
 	char watch_tok[64][12];
-
-	TextInput(const char* src){
+#endif
+	bool error_newline;
+	
+	void error(const char* str,...){
+		if(!error_newline){printf("\n");}
+		printf("%s:%d:",filename,pos.line);
+		char tmp[1024];
+		va_list arglist;
+		
+		va_start( arglist, str );
+		vsprintf(tmp, str, arglist );
+		va_end( arglist );
+		printf("\n"); error_newline=true;
+	}
+	TextInput(const char* src,const char *filename_){
+		strncpy(filename,filename_,512);
+		g_filename=filename;
+		
+		line_start=src;
+		pos.set(1,0);
 		buffer=src;
 		curr_tok=-1;
 		tok_start=tok_end=buffer;
 		advance_tok();
 	}
 
-	void advance_sub(bool (*sub)(char c)){while ( *tok_end && sub(*tok_end)) tok_end++;}
+	void advance_sub(bool (*sub)(char c)){
+		while ( *tok_end && sub(*tok_end)) tok_end++;
+	}
 	void advance_operator() {
 		int match=0;
 		int longest=0;
@@ -1668,9 +1696,16 @@ struct TextInput {
 		if (*tok_end)
 			tok_end++; // step past last quote.
 	}
+	void skip_whitespace(){
+		while (isWhitespace(*tok_end)&&*tok_end) {
+			if (*tok_end=='\n') {pos.line++;line_start==tok_end;}
+			pos.col=tok_end-line_start;
+			tok_end++;
+		}
+	}
 
 	void advance_tok() {
-		while (isWhitespace(*tok_end)&&*tok_end) tok_end++;
+		skip_whitespace();
 		tok_start=tok_end;
 		if (!*tok_end) { this->curr_tok=0; return;}
 		auto c=*tok_end;
@@ -1684,8 +1719,10 @@ struct TextInput {
 		else advance_operator();
 //		else tok_end++;
 		this->curr_tok = getStringIndex(tok_start,tok_end);
+#ifdef WATCH_TOK
 		for (auto i=10; i>0; i--){strcpy(watch_tok[i],watch_tok[i-1]);}
 		memcpy(watch_tok[0],tok_start,tok_end-tok_start); watch_tok[0][tok_end-tok_start]=0;
+#endif
 	}
 	Name eat_tok() {
 		prev_start=tok_start;
@@ -1761,6 +1798,7 @@ struct TextInput {
 	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
 	Name expect(Name t){ int x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s",str(t), str(x));exit(0);} return x;}
 };
+
 void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
 typedef TextInput TokenStream;
 
@@ -1782,7 +1820,7 @@ void dump(vector<Expr*>& v) {
 	}
 	dbprintf("\n");
 }
-
+	
 void pop_operator_call( vector<int>& operators,vector<Expr*>& operands) {
 	//takes the topmost operator from the operator stack
 	//creates an expression node calling it, consumes operands,
@@ -1803,6 +1841,7 @@ void pop_operator_call( vector<int>& operators,vector<Expr*>& operands) {
 		error(0,"\nerror: %s arity %d, %lu operands given\n",getString(op),arity(op),operands.size());
 		exit(0);
 	}
+	p->pos=p->lhs?p->lhs->pos:p->rhs->pos;
 	operands.push_back((Expr*)p);
 }
 //   void fn(x:(int,int),y:(int,int))
@@ -1845,7 +1884,6 @@ LLVMType Expr::get_type_llvm() const
 }
 
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
-	CHECK();
 	// shunting yard expression parser
 	ExprBlock *node=new ExprBlock; node->call_expr=op;
 	verify(node->type());
@@ -1855,9 +1893,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
 	node->square_bracket=close==CLOSE_BRACKET;
-	CHECK();
 	while (true) {
-		CHECK();
 		if (!src.peek_tok()) break;
 		if (src.peek_tok()==IN) break;
 		// parsing a single expression TODO split this into 'parse expr()', 'parse_compound'
@@ -1980,7 +2016,6 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	};
 	flush_op_stack(node,operators,operands);
 	verify(node->get_type());
-	CHECK();
 	return node;
 }
 
@@ -2237,7 +2272,6 @@ ExprFor* parse_for(TokenStream& src){
 }
 
 
-
 Node* ExprFor::clone()const{
 	auto n=new ExprFor;
 	n->pattern=(Expr*)pattern->clone_if();
@@ -2464,7 +2498,10 @@ const char* g_TestProg=
 	"	printf(\"push_back %d\n\", a);0  \n"
 	"}  \n"
 	"struct Vec[T]{data:*T, num:int};   \n"
+	"struct Vec3{vx:float,vy:float,vz:float};   \n"
 	"fn main(argc:int,argv:**char)->int{  \n"
+	"	t1:=argc<0 && argc>1;\n"
+	"	test_result:=if argc==0 || argc==1 {14} else {13} ;"
 	"	xs=:array[int,512];  \n"
 	"	p2:=&xs[1];  \n"
 	"	fs=:array[float,512];  \n"
@@ -2474,6 +2511,8 @@ const char* g_TestProg=
 	"	yp:=ys.data;  \n"
 	"	push_back(ys,2.0);  \n"
 	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\n\");b};  \n"
+	"	my_vec=:Vec3;  \n"
+	"	my_vec.vx=10.0;  \n"
 	"	r:=f(0.1,2);  \n"
 	"	q:=xs[1];  \n"
 	"	p1:=&xs[1];  \n"
@@ -2490,7 +2529,7 @@ const char* g_TestProg=
 	"   x:=if argc<2{1}else{2};  \n"
 	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}  \n"
 	"	xs1:=xs[1]; xs2:=xs[2];  \n"
-	"	printf(\"Hello From My Language %.3f %d %d %d \", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data)); \n"
+	"	printf(\"Hello From My Language %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
 	"	0  \n"
 	"}  \n\0"
 
@@ -2529,13 +2568,17 @@ void filename_change_ext(char* dst,const char* src,const char* new_ext){
 	else strcpy(s+1,new_ext);
 }
 /*
-// format should represent json ok
+// TODO literal format,
+// we'd like JSON but the fly in the ointment is : vs = with : used for types.
+// if '=' is used for field initializers we only have one grammar everywhere.
+// could we hack a rule.. "if a block only contains ident:expr,.. it's a struct literal"
 {}     // statement
 { ; ; }  // compound statement
-{ , , } // struct literal
-[ ,  , , ] // array literal
-
+{ , , } // ANON struct literal
+[ , , , ] // 'slice' literal: *T,size. if  types differ, at compile time make a union?
 (, , ) // tuple literal  assignments in brackets
+ 		// tuple should auto coerce to 'array(T,N)' if its (T,T,T..)
+//
 
 foo:={
 	foo:[1,2,3],
@@ -2564,13 +2607,11 @@ should be able to code assetless
 */
 
 enum COMPILE_FLAGS {
-	LLVM=0x0001, TYPES=0x0002, EXECUTABLE=0x0008, RUN=0x0010
+	LLVM=0x0001, TYPES=0x0002, EXECUTABLE=0x0004, RUN=0x008
 };
-int compile_source(const char *buffer, const char* outname, int flags){
-	auto p=outname; g_p=p;
-	g_pp=&outname;
-	printf("%p \n",outname);
-	TextInput	src(buffer);
+int compile_source(const char *buffer, const char* filename, const char* outname, int flags){
+
+	TextInput	src(buffer,filename);
 	auto node=parse_call(src,0,SEMICOLON,nullptr);
 	node->dump(0);
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
@@ -2594,20 +2635,22 @@ int compile_source(const char *buffer, const char* outname, int flags){
 			fprintf(ofp,"\n;end");
 			fclose(ofp);
 			if (flags & EXECUTABLE) {
+
 				char exename[256];
 				filename_change_ext(exename,outname,"");
 				char compile_cmd[512]; sprintf(compile_cmd,"clang %s -o %s", outname, exename);
+				printf("\nllvm src=%s\n executable=%s\nflags %x\n",outname,exename, flags);
 				printf("\n%s\n",compile_cmd);
 				auto ret= system(compile_cmd);
 				if (!ret && (flags & RUN)) {
-					printf("compiled ok, running executable %s ", exename);
+					printf("compiled ok, running executable %s \n", exename);
 					char invoke[512];sprintf(invoke,"./%s",exename);
 					return system(invoke);
+					return 0;
 				}
 				return ret;
 			}
 		} else {
-			printf("%p %p\n",p, outname);
 			printf("can't open output file %s\n",outname);
 			return -1;
 		}
@@ -2626,7 +2669,7 @@ int compile_source_file(const char* filename, int options) {
 		fread((void*)buffer,1,sz,fp);
 		buffer[sz]=0;
 		fclose(fp);
-		int ret=compile_source(buffer,outname,options);
+		int ret=compile_source(buffer,filename,outname,options);
 		free((void*)buffer);
 		return ret;
 	} else{
@@ -2635,26 +2678,30 @@ int compile_source_file(const char* filename, int options) {
 	}
 }
 int main(int argc, const char** argv) {
-//	compile_source_file("/Users/walter/hack/hack.rs");
+//	compile_source_file("~/hack/test_hack/prog.rs",0xf);
 	int options=0,given_opts=0;
 	for (auto i=1; i<argc; i++) {
 		const char* a=argv[i];
 		if (a[0]=='-'){
-			if (a[1]=='t') options|=TYPES;
-			if (a[1]=='l') options|=LLVM;
-			if (a[1]=='r') options|=RUN|EXECUTABLE;
-			if (a[1]=='e') options|=EXECUTABLE;
+			for (int j=1; a[j];j++){
+				if (a[j]=='t') options|=TYPES;
+				if (a[j]=='l') options|=LLVM;
+				if (a[j]=='r') options|=RUN|EXECUTABLE;
+				if (a[j]=='e') options|=EXECUTABLE;
+			}
 		}
 	}
 	if (!options) options=TYPES|LLVM|RUN|EXECUTABLE;
 	
 	for (auto i=1; i<argc; i++) {
-		if (argv[i][0]!='-')
+		if (argv[i][0]!='-') {
+			printf("compile src file %s with options %x\n",argv[i],options);
 			compile_source_file(argv[i],options);
+		}
 	}
 	if (argc<=1) {
 		printf("no sources given so running inbuilt test.\n");
-		auto ret=compile_source(g_TestProg,"test.ll",options);
+		auto ret=compile_source(g_TestProg,"g_TestProg","test.ll",options);
 		if (!ret) {
 			printf("\nSource we just compiled, use for reference..\n");
 			printf(g_TestProg);

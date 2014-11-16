@@ -31,6 +31,6 @@ fn main(argc:int,argv:**char)->int{
 
 	x:=if argc<2{printf("<2");1}else{printf(">2");2};
 	printf("yada yada yada\n");
-	printf("\nhhhhello world %.3f %d\n", lerp(10.0,20.0,0.5),y );0
+	printf("\nHello World %.3f %d\n", lerp(10.0,20.0,0.5),y );0
 }
 

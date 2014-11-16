@@ -13,7 +13,25 @@
 #else
 #define ASSERT(x)
 #define WARN(x)
+#define TRACE
 #endif
+
+typedef int32_t OneBasedIndex;
+
+struct SrcPos {
+	OneBasedIndex	line; //1-based line index
+	int16_t col;
+	void set(OneBasedIndex l,int c){line=l   ;col=c;}
+	void printf(FILE* ofp){ fprintf(ofp,"%d,%d",line,col); }
+	
+	void print(FILE* ofp, const char* filename) {
+		fprintf(ofp,"%s:%d:%d",filename,line,col);
+	}
+};
+
+struct Span {
+	SrcPos start,end;
+};
 
 struct Node;
 struct Name;
@@ -184,9 +202,12 @@ struct ResolvedType{
 	//operator Type* ()const {return type;}
 	//operator bool()const { return status==COMPLETE && type!=0;}
 };
+class CodeGen;
+class CgValue;
 class Node {
 public:
 	Name name;						// identifier index
+	SrcPos pos;						// where is it
 	RegisterName regname;			// temporary for llvm SSA calc.
 	bool reg_is_addr=false;
 	int visited;					// anti-recursion flag.
@@ -205,6 +226,7 @@ public:
 	RegisterName get_reg(Name baseName, int* new_index, bool force_new);
 	RegisterName get_reg_new(Name baseName, int* new_index);
 	RegisterName get_reg_existing();
+	virtual CgValue codegen(CodeGen& cg,bool contents);
 	virtual bool is_undefined()const{if (this && name==PLACEHOLDER) return true; return false;}
 	
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const{return ;}
