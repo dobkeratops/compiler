@@ -5,14 +5,9 @@ fn printf(s:str,...)->int;
 struct Foo {
 	vx:int, vy:int, vz:int
 }
-fn something(f){
+fn something(f:Foo)->int{
 	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz);
-}
-
-struct Variant[A,B] {
-	u:int,
-	a:A,
-	b:B
+	0
 }
 
 fn main(argc:int,argv:**char)->int{
@@ -24,11 +19,10 @@ fn main(argc:int,argv:**char)->int{
 	z:=5;
 	y:=xs[1]+z+xs[2];
 	x:=0;
-	vt:=Variant[int,float];
-
 	fv=:Foo;
 	fv.vx=3; fv.vy=4; fv.vz=5;
-	something(fv);
+
+	something(&fv);
 
 	for i:=0,j:=0; i<10; i+=1,j+=10 {
 		x+=i;
@@ -39,6 +33,7 @@ fn main(argc:int,argv:**char)->int{
 
 	x:=if argc<2{printf("<2");1}else{printf(">2");2};
 	printf("yada yada yada\n");
-	printf("\nHello World %.3f %d\n", lerp(10.0,20.0,0.5),y );0
+	printf("\nHelloWorld %.3f\n",lerp(5.0,10.0,7.0));
+	0
 }
 

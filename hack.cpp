@@ -91,6 +91,16 @@ void dbprintf(const char* str, ... )
 	printf("%s",tmp);
 #endif
 }
+void dbprintf(SrcPos& pos){
+	dbprintf("%s:%d:",g_filename,pos.line);
+}
+void dbprintf(Name& n){
+	dbprintf("%s",str(n));
+}
+void dbprintf(Node* n){n->dump(-1);}
+//template<typename X,typename Y> void dbprintf(X x,Y y){dbprintf(x);dbprintf(y);}
+//template<typename X,typename Y,typename Z> void dbprintf(X x,Y y,Z z){dbprintf(x);dbprintf(y);dbprintf(z);}
+//template<typename X,typename Y,typename Z,typename W> void dbprintf(X x,Y y,Z z,W w){dbprintf(x);dbprintf(y);dbprintf(z);dbprintf(w);}
 // for real compiler errors. todo.. codelocations on nodes
 void error(const Node* n, const char* str, ... ){
 	char buffer[1024];
@@ -100,6 +110,8 @@ void error(const Node* n, const char* str, ... ){
 	va_end( arglist );
 	printf("error:-\n");
 	n->dump_if(-1);
+	printf("\n");
+	printf("%s:%d: error:",g_filename,n->pos.line);
 	printf(";%s\n",buffer);
 #ifdef DEBUG
 	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
@@ -118,6 +130,23 @@ void error(const Node* n,Scope* s, const char* str, ... ){
 	n->dump_if(-1);
 	printf("%s\n",buffer);
 	printf("in scope of %s\n",s->name());
+#ifdef DEBUG
+	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
+#endif
+	CRASH;
+}
+// for real compiler errors. todo.. codelocations on nodes
+void error(const Node* n,const Node* n2, const char* str, ... ){
+	char buffer[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(buffer, str, arglist );
+	va_end( arglist );
+	n->dump_if(-1);
+	printf("\n");
+	printf("%s:%d: error:\n",g_filename,n->pos.line);
+	printf("%s:%d: see:\n",g_filename,n2->pos.line);
+	printf("%s\n",buffer);
 #ifdef DEBUG
 	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
 #endif
@@ -369,8 +398,11 @@ int get_typeparam_index(const vector<TypeParam>& tps, Name name) {
 	return -1;
 }
 
-Expr::Expr(){ m_type=0;}
+Expr::Expr(){ m_type=0;visited=0;regname=0;}
 ResolvedType assert_types_eq(const Node* n, const Type* a,const Type* b) {
+	if (!n->pos.line){
+		error(n,"AST node hasn't been setup properly");
+	}
 	ASSERT(a && b);
 	if (!a->eq(b)){
 		dbprintf("a=\n");
@@ -417,7 +449,7 @@ void verify(const Type* a,const Type* b,const Type* c){
 	verify(c);
 }
 const Type* any_not_zero(const Type* a, const Type* b){return a?a:b;}
-ResolvedType propogate_type(const Node*n, Type*& a,Type*& b) {
+ResolvedType propogate_type(int flags,const Node*n, Type*& a,Type*& b) {
 	verify(a,b);
 	if (!(a || b)) return ResolvedType(0,ResolvedType::INCOMPLETE);
 	if (!a && b) {a=b; return ResolvedType(a,ResolvedType::COMPLETE);}
@@ -426,7 +458,7 @@ ResolvedType propogate_type(const Node*n, Type*& a,Type*& b) {
 		return assert_types_eq(n, a,b);
 	}
 }
-ResolvedType propogate_type_fwd(const Node* n, const Type*& a,Type*& b) {
+ResolvedType propogate_type_fwd(int flags,const Node* n, const Type*& a,Type*& b) {
 	verify(a,b);
 	if (!(a || b)) return ResolvedType(0,ResolvedType::INCOMPLETE);
 	if (!a && b){return ResolvedType(b,ResolvedType::INCOMPLETE);}
@@ -434,43 +466,43 @@ ResolvedType propogate_type_fwd(const Node* n, const Type*& a,Type*& b) {
 	if (a && b){return assert_types_eq(n, a,b);  }
 	ASSERT(0);
 }
-ResolvedType propogate_type_fwd(Expr* e, const Type*& a) {
-	return propogate_type_fwd(e, a, e->type_ref());
+ResolvedType propogate_type_fwd(int flags,Expr* e, const Type*& a) {
+	return propogate_type_fwd(flags,e, a, e->type_ref());
 }
-ResolvedType propogate_type(Expr* e, Type*& a) {
-	return propogate_type(e, a, e->type_ref());
+ResolvedType propogate_type(int flags,Expr* e, Type*& a) {
+	return propogate_type(flags,e, a, e->type_ref());
 }
 
-ResolvedType propogate_type(const Node* n, Type*& a,Type*& b,Type*& c) {
+ResolvedType propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c) {
 	verify(a,b,c);
 	int ret=ResolvedType::COMPLETE;
-	ret|=propogate_type(n,a,b).status;
-	ret|=(c)?propogate_type(n,b,c).status:ResolvedType::INCOMPLETE;
-	ret|=(c)?propogate_type(n,a,c).status:ResolvedType::INCOMPLETE;
+	ret|=propogate_type(flags,n,a,b).status;
+	ret|=(c)?propogate_type(flags,n,b,c).status:ResolvedType::INCOMPLETE;
+	ret|=(c)?propogate_type(flags,n,a,c).status:ResolvedType::INCOMPLETE;
 	const Type* any=any_not_zero(a,any_not_zero(b,c));
 	return ResolvedType(any,ret);
 }
-ResolvedType propogate_type_fwd(const Node* n,const Type*& a,Type*& b,Type*& c) {
+ResolvedType propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c) {
 	verify(a,b,c);
 	int ret=ResolvedType::COMPLETE;
-	ret|=propogate_type_fwd(n,a,b).status;
-	ret|=propogate_type_fwd(n,a,c).status;
-	ret|=propogate_type(n,b,c).status;
+	ret|=propogate_type_fwd(flags,n,a,b).status;
+	ret|=propogate_type_fwd(flags,n,a,c).status;
+	ret|=propogate_type(flags,n,b,c).status;
 	return ResolvedType(any_not_zero(a,any_not_zero(b,c)),ret);
 }
-ResolvedType propogate_type(const Node* n, ResolvedType& a,Type*& b) {
+ResolvedType propogate_type(int flags,const Node* n, ResolvedType& a,Type*& b) {
 	verify(a.type,b);
-	a.combine(propogate_type(n, a.type,b));
+	a.combine(propogate_type(flags,n, a.type,b));
 	return a;
 }
-ResolvedType propogate_type(Expr* e, ResolvedType& a) {
-	return propogate_type(e, a, e->type_ref());
+ResolvedType propogate_type(int flags,Expr* e, ResolvedType& a) {
+	return propogate_type(flags,e, a, e->type_ref());
 }
 
-ResolvedType propogate_type(const Node* n,ResolvedType& a,Type*& b,const Type* c) {
+ResolvedType propogate_type(int flags,const Node* n,ResolvedType& a,Type*& b,const Type* c) {
 	verify(a.type,b,c);
-	a.combine(propogate_type_fwd(n, c,b));
-	a.combine(propogate_type(n, a.type,b));
+	a.combine(propogate_type_fwd(flags,n, c,b));
+	a.combine(propogate_type(flags,n, a.type,b));
 	return a;
 }
 StructDef* dump_find_struct(Scope* s, Name name){
@@ -530,18 +562,18 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled .
-		propogate_type_fwd(this, desired,this->type_ref());
+		propogate_type_fwd(flags,this, desired,this->type_ref());
 		return ResolvedType(this->type_ref(),ResolvedType::COMPLETE);
 	}
-	propogate_type_fwd(this, desired,this->type_ref());
+	propogate_type_fwd(flags,this, desired,this->type_ref());
 	if (auto sd=scope->find_struct_named(this->name)) {
 		if (!this->get_type()){
 			this->set_type(new Type(sd));
-			return propogate_type_fwd(this, desired,this->type_ref());
+			return propogate_type_fwd(flags,this, desired,this->type_ref());
 		}
 	}
 	if (auto v=scope->find_variable_rec(this->name)){
-		return propogate_type(this, this->type_ref(),v->type_ref());
+		return propogate_type(flags,this, this->type_ref(),v->type_ref());
 	} else if (!scope->find_named_items_rec(this->name)){
 		error(this,scope,"can't find variable/item %s",str(this->name));
 	}
@@ -758,7 +790,7 @@ ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
 		}
 		this->set_type(t); // one time resolve event.
 	}
-	return propogate_type_fwd(this, desired,this->type_ref());
+	return propogate_type_fwd(flags,this, desired,this->type_ref());
 }
 size_t ExprLiteral::strlen() const{
 	if (type_id==T_CONST_STRING)
@@ -766,20 +798,23 @@ size_t ExprLiteral::strlen() const{
 	else return 0;
 }
 
-ExprLiteral::ExprLiteral(float f) {
+ExprLiteral::ExprLiteral(const SrcPos& s,float f) {
+	pos=s;
 	this->owner_scope=0;
 	set_type(new Type(FLOAT));
 	type_id=T_FLOAT;
 	u.val_float=f;
 	dbprintf("lit float %.3f",f);
 }
-ExprLiteral::ExprLiteral(int i) {
+ExprLiteral::ExprLiteral(const SrcPos& s,int i) {
+	pos=s;
 	this->owner_scope=0;
 	set_type(new Type(INT));
 	type_id=T_INT;
 	u.val_int=i;
 }
-ExprLiteral::ExprLiteral(const char* start,int length) {//copy
+ExprLiteral::ExprLiteral(const SrcPos& s,const char* start,int length) {//copy
+	pos=s;
 	this->owner_scope=0;
 	set_type(new Type(STR));
 	type_id=T_CONST_STRING;
@@ -787,7 +822,8 @@ ExprLiteral::ExprLiteral(const char* start,int length) {//copy
 	u.val_str=str;memcpy(str,(void*)start,length);
 	str[length]=0;
 }
-ExprLiteral::ExprLiteral(const char* src) {//take ownership
+ExprLiteral::ExprLiteral(const SrcPos& s,const char* src) {//take ownership
+	pos=s;
 	this->owner_scope=0;
 	set_type(new Type(STR));
 	u.val_str=src;
@@ -825,6 +861,18 @@ void ArgDef::dump(int depth) const {
 	if (type) {dbprintf(":");type->dump(-1);}
 	if (default_expr) {dbprintf("=");default_expr->dump(-1);}
 }
+Node*	TypeParam::clone() const
+{	return new TypeParam(this->name, (Type*) (this->defaultv?this->defaultv->clone():nullptr));
+}
+
+VResult TypeParam::recurse(Visitor* v)
+{
+	v->pre_visit(this);
+	if (this->defaultv) this->defaultv->visit(v);
+	v->post_visit(this);
+	return 0;
+}
+
 void TypeParam::dump(int depth) const {
 	newline(depth);dbprintf("%s",str(name));
 	if (defaultv) {dbprintf("=");defaultv->dump(-1);}
@@ -928,7 +976,7 @@ void ExprFnDef::dump_signature()const{
 	this->return_type()->dump_if(-1);
 	dbprintf("\n");
 }
-ExprFnDef* instantiate_generic_function(ExprFnDef* src,Name name, vector<Expr*>& call_args) {
+ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
 	if (src->type_parameter_index(src->name)>=0){
 		dbprintf("WARNING instantiated templated NAME function for %s, as no function of the right name was found.. experiment aimed at implementing OOP thru generics.. eg fn METHOD[OBJ,METHOD,ARG0,ARG1](o:OBJ,a0:ARG0,a1:ARG1){ o.vtable.METHOD(o,a0,a1)}", str(name));
 	}
@@ -943,6 +991,9 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* src,Name name, vector<Expr*>&
 				new_fn->args[i]->set_type((Type*)call_args[i]->get_type()->clone());
 		}
 	}
+	if (return_type){
+		new_fn->ret_type=const_cast<Type*>(return_type);
+	}
 	src->dump_signature();
 	new_fn->dump_signature();
 	new_fn->dump(0);
@@ -956,7 +1007,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* src,Name name, vector<Expr*>&
 //	dbprintf("generic instantiation:-\n");
 //	new_fn->dump(0);
 //	new_fn->scope->dump(0);
-	new_fn->resolve(src_fn_owner,nullptr,0);//todo: we can use output type ininstantiation too
+	new_fn->resolve(src_fn_owner,nullptr,flags);//todo: we can use output type ininstantiation too
 	dbprintf("instantiated: %s \n",str(new_fn->name));
 	new_fn->dump_signature();
 	dbprintf("%s\n", str(new_fn->ret_type->name));
@@ -984,12 +1035,13 @@ Node* ExprBlock::clone() const {
 Node*
 ExprLiteral::clone() const{
 	return (Node*)this;	// TODO - ensure this doesn't get into dangling state or anything!
-	if (!this) return nullptr;
+/*	if (!this) return nullptr;
 	auto r=new ExprLiteral(0); if (this->is_string()){r->u.val_str=strdup(this->u.val_str);}else r->u=this->u;
 	r->type_id=this->type_id;
 	r->llvm_strlen=this->llvm_strlen; // TODO this should just be a reference!?
 	r->name=this->name;
 	return r;
+*/
 }
 Node*
 ExprFnDef::clone() const{
@@ -1044,13 +1096,15 @@ int num_known_arg_types(vector<Expr*>& args) {
 	
 //}
 
-int match_generic_type_params(const vector<TypeParam>& fn_tps, vector<const Type*>& matched_tps, const Type* fn_arg, const Type* given_arg)
+int match_generic_typeparams(const vector<TypeParam>& fn_tps, vector<const Type*>& matched_tps, const Type* fn_arg, const Type* given_arg)
 {
 	int ret_score=0;
-	if (!fn_arg && !given_arg) return 0;
+//	if (!fn_arg && !given_arg) return 0;
 	if (!fn_arg) return 0;// dont care if trying to match given with 'any'
+	if (!given_arg) return 0;
+	
 	for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->next,sub2=sub2->next) {
-		ret_score+=match_generic_type_params(fn_tps, matched_tps, sub1, sub2);
+		ret_score+=match_generic_typeparams(fn_tps, matched_tps, sub1, sub2);
 	}
 	dbprintf("TODO: matching arguments should actually traverse the type tree , they can be complex thats' the point, eg [T](args:vector<T>,T) that sort of thing.\n");
 	int ti = get_typeparam_index(fn_tps, fn_arg->name);
@@ -1074,118 +1128,133 @@ int match_generic_type_params(const vector<TypeParam>& fn_tps, vector<const Type
 }
 
 
-void compare_candidate_function(ExprFnDef* f,Name name,vector<Expr*>& args,const Type* ret_type, ExprFnDef** best_fn, int* best_score,int* ambiguity) {
+void compare_candidate_function(ExprFnDef* f,Name name,const vector<Expr*>& args,const Type* ret_type, vector<pair<ExprFnDef*,int>>& candidates) {
 	if (f->type_parameter_index(f->name)<0)
 		if (f->name!=name)
 			return ;
 	
 	// TODO: may need to continually update the function match, eg during resolving, as more types are found, more specific peices may appear?
 	// Find max number of matching arguments
-	if (args.size() >f->args.size() && !f->variadic)	// if not enough args, dont even try.
+	if (args.size() >f->args.size() && !f->variadic)	// if we supplied too many args - we can't call it.
 		return;
-	if (args.size() <f->args.size())	// TODO: bring default arguments into the picture.
+	if (args.size() <f->args.size())	//TODO:consider default args here
 		return;
-
-	find_printf("candidate:");
 	
 	vector<const Type*> matched_type_params;
 	for (int i=0; i<f->typeparams.size(); i++){matched_type_params.push_back(nullptr);}
 
 	for (int i=0; i<args.size() && i<f->args.size(); i++) {
-//		find_printf("%s ",f->args[i]->type->get_name_str());
-		find_printf("arg %d %s",i,getString(f->args[i]->name));
 		auto t=f->args[i]->type;
 		if (t) t->dump(-1);
-		find_printf("\n");
 	}
 
-	find_printf("\n");
 	int score=0;
+	if (!f->is_enough_args(args.size())){
+		score=-1000*abs(args.size()-f->args.size());
+		if (candidates.size()>=5) return;
+		goto insert_candidate;
+	}
+
 	if (f->variadic && args.size()> f->args.size())
 		score=1;	// variadic functoin can match anything?
 	for (int i=0; i<args.size() && i<f->args.size(); i++) {
-		
-		
-		if (f->args[i]->get_type()->eq(args[i]->get_type())) {
-			find_printf("match %s %s\n",f->args[i]->get_type()->get_name_str(), args[i]->get_type()->get_name_str());
-				score++;
+		if (!f->args[i]->get_type() || (!args[i])) {
+			score++; //1 point for an 'any' arg on either side
+		} else{
+			// both args are given:
+			if (f->args[i]->get_type()->eq(args[i]->get_type())) {
+				find_printf("match %s %s\n",f->args[i]->get_type()->get_name_str(), args[i]->get_type()->get_name_str());
+					score+=100;// 1 exact match worth more than any number of anys
+			} else{
+				//if (!is_generic_type(f->typeparams,f->args[i]->get_type())
+				{
+				// instant fail for incorrect concrete arg
+				//TODO consider conversion operators here.
+				//	score-=10000;
+				//	if (candidates.size()>=4)
+				//		return;
+				}
+			}
 		}
 	}
 	// find generic typeparams..
 	if (f->typeparams.size()){
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
-				score+=match_generic_type_params(f->typeparams, matched_type_params, f->args[i]->get_type(), args[i]->get_type());
+			score+=match_generic_typeparams(f->typeparams, matched_type_params, f->args[i]->get_type(), args[i]->get_type());
 		}
-#ifdef DEBUG
-		dbprintf(" %s score=%d; matched typeparams{:-\n",str(f->name),score);
-		for (auto i=0; i<f->typeparams.size(); i++){
-			dbprintf("%s = %s;", str(f->typeparams[i].name), str(matched_type_params[i]->name) );
-		}
-		dbprintf("}\n");
-		dbprintf("\n");
-#endif
+		score+=match_generic_typeparams(f->typeparams,matched_type_params,f->ret_type,ret_type);
+		auto dbp=[&](){
+			dbprintf("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
+			dbprintf("score=%d; matched typeparams{:-\n",str(f->name),score);
+			for (auto i=0; i<f->typeparams.size(); i++){
+				dbprintf("%s = %s;", str(f->typeparams[i].name), matched_type_params[i]?str(matched_type_params[i]->name):"" );
+			}
+			dbprintf("}\n");
+			dbprintf("\n");
+		};
 	}
 	// fill any unmatched with defaults?
 
 	// consider return type in call.
-	if (ret_type) if (f->get_type()->eq(ret_type)) score++;
-		
-	// for any given argument not matched, zero the score if its the *wrong* argument?
-	// TODO: this is where we'd bring conversion operators into play.
-	if (!f->typeparams.size()) // TODO; we need to do this with translated types. for now, we skip this if the signature has typeparams.
-	for (int i=0; i<args.size() && i<f->args.size(); i++) {
-		if (f->args[i]->get_type() && args[i]->get_type())
-			if ((!f->args[i]->get_type()->eq(args[i]->get_type())) && f->args[i]->get_type()!=0) score=-1;
+	if (ret_type)
+		if (f->get_type()->eq(ret_type)) score+=100;
+
+	if (f->name==name) score*=100; // 'named' functions always win over un-named forms eg F[F,X](a:X),we may use unnamed to implement OOP..
+	// insert candidate
+insert_candidate:
+	for(int i=0; i<candidates.size();i++){ // 5  1  3 7 8
+		if (candidates[i].second>score) {
+			candidates.resize(candidates.size()+1);
+			for (int j=i+1;j<candidates.size(); j++){ candidates[j]=candidates[j-1];}
+			candidates[i]=std::make_pair(f,score);
+			return;
+		}
 	}
-	if (f->name==name && score) score*=100; // 'named' functions always win over un-named forms eg F[F,X](a:X)
-	find_printf("score is %d\n",score);
-	if (score >*best_score) {
-		*best_score=score;
-		*best_fn=f;
-		ambiguity=0;
-	} else if (score==*best_score) ambiguity++;
+	candidates.push_back(std::make_pair(f,score));
 }
-void find_fn_sub(Expr* src,Name name,vector<Expr*>& args, const Type* ret_type,ExprFnDef** best_fn, int* best_score,int* ambiguity) {
+void find_fn_sub(Expr* src,Name name,const vector<Expr*>& args, const Type* ret_type, vector<pair<ExprFnDef*,int>>& candidates) {
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
 		find_printf("look for %s in %s\n",getString(name),src->get_name_str());
 		for (auto x:sb->argls) {
-			find_fn_sub(x,name,args,ret_type,best_fn,best_score,ambiguity);
+			find_fn_sub(x,name,args,ret_type, candidates);
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
-		compare_candidate_function(f,name,args,ret_type, best_fn,best_score,ambiguity);
+		compare_candidate_function(f,name,args,ret_type, candidates);
 		for (auto ins=f->instances; ins; ins=ins->next_instance) {
-			compare_candidate_function(ins,name,args,ret_type, best_fn,best_score,ambiguity);
+			compare_candidate_function(ins,name,args,ret_type, candidates);
 		}
 	}
 }
-void find_fn_rec(Scope* s,Scope* ex,Name name,vector<Expr*>& args, const Type* ret_type,ExprFnDef** best_fn, int* best_score,int* ambiguity)
+void find_fn_rec(Scope* s,Scope* ex,Name name,const vector<Expr*>& args, const Type* ret_type, vector<pair<ExprFnDef*,int>>& candidates)
 {
 	if (auto fname=s->find_named_items_local(name)){
 		for (auto f=fname->fn_defs; f;f=f->next_of_name) {
-			find_fn_sub((Expr*)f, name, args,ret_type,best_fn,best_score,ambiguity);
+			find_fn_sub((Expr*)f, name, args,ret_type,candidates);
 		}
 	}
 	for (auto f=s->templated_name_fns; f;f=f->next_of_name) {
-		find_fn_sub((Expr*)f, name, args,ret_type,best_fn,best_score,ambiguity);
+		find_fn_sub((Expr*)f, name, args,ret_type,candidates);
 	}
 	for (auto sub=s->child; sub; sub=sub->next) {
 		if (sub==ex) continue;
-		find_fn_rec(sub,ex,name,args,ret_type,best_fn,best_score,ambiguity);
+		find_fn_rec(sub,ex,name,args,ret_type,candidates);
 	}
 }
 
-ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  {
+ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags)  {
+	// TODO: ACCELERATION:
+	// make a type-code and have direct hash lookup of exact-match
+	// we only need all this search logic to execute once per permutation of args.
+	
 	find_printf("\n;find call with args(");
 	for (int i=0; i<args.size(); i++) {find_printf(" %d:",i);find_printf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
 	find_printf(")\n");
 
-	ExprFnDef*	best=0;
-	int best_score=-1;
-	int	ambiguity=0;
 	Scope* prev=nullptr;
+	vector<pair<ExprFnDef*,int>> candidates;
 	for (auto src=this; src; prev=src,src=src->parent) {// go back thru scopes first;
 		find_printf(";in scope %p\n",src);
-		find_fn_rec(src,prev,name, args,ret_type,&best,&best_score,&ambiguity);
+		find_fn_rec(src,prev,name, args,ret_type,candidates);
 	}
 	// then search subscopes, excluding 'this'
 	// TODO: consider "name-distance" as part of resolve algorithm??
@@ -1208,23 +1277,45 @@ ExprFnDef*	Scope::find_fn(Name name, vector<Expr*>& args,const Type* ret_type)  
 //		exit(0);
 //		return 0;f
 //	}
-	dbprintf(";match %s score=%d/%z\n", best?str(best->name):"" ,best_score, args.size());
-	if (!best)  {
-		for (auto i=0; i<args.size(); i++){
-			dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");
+	if (!candidates.size()){
+		error(callsite,"can't find function\n",str(name));
+	}
+	if (candidates.back().second<=0) {
+		if (flags & 1){
+		no_match_error:
+			dbprintf("\nCall with args:-\n");
+			for (auto i=0; i<args.size(); i++){
+				dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");
+			}
+			dbprintf("\ncandidate functoins:-\n");
+			for (auto c:candidates){
+				dbprintf(c.first->pos);c.first->dump(-1);dbprintf("\n");
+			}
+			error(callsite,"no matching function %s(), %d candidates\n",str(name),candidates.size());
+			return nullptr;
 		}
-		dbprintf(";No match found for %s\n",str(name));
+		// SFINAE for caller
 		return nullptr;
 	}
-	if (ambiguity){
-		error(this->owner,";ambiguous matches for %s",getString(name));
+	if (flags & R_FINAL && !candidates.size())
+	{
+		error(callsite,";No matchrs found for %s\n",str(name));
+		return nullptr;
 	}
-	if (best->is_generic()) {
-		dbprintf(";matched generic function %s instanting\n",str(best->name));
-		return instantiate_generic_function(best, name, args);
+	for (int i=candidates.size()-1; i>=0; i--) {
+		printf("%p %d\n",candidates[i].first, candidates[i].second);
+		auto next_best=candidates[i].first;
+		if (candidates[i].second<=0)continue;
+		if (!next_best->is_generic())
+			return next_best;
+		if (auto new_f= instantiate_generic_function(next_best, callsite,name, args,ret_type,flags))
+			return new_f;
+		//SFINAE here
 	}
-	
-	return best;
+	if (flags&1){
+		goto no_match_error;
+	}
+	return nullptr;
 }
 Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 	// todo: This Pointer?
@@ -1271,7 +1362,6 @@ ExprStructDef* Scope::find_struct_named(Name name){
 
 void Scope::add_fn(ExprFnDef* fnd){
 	if (fnd->instance_of!=0) return; // we compile/match it by instance search.
-	dbprintf("add fn %s to %s\n", str(fnd->name), this->name());
 	if (fnd->name_ptr) return;
 	if (fnd->type_parameter_index(fnd->name)>=0){
 		this->templated_name_fns=fnd;
@@ -1380,8 +1470,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			new_var->set_type(rhs_t);
 			lhs->set_type(rhs_t);
 			this->set_type(rhs_t);
-			propogate_type_fwd(this, desired, lhs->type_ref());
-			return 	propogate_type_fwd(this, desired, this->type_ref());
+			propogate_type_fwd(flags, this, desired, lhs->type_ref());
+			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 		}
 		else if (op_ident==ASSIGN_COLON){ // create a var, of given type.
 			// todo: get this in the main parser
@@ -1391,27 +1481,24 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			auto v=sc->get_or_create_scope_variable(lhsi->name,Local);
 			v->set_type(rhst);
 			if (rhst->name>=IDENT && !rhst->sub) {
-				dbprintf(";struct type? %s\n", str(rhst->name));
 				rhst->struct_def = sc->find_struct(rhst);
-				dbprintf("%p\n", rhst->struct_def);
 			}
 			if (v->get_type()) {
-				dbprintf("instantiating a %s\n", str(v->get_type()->name));
 				sc->find_struct(v->get_type());// instantiate
 			}
-			return propogate_type(this, v->type_ref(),type_ref());
+			return propogate_type(flags, this, v->type_ref(),type_ref());
 		}
 		else if (op_ident==ASSIGN){
-			propogate_type_fwd(this, desired, type_ref());
+			propogate_type_fwd(flags,this, desired, type_ref());
 			auto rhs_t=rhs->resolve(sc,desired,flags);
 			auto lhs_t=lhs->resolve(sc,desired,flags);		// might assign to struct-field, ...
 //			rhs->dump(0);rhs->type()->dump_if(-1);newline(0);
 //			lhs->dump(0);lhs->type()->dump_if(-1);newline(0);
 //			desired->dump_if(-1);newline(0);
-			propogate_type(this, rhs->type_ref(), lhs->type_ref());
-			propogate_type(this, type_ref(),rhs->type_ref());
+			propogate_type(flags,this, rhs->type_ref(), lhs->type_ref());
+			propogate_type(flags,this, type_ref(),rhs->type_ref());
 //			lhs->type()->dump_if(-1);newline(0);
-			return propogate_type(this, type_ref(),lhs->type_ref());
+			return propogate_type(flags, this, type_ref(),lhs->type_ref());
 		} else{
 			ASSERT(0);
 			return ResolvedType();
@@ -1426,7 +1513,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			v->set_type((const Type*)rhs);
 			ASSERT(dynamic_cast<Type*>(rhs))
 		}
-		return propogate_type(this, v->type_ref(),type_ref());
+		return propogate_type(flags, this, v->type_ref(),type_ref());
 	}
 	else if (op_ident==DOT || op_ident==ARROW) {
 		auto lhs_t=lhs->resolve(sc, 0,flags);//type doesn't push up- the only info we have is what field it needs
@@ -1442,10 +1529,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				if (auto f=st->find_field(rhs->name)){
 					f->dump(-1);
 					ret=f->type;
-					return propogate_type(this, ret,this->type_ref());
+					return propogate_type(flags,this, ret,this->type_ref());
 				} else{
 					st->dump(-1);
-					error(this,"\nfield not found %s in %s\n",str(rhs->name), str(st->name));
+					error(this,st,"field not found %s in %s\n",str(rhs->name), str(st->name));
 					ASSERT(0 && "field not found");
 				}
 			}else {
@@ -1469,12 +1556,11 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 		auto ret=rhs->resolve(sc,dt,flags);
 		if (!this->get_type() && ret.type){
-			dbprintf("resolve pointer type\n");
 			ret.type->dump(-1); newline(0);
 			auto ptr_type=new Type(PTR); ptr_type->sub=(Type*)ret.type->clone();
 			this->set_type(ptr_type);
 			ptr_type->dump(-1); newline(0);
-			return propogate_type_fwd(this, desired,ptr_type);
+			return propogate_type_fwd(flags,this, desired,ptr_type);
 		}
 		return ret;
 	}
@@ -1491,7 +1577,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 			ASSERT(ret.type->name==PTR);
 			this->set_type(ret.type->sub);
-			return propogate_type_fwd(this, desired, this->type_ref());
+			return propogate_type_fwd(flags,this, desired, this->type_ref());
 		}
 		else return ResolvedType();
 	}
@@ -1510,10 +1596,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// TODO propogate types for pointer-arithmetic - ptr+int->ptr   int+ptr->ptr  ptr-ptr->int
 		// defaults to same types all round.
 		auto lhst=lhs->resolve(sc,desired,flags);
-		auto rhst=lhs->resolve(sc,desired,flags);
-		propogate_type(this, lhst,type_ref());
-		propogate_type(this, rhst,type_ref());
-		return propogate_type_fwd(this, desired, type_ref());
+		auto rhst=rhs->resolve(sc,desired,flags);
+		propogate_type(flags,this, lhst,type_ref());
+		propogate_type(flags,this, rhst,type_ref());
+		return propogate_type_fwd(flags,this, desired, type_ref());
 	}
 }
 
@@ -1521,7 +1607,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 	verify(this->get_type());
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->get_type()) this->set_type(new Type(VOID));
-		return propogate_type_fwd(this, desired,this->type_ref());
+		return propogate_type_fwd(flags,this, desired,this->type_ref());
 	}
 	ExprIdent* p=nullptr;
 	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
@@ -1531,9 +1617,9 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 		}
 		// last expression - type bounce
 		if (this->argls.size()) {
-			propogate_type_fwd(this, desired,this->type_ref());
+			propogate_type_fwd(flags,this, desired,this->type_ref());
 			auto ret=this->argls[n]->resolve(sc,desired,flags);
-			return propogate_type(this, ret,this->type_ref());
+			return propogate_type(flags,this, ret,this->type_ref());
 		}
 		else {ASSERT(0);return ResolvedType();}
 	}
@@ -1546,18 +1632,28 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 				argls[i]->resolve(sc,nullptr,flags ); // TODO any indexing type? any type extracted from 'array' ?
 			}
 			const Type* array_elem_type=array_type.type->sub;
-			propogate_type_fwd(this, array_elem_type);
-			return propogate_type_fwd(this, desired);
+			propogate_type_fwd(flags,this, array_elem_type);
+			return propogate_type_fwd(flags,this, desired);
 		} else return ResolvedType();
 	}
 	else if (this->call_expr){
-		dbprintf(";resolve call..%s->%s\n",sc->name(),str(p->ident()));
 		// TODO: distinguish 'partially resolved' from fully-resolved.
 		// at the moment we only pick an fn when we know all our types.
 		// But, some functions may be pure generic? -these are ok to match to nothing.
 		// todo:
 //		auto n=num_known_arg_types(this->argls);
-		
+		if (call_expr->name==NAMEOF && strlen(str(this->argls[0]->name))>1) {
+			auto src=this->argls[0];
+			if (!this->type()){ this->set_type(new Type(STR));};
+			char tmp[512];
+			sprintf(tmp,"%s",str(src->name));
+			this->call_expr=0;
+			this->argls.resize(1);
+			this->argls[0]=new ExprLiteral(src->pos,tmp,strlen(tmp));
+			this->argls[0]->resolve(sc,nullptr,0);
+			this->set_type(src->get_type());
+			return ResolvedType();
+		}
 		auto fn_type_r=this->call_expr->resolve(sc,nullptr,flags);
 		auto fn_type=fn_type_r.type;
 		int arg_index=0;
@@ -1570,13 +1666,11 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 				argls[arg_index]->resolve(sc,nullptr,flags);
 			}
 			const Type* fr=fn_type->fn_return();
-			return propogate_type_fwd(this, fr);
+			return propogate_type_fwd(flags,this, fr);
 		} else
 		for (auto i=0; i<argls.size(); i++)  {
 			argls[i]->resolve(sc,nullptr,flags );
 		}
-		if (flags & R_FINAL)
-			ASSERT(this->type());
 
 		if (!this->call_target){
 			
@@ -1591,9 +1685,12 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 				auto fnarg=i<fnc->args.size()?fnc->args[i]:nullptr;
 				argls[i]->resolve(sc,fnarg?fnarg->type:nullptr ,flags);
 			}
-			return propogate_type_fwd(this, desired,this->call_target->ret_type);
-//			return this->call_target->resolve(this->scope, desired);
+			return propogate_type_fwd(flags,this, desired,this->call_target->ret_type);
 		} else {
+			if (flags & R_FINAL)
+				if (!this->type())
+					error(this,"can't call/ type check failed %s",this->call_expr->name_str());
+
 			return ResolvedType();
 		}
 	}
@@ -1601,11 +1698,17 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 }
 
 ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) {
+
+	int num_resolved_args=0;
 	for (int i=0; i<block->argls.size(); i++) {
 		block->argls[i]->resolve(scope,desired,flags);
-		dbprintf("resolve arg %d type=",i); auto t=block->argls[i]->get_type(); if (t) t->dump(-2); printf("\n");
+		if (block->argls[i]->type()) num_resolved_args++;
 	}
-	ASSERT(block->call_target==0);
+	
+	if (block->call_target && num_resolved_args==block->argls.size())
+		return ResolvedType(block->call_target->ret_type,ResolvedType::COMPLETE);
+
+//	ASSERT(block->call_target==0);
 	// is it just an array access.
 	if (block->square_bracket){
 		auto object_t=block->call_expr->resolve(scope,nullptr,flags);
@@ -1621,11 +1724,11 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		return ResolvedType();
 	}
 
-	ExprFnDef* call_target = scope->find_fn(block->call_expr->ident(), block->argls, desired);
+	ExprFnDef* call_target = scope->find_fn(block->call_expr->ident(), block,block->argls, desired,flags);
 	auto fnc=call_target;
 	if (call_target!=block->call_target) {
 		if (block->call_target) {
-			dbprintf("improving call match WARNIGN MEM LEAK ON block->scope?\n");
+			error(block,"call target changed during resolving, we're not sure how to handle this yet\n");
 			block->scope=0; // todo delete.
 		} else {
 			block->scope=0; // todo delete.
@@ -1633,7 +1736,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		block->call_target=call_target;
 		if (call_target->resolved) {
 			Type * fnr=call_target->return_type();
-			return propogate_type_fwd(block, desired, block->type_ref(),fnr);
+			return propogate_type_fwd(flags,block, desired, block->type_ref(),fnr);
 		}
 			// add this to the targets' list of calls.
 		int num_known_types=(desired?1:0)+num_known_arg_types(block->argls);
@@ -1641,7 +1744,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		if (!(isg && num_known_types)) {
 			// concrete function: we can just take return type.
 			auto rt=fnc->return_type();
-			return propogate_type_fwd(block, desired, rt,block->type_ref());
+			return propogate_type_fwd(flags,block, desired, rt,block->type_ref());
 		}
 		{
 			int once=false; if(!once++){
@@ -1686,10 +1789,12 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		}
 		
 		auto ret=call_target->resolve_call(fsc,desired,flags);
-		return propogate_type(block, ret);
+		return propogate_type(flags,block, ret);
 	}
-	else 
+	else  {
+		if (flags &1) error(block,"can't resolve call\n");
 		return ResolvedType();
+	}
 }
 int ExprFnDef::type_parameter_index(Name n) const {
 	for (auto i=0; i<typeparams.size(); i++){
@@ -1699,19 +1804,20 @@ int ExprFnDef::type_parameter_index(Name n) const {
 	return -1;
 }
 ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags) {
-	dbprintf("resolve fn call.. %p\n", scope);
-	
-	for (auto ins=this->instances; ins;ins=ins->next_instance){
-		ins->resolve(scope,nullptr,flags);
+	if (this->is_generic()){
+		for (auto ins=this->instances; ins;ins=ins->next_instance){
+			ins->resolve(scope,nullptr,flags);
+		}
+		return ResolvedType();
 	}
 	
-	propogate_type_fwd(this, desired,this->ret_type);
+	propogate_type_fwd(flags,this, desired,this->ret_type);
 
 	auto rt=this->body->resolve(scope,desired,flags);
 	dbprintf("resolve %s yields type:", getString(this->ident()));if (rt.type) rt.type->dump(-1);printf("\n");
 	// awkwardness says: type error return is more like an enum that doesn't return a type?
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
-	return propogate_type(this, rt,this->ret_type); // todo: hide FnDef->type. its too confusing
+	return propogate_type(flags,this, rt,this->ret_type); // todo: hide FnDef->type. its too confusing
 }
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope);
@@ -1729,19 +1835,19 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 	auto sc=definer_scope->make_inner_scope(&this->scope,this);
 		//this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
 	if (!this->is_generic()){
-	for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
-		auto arg=this->args[i];
-		auto v=sc->find_scope_variable(arg->name);
-		if (!v){v=sc->create_variable(arg->name,VkArg);}
-		propogate_type(this, arg->type_ref(),v->type_ref());
-		if (arg->default_expr){static int warn=0; if (!warn){warn=1;
-			dbprintf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
+		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
+			auto arg=this->args[i];
+			auto v=sc->find_scope_variable(arg->name);
+			if (!v){v=sc->create_variable(arg->name,VkArg);}
+			propogate_type(flags,this, arg->type_ref(),v->type_ref());
+			if (arg->default_expr){static int warn=0; if (!warn){warn=1;
+				dbprintf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
+			}
 		}
-	}
-	if (this->body){
-		auto ret=this->body->resolve(sc,this->ret_type, flags);
-		propogate_type(this, ret,this->ret_type);
-	}
+		if (this->body){
+			auto ret=this->body->resolve(sc,this->ret_type, flags);
+			propogate_type(flags,this, ret,this->ret_type);
+		}
 	}
 
 	if (!this->fn_type) {
@@ -1754,7 +1860,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 		this->fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(AUTO));
 		
 		const Type* t0=this->fn_type; Type*& tr=this->type_ref();
-		propogate_type_fwd(this, t0,tr);
+		propogate_type_fwd(flags,this, t0,tr);
 	}
 	{ int once;if (!once++) dbprintf("RESOLVE FN DEF TYPE PROPERLY- TODO cleanup ambiguity between fn ptr type & fn return type!\n");
 	}
@@ -2076,20 +2182,16 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			if (peek==CLOSE_BRACKET || peek==CLOSE_BRACE || peek==COMMA || peek==SEMICOLON)
 				break;
 		}
-		dbprintf(";:%s\n",getString(src.peek_tok()));
-		dbprintf(";parse:- %zu %zu\n",operands.size(),operators.size());
-//		printf("operands:");dump(operands);
-//		printf("operators:");dump(operators);printf("\n");
 
 		print_tok(src.peek_tok());
 		if (src.is_next_literal()) {
 			ExprLiteral* ln=0;
 			if (src.is_next_number()) {
 				auto n=src.eat_number();
-				if (n.denom==1) {ln=new ExprLiteral(n.num);}
-				else {ln=new ExprLiteral((float)n.num/(float)n.denom);}
+				if (n.denom==1) {ln=new ExprLiteral(src.pos,n.num);}
+				else {ln=new ExprLiteral(src.pos, (float)n.num/(float)n.denom);}
 			} else if (src.is_next_string()) {
-				ln=new ExprLiteral(src.eat_string());
+				ln=new ExprLiteral(src.pos,src.eat_string());
 			} else {
 				error(0,"error parsing literal\n");
 				exit(0);
@@ -2504,27 +2606,26 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 	for (auto s:structs){ s->resolve(sc,nullptr,flags);}
 	for (auto f:functions){ f->resolve(sc,nullptr,flags);}
 
-	return propogate_type_fwd(this, desired);
+	return propogate_type_fwd(flags,this, desired);
 }
 // iterator protocol. value.init. increment & end test.
 ExprFor* parse_for(TokenStream& src){
-	auto p=new ExprFor;
+	auto p=new ExprFor(src.pos);
 	auto first=parse_call(src,SEMICOLON,COMMA,0);
-//	if (src.eat_if(IN)){
-//		p->pattern=first;
-//		p->init=parse_call(src, OPEN_BRACE, 0, 0);
-//		src.expect(OPEN_BRACE);
-//	} else if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
-	if (true) {
+	if (src.eat_if(IN)){
+		p->pattern=first;
+		p->init=parse_call(src, OPEN_BRACE, 0, 0);
+		src.expect(OPEN_BRACE);
+	} else {//if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
 		p->pattern=0;
 		p->init=first;
 		p->cond=parse_expr(src);
 		src.expect(SEMICOLON);
 		p->incr=parse_call(src,OPEN_BRACE,COMMA,0);
-	} else {
-		error(0,"c style for loop, expect for init;cond;incr{body}");
-		exit(0);
 	}
+ //else {
+//		error(p,"for..in.. or c style for loop, expect for init;cond;incr{body}");
+//	}
 	p->body=parse_call(src, CLOSE_BRACE, SEMICOLON, nullptr);
 	if (src.eat_if(ELSE)){
 		src.expect(OPEN_BRACE);
@@ -2535,7 +2636,7 @@ ExprFor* parse_for(TokenStream& src){
 
 
 Node* ExprFor::clone()const{
-	auto n=new ExprFor;
+	auto n=new ExprFor(this->pos);
 	n->pattern=(Expr*)pattern->clone_if();
 	n->init=(Expr*)init->clone_if();
 	n->cond=(Expr*)cond->clone_if();
@@ -2551,7 +2652,7 @@ Node* ExprFor::clone()const{
 ExprIf* parse_if(TokenStream& src){
 	// TODO: assignments inside the 'if ..' should be in-scope
 	// eg if (result,err)=do_something(),err==ok {....}  else {...}
-	auto p=new ExprIf;
+	auto p=new ExprIf(src.pos);
 	p->cond=parse_call(src, OPEN_BRACE, 0, 0);
 	p->body=parse_call(src, CLOSE_BRACE,SEMICOLON,0);
 	verify(p->cond->get_type());
@@ -2571,7 +2672,7 @@ ExprIf* parse_if(TokenStream& src){
 	return p;
 }
 Node* ExprIf::clone()const {
-	auto p=new ExprIf;
+	auto p=new ExprIf(this->pos);
 	p->cond=(Expr*)this->cond->clone_if();
 	p->body=(Expr*)this->body->clone_if();
 	p->else_block=(Expr*)this->else_block->clone_if();
@@ -2597,8 +2698,8 @@ ResolvedType ExprIf::resolve(Scope* s,const Type* desired,int flags){
 	auto body_type=this->body->resolve(s,desired,flags);
 	Type* bt=body_type.type;
 	if (else_block){
-		propogate_type_fwd(this, desired,bt);
-		propogate_type(this, bt);
+		propogate_type_fwd(flags,this, desired,bt);
+		propogate_type(flags,this, bt);
 		return else_block->resolve(s,bt,flags);
 	}
 	else {
@@ -2645,7 +2746,6 @@ void ExprFor::dump(int d) const {
 
 ExprFnDef* parse_fn(TokenStream&src) {
 	auto *fndef=new ExprFnDef(src.pos);
-	dbprintf("parse_fn");
 	// read function name or blank
 
 	auto tok=src.eat_tok(); 
@@ -2659,14 +2759,12 @@ ExprFnDef* parse_fn(TokenStream&src) {
 		}
 		tok=src.expect(OPEN_PAREN);
 	} else fndef->name=NONE;
-	dbprintf("%s",getString(fndef->name));
 	// read function arguments
 	while (NONE!=(tok=src.peek_tok())) {
 		if (tok==ELIPSIS){
 			fndef->variadic=true; src.eat_tok(); src.expect(CLOSE_PAREN); break;
 		}
 		if (tok==CLOSE_PAREN) {src.eat_tok();break;}
-		dbprintf(" arg:%s ",getString(tok));
 		auto arg=parse_arg(src,CLOSE_PAREN);
 		fndef->args.push_back(arg);
 		src.eat_if(COMMA);
@@ -2675,7 +2773,6 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	if (src.eat_if(ARROW) || src.eat_if(COLON)) {
 		fndef->ret_type = parse_type(src, 0);
 	}
-	dbprintf("fn body:");
 	// implicit "progn" here..
 	if (src.eat_if(OPEN_BRACE)){
 		fndef->body = new ExprBlock;
@@ -2755,7 +2852,7 @@ const char* g_TestProg=
 	"vz"
 	"}"
 */
-/*
+
 	"fn lerp[T,F](a:T,b:T,f:F){(b-a)*f+a};  \n"
 	"fn foo(a:int)->int{printf(\"foo_int\n\");0};  \n"
 	"fn printf(s:str,...)->int;  \n"
@@ -2768,7 +2865,7 @@ const char* g_TestProg=
 //	"fn F[F,O,X,Y](o:O, x:X,y:Y){ o.vtable.F(o,x,y)   };"
 
 	"fn main(argc:int,argv:**char)->int{  \n"
-	"	t1:=argc<0 && argc>1;\n"
+"	t1:=argc<0 && argc>1;\n"
 	"	test_result:=if argc==0 || argc==1 {14} else {13} ;"
 	"	xs=:array[int,512];  \n"
 	"	p2:=&xs[1];  \n"
@@ -2794,11 +2891,11 @@ const char* g_TestProg=
 	"	printf(\"Hello From My Language %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
 	"	0  \n"
 	"}  \n\0"
-*/
-"	fn foo(x,y){ x+y  }      "
-"	fn main(argc:int, argv:**char)->int{	"
-"		argc+=foo(argc,0);		"
-"	,0}"
+
+//"	fn foo(x:float,y:float)->float{ x+y  }      "
+//"	fn main(argc:int, argv:**char)->int{	"
+//"		argc+=foo(argc,0);		"
+//"	,0}"
 /*
 	"struct Foo{x:int,y:int, struct Bar{x:float}, fn method(i:int)->int{printf(\"hello from method %d\n\",i);0};};"
 	"fn printf(s:str,...)->int;"
@@ -2877,6 +2974,7 @@ should be able to code assetless
 //	ASSERT(0 && "missing nodes if this is ever called. must have a visitor member fn for every type");
 //}
 VResult Visitor::visit(Type* t)			{newline(depth);dbprintf("type %s",t->name_str()); return t->recurse(this);};
+VResult Visitor::visit(TypeParam* op)		{newline(depth);dbprintf("Op %s",op->name_str());return op->recurse(this);};
 VResult Visitor::visit(ExprOp* op)		{newline(depth);dbprintf("Op %s",op->name_str());return op->recurse(this);};
 VResult Visitor::visit(ExprBlock* b)		{newline(depth);dbprintf("Block %s",b->name_str());return b->recurse(this);}
 VResult Visitor::visit(ExprLiteral* l)	{newline(depth);dbprintf("Literal %s",l->name_str());return l->recurse(this);}
@@ -2893,15 +2991,18 @@ VResult Node::recurse(Visitor* v){
 };
 
 VResult ExprStructDef::recurse(Visitor* v){
+	v->pre_visit(this);
+	for (auto t:typeparams)t.visit(v);
 	for (auto a:fields)a->visit(v);
 	for (auto s:structs){s->visit(v);};
 	for (auto f:functions){f->visit(v);};
 	for (auto s=this->instances;s;s=s->next_instance)s->visit(v);
+	v->post_visit(this);
 	return 0;
 }
 
 enum COMPILE_FLAGS {
-	LLVM=0x0001, TYPES=0x0002, EXECUTABLE=0x0004, RUN=0x008
+	B_AST=0x0001,B_DEFS=0x0002,B_GENERICS=0x0004, B_TYPES=0x0008,B_LLVM=0010,B_EXECUTABLE=0x0020,B_RUN=0x0040
 };
 int compile_source(const char *buffer, const char* filename, const char* outname, int flags){
 
@@ -2910,27 +3011,33 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	node->dump(0);
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
 	Visitor v;
-	node->visit(&v);
+	if (flags & B_AST){
+		node->dump(0);
+	}
 	gather_named_items(node,&global);
 	node->resolve(&global,nullptr,0);
 	node->resolve(&global,nullptr,0);
 	node->resolve(&global,nullptr,0);
 	node->resolve(&global,nullptr,0);
-	node->resolve(&global,nullptr,R_FINAL);
-	if (flags & TYPES) {
+	node->resolve(&global,nullptr,(flags&B_LLVM)?R_FINAL:0);
+	if (flags & B_DEFS){
 		global.dump(0);
+	}
+	if (flags & B_TYPES) {
 		node->dump(0);
 	}
-	if (flags & LLVM) {
+	if (flags & B_LLVM) {
 		output_code(stdout, &global);
 	}
 	if (outname){
 		FILE* ofp=fopen(outname,"wb");
 		if (ofp){
-			output_code(ofp, &global);
+			if (flags & (B_EXECUTABLE|B_RUN|B_LLVM)) {
+				output_code(ofp, &global);
+			}
 			fprintf(ofp,"\n;end");
 			fclose(ofp);
-			if (flags & EXECUTABLE) {
+			if (flags & (B_EXECUTABLE|B_RUN)) {
 
 				char exename[256];
 				filename_change_ext(exename,outname,"");
@@ -2938,7 +3045,7 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 				printf("\nllvm src=%s\n executable=%s\nflags %x\n",outname,exename, flags);
 				printf("\n%s\n",compile_cmd);
 				auto ret= system(compile_cmd);
-				if (!ret && (flags & RUN)) {
+				if (!ret && (flags & B_RUN)) {
 					printf("compiled ok, running executable %s \n", exename);
 					char invoke[512];sprintf(invoke,"./%s",exename);
 					return system(invoke);
@@ -2980,14 +3087,18 @@ int main(int argc, const char** argv) {
 		const char* a=argv[i];
 		if (a[0]=='-'){
 			for (int j=1; a[j];j++){
-				if (a[j]=='t') options|=TYPES;
-				if (a[j]=='l') options|=LLVM;
-				if (a[j]=='r') options|=RUN|EXECUTABLE;
-				if (a[j]=='e') options|=EXECUTABLE;
+				if (a[j]=='a') options|=B_AST;
+				if (a[j]=='t') options|=B_TYPES;
+				if (a[j]=='d') options|=B_DEFS;
+				if (a[j]=='g') options|=B_GENERICS;
+				if (a[j]=='l') options|=B_LLVM;
+				if (a[j]=='r') options|=B_RUN|B_EXECUTABLE;
+				if (a[j]=='e') options|=B_EXECUTABLE;
 			}
 		}
 	}
-	if (!options) options=TYPES|LLVM|RUN|EXECUTABLE;
+	if (!options)
+		options=B_RUN|B_EXECUTABLE;
 	
 	for (auto i=1; i<argc; i++) {
 		if (argv[i][0]!='-') {
@@ -2997,10 +3108,10 @@ int main(int argc, const char** argv) {
 	}
 	if (argc<=1) {
 		printf("no sources given so running inbuilt test.\n");
-		auto ret=compile_source(g_TestProg,"g_TestProg","test.ll",TYPES|LLVM);
+		auto ret=compile_source(g_TestProg,"g_TestProg","test.ll",B_AST|B_DEFS|B_TYPES|B_LLVM);
 		if (!ret) {
 			printf("\nSource we just compiled, use for reference..\n");
-			printf(g_TestProg);
+			printf("%s",g_TestProg);
 			printf("\noptions -l emit llvm IR only -e emit executable only -t dump AST with types -r compile & run\n");
 			printf("\ndefault: it will compile & run a source file;\ngenerates srcname.ll & srcname/srcname.out executable");
 		}
