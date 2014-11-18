@@ -41,6 +41,7 @@ struct Span {
 struct Node;
 struct Name;
 extern void dbprintf(const char*,...);
+extern void error(const Node*,const Node*,const char*,...);
 extern void error(const Node*,const char*,...);
 extern void error(const char*,...);
 extern bool is_comparison(Name n);
@@ -85,7 +86,10 @@ bool isSymbolStart(char c);
 enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
-	INT,UINT,BOOL,FLOAT,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,PTR,REF,TUPLE,NUMBER,TYPE,NAME,
+	INT,UINT,SIZE_T,I8,I16,I32,I64,U8,U16,U32,U64,BOOL,	// int types
+	HALF,FLOAT,DOUBLE,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,	// float types,ptrs
+	PTR,REF,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
+	
 	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,
 	LET,SET,VAR,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
@@ -267,6 +271,7 @@ public:
 	bool reg_is_addr=false;
 	SrcPos pos;						// where is it
 	Node(){}
+	Node*	def=0;		// definition of the entity here. (function call, struct,type,field);
 	virtual  ~Node(){};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
@@ -274,7 +279,7 @@ public:
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
 	const char* name_str()const{return str(this->name);}
-	Name ident() const  { if (this)return this->name;else return 0;}
+//	Name ident() const  { if (this)return this->name;else return 0;}
 	virtual Node* clone() const=0;
 	Node* clone_if()const { if(this) return this->clone();else return nullptr;}
 	void dump_if(int d)const{if (this) this->dump(d);}
@@ -288,6 +293,10 @@ public:
 	virtual void translate_typeparams(const TypeParamXlat& tpx){ error(this,"not handled for %s",this->kind_str()); };
 	virtual VResult recurse(Visitor* v);
 	virtual VResult visit(Visitor* v)=0;
+	virtual Name as_ident()const{
+		error(this,"expected ident %s",str(this->name));
+		return PLACEHOLDER;
+	};
 };
 
 struct TypeParam: Node{
@@ -329,7 +338,7 @@ public:
 	Type*& type_ref(){return this->m_type;}
 	LLVMType get_type_llvm() const;
 	virtual Type* eval_as_type()const{return nullptr;};
-	virtual ExprBlock* is_subscript(){return (ExprBlock*)nullptr;}
+	virtual ExprBlock* is_subscript()const {return (ExprBlock*)nullptr;}
 };
 struct Type : Expr{
 	int marker;
@@ -405,16 +414,23 @@ struct ExprBlock :public ExprScopeBlock{
 	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
 	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
 	// the similarity between all is
-	bool square_bracket;  // aka foo[a]  in C desugars as *(foo+a)
-	bool is_compound_expression()const{return !call_expr &&!call_target && !name;}
+	
+	short bracket_type;	//OPEN_PARENS,OPEN_BRACES,OPEN_BRACKETS,(ANGLE_BRACKETS?)
+	short delimiter=SEMICOLON;//COMMA, SEMICOLON,SPACES?
 
 	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...}
 	vector<Expr*>	argls;
-	ExprFnDef*	call_target=0;
+	//ExprFnDef*	call_target=0;
 	Scope* scope=0;
 	ExprBlock* next_of_call_target=0;	// to walk callers to a function
-	virtual ExprBlock* is_subscript(){if (this->square_bracket) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
-	ExprFnDef* get_fn_call()const {return this->call_target;}
+	bool is_compound_expression()const{return !call_expr && !name;}
+	bool is_tuple()const{ return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
+	bool is_struct_initializer()const{ return this->bracket_type==OPEN_BRACE && this->delimiter==COMMA;}
+	bool is_anon_struct()const{ return this->is_struct_initializer() && !this->call_expr;}
+	bool is_array_initializer()const{ return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
+	void set_delim(int delim){delimiter=delim;}
+	virtual ExprBlock* is_subscript()const{if (this->bracket_type==OPEN_BRACKET && call_expr) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
+	ExprFnDef* get_fn_call()const;
 	Name get_fn_name() const;
 	void dump(int depth) const;
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
@@ -539,7 +555,7 @@ struct Variable : Expr{
 };
 // scopes are created when resolving; generic functions are evaluated
 struct Scope {
-	Expr*	owner=0;	// TODO: eliminate this, owner might be FnDef or Struct.
+	Expr*	owner=0;	// TODO: eliminate this, owner might be FnDef,Struct,ExprBlock
 	Expr* node=0;
 	Scope* parent=0;
 	Scope* next=0;
@@ -564,9 +580,16 @@ public:
 	Variable* find_scope_variable(Name ident);
 	Variable* create_variable(Node* n, Name name,VarKind k);
 	Variable* get_or_create_scope_variable(Node* creator,Name name,VarKind k);
-	ExprStructDef* find_struct(Type* t){return this->find_struct_sub(this,t);}//original scope because typarams might use it.
-	ExprStructDef* find_struct_sub(Scope* original, Type* t);
+	ExprStructDef* try_find_struct(const Type* t){return this->find_struct_sub(this,t);}
+	ExprStructDef* find_struct(const Type* t){
+		auto r=try_find_struct(t);
+		if (!r)
+			error(t,"cant find struct %s", t->name_str());
+		return r;
+	}//original scope because typarams might use it.
+	ExprStructDef* find_struct_sub(Scope* original,const Type* t);
 	ExprStructDef* find_struct_named(Name name);
+	ExprStructDef* find_struct_named(const Node* node){return find_struct_named(node->as_ident());}
 	ExprFnDef*	find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags);
 	void add_struct(ExprStructDef*);
 	void add_fn(ExprFnDef*);
@@ -655,11 +678,12 @@ struct ExprStructDef: Expr {
 	ExprStructDef* instances=0, *instance_of=0,*next_instance=0;
 	ExprFnDef* constructor_fn=0;
 	NamedItems* name_ptr=0;
-	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} return nullptr;}
-	int field_index(Name name){for (auto i=0; i<fields.size(); i++){if(fields[i]->name==name)return i;} return -1;}
+//	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} error(this,"no field %s",str(name));return nullptr;}
+	ArgDef* find_field(const Node* rhs)const{ auto name=rhs->as_ident(); for (auto a:fields){if (a->name==name) return a;} error(this,rhs,"no field %s",str(name));return nullptr;}
+	int field_index(const Node* rhs){auto name=rhs->as_ident(); for (auto i=0; i<fields.size(); i++){if(fields[i]->name==name)return i;} return -1;}
 	ExprStructDef* next_of_name;
 	ExprStructDef(SrcPos sp){pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
-	ExprStructDef* get_instance(Scope* sc, Type* type); // 'type' includes all the typeparams.
+	ExprStructDef* get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
 	void dump(int depth)const;
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	Node* clone()const;
@@ -726,6 +750,16 @@ struct ExprFnDef : Expr {
 	VResult visit(Visitor* v){ return v->visit(this);}
 };
 
+struct StructInitializer{ // named initializer
+	ExprBlock* si; // struct_intializer
+	Scope *sc;
+	vector<int> field_indices;
+	vector<ArgDef*> field_refs;
+	StructInitializer(Scope* s,ExprBlock* block){si=block,sc=s;};
+	void map_fields();
+	ResolvedType resolve(const Type* desiredType,int flags);
+};
+
 // What details did we miss ?
 // Codegen is a big issue.
 
@@ -743,6 +777,7 @@ struct ExprIdent :Expr{
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	virtual VResult recurse(Visitor* v){return 0;};
 	VResult visit(Visitor* v){ return v->visit(this);}
+	virtual Name as_ident()const{return name;};
 };
 
 
