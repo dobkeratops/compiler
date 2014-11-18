@@ -21,6 +21,7 @@
 typedef int32_t OneBasedIndex;
 
 #define R_FINAL 0x0001
+#define R_REVERSE 0x0002
 
 struct SrcPos {
 	OneBasedIndex	line; //1-based line index
@@ -268,7 +269,7 @@ public:
 	Node(){}
 	virtual  ~Node(){};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
-	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty?");return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
+	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
 	virtual const char* kind_str(){return"node";}
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
@@ -370,6 +371,7 @@ struct Type : Expr{
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	VResult visit(Visitor* v){ auto r= v->visit(this);return r;}
 	virtual VResult recurse(Visitor* v){v->pre_visit(this);for (auto s=this->sub; s; s=s->next){s->visit(v);} v->post_visit(this); return 0;}
+	virtual ResolvedType resolve(Scope* s, const Type* desired,int flags){return ResolvedType(this,ResolvedType::COMPLETE);}
 
 };
 
@@ -417,7 +419,7 @@ struct ExprBlock :public ExprScopeBlock{
 	void dump(int depth) const;
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	virtual const char* kind_str()const{return"block";}
-	ExprBlock();
+	ExprBlock(const SrcPos& p);
 	Node* clone() const;
 	void clear_reg(){ for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); regname=0;};
 	bool is_undefined()const ;
@@ -524,9 +526,9 @@ struct Variable : Expr{
 	Scope* owner=0;
 	Variable* next=0;
 	Expr* initialize=0; // if its an argdef, we instantiate an initializer list
-	Variable(Name n,VarKind k){name=n; initialize=0; owner=0;kind=k;this->set_type(0);}
+	Variable(SrcPos pos,Name n,VarKind k){this->pos=pos,name=n; initialize=0; owner=0;kind=k;this->set_type(0);}
 	Node* clone() const {
-		auto v=new Variable(name,this->kind);
+		auto v=new Variable(this->pos,name,this->kind);
 		std::cout<<"clone "<<str(name)<<this<<" as "<<v<<"\n";
 		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
 		v->next=0; v->set_type(this->get_type()); return v;
@@ -560,8 +562,8 @@ public:
 	Variable* get_fn_variable(Name name,ExprFnDef* f);
 	Variable* find_variable_rec(Name ident);
 	Variable* find_scope_variable(Name ident);
-	Variable* create_variable(Name name,VarKind k);
-	Variable* get_or_create_scope_variable(Name name,VarKind k);
+	Variable* create_variable(Node* n, Name name,VarKind k);
+	Variable* get_or_create_scope_variable(Node* creator,Name name,VarKind k);
 	ExprStructDef* find_struct(Type* t){return this->find_struct_sub(this,t);}//original scope because typarams might use it.
 	ExprStructDef* find_struct_sub(Scope* original, Type* t);
 	ExprStructDef* find_struct_named(Name name);

@@ -58,11 +58,10 @@ const char* g_filename=0;
 
  BREAK EXPRESSIONS
  
- RUST COMPATABILITY
-  -parsing rust syntax
+ SOME RUST COMPATABILITY -parsing rust syntax?
   -how far could we go there?
  
- C++ COMPATABILITY
+ SOME C++ COMPATABILITY -parse a subset of c++?
 
 if x in {
 	foo=>....
@@ -76,8 +75,6 @@ if x in {
 
  */
 
-//(sourcecode "hack.cpp")
-//(normalize (lerp (obj:zaxis)(normalize(sub(target(obj:pos)))) //(settings:angle_rate)) (sloc 512 40 20))
 
 void dbprintf(const char* str, ... )
 {
@@ -116,8 +113,23 @@ void error(const Node* n, const char* str, ... ){
 #ifdef DEBUG
 	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
 #endif
-	ASSERT(0);
 }
+void warning(const Node* n, const char* str, ... ){
+	char buffer[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(buffer, str, arglist );
+	va_end( arglist );
+	printf("error:-\n");
+	n->dump_if(-1);
+	printf("\n");
+	printf("%s:%d: warning:",g_filename,n->pos.line);
+	printf("%s\n",buffer);
+#ifdef DEBUG
+	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
+#endif
+}
+
 // for real compiler errors. todo.. codelocations on nodes
 void error(const Node* n,Scope* s, const char* str, ... ){
 	char buffer[1024];
@@ -133,7 +145,6 @@ void error(const Node* n,Scope* s, const char* str, ... ){
 #ifdef DEBUG
 	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
 #endif
-	CRASH;
 }
 // for real compiler errors. todo.. codelocations on nodes
 void error(const Node* n,const Node* n2, const char* str, ... ){
@@ -150,7 +161,6 @@ void error(const Node* n,const Node* n2, const char* str, ... ){
 #ifdef DEBUG
 	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
 #endif
-	CRASH;
 }
 
 void error(const char* str, ... ){
@@ -329,9 +339,6 @@ StringTable::StringTable(const char** initial){
 		index_to_name[i]=std::string(g_token_str[i]);
 		names.insert(std::make_pair(index_to_name[i],i));
 	}
-	dbprintf("%d %s\n",COMMA,g_token_str[COMMA]);
-	dbprintf("%d %s\n",SEMICOLON,g_token_str[SEMICOLON]);
-	dbprintf("%d",nextId);
 	ASSERT(nextId==IDENT);
 }
 int StringTable::get_index(const char* str, const char* end,char flag) {
@@ -626,7 +633,7 @@ void ExprOp::dump(int depth) const {
 	newline(depth);dbprintf(")");
 }
 
-ExprBlock::ExprBlock(){call_target=0;}
+ExprBlock::ExprBlock(const SrcPos& s){call_target=0; pos=s;}
 
 const char* Scope::name() const {
 	if (owner) return str(owner->name);
@@ -804,7 +811,6 @@ ExprLiteral::ExprLiteral(const SrcPos& s,float f) {
 	set_type(new Type(FLOAT));
 	type_id=T_FLOAT;
 	u.val_float=f;
-	dbprintf("lit float %.3f",f);
 }
 ExprLiteral::ExprLiteral(const SrcPos& s,int i) {
 	pos=s;
@@ -988,9 +994,6 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, con
 	if (return_type){
 		new_fn->ret_type=const_cast<Type*>(return_type);
 	}
-	src->dump_signature();
-	new_fn->dump_signature();
-	new_fn->dump(0);
 	// todo: translate return type. for the minute we discard it..
 	new_fn->ret_type=nullptr;
 	new_fn->body->set_type(nullptr);// todo, inference upward..
@@ -998,14 +1001,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, con
 	src->instances=new_fn;
 	new_fn->instance_of = src;
 	new_fn->resolved=false;
-//	dbprintf("generic instantiation:-\n");
-//	new_fn->dump(0);
-//	new_fn->scope->dump(0);
 	new_fn->resolve(src_fn_owner,nullptr,flags);//todo: we can use output type ininstantiation too
-	dbprintf("instantiated: %s \n",str(new_fn->name));
-	new_fn->dump_signature();
-	dbprintf("%s\n", str(new_fn->ret_type->name));
-//	new_fn->dump(0);
 	return new_fn;	// welcome new function!
 }
 Node* ExprOp::clone() const {
@@ -1013,7 +1009,7 @@ Node* ExprOp::clone() const {
 }
 Node* ExprBlock::clone() const {
 	if (!this) return nullptr;
-	auto r=new ExprBlock();
+	auto r=new ExprBlock(this->pos);
 	if (this->call_expr) {
 		r->call_expr = (Expr*) this->call_expr->clone();
 	}
@@ -1100,17 +1096,14 @@ int match_generic_typeparams(const vector<TypeParam>& fn_tps, vector<const Type*
 	for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->next,sub2=sub2->next) {
 		ret_score+=match_generic_typeparams(fn_tps, matched_tps, sub1, sub2);
 	}
-	dbprintf("TODO: matching arguments should actually traverse the type tree , they can be complex thats' the point, eg [T](args:vector<T>,T) that sort of thing.\n");
 	int ti = get_typeparam_index(fn_tps, fn_arg->name);
 	if (ti>=0) {
 		// Is this a generic typeparam?
 		if (matched_tps[ti]==0){ // new typeparam?
-			dbprintf("typeparam %s is %s\n", str(fn_tps[ti].name), str(given_arg->name));
 			matched_tps[ti]=given_arg;
 			return ret_score+1;
 		}
 		else if (!(matched_tps[ti]->eq(given_arg))) {// or we already found it - match..
-			dbprintf("typeparam %s is %s, !=given %s\n", str(fn_tps[ti].name), str(matched_tps[ti]->name), str(given_arg->name));
 			return ret_score-1000;
 		}
 	} else {
@@ -1145,7 +1138,6 @@ void FindFunction::insert_candidate(ExprFnDef* f,int score){
 		}
 	}
 	candidates.push_back(Candidate{f,score});
-
 }
 void FindFunction::consider_candidate(ExprFnDef* f) {
 	if (f->type_parameter_index(f->name)<0)
@@ -1161,11 +1153,6 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	
 	vector<const Type*> matched_type_params;
 	for (int i=0; i<f->typeparams.size(); i++){matched_type_params.push_back(nullptr);}
-
-	for (int i=0; i<args.size() && i<f->args.size(); i++) {
-		auto t=f->args[i]->type;
-		if (t) t->dump(-1);
-	}
 
 	int score=0;
 	if (!f->is_enough_args((int)args.size())){
@@ -1183,8 +1170,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 		} else{
 			// both args are given:
 			if (f->args[i]->get_type()->eq(args[i]->get_type())) {
-				find_printf("match %s %s\n",f->args[i]->get_type()->get_name_str(), args[i]->get_type()->get_name_str());
-					score+=100;// 1 exact match worth more than any number of anys
+				score+=100;// 1 exact match worth more than any number of anys
 			} else{
 				//if (!is_generic_type(f->typeparams,f->args[i]->get_type())
 				{
@@ -1225,7 +1211,6 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 }
 void FindFunction::find_fn_sub(Expr* src) {
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
-		find_printf("look for %s in %s\n",getString(name),src->get_name_str());
 		for (auto x:sb->argls) {
 			find_fn_sub(x);
 		}
@@ -1252,20 +1237,22 @@ void FindFunction::find_fn_from_scopes(Scope* s,Scope* ex)
 	}
 }
 
+void dbprint_find(const vector<ArgDef*>& args){
+	dbprintf("\n;find call with args(");
+	for (int i=0; i<args.size(); i++) {dbprintf(" %d:",i);dbprintf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
+	dbprintf(")\n");
+}
+
 ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags)  {
 	// TODO: ACCELERATION:
 	// make a type-code and have direct hash lookup of exact-match
 	// we only need all this search logic to execute once per permutation of args.
 	FindFunction ff(name,args,ret_type,flags);
 	
-	find_printf("\n;find call with args(");
-	for (int i=0; i<args.size(); i++) {find_printf(" %d:",i);find_printf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
-	find_printf(")\n");
 
 	Scope* prev=nullptr;
 	vector<pair<ExprFnDef*,int>> candidates;
 	for (auto src=this; src; prev=src,src=src->parent) {// go back thru scopes first;
-		find_printf(";in scope %p\n",src);
 		ff.find_fn_from_scopes(src,prev);
 	}
 	// then search subscopes, excluding 'this'
@@ -1301,7 +1288,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 			}
 			dbprintf("\ncandidate functoins:-\n");
 			for (auto c:ff.candidates){
-				dbprintf(c.f->pos);c.f->dump(-1);dbprintf("\n");
+				dbprintf(c.f->pos);c.f->dump_signature();dbprintf("\n");
 			}
 			error(callsite,"no matching function %s(), %d candidates\n",str(name),ff.candidates.size());
 			return nullptr;
@@ -1316,7 +1303,6 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	}
 	for (int i=(int)ff.candidates.size()-1; i>=0; i--) {
 		auto c=&ff.candidates[i];
-		printf("%p %d\n",c->f, c->score);
 		auto next_best=c->f;
 		if (c->score<=0)continue;
 		if (!next_best->is_generic())
@@ -1412,23 +1398,22 @@ Variable* Scope::get_or_create_variable(Name name,VarKind k){
 	return this->create_variable(name,k);
 }
  */
-Variable* Scope::create_variable(Name name,VarKind k){
+Variable* Scope::create_variable(Node* n, Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	if (exv) return exv;
 	ASSERT(exv==0);
-	dbprintf("create variable %s\n",str(name));
-	auto v=new Variable(name,k); v->next=this->vars; this->vars=v;
+	auto v=new Variable(n->pos,name,k); v->next=this->vars; this->vars=v;
 	v->name=name;v->owner=this;
 	return v;
 }
-Variable* Scope::get_or_create_scope_variable(Name name,VarKind k){
+Variable* Scope::get_or_create_scope_variable(Node* creator,Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	auto shadow_v=find_variable_rec(name);
 	if (exv) return exv;
 	if (shadow_v){
-		dbprintf("warning shadowing variable %s in %s\n",str(name),this->name());
+		warning(creator,"warning shadowing variable %s in %s\n",str(name),this->name());
 	}
-	auto v=this->create_variable(name,k);
+	auto v=this->create_variable(creator,name,k);
 	return v;
 }
 void Scope::dump(int depth)const {
@@ -1471,15 +1456,13 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
 		ASSERT(this->lhs && this->rhs);
 		auto vname=lhs->ident();	//todo: rvalue malarchy.
-		//			printf("set: try to create %d %s %s\n", vname, getString(vname), this->args[1]->kind_str());
 		auto rhs_t=rhs->resolve(sc,desired,flags);
-		lhs->dump(0);
 		if (op_ident==LET_ASSIGN){
 			if (desired) {
 				desired->dump(-1);
 			}
 			auto rhs_t = rhs->get_type();
-			auto new_var=sc->create_variable(vname,Local);
+			auto new_var=sc->create_variable(this,vname,Local);
 			new_var->set_type(rhs_t);
 			lhs->set_type(rhs_t);
 			this->set_type(rhs_t);
@@ -1491,7 +1474,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			auto lhsi=expect_cast<ExprIdent>(lhs);
 			auto rhst=expect_cast<Type>(rhs);
 			//			auto v=sc->find_variable_rec(this->argls[0]->name);
-			auto v=sc->get_or_create_scope_variable(lhsi->name,Local);
+			auto v=sc->get_or_create_scope_variable(this,lhsi->name,Local);
 			v->set_type(rhst);
 			if (rhst->name>=IDENT && !rhst->sub) {
 				rhst->struct_def = sc->find_struct(rhst);
@@ -1505,12 +1488,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			propogate_type_fwd(flags,this, desired, type_ref());
 			auto rhs_t=rhs->resolve(sc,desired,flags);
 			auto lhs_t=lhs->resolve(sc,desired,flags);		// might assign to struct-field, ...
-//			rhs->dump(0);rhs->type()->dump_if(-1);newline(0);
-//			lhs->dump(0);lhs->type()->dump_if(-1);newline(0);
-//			desired->dump_if(-1);newline(0);
 			propogate_type(flags,this, rhs->type_ref(), lhs->type_ref());
 			propogate_type(flags,this, type_ref(),rhs->type_ref());
-//			lhs->type()->dump_if(-1);newline(0);
 			return propogate_type(flags, this, type_ref(),lhs->type_ref());
 		} else{
 			ASSERT(0);
@@ -1540,13 +1519,11 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			ASSERT(dynamic_cast<ExprIdent*>(rhs));
 			if (auto st=sc->find_struct(t)){
 				if (auto f=st->find_field(rhs->name)){
-					f->dump(-1);
 					ret=f->type;
 					return propogate_type(flags,this, ret,this->type_ref());
 				} else{
 					st->dump(-1);
 					error(this,st,"field not found %s in %s\n",str(rhs->name), str(st->name));
-					ASSERT(0 && "field not found");
 				}
 			}else {
 				error(this,"struct not found %s", str(t->name));
@@ -1560,19 +1537,16 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		Type* dt=nullptr;
 		if (desired){
 			if (desired->name!=PTR || desired->name!=REF) {
-				dbprintf("taking adr,want:\n");
+				error(this,"taking adress, expected type");
 				desired->dump(-1);
 				newline(0);
-				ASSERT(0&&"incorrect type for grabbing adress");
 			}
 			dt=desired->sub;
 		}
 		auto ret=rhs->resolve(sc,dt,flags);
 		if (!this->get_type() && ret.type){
-			ret.type->dump(-1); newline(0);
 			auto ptr_type=new Type(PTR); ptr_type->sub=(Type*)ret.type->clone();
 			this->set_type(ptr_type);
-			ptr_type->dump(-1); newline(0);
 			return propogate_type_fwd(flags,this, desired,ptr_type);
 		}
 		return ret;
@@ -1628,11 +1602,16 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 		for (; n<this->argls.size()-1; n++) {
 			this->argls[n]->resolve(sc,0,flags);
 		}
-		// last expression - type bounce
+		// last expression - type bounce. The final expression is a return value, use 'desired';
+		// we then propogate backwards. some variables will have been set, eg return value accumulator..
 		if (this->argls.size()) {
-			propogate_type_fwd(flags,this, desired,this->type_ref());
+			propogate_type_fwd(flags,this, desired);
 			auto ret=this->argls[n]->resolve(sc,desired,flags);
-			return propogate_type(flags,this, ret,this->type_ref());
+			// reverse pass too
+			for (n=(int)this->argls.size()-1;n>=0; n--) {
+				this->argls[n]->resolve(sc,0,flags);
+			}
+			return propogate_type(flags,this, ret);
 		}
 		else {ASSERT(0);return ResolvedType();}
 	}
@@ -1687,7 +1666,6 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 
 		if (!this->call_target){
 			
-			static bool warn=false; if (!warn){warn=true;dbprintf("TODO try re-testing every time, or waiting for max args to be ready? one way might be: no unknown args, between caller & candidate. ( eg caller (f f _) vs callee (_ f f) would infer the last ones ok\n  dont just wait for all on caller.");}
 			for (auto i=0; i<argls.size(); i++)  {
 				argls[i]->resolve(sc,nullptr ,flags);
 			}
@@ -1789,7 +1767,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		Scope* fsc=block->scope;
 		for (int i=0; i<block->argls.size() && i<fnc->args.size(); i++) {
 			auto input_type=block->argls[i]->get_type();
-			auto v=fsc->create_variable(fnc->args[i]->name,VkArg);
+			auto v=fsc->create_variable(fnc->args[i], fnc->args[i]->name,VkArg);
 			auto argtype=fnc->args[i]->get_type();
 			if (!v->type()){
 				v->type(argtype?argtype:input_type);
@@ -1851,7 +1829,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 			auto arg=this->args[i];
 			auto v=sc->find_scope_variable(arg->name);
-			if (!v){v=sc->create_variable(arg->name,VkArg);}
+			if (!v){v=sc->create_variable(arg,arg->name,VkArg);}
 			propogate_type(flags,this, arg->type_ref(),v->type_ref());
 			if (arg->default_expr){static int warn=0; if (!warn){warn=1;
 				dbprintf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
@@ -1874,8 +1852,6 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 		
 		const Type* t0=this->fn_type; Type*& tr=this->type_ref();
 		propogate_type_fwd(flags,this, t0,tr);
-	}
-	{ int once;if (!once++) dbprintf("RESOLVE FN DEF TYPE PROPERLY- TODO cleanup ambiguity between fn ptr type & fn return type!\n");
 	}
 	return ResolvedType(fn_type,ResolvedType::COMPLETE);
 }
@@ -1960,7 +1936,6 @@ struct TextInput {
 		for (int i=0; i<IDENT; i++) {
 			int len=0;
 			const char* cmp=g_token_str[i];
-//			printf("%c %c\n",tok_start[0],cmp[0]);
 			int j=0;
 			for (; cmp[j] ; j++,len++) {
 				if (tok_start[j]!=cmp[j]) break;
@@ -1969,7 +1944,6 @@ struct TextInput {
 				if (len>longest){longest=len;match=i;}
 			}
 		}
-//		printf("op len=%d",longest);
 		tok_end=tok_start+longest;
 	}
 	void advance_string(char quote) {
@@ -2150,7 +2124,7 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 
 					  ){
 	if (was_operand==true) {
-		dbprintf("warning undeliminated expression parsing anyway");
+		//error(node,"warning undeliminated expression parsing anyway");
 		flush_op_stack(node,operators,operands);// keep going
 	}
 	was_operand=true;
@@ -2171,7 +2145,7 @@ LLVMType Expr::get_type_llvm() const
 
 ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	// shunting yard expression parser
-	ExprBlock *node=new ExprBlock; node->call_expr=op; node->pos=src.pos;
+	ExprBlock *node=new ExprBlock(src.pos); node->call_expr=op;
 	verify(node->type());
 	vector<SrcOp> operators;
 	vector<Expr*> operands;
@@ -2196,7 +2170,6 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 				break;
 		}
 
-		print_tok(src.peek_tok());
 		if (src.is_next_literal()) {
 			ExprLiteral* ln=0;
 			if (src.is_next_number()) {
@@ -2218,7 +2191,6 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			operands.push_back(parse_struct(src));
 		}
 		else if (src.eat_if(FN)) {
-//			ASSERT(!was_operand);
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			auto local_fn=parse_fn(src);
 			operands.push_back(local_fn);
@@ -2254,7 +2226,6 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			was_operand=false;
 		}
 		else if (src.eat_if(wrong_delim) && delim){ //allows ,,;,,;,,  TODO. more precise.
-//			printf("error expected %s not %s", getString(delim),getString(wrong_delim));
 			flush_op_stack(node,operators,operands);// keep going
 			was_operand=false;
 		}
@@ -2336,7 +2307,6 @@ Type* parse_type(TokenStream& src, int close) {
 		}
 	}
 	// todo: pointers, adresses, arrays..
-	ret->dump(-1);
 	return ret;
 }
 ArgDef* parse_arg(TokenStream& src, int close) {
@@ -2366,7 +2336,6 @@ void parse_typeparams(TokenStream& src,vector<TypeParam>& out) {
 
 ExprStructDef* parse_struct(TokenStream& src) {
 	auto sd=new ExprStructDef(src.pos);
-	dbprintf("parse_struct");
 	auto tok=src.eat_ident();
 	sd->name=tok;
 	if (src.eat_if(OPEN_BRACKET)) {
@@ -2461,19 +2430,11 @@ void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 
 void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)
 {
-	for (auto a:this->fields) {
-		a->translate_typeparams(tpx);
-	}
-	for (auto f:functions){
-		f->translate_typeparams(tpx);
-	}
-	for (auto s:structs){
-		s->translate_typeparams(tpx);
-	}
+	for (auto a:this->fields)a->translate_typeparams(tpx);
+	for (auto f:functions)f->translate_typeparams(tpx);
+	for (auto s:structs)s->translate_typeparams(tpx);
 	if (tpx.typeparams_all_set())
-	{
 		this->typeparams.resize(0);
-	}
 }
 
 void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
@@ -2571,10 +2532,6 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, Type* type) {
 		ins->inherits_type= this->inherits_type; // TODO: typeparams! map 'parent' within context  to make new typeparam vector, and get an instance for that too.
 
 		ins->translate_typeparams(TypeParamXlat(this->typeparams, ins->instanced_types));
-		dbprintf("template instantiation of %s\n :-{", str(parent->name));
-		type->dump(-1);
-		ins->dump(-1);
-		dbprintf("}template instantiation", str(parent->name));
 	}
 	if (!type->struct_def) { type->struct_def=ins;}
 	else { ASSERT(type->struct_def==ins && "instantiated type should be unique")};
@@ -2781,7 +2738,6 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	// read function name or blank
 
 	auto tok=src.eat_tok(); 
-	print_tok(tok);
 
 	if (tok!=OPEN_PAREN) {
 		ASSERT(is_ident(tok));
@@ -2807,12 +2763,10 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	}
 	// implicit "progn" here..
 	if (src.eat_if(OPEN_BRACE)){
-		fndef->body = new ExprBlock;
 		fndef->body = parse_call(src, CLOSE_BRACE, SEMICOLON, nullptr);
 	} else {
 		fndef->body=nullptr; // Its' just an extern prototype.
 	}
-	fndef->dump(0);
 	return fndef;
 }
 // every file is an implicitly a function aswell taking no args
@@ -2901,15 +2855,15 @@ const char* g_TestProg=
 	"	test_result:=if argc==0 || argc==1 {14} else {13} ;"
 	"	xs=:array[int,512];  \n"
 	"	p2:=&xs[1];  \n"
-	"	fs=:array[float,512];  \n"
+	"	fs=:array[float,64];  \n"
 	"	ys=:Vec[int];  \n"
 	"	ys.data=&xs[3];  \n"
 	"	ys.num=10;   \n"
 	"	yp:=ys.data;  \n"
 	"	push_back(ys,2);  \n"
-	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\n\");b};  \n"
+//	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\\n\");b};  \n"
+//	"	r:=f(0.1,2);  \n"
 	"	my_vec=:Vec3[vecx];  my_vec.vecx=10.0;my_vec.vy=5.0;  \n"
-	"	r:=f(0.1,2);  \n"
 	"	q:=xs[1];  p1:=&xs[1];  q:=*p1; \n"
 	"	xs[1]=20;  xs[2]+=400;  xs[3]=500;  \n"
 	"	*ys.data += 20;  \n"
@@ -2918,7 +2872,7 @@ const char* g_TestProg=
 	"   y:=xs[1]+z+xs[2];  \n"
 	"	f0:=lerp(10.0,20.0,0.5);\n"
 	"   x:=if argc<2{1}else{2};  \n"
-	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\n\",i,j,x);}else{printf(\"loop exit fine\n\");}  \n"
+	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\\n\",i,j,x);}else{printf(\"loop exit fine\\n\");}  \n"
 	"	xs1:=xs[1]; xs2:=xs[2];  \n"
 	"	printf(\"Hello From My Language %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
 	"	0  \n"
@@ -3034,22 +2988,18 @@ VResult ExprStructDef::recurse(Visitor* v){
 }
 
 enum COMPILE_FLAGS {
-	B_AST=0x0001,B_DEFS=0x0002,B_GENERICS=0x0004, B_TYPES=0x0008,B_LLVM=0010,B_EXECUTABLE=0x0020,B_RUN=0x0040
+	B_AST=0x0001,B_DEFS=0x0002,B_GENERICS=0x0004, B_TYPES=0x0008,B_LLVM=0010,B_EXECUTABLE=0x0020,B_RUN=0x0040,B_VERBOSE=0x0080
 };
 int compile_source(const char *buffer, const char* filename, const char* outname, int flags){
 
 	TextInput	src(buffer,filename);
 	auto node=parse_call(src,0,SEMICOLON,nullptr);
-	node->dump(0);
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
 	Visitor v;
 	if (flags & B_AST){
 		node->dump(0);
 	}
 	gather_named_items(node,&global);
-	node->resolve(&global,nullptr,0);
-	node->resolve(&global,nullptr,0);
-	node->resolve(&global,nullptr,0);
 	node->resolve(&global,nullptr,0);
 	node->resolve(&global,nullptr,(flags&B_LLVM)?R_FINAL:0);
 	if (flags & B_DEFS){
@@ -3074,11 +3024,11 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 				char exename[256];
 				filename_change_ext(exename,outname,"");
 				char compile_cmd[512]; sprintf(compile_cmd,"clang %s -o %s", outname, exename);
-				printf("\nllvm src=%s\n executable=%s\nflags %x\n",outname,exename, flags);
-				printf("\n%s\n",compile_cmd);
+				if (flags & B_VERBOSE)printf("\nllvm src=%s\n executable=%s\nflags %x\n",outname,exename, flags);
+				if (flags & B_VERBOSE)printf("\n%s\n",compile_cmd);
 				auto ret= system(compile_cmd);
 				if (!ret && (flags & B_RUN)) {
-					printf("compiled ok, running executable %s \n", exename);
+					if (flags & B_VERBOSE)printf("compiled ok, running executable %s \n", exename);
 					char invoke[512];sprintf(invoke,"./%s",exename);
 					return system(invoke);
 					return 0;
@@ -3096,7 +3046,7 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 int compile_source_file(const char* filename, int options) {
 	char outname[256];
 	filename_change_ext(outname,filename,"ll");
-	printf("compiling %s\n -> %s\n",filename,outname);
+	if (options & B_VERBOSE)printf("compiling %s\n -> %s\n",filename,outname);
 	auto fp=fopen(filename,"rb");
 	if (fp){
 		fseek(fp,0,SEEK_END); auto sz=ftell(fp); fseek(fp,0,SEEK_SET);
@@ -3126,6 +3076,7 @@ int main(int argc, const char** argv) {
 				if (a[j]=='l') options|=B_LLVM;
 				if (a[j]=='r') options|=B_RUN|B_EXECUTABLE;
 				if (a[j]=='e') options|=B_EXECUTABLE;
+				if (a[j]=='v') options|=B_VERBOSE;
 			}
 		}
 	}
@@ -3134,13 +3085,14 @@ int main(int argc, const char** argv) {
 	
 	for (auto i=1; i<argc; i++) {
 		if (argv[i][0]!='-') {
-			printf("compile src file %s with options %x\n",argv[i],options);
+			if (options & B_VERBOSE)
+				printf("compile src file %s with options %x\n",argv[i],options);
 			compile_source_file(argv[i],options);
 		}
 	}
 	if (argc<=1) {
 		printf("no sources given so running inbuilt test.\n");
-		auto ret=compile_source(g_TestProg,"g_TestProg","test.ll",B_AST|B_DEFS|B_TYPES|B_LLVM);
+		auto ret=compile_source(g_TestProg,"g_TestProg","test.ll",B_EXECUTABLE|B_RUN);
 		if (!ret) {
 			printf("\nSource we just compiled, use for reference..\n");
 			printf("%s",g_TestProg);
