@@ -922,12 +922,6 @@ void ExprFnDef::dump(int ind) const {
 		}
 	}
 }
-bool typeparams_all_set(const vector<TypeParam> &tformat, const vector<Type *> &given_types) {
-	for (int i=0; i<given_types.size(); i++) {
-		if (given_types[i]==0) return false;
-	}
-	return true;
-}
 
 Expr* ExprFnDef::get_return_value() const{
 	if (this->body){
@@ -1127,8 +1121,33 @@ int match_generic_typeparams(const vector<TypeParam>& fn_tps, vector<const Type*
 	return ret_score;
 }
 
+struct FindFunction {
+	struct Candidate{ExprFnDef* f; int score;};
+	vector<Candidate> candidates;
+	Name	name;
+	const vector<Expr*>& args;
+	const Type* ret_type;
+	int flags;
+	FindFunction(Name n, const vector<Expr*>& a, const Type* r,int f):name(n),args(a),ret_type(r),flags(f){}
 
-void compare_candidate_function(ExprFnDef* f,Name name,const vector<Expr*>& args,const Type* ret_type, vector<pair<ExprFnDef*,int>>& candidates) {
+	void consider_candidate(ExprFnDef* f);
+	void find_fn_sub(Expr* src);
+	void find_fn_from_scopes(Scope* s,Scope* ex);
+	void insert_candidate(ExprFnDef* f,int score);
+};
+void FindFunction::insert_candidate(ExprFnDef* f,int score){
+	for(int i=0; i<candidates.size();i++){
+		if (candidates[i].score>score) {
+			candidates.resize(candidates.size()+1);
+			for (int j=i+1;j<candidates.size(); j++){ candidates[j]=candidates[j-1];}
+			candidates[i]=Candidate{f,score};
+			return;
+		}
+	}
+	candidates.push_back(Candidate{f,score});
+
+}
+void FindFunction::consider_candidate(ExprFnDef* f) {
 	if (f->type_parameter_index(f->name)<0)
 		if (f->name!=name)
 			return ;
@@ -1149,10 +1168,11 @@ void compare_candidate_function(ExprFnDef* f,Name name,const vector<Expr*>& args
 	}
 
 	int score=0;
-	if (!f->is_enough_args(args.size())){
-		score=-1000*abs(args.size()-f->args.size());
+	if (!f->is_enough_args((int)args.size())){
+		score=-1000*abs((int)args.size()-(int)f->args.size());
 		if (candidates.size()>=5) return;
-		goto insert_candidate;
+		insert_candidate(f,score);
+		return;
 	}
 
 	if (f->variadic && args.size()> f->args.size())
@@ -1201,43 +1221,34 @@ void compare_candidate_function(ExprFnDef* f,Name name,const vector<Expr*>& args
 
 	if (f->name==name) score*=100; // 'named' functions always win over un-named forms eg F[F,X](a:X),we may use unnamed to implement OOP..
 	// insert candidate
-insert_candidate:
-	for(int i=0; i<candidates.size();i++){ // 5  1  3 7 8
-		if (candidates[i].second>score) {
-			candidates.resize(candidates.size()+1);
-			for (int j=i+1;j<candidates.size(); j++){ candidates[j]=candidates[j-1];}
-			candidates[i]=std::make_pair(f,score);
-			return;
-		}
-	}
-	candidates.push_back(std::make_pair(f,score));
+	insert_candidate(f,score);
 }
-void find_fn_sub(Expr* src,Name name,const vector<Expr*>& args, const Type* ret_type, vector<pair<ExprFnDef*,int>>& candidates) {
+void FindFunction::find_fn_sub(Expr* src) {
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
 		find_printf("look for %s in %s\n",getString(name),src->get_name_str());
 		for (auto x:sb->argls) {
-			find_fn_sub(x,name,args,ret_type, candidates);
+			find_fn_sub(x);
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
-		compare_candidate_function(f,name,args,ret_type, candidates);
+		consider_candidate(f);
 		for (auto ins=f->instances; ins; ins=ins->next_instance) {
-			compare_candidate_function(ins,name,args,ret_type, candidates);
+			consider_candidate(ins);
 		}
 	}
 }
-void find_fn_rec(Scope* s,Scope* ex,Name name,const vector<Expr*>& args, const Type* ret_type, vector<pair<ExprFnDef*,int>>& candidates)
+void FindFunction::find_fn_from_scopes(Scope* s,Scope* ex)
 {
 	if (auto fname=s->find_named_items_local(name)){
 		for (auto f=fname->fn_defs; f;f=f->next_of_name) {
-			find_fn_sub((Expr*)f, name, args,ret_type,candidates);
+			find_fn_sub((Expr*)f);
 		}
 	}
 	for (auto f=s->templated_name_fns; f;f=f->next_of_name) {
-		find_fn_sub((Expr*)f, name, args,ret_type,candidates);
+		find_fn_sub((Expr*)f);
 	}
 	for (auto sub=s->child; sub; sub=sub->next) {
 		if (sub==ex) continue;
-		find_fn_rec(sub,ex,name,args,ret_type,candidates);
+		find_fn_from_scopes(sub,ex);
 	}
 }
 
@@ -1245,6 +1256,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	// TODO: ACCELERATION:
 	// make a type-code and have direct hash lookup of exact-match
 	// we only need all this search logic to execute once per permutation of args.
+	FindFunction ff(name,args,ret_type,flags);
 	
 	find_printf("\n;find call with args(");
 	for (int i=0; i<args.size(); i++) {find_printf(" %d:",i);find_printf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
@@ -1254,7 +1266,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	vector<pair<ExprFnDef*,int>> candidates;
 	for (auto src=this; src; prev=src,src=src->parent) {// go back thru scopes first;
 		find_printf(";in scope %p\n",src);
-		find_fn_rec(src,prev,name, args,ret_type,candidates);
+		ff.find_fn_from_scopes(src,prev);
 	}
 	// then search subscopes, excluding 'this'
 	// TODO: consider "name-distance" as part of resolve algorithm??
@@ -1277,10 +1289,10 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 //		exit(0);
 //		return 0;f
 //	}
-	if (!candidates.size()){
+	if (!ff.candidates.size()){
 		error(callsite,"can't find function\n",str(name));
 	}
-	if (candidates.back().second<=0) {
+	if (ff.candidates.back().score<=0) {
 		if (flags & 1){
 		no_match_error:
 			dbprintf("\nCall with args:-\n");
@@ -1288,24 +1300,25 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 				dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");
 			}
 			dbprintf("\ncandidate functoins:-\n");
-			for (auto c:candidates){
-				dbprintf(c.first->pos);c.first->dump(-1);dbprintf("\n");
+			for (auto c:ff.candidates){
+				dbprintf(c.f->pos);c.f->dump(-1);dbprintf("\n");
 			}
-			error(callsite,"no matching function %s(), %d candidates\n",str(name),candidates.size());
+			error(callsite,"no matching function %s(), %d candidates\n",str(name),ff.candidates.size());
 			return nullptr;
 		}
 		// SFINAE for caller
 		return nullptr;
 	}
-	if (flags & R_FINAL && !candidates.size())
+	if (flags & R_FINAL && !ff.candidates.size())
 	{
 		error(callsite,";No matchrs found for %s\n",str(name));
 		return nullptr;
 	}
-	for (int i=candidates.size()-1; i>=0; i--) {
-		printf("%p %d\n",candidates[i].first, candidates[i].second);
-		auto next_best=candidates[i].first;
-		if (candidates[i].second<=0)continue;
+	for (int i=(int)ff.candidates.size()-1; i>=0; i--) {
+		auto c=&ff.candidates[i];
+		printf("%p %d\n",c->f, c->score);
+		auto next_best=c->f;
+		if (c->score<=0)continue;
 		if (!next_best->is_generic())
 			return next_best;
 		if (auto new_f= instantiate_generic_function(next_best, callsite,name, args,ret_type,flags))
@@ -1649,7 +1662,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 			sprintf(tmp,"%s",str(src->name));
 			this->call_expr=0;
 			this->argls.resize(1);
-			this->argls[0]=new ExprLiteral(src->pos,tmp,strlen(tmp));
+			this->argls[0]=new ExprLiteral(src->pos,tmp,(int)strlen(tmp));
 			this->argls[0]->resolve(sc,nullptr,0);
 			this->set_type(src->get_type());
 			return ResolvedType();
@@ -2380,86 +2393,106 @@ ExprStructDef* parse_struct(TokenStream& src) {
 	}
 	return sd;
 }
-void ExprIf::translate_typeparams(const vector<TypeParam> &typeparams, const vector<Type *> &types){
-	this->cond->translate_typeparams(typeparams,types);
-	this->body->translate_typeparams(typeparams,types);
-	this->else_block->translate_typeparams(typeparams,types);
+
+struct TypeParamXlat{
+	const vector<TypeParam>& typeparams; const vector<Type*>& given_types;
+	TypeParamXlat(	const vector<TypeParam>& t, const vector<Type*>& g):typeparams(t),given_types(g){}
+	bool typeparams_all_set()const{
+		for (int i=0; i<given_types.size(); i++) {
+			if (given_types[i]==0) return false;
+		}
+		return true;
+	}
+	int typeparam_index(const Name& n) const;
+};
+
+
+void ExprIf::translate_typeparams(const TypeParamXlat& tpx){
+	this->cond->translate_typeparams(tpx);
+	this->body->translate_typeparams(tpx);
+	this->else_block->translate_typeparams(tpx);
 }
-void ExprFor::translate_typeparams(const vector<TypeParam> &typeparams, const vector<Type *> &types)
+void ExprFor::translate_typeparams(const TypeParamXlat& tpx)
 {
-	if (this->init) this->init->translate_typeparams(typeparams,types);
-	if (this->cond) this->cond->translate_typeparams(typeparams,types);
-	if (this->incr) this->incr->translate_typeparams(typeparams,types);
-	if (this->pattern) this->pattern->translate_typeparams(typeparams,types);
-	if (this->body) this->body->translate_typeparams(typeparams,types);
-	if (this->else_block) this->else_block->translate_typeparams(typeparams,types);
+	if (this->init) this->init->translate_typeparams(tpx);
+	if (this->cond) this->cond->translate_typeparams(tpx);
+	if (this->incr) this->incr->translate_typeparams(tpx);
+	if (this->pattern) this->pattern->translate_typeparams(tpx);
+	if (this->body) this->body->translate_typeparams(tpx);
+	if (this->else_block) this->else_block->translate_typeparams(tpx);
 }
 
-void Name::translate_typeparams(const vector<TypeParam> &typeparams, const vector<Type *> &given_types)
+void Name::translate_typeparams(const TypeParamXlat& tpx)
 {
-	auto index=get_typeparam_index(typeparams, *this);
+	auto index=tpx.typeparam_index(*this);
 	if (index>=0){
-		ASSERT(given_types[index]->sub==0 && "TODO type-expressions for name? concat[],...");
-		*this=given_types[index]->name;
+		ASSERT(tpx.given_types[index]->sub==0 && "TODO type-expressions for name? concat[],...");
+		*this=tpx.given_types[index]->name;
 	}
 }
-void ExprIdent::translate_typeparams(const vector<TypeParam> &typeparams, const vector<Type *> &given_types)
+void ExprIdent::translate_typeparams(const TypeParamXlat& tpx)
 {
 	// templated idents?
 	// TODO - these could be expresions - "concat[T,X]"
-	this->name.translate_typeparams(typeparams,given_types);
+	this->name.translate_typeparams(tpx);
 	
 }
 
-void ExprBlock::translate_typeparams(const vector<TypeParam> &typeparams, const vector<Type *> &types){
-	this->call_expr->translate_typeparams(typeparams,types);
+void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
+	this->call_expr->translate_typeparams(tpx);
 	for (auto e:argls){
-		e->translate_typeparams(typeparams,types);
+		e->translate_typeparams(tpx);
 	}
 }
 
-void ExprOp::translate_typeparams(const vector<TypeParam> &typeparams, const vector<Type *> &types){
-	if (lhs) lhs->translate_typeparams(typeparams,types);
-	if (rhs) rhs->translate_typeparams(typeparams,types);
+void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
+	if (lhs) lhs->translate_typeparams(tpx);
+	if (rhs) rhs->translate_typeparams(tpx);
 }
 
-void ExprFnDef::translate_typeparams(const vector<TypeParam> &tformat, const vector<Type *> &given_types){
-	for (auto &a:args) a->translate_typeparams(tformat,given_types);
+void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
+	for (auto &a:args) a->translate_typeparams(tpx);
 	
-	if (typeparams_all_set(typeparams,given_types))
+	if (tpx.typeparams_all_set())
 	{
 		this->typeparams.resize(0);
 	}
 }
 
-void ExprStructDef::translate_typeparams(const vector<TypeParam> &type_params, const vector<Type *>& given_types)
+void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)
 {
 	for (auto a:this->fields) {
-		a->translate_typeparams(/*sc,*/ type_params, given_types);
+		a->translate_typeparams(tpx);
 	}
 	for (auto f:functions){
-		f->translate_typeparams(type_params,given_types);
+		f->translate_typeparams(tpx);
 	}
 	for (auto s:structs){
-		s->translate_typeparams(type_params,given_types);
+		s->translate_typeparams(tpx);
 	}
-	if (typeparams_all_set(type_params,given_types))
+	if (tpx.typeparams_all_set())
 	{
 		this->typeparams.resize(0);
 	}
 }
 
-void ArgDef::translate_typeparams(const vector<TypeParam> &typeparams, const vector<Type *> &types){
-	this->name.translate_typeparams(typeparams,types);
+void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
+	this->name.translate_typeparams(tpx);
 	if (this->get_type()){
-		this->get_type()->translate_typeparams(typeparams,types);
+		this->get_type()->translate_typeparams(tpx);
 	}
 	if (this->default_expr){
-		this->default_expr->translate_typeparams(typeparams,types);
+		this->default_expr->translate_typeparams(tpx);
 	}
 }
+int TypeParamXlat::typeparam_index(const Name& n) const{
+	for (int i=0; i<this->typeparams.size(); i++){
+		if (this->typeparams[i].name==n) return i;
+	}
+	return -1;
+}
 
-void Type::translate_typeparams(const vector<TypeParam>&param_format, const vector<Type*>& given_params){
+void Type::translate_typeparams(const TypeParamXlat& tpx){
 /*
  example:
  struct vector<T,N=int> {
@@ -2487,10 +2520,9 @@ instantiate tree<vector,int>
 	// TODO: assert there is no shadowing in this types' own definitions
 
 	Type* new_type=0;
-	int param_index=get_typeparam_index(param_format, this->name);
+	int param_index=tpx.typeparam_index(this->name);
 	if (param_index>=0){
-		auto src_ty=given_params[param_index];
-		dbprintf("substituting %s %d/%d %d\n", str(this->name),param_index,param_format.size(), given_params.size());
+		auto src_ty=tpx.given_types[param_index];
 		if (!src_ty){error(this,"typaram not given,partial instance?");}
 		if (!src_ty->sub) {
 			this->name=src_ty->name;
@@ -2503,7 +2535,7 @@ instantiate tree<vector,int>
 		else error(this,"trying to instantiate complex typeparameter into non-root of another complex typeparameter,we dont support this yet");
 	}
 	for (auto sub=this->sub; sub; sub=sub->next) {
-		sub->translate_typeparams(param_format,given_params);
+		sub->translate_typeparams(tpx);
 	}
 }
 bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b) {
@@ -2538,7 +2570,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, Type* type) {
 		ins->next_instance = this->instances; this->instances=ins;
 		ins->inherits_type= this->inherits_type; // TODO: typeparams! map 'parent' within context  to make new typeparam vector, and get an instance for that too.
 
-		ins->translate_typeparams(this->typeparams, ins->instanced_types);
+		ins->translate_typeparams(TypeParamXlat(this->typeparams, ins->instanced_types));
 		dbprintf("template instantiation of %s\n :-{", str(parent->name));
 		type->dump(-1);
 		ins->dump(-1);
