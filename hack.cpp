@@ -1071,14 +1071,7 @@ ExprFnDef::clone() const{
 Node*
 ArgDef::clone() const{
 	if (!this) return nullptr;
-	auto r=new ArgDef; {
-		r->name=this->name;
-		if (this->type)
-			r->type=(Type*)this->type->clone();
-		if (this->default_expr)
-			r->default_expr=(Expr*)this->default_expr->clone();
-	}
-	return r;
+	return new ArgDef(this->pos,this->name, (Type*)this->type->clone_if(),(Expr*)this->default_expr->clone_if());
 }
 Node*
 Type::clone() const{
@@ -2223,7 +2216,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	bool	was_operand=false;
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
-	node->bracket_type=(close==CLOSE_BRACKET)?OPEN_BRACKET:close==CLOSE_PAREN?OPEN_PAREN:OPEN_BRACE;
+	node->bracket_type=(close==CLOSE_BRACKET)?OPEN_BRACKET:close==CLOSE_PAREN?OPEN_PAREN:close==CLOSE_BRACE?OPEN_BRACE:0;
 	while (true) {
 		if (!src.peek_tok()) break;
 		if (src.peek_tok()==IN) break;
@@ -2351,6 +2344,33 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 	return node;
 }
 
+void
+ExprBlock::create_anon_struct_initializer(){
+	// concatenate given names & argcount as the identifer
+	// make it generic over types.
+	char tmp[256]="anon_";
+	for (auto i=0; i<argls.size();i++){
+		auto p=dynamic_cast<ExprOp*>(argls[i]);
+		if (!p || p->name!=ASSIGN){
+			error(this,"anon struct initializer must have named elements {n0=expr,n1=expr,..}");
+		}
+		if (i) strcat(tmp,"_");
+		strcat(tmp,str(p->lhs->as_ident()));
+	}
+	// TODO - these need to be hashed somewhere, dont want each unique!
+	ExprStructDef* sd=new ExprStructDef(this->pos);
+	ASSERT(sd->type()==0&&"todo-struct def creates its own type");
+	sd->set_type(new Type(sd));
+	sd->name=getStringIndex(tmp);
+	for (auto i=0; i<argls.size();i++){
+		sd->fields.push_back(new ArgDef(argls[i]->pos, argls[i]->as_op()->lhs->as_ident()) );
+	}
+	this->call_expr=sd;
+	this->def=sd;
+	this->set_type(sd->get_type());
+}
+
+
 Type* parse_type(TokenStream& src, int close) {
 	auto tok=src.eat_tok();
 	Type* ret=0;	// read the first, its the form..
@@ -2391,7 +2411,7 @@ Type* parse_type(TokenStream& src, int close) {
 ArgDef* parse_arg(TokenStream& src, int close) {
 	auto argname=src.eat_ident();
 	if (argname==close) return nullptr;
-	auto a=new ArgDef(argname);
+	auto a=new ArgDef(src.pos,argname);
 	a->pos=src.pos;
 	if (src.eat_if(COLON)) {
 		a->type=parse_type(src,CLOSE_PAREN);

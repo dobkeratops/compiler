@@ -275,7 +275,7 @@ public:
 	virtual  ~Node(){};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
-	virtual const char* kind_str(){return"node";}
+	virtual const char* kind_str()const{return"node";}
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
 	const char* name_str()const{return str(this->name);}
@@ -293,6 +293,7 @@ public:
 	virtual void translate_typeparams(const TypeParamXlat& tpx){ error(this,"not handled for %s",this->kind_str()); };
 	virtual VResult recurse(Visitor* v);
 	virtual VResult visit(Visitor* v)=0;
+	virtual ExprOp* as_op()const{error(this,"expected op, found %s:%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name as_ident()const{
 		error(this,"expected ident %s",str(this->name));
 		return PLACEHOLDER;
@@ -408,6 +409,7 @@ struct ExprOp: public Expr{
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	VResult visit(Visitor* v){ return v->visit(this);}
 	virtual VResult recurse(Visitor* v){v->pre_visit(this);if (this->lhs) this->lhs->visit(v); if (this->rhs) this->rhs->visit(v); v->post_visit(this);return 0;}
+	virtual ExprOp* as_op()const{return const_cast<ExprOp*>(this);}
 };
 
 struct ExprBlock :public ExprScopeBlock{
@@ -417,16 +419,18 @@ struct ExprBlock :public ExprScopeBlock{
 	// the similarity between all is
 	
 	short bracket_type;	//OPEN_PARENS,OPEN_BRACES,OPEN_BRACKETS,(ANGLE_BRACKETS?)
-	short delimiter=SEMICOLON;//COMMA, SEMICOLON,SPACES?
+	short delimiter=0;//COMMA, SEMICOLON,SPACES?
 
 	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...}
 	vector<Expr*>	argls;
 	//ExprFnDef*	call_target=0;
 	Scope* scope=0;
 	ExprBlock* next_of_call_target=0;	// to walk callers to a function
+	// these are supposed to be mutually exclusive substates, this would be an enum ideally.
 	bool is_compound_expression()const{return !call_expr && !name;}
 	bool is_tuple()const{ return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
 	bool is_struct_initializer()const{ return this->bracket_type==OPEN_BRACE && this->delimiter==COMMA;}
+	bool is_function_call()const{return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA||this->delimiter==0;}
 	bool is_anon_struct()const{ return this->is_struct_initializer() && !this->call_expr;}
 	bool is_array_initializer()const{ return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
 	void set_delim(int delim){delimiter=delim;}
@@ -444,6 +448,7 @@ struct ExprBlock :public ExprScopeBlock{
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	virtual VResult recurse(Visitor*v){v->pre_visit(this);if (call_expr)call_expr->visit(v);for (auto a:argls)a->visit(v); v->post_visit(this);return 0;}
 	VResult visit(Visitor* v){ return v->visit(this);}
+	void create_anon_struct_initializer();
 };
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
@@ -494,8 +499,7 @@ struct ArgDef :Node{
 	Type* get_type()const {return type;}
 	void set_type(Type* t){verify(t);type=t;}
 	Type*& type_ref(){return type;}
-	ArgDef(){type=0;default_expr=0;};
-	ArgDef(Name n){name=n;type=0;default_expr=0;}
+	ArgDef(SrcPos p,Name n, Type* t=nullptr,Expr* d=nullptr){pos=p; name=n;type=t;default_expr=d;}
 	void dump(int depth) const;
 	virtual const char* kind_str()const;
 	~ArgDef(){}
