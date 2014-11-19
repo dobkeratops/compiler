@@ -2450,11 +2450,25 @@ Type* parse_type(TokenStream& src, int close) {
 	auto tok=src.eat_tok();
 	Type* ret=0;	// read the first, its the form..
 	if (tok==close) return nullptr;
-	if (tok==OPEN_PAREN) {
+	if (tok==FN){	// fn(arg0,arg1,...)->ret
+		ret=new Type(FN,src.pos);
+		ret->push_back(parse_type(src,0));// args
+		src.expect("->");
+		ret->push_back(parse_type(src,0));// return value
+	}
+	else if (tok==OPEN_PAREN) {
 		ret=new Type(TUPLE,src.pos);
 		while (auto sub=parse_type(src, CLOSE_PAREN)){
 			ret->push_back(sub);
 			src.eat_if(COMMA);
+		}
+		if (src.eat_if(ARROW)){
+			// tuple->type  defines a function.
+			auto fn_ret=parse_type(src,0);
+			auto fn_type=new Type(FN);
+			fn_type->push_back(ret);
+			fn_type->push_back(fn_ret);
+			return fn_type;
 		}
 	} else {
 		// prefixes in typegrammar..
@@ -3068,9 +3082,11 @@ const char* g_TestProg=
 const char* g_TestProg2=
 "fn printf(s:str,...)->int;\n"
 "	fn foo(x:int)->int{ printf(\"hello from fn ptr %d\\n\",x);  0}      \n"
+"	fn take_ptr(f:(int)->int)->int{ f(5);0}"
 "	fn main(argc:int, argv:**char)->int{	\n"
 "		fp:=foo;		\n"
 "		fp(2);fp(3);		\n"
+"		take_ptr(fp);\n"
 "	,0}\n"
 /*
 	"struct Foo{x:int,y:int, struct Bar{x:float}, fn method(i:int)->int{printf(\"hello from method %d\n\",i);0};};"

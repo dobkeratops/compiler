@@ -37,6 +37,9 @@ fn main(argc:int,argv:**char)->int{
 	fv=:Foo;
 	fv.vx=3; fv.vy=4; fv.vz=5;
 	something(fv);
+	fp1:=foo;
+	fp2:=bar;
+	if (argc<1) {fp1()} else {fp2()}
 
 
 	mv:=Vec4{vx=0,vy=1,vz=20};

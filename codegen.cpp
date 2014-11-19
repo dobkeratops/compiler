@@ -142,10 +142,10 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 		if (var)
 		if (auto fp=dynamic_cast<ExprFnDef*>(var)){
 			reg=req_reg;
-			fprintf(ofp,"\t%%hack_value =alloca ");write_function_type(ofp,fp->type());fprintf(ofp,",align 8\n");
+			fprintf(ofp,"\t%%pre%s =alloca ",str(reg));write_function_type(ofp,fp->type());fprintf(ofp,",align 8\n");
 			fprintf(ofp,"\tstore ");write_function_type(ofp,fp->type());fprintf(ofp," @%s, \n",fp->name_str());
-			write_function_type(ofp,fp->type());fprintf(ofp,"* %%hack_value,align 4");
-			fprintf(ofp,"\t%%%s = load ",str(reg)); write_function_type(ofp,fp->type()); fprintf(ofp,"* %%hack_value\n");
+			write_function_type(ofp,fp->type());fprintf(ofp,"* %%pre%s,align 4",str(reg));
+			fprintf(ofp,"\t%%%s = load ",str(reg)); write_function_type(ofp,fp->type()); fprintf(ofp,"* %%pre%s\n",str(reg));
 			return reg;
 			/*
 			fprintf(ofp,"\t%%%s = load ", str(reg));
@@ -283,7 +283,7 @@ void write_type(FILE* ofp, const Type* t, bool ref) {
 		fprintf(ofp,"]");
 	}
 	else if (t->is_function()){
-		error(t,"TODO,write function type unified ");
+		//error(t,"TODO,write function type unified ");
 		write_function_type(ofp, t);
 	}
 	else {
