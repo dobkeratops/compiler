@@ -16,6 +16,14 @@ fn something(f:Foo)->int{
 	0
 }
 
+fn foo()->int{
+	printf("hello from foo\n");
+	0
+}
+fn bar()->int{
+	printf("hello from bar\n");
+	0
+}
 
 fn main(argc:int,argv:**char)->int{
 	xs=:array[int,512];
@@ -29,6 +37,8 @@ fn main(argc:int,argv:**char)->int{
 	fv=:Foo;
 	fv.vx=3; fv.vy=4; fv.vz=5;
 	something(&fv);
+
+	fp:=foo;
 
 	mv:=Vec4{vx=0,vy=1,vz=20};
 	mv2:={key=12,value=13};

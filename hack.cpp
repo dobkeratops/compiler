@@ -378,7 +378,7 @@ StringTable g_Names(g_token_str);
 Name getStringIndex(const char* str,const char* end) {
 	return g_Names.get_index(str, end,0);
 }
-const char* getString(Name index) {
+const char* getString(const Name& index) {
 	return g_Names.index_to_name[(int)index].c_str();
 }
 Name getNumberIndex(int num){
@@ -601,8 +601,16 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	if (auto v=scope->find_variable_rec(this->name)){
 		this->def=v;
 		return propogate_type(flags,this, this->type_ref(),v->type_ref());
+
 	} else if (!scope->find_named_items_rec(this->name)){
 		error(this,scope,"can't find variable/item %s",str(this->name));
+	}
+	if (auto f=scope->find_unique_fn_named(this,flags)){ // todo: filter using function type, because we'd be storing it as a callback frequently..
+		// TODO; loose end :( in case where arguments are known, this overrides the match
+		//we eitehr need to pass in arguemnt informatino here *aswell*, or seperaete out the callsite case properly.
+		this->def=f;
+		this->set_type(f->fn_type);
+		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
 	return ResolvedType();
 }
@@ -939,6 +947,7 @@ void ExprFnDef::dump(int ind) const {
 	if (variadic) dbprintf(args.size()?",...":"...");
 	dbprintf(")");
 	if (this->ret_type) {dbprintf("->");this->ret_type->dump(-1);};
+	if (ind && this->fn_type) {newline(ind);this->fn_type->dump(-1);newline(ind);}
 	dbprintf(" {");
 	if (this->body) {
 		this->body->dump(ind);
@@ -981,6 +990,14 @@ NamedItems* Scope::find_named_items_rec(Name name){
 		return ni;
 	if (this->parent) return this->parent->find_named_items_rec(name);
 	else return nullptr;
+}
+
+ExprFnDef* NamedItems::getByName(Name n){
+	for(auto f=this->fn_defs;f;f=f->next_of_name){
+		if (f->name==n)
+			return f;
+	}
+	return nullptr;
 }
 
 /*
@@ -1258,8 +1275,30 @@ void dbprint_find(const vector<ArgDef*>& args){
 	for (int i=0; i<args.size(); i++) {dbprintf(" %d:",i);dbprintf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
 	dbprintf(")\n");
 }
+ExprFnDef* Scope::find_unique_fn_named(const Node* name_node,int flags, const Type* fn_type){
+	auto name=name_node->as_ident();
+	auto sc=this;
+	ExprFnDef* found=nullptr; bool ambiguous=false;
+	ASSERT(fn_type==0 &&"when we have type info here, remove this hack")
+	for (;sc;sc=sc->parent_or_global()){
+		if(auto ni=sc->find_named_items_local(name)){
+			for(auto f=ni->fn_defs;f;f=f->next_of_name){
+				if (f->name==name && !f->is_generic()){
+					if (found) {ambiguous=true;return nullptr;}
+					found=f;
+				}
+			}
+		}
+	}
+	if (flags&R_FINAL){
+		error(name_node,"can't find fn");
+	}
+	return ambiguous?nullptr:found;
+	
+}
 
 ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags)  {
+	// TODO: rework this to take Type* fn_type fn[(args),ret] - for symetry with anything using function pointers
 	// TODO: ACCELERATION:
 	// make a type-code and have direct hash lookup of exact-match
 	// we only need all this search logic to execute once per permutation of args.
@@ -1338,15 +1377,14 @@ Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 	for (auto v=this->vars; v; v=v->next) {
 		if (v->name==name) return v;
 	}
-	if (this->parent){
-		if (auto p=this->parent->find_fn_variable(name,f))
+	for (auto ps=this->parent; ps;ps=ps->parent_or_global()){
+		if (auto p=ps->find_fn_variable(name,f))
 			return	p;
 	}
-	if (this->global && this->global!=this){
-		if (auto p=this->global->find_fn_variable(name,f))
-			return	p;
-	}
-	dbprintf(";fn %s no var %s in scope\n",getString(f->name),getString(name));
+//	if (this->global && this->global!=this){
+//		if (auto p=this->global->find_fn_variable(name,f))
+//			return	p;
+//	}
 	return nullptr;
 }
 ExprStructDef* Scope::find_struct_sub(Scope* original,const Type* t){
@@ -1438,8 +1476,11 @@ void Scope::dump(int depth)const {
 		newline(depth+1); dbprintf("var %d %s:",(int)v->name, getString(v->name));
 		if (auto t=v->get_type()) t->dump(-1);
 	}
-	for (auto f=this->named_items; f;f=f->next){
-		newline(depth+1); dbprintf("name %s:",getString(f->name));
+	for (auto ni=this->named_items; ni;ni=ni->next){
+		newline(depth+1); dbprintf("name %s:",getString(ni->name));
+		for (auto fnd=ni->fn_defs; fnd;fnd=fnd->next_of_name){
+			newline(depth+1);dbprintf("fn %s\n",getString(fnd->name));
+		}
 	}
 	for (auto s=this->child; s; s=s->next){
 		s->dump(depth+1);
@@ -1661,8 +1702,17 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 			this->set_type(src->get_type());
 			return ResolvedType();
 		}
+		auto bool indirect_call=false;
+		auto call_ident=dynamic_cast<ExprIdent*>(this->call_expr);
+		if (call_ident){
+			if (sc->find_fn_variable(this->call_expr->as_ident(),nullptr))
+				indirect_call=true;
+		}else {
+			indirect_call=true;
+		}
 		auto fn_type_r=this->call_expr->resolve(sc,nullptr,flags);
-		auto fn_type=fn_type_r.type;
+		auto fn_type=indirect_call?nullptr:fn_type_r.type;
+		
 		int arg_index=0;
 		if (fn_type) {
 			// propogate types we have into argument expressions
@@ -2964,6 +3014,7 @@ const char* g_TestProg=
 "fn lerp(a,b,f)->float{(b-a)*f+a};\n"
 	"fn lerp[T,F](a:T,b:T,f:F){(b-a)*f+a};  \n"
 	"fn foo(a:int)->int{printf(\"foo_int\n\");0};  \n"
+	"fn bar(a:int)->int{printf(\"bar_int\n\");0};  \n"
 	"fn printf(s:str,...)->int;  \n"
 	"fn push_back[T](t:Vec[T],v:T)->int{  \n"
 	"	a:=t.num;   \n"
@@ -2978,6 +3029,7 @@ const char* g_TestProg=
 "	t1:=argc<0 && argc>1;\n"
 	"	test_result:=if argc==0 || argc==1 {14} else {13} ;"
 	"	xs=:array[int,512];  \n"
+	"	fp:=foo;\n"
 	"	p2:=&xs[1];  \n"
 	"	fs=:array[float,64];  \n"
 	"	ys=:Vec[int];  \n"

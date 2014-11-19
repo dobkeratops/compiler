@@ -146,7 +146,8 @@ struct Name {
 	int32_t index;
 	Name(){index=0;}
 	Name(const char* a, const char* end=0){
-		if (!end) end=end+strlen(a);
+		if (!end)
+			end=a+strlen(a);
 		index=getStringIndex(a,end);
 	}
 	Name(int i){index=i;}
@@ -191,9 +192,9 @@ Name getStringIndex(const char* str,const char* end);
 Name getNumberIndex(int num);	// ints in the type system stored like so
 int getNumberInt(Name n);
 float getNumberFloat(Name n);
-const char* getString(Name index);
+const char* getString(const Name& index);
 void indent(int depth);
-inline const char* str(Name n){return getString(n);}
+inline const char* str(const Name& n){return getString(n);}
 inline const char* str(int i){return g_Names.index_to_name[i].c_str();}
 
 // todo: path malarchy.
@@ -430,7 +431,7 @@ struct ExprBlock :public ExprScopeBlock{
 	bool is_compound_expression()const{return !call_expr && !name;}
 	bool is_tuple()const{ return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
 	bool is_struct_initializer()const{ return this->bracket_type==OPEN_BRACE && this->delimiter==COMMA;}
-	bool is_function_call()const{return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA||this->delimiter==0;}
+	bool is_function_call()const{return this->bracket_type==OPEN_PAREN && (this->delimiter==COMMA||this->delimiter==0);}
 	bool is_anon_struct()const{ return this->is_struct_initializer() && !this->call_expr;}
 	bool is_array_initializer()const{ return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
 	void set_delim(int delim){delimiter=delim;}
@@ -596,6 +597,7 @@ public:
 	ExprStructDef* find_struct_named(Name name);
 	ExprStructDef* find_struct_named(const Node* node){return find_struct_named(node->as_ident());}
 	ExprStructDef* find_struct(const Node* node);
+	ExprFnDef*	find_unique_fn_named(const Node* name_node,int flags=0, const Type* fn_type=nullptr); // todo: replace with fn type.
 	ExprFnDef*	find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags);
 	void add_struct(ExprStructDef*);
 	void add_fn(ExprFnDef*);
@@ -727,7 +729,7 @@ struct ExprFnDef : Expr {
 	bool is_generic() const;
 	void dump_signature() const;
 	int type_parameter_index(Name n) const;
-	int min_args(){for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return args.size();}
+	int min_args(){for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}
 	bool is_enough_args(int x){ if (x<min_args()) return false; if (x> args.size() && !variadic) return false; return true;}
 	virtual const char* kind_str()const{return"fn";}
 	ExprFnDef(SrcPos sp){pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
