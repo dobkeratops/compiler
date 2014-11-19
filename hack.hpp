@@ -273,6 +273,11 @@ public:
 	SrcPos pos;						// where is it
 	Node(){}
 	Node*	def=0;		// definition of the entity here. (function call, struct,type,field);
+	void set_def(Node* d){
+		def=d;
+//		if (!this->def)this->def=d;
+//		else //ASSERT(d==this->def);
+	}
 	virtual  ~Node(){};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
@@ -351,8 +356,9 @@ struct Type : Expr{
 	Type*	next=0;
 	void push_back(Type* t);
 	virtual const char* kind_str()const;
-	Type(Name a,Name b): Type(a){push_back(new Type(b));}
+	Type(Name a,Name b): Type(a){push_back(new Type(b)); marker=1000;}
 	Type(Name a,Name b,Name c): Type(a){
+		marker=2000;
 		auto tc=new Type(c); auto tb=new Type(b); tb->push_back(tc); push_back(tb);
 	}
 	Type(ExprStructDef* sd);

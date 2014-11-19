@@ -599,7 +599,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		this->def=sd;
 	}
 	if (auto v=scope->find_variable_rec(this->name)){
-		this->def=v;
+		this->set_def(v);
 		return propogate_type(flags,this, this->type_ref(),v->type_ref());
 
 	} else if (!scope->find_named_items_rec(this->name)){
@@ -608,15 +608,15 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	if (auto f=scope->find_unique_fn_named(this,flags)){ // todo: filter using function type, because we'd be storing it as a callback frequently..
 		// TODO; loose end :( in case where arguments are known, this overrides the match
 		//we eitehr need to pass in arguemnt informatino here *aswell*, or seperaete out the callsite case properly.
-		this->def=f;
-		this->set_type(f->fn_type);
+	//	this->def=f;
+	//	this->set_type(f->fn_type);
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
 	return ResolvedType();
 }
 void ExprIdent::dump(int depth) const {
 	if (!this) return;
-	newline(depth);dbprintf("%s:",getString(name));
+	newline(depth);dbprintf("%s: %p",getString(name),this->def);
 	if (this->get_type()) {this->get_type()->dump(-1);}
 }
 
@@ -1510,6 +1510,7 @@ T* expect_cast(Node* n){
 ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	Type* ret=0;
 	auto op_ident=name;
+	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
 		ASSERT(this->lhs && this->rhs);
 		auto rhs_t=rhs->resolve(sc,desired,flags);
@@ -1520,6 +1521,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 			auto rhs_t = rhs->get_type();
 			auto new_var=sc->create_variable(this,vname,Local);
+			lhs->set_def(new_var);
 			new_var->set_type(rhs_t);
 			lhs->set_type(rhs_t);
 			this->set_type(rhs_t);
@@ -1534,6 +1536,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			//			auto v=sc->find_variable_rec(this->argls[0]->name);
 			auto v=sc->get_or_create_scope_variable(this,lhsi->name,Local);
 			v->set_type(rhst);
+			lhs->set_def(v);
 			if (rhst->name>=IDENT && !rhst->sub) {
 				rhst->struct_def = sc->find_struct(rhst);
 			}
@@ -1556,13 +1559,14 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 	else if (op_ident==COLON){ // TYPE ASSERTION,
 		// todo: get this in the main parser
-		ASSERT(dynamic_cast<ExprIdent*>(rhs));
+		ASSERT(dynamic_cast<ExprIdent*>(rhs)); // todo- not just that
 		int tname=rhs->name;
 		auto v=sc->find_variable_rec(lhs->name);
 		if (!v->get_type()){
 			v->set_type((const Type*)rhs);
 			ASSERT(dynamic_cast<Type*>(rhs))
 		}
+		lhs->set_def(v);
 		return propogate_type(flags, this, v->type_ref(),type_ref());
 	}
 	else if (op_ident==DOT || op_ident==ARROW) {
@@ -3026,10 +3030,11 @@ const char* g_TestProg=
 //	"fn F[F,O,X,Y](o:O, x:X,y:Y){ o.vtable.F(o,x,y)   };"
 
 	"fn main(argc:int,argv:**char)->int{  \n"
+	"	printf(\"HELLO FROM NEW LANGUAGE\n\");\n"
 "	t1:=argc<0 && argc>1;\n"
 	"	test_result:=if argc==0 || argc==1 {14} else {13} ;"
 	"	xs=:array[int,512];  \n"
-	"	fp:=foo;\n"
+//	"	fp:=foo;\n"
 	"	p2:=&xs[1];  \n"
 	"	fs=:array[float,64];  \n"
 	"	ys=:Vec[int];  \n"
@@ -3270,7 +3275,7 @@ int main(int argc, const char** argv) {
 	}
 	if (argc<=1) {
 		printf("no sources given so running inbuilt test.\n");
-		auto ret=compile_source(g_TestProg,"g_TestProg","test.ll",B_EXECUTABLE|B_RUN);
+		auto ret=compile_source(g_TestProg,"g_TestProg","test.ll",B_TYPES|B_EXECUTABLE|B_RUN);
 		if (!ret) {
 			printf("\nSource we just compiled, use for reference..\n");
 			printf("%s",g_TestProg);

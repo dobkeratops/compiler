@@ -1,5 +1,5 @@
 fn lerp(a,b,f)->float{(b-a)*f+a};
-fn foo(a:*char)->void;
+fn foo1(a:*char)->void;
 fn printf(s:str,...)->int;
 
 struct Foo {
@@ -36,9 +36,8 @@ fn main(argc:int,argv:**char)->int{
 	x:=0;
 	fv=:Foo;
 	fv.vx=3; fv.vy=4; fv.vz=5;
-	something(&fv);
+	something(fv);
 
-	fp:=foo;
 
 	mv:=Vec4{vx=0,vy=1,vz=20};
 	mv2:={key=12,value=13};
