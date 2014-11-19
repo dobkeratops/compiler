@@ -432,6 +432,7 @@ ResolvedType assert_types_eq(const Node* n, const Type* a,const Type* b) {
 	}
 	return ResolvedType(a,ResolvedType::COMPLETE);
 }
+ExprStructDef* Node::as_struct_def()const{ error(this,"expect struct def"); return nullptr;};
 RegisterName Node::get_reg_existing(){ASSERT(regname); return regname;}
 RegisterName Node::get_reg(Name baseName, int *new_index, bool force_new){
 	// variable might be in a local scope shadowing others, so it still needs a unique name
@@ -1715,6 +1716,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 		si->set_type(new Type(sd));
 	}
 	si->call_expr->def=sd;
+	si->def=sd;
 	// assignment forms are expected eg MyStruct{x=...,y=...,z=...} .. or can we have MyStruct{expr0,expr1..} equally?
 	//int next_field_index=0;
 	// todo:infer generic typeparams - adapt code for functioncall. we have struct fields & struct type-params & given expressions.
@@ -1733,10 +1735,11 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			//				propogate_type(flags,op,op->rhs->type_ref());
 			op->lhs->def=field;
 			next_field_index=sd->field_index(op->lhs);
+			this->value.push_back(op->rhs);
 		}else if (next_field_index>=0){
 			if (field_index>=sd->fields.size()){error(a,sd,"too many fields");}
 			field=sd->fields[field_index++];
-			
+			this->value.push_back(a);
 			a->resolve(sc,field->type,flags); // todo, need generics!
 		}else{error(a,"named field expected");}
 		this->field_refs.push_back(field);
@@ -1744,7 +1747,6 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 	}
 	
 	return propogate_type_fwd(flags,si, desiredType);
-
 }
 
 

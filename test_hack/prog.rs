@@ -28,8 +28,9 @@ fn main(argc:int,argv:**char)->int{
 	fv=:Foo;
 	fv.vx=3; fv.vy=4; fv.vz=5;
 	something(&fv);
-	mv:=Vec4{vx=0.0,vy=1.0,vz=2.0};
+	mv:=Foo{vx=0,vy=1,vz=20};
 
+	ff:=mv.vz;
 	
 	for i:=0,j:=0; i<10; i+=1,j+=10 {
 		x+=i;
@@ -40,7 +41,7 @@ fn main(argc:int,argv:**char)->int{
 
 	x:=if argc<2{printf("argc is <2\n");1}else{printf("argc is>2\n");2};
 	printf("yada yada yada\n");
-	printf("\nHelloWorld %.3f foo bar baz\n",lerp(5.0,10.0,7.0));
+	printf("\nHelloWorld %.3f %d foo bar baz\n",lerp(5.0,10.0,7.0), mv.vz);
 	0
 }
 

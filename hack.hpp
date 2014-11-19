@@ -297,6 +297,7 @@ public:
 		error(this,"expected ident %s",str(this->name));
 		return PLACEHOLDER;
 	};
+	virtual ExprStructDef* as_struct_def()const;
 };
 
 struct TypeParam: Node{
@@ -504,7 +505,7 @@ struct ArgDef :Node{
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	virtual VResult recurse(Visitor*v){;return 0;}
 	VResult visit(Visitor* v){ return v->visit(this);}
-
+	Name as_ident()const{return this->name;}
 };
 
 struct ExprStructDef;
@@ -664,6 +665,8 @@ struct ExprStructDef: Expr {
 	// lots of similarity to a function actually.
 	// but its' backwards.
 	// it'll want TypeParams aswell.
+	bool is_enum_=false;
+	bool is_enum() { return is_enum_;}
 	uint32_t size;
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> fields;
@@ -692,6 +695,7 @@ struct ExprStructDef: Expr {
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	virtual VResult recurse(Visitor* v);
 	VResult visit(Visitor* v){ return v->visit(this);}
+	ExprStructDef* as_struct_def()const{return const_cast<ExprStructDef*>(this);}
 };
 // todo.. generic instantiation: typeparam logic, and adhoc mo
 struct ExprFnDef : Expr {
@@ -755,8 +759,9 @@ struct StructInitializer{ // named initializer
 	Scope *sc;
 	vector<int> field_indices;
 	vector<ArgDef*> field_refs;
+	vector<Expr*>	value;
 	StructInitializer(Scope* s,ExprBlock* block){si=block,sc=s;};
-	void map_fields();
+	void map_fields(){resolve(nullptr,0);}//todo..seperate out}
 	ResolvedType resolve(const Type* desiredType,int flags);
 };
 
