@@ -264,6 +264,7 @@ struct Visitor {
 	virtual VResult visit(ArgDef* i);//		{newline(depth);dbprintf("For");return f->recurse(v);}
 };
 
+struct Expr;
 class Node {
 	friend Visitor;
 public:
@@ -272,8 +273,8 @@ public:
 	bool reg_is_addr=false;
 	SrcPos pos;						// where is it
 	Node(){}
-	Node*	def=0;		// definition of the entity here. (function call, struct,type,field);
-	void set_def(Node* d){
+	Expr*	def=0;		// definition of the entity here. (function call, struct,type,field);
+	void set_def(Expr* d){
 		def=d;
 //		if (!this->def)this->def=d;
 //		else //ASSERT(d==this->def);
@@ -284,7 +285,8 @@ public:
 	virtual const char* kind_str()const{return"node";}
 	virtual int get_name() const{return 0;}
 	const char* get_name_str()const;
-	const char* name_str()const{return str(this->name);}
+	const char* name_str()const{return this->name?str(this->name):""
+		;}
 //	Name ident() const  { if (this)return this->name;else return 0;}
 	virtual Node* clone() const=0;
 	Node* clone_if()const { if(this) return this->clone();else return nullptr;}
@@ -304,6 +306,7 @@ public:
 		error(this,"expected ident %s",str(this->name));
 		return PLACEHOLDER;
 	};
+	bool is_ident()const ;
 	virtual ExprStructDef* as_struct_def()const;
 };
 
@@ -347,6 +350,8 @@ public:
 	LLVMType get_type_llvm() const;
 	virtual Type* eval_as_type()const{return nullptr;};
 	virtual ExprBlock* is_subscript()const {return (ExprBlock*)nullptr;}
+	virtual bool is_function_name()const{return false;}
+	virtual bool is_variable_name()const{return false;}
 };
 struct Type : Expr{
 	int marker;
@@ -437,7 +442,7 @@ struct ExprBlock :public ExprScopeBlock{
 	bool is_compound_expression()const{return !call_expr && !name;}
 	bool is_tuple()const{ return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
 	bool is_struct_initializer()const{ return this->bracket_type==OPEN_BRACE && this->delimiter==COMMA;}
-	bool is_function_call()const{return this->bracket_type==OPEN_PAREN && (this->delimiter==COMMA||this->delimiter==0);}
+	bool is_function_call()const{return (this->call_expr!=0) && this->bracket_type==OPEN_PAREN && (this->delimiter==COMMA||this->delimiter==0);}
 	bool is_anon_struct()const{ return this->is_struct_initializer() && !this->call_expr;}
 	bool is_array_initializer()const{ return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
 	void set_delim(int delim){delimiter=delim;}
@@ -499,14 +504,14 @@ struct ExprLiteral : Expr {
 	VResult visit(Visitor* v){ return v->visit(this);}
 };
 
-struct ArgDef :Node{
+struct ArgDef :Expr{
 	uint32_t size,offset;
-	Type* type=0;
+	//Type* type=0;
 	Expr* default_expr=0;
-	Type* get_type()const {return type;}
-	void set_type(Type* t){verify(t);type=t;}
-	Type*& type_ref(){return type;}
-	ArgDef(SrcPos p,Name n, Type* t=nullptr,Expr* d=nullptr){pos=p; name=n;type=t;default_expr=d;}
+	//Type* get_type()const {return type;}
+	//void set_type(Type* t){verify(t);type=t;}
+	//Type*& type_ref(){return type;}
+	ArgDef(SrcPos p,Name n, Type* t=nullptr,Expr* d=nullptr){pos=p; name=n;set_type(t);default_expr=d;}
 	void dump(int depth) const;
 	virtual const char* kind_str()const;
 	~ArgDef(){}
@@ -790,6 +795,8 @@ struct ExprIdent :Expr{
 	ExprIdent(Name n,SrcPos sp){pos=sp;name=n;set_type(nullptr);}
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	Node* clone() const;
+	virtual bool is_function_name()const{ return dynamic_cast<ExprFnDef*>(this->def)!=0;}
+	virtual bool is_variable_name()const{ return dynamic_cast<Variable*>(this->def)!=0;}
 	bool is_placeholder()const{return name==PLACEHOLDER;}
 	bool is_undefined()const{return is_placeholder();}
 	virtual void translate_typeparams(const TypeParamXlat& tpx);

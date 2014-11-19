@@ -608,8 +608,9 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	if (auto f=scope->find_unique_fn_named(this,flags)){ // todo: filter using function type, because we'd be storing it as a callback frequently..
 		// TODO; loose end :( in case where arguments are known, this overrides the match
 		//we eitehr need to pass in arguemnt informatino here *aswell*, or seperaete out the callsite case properly.
-	//	this->def=f;
-	//	this->set_type(f->fn_type);
+		if (!this->def)
+			this->def=f;
+		this->set_type(f->fn_type);
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
 	return ResolvedType();
@@ -629,7 +630,9 @@ Name ExprBlock::get_fn_name()const
 	else if (get_fn_call()){return get_fn_call()->name;}
 	else return 0;
 }
-
+bool Node::is_ident()const {
+	return (dynamic_cast<const ExprIdent*>(this)!=0);
+}
 
 void ExprBlock::dump(int depth) const {
 	if (!this) return;
@@ -895,7 +898,7 @@ void Variable::dump(int depth) const{
 
 void ArgDef::dump(int depth) const {
 	newline(depth);dbprintf("%s",getString(name));
-	if (type) {dbprintf(":");type->dump(-1);}
+	if (this->type()) {dbprintf(":");type()->dump(-1);}
 	if (default_expr) {dbprintf("=");default_expr->dump(-1);}
 }
 Node*	TypeParam::clone() const
@@ -927,7 +930,7 @@ bool ExprFnDef::is_generic() const {
 	if (typeparams.size())
 		return true;
 	for (auto i=0; i<args.size(); i++)
-		if (!args[i]->type || args[i]->type->name==AUTO)
+		if (!args[i]->type() || args[i]->type()->name==AUTO)
 			return true;
 	return false;
 }
@@ -1088,7 +1091,7 @@ ExprFnDef::clone() const{
 Node*
 ArgDef::clone() const{
 	if (!this) return nullptr;
-	return new ArgDef(this->pos,this->name, (Type*)this->type->clone_if(),(Expr*)this->default_expr->clone_if());
+	return new ArgDef(this->pos,this->name, (Type*)this->type()->clone_if(),(Expr*)this->default_expr->clone_if());
 }
 Node*
 Type::clone() const{
@@ -1581,7 +1584,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			ASSERT(dynamic_cast<ExprIdent*>(rhs));
 			if (auto st=sc->find_struct(t)){
 				if (auto f=st->find_field(rhs)){
-					ret=f->type;
+					ret=f->type();
 					return propogate_type(flags,this, ret,this->type_ref());
 				}
 			}
@@ -1706,7 +1709,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 			this->set_type(src->get_type());
 			return ResolvedType();
 		}
-		auto bool indirect_call=false;
+		bool indirect_call=false;
 		auto call_ident=dynamic_cast<ExprIdent*>(this->call_expr);
 		if (call_ident){
 			if (sc->find_fn_variable(this->call_expr->as_ident(),nullptr))
@@ -1727,7 +1730,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 				argls[arg_index]->resolve(sc,nullptr,flags);
 			}
 			const Type* fr=fn_type->fn_return();
-			return propogate_type_fwd(flags,this, fr);
+			propogate_type_fwd(flags,this, fr);
 		} else
 		for (auto i=0; i<argls.size(); i++)  {
 			argls[i]->resolve(sc,nullptr,flags );
@@ -1738,12 +1741,13 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 			for (auto i=0; i<argls.size(); i++)  {
 				argls[i]->resolve(sc,nullptr ,flags);
 			}
-
-			return resolve_make_fn_call(this, sc,desired,flags);
+			if (this->call_expr->is_ident() && 0==dynamic_cast<Variable*>(this->call_expr->def)){
+				return resolve_make_fn_call(this, sc,desired,flags);
+			}
 		} else if (auto fnc=this->get_fn_call()){ // static call
 			for (auto i=0; i<argls.size(); i++)  {
 				auto fnarg=i<fnc->args.size()?fnc->args[i]:nullptr;
-				argls[i]->resolve(sc,fnarg?fnarg->type:nullptr ,flags);
+				argls[i]->resolve(sc,fnarg?fnarg->type():nullptr ,flags);
 			}
 			return propogate_type_fwd(flags,this, desired,this->get_fn_call()->ret_type);
 		} else {
@@ -1781,7 +1785,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 		Type*t = nullptr;
 		if (op&&(op->name==ASSIGN||op->name==COLON||op->name==LET_ASSIGN)){
 			field=sd->find_field(op->lhs);
-			op->rhs->resolve(sc,field->type,flags); // todo, need type params fwd here!
+			op->rhs->resolve(sc,field->type(),flags); // todo, need type params fwd here!
 			propogate_type(flags,op,op->lhs->type_ref(),op->rhs->type_ref());
 			//				propogate_type(flags,op,op->rhs->type_ref());
 			op->lhs->def=field;
@@ -1792,14 +1796,14 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			if (field_index>=sd->fields.size()){error(a,sd,"too many fields");}
 			field=sd->fields[field_index++];
 			this->value.push_back(a);
-			a->resolve(sc,field->type,flags); // todo, need generics!
+			a->resolve(sc,field->type(),flags); // todo, need generics!
 			t=a->type();
 		}else{error(a,"named field expected");}
 		this->field_refs.push_back(field);
 		this->field_indices.push_back(field_index);
 		if (local_struct_def){
-			if (!local_struct_def->fields[i]->type){
-				local_struct_def->fields[i]->type=t;}}// special case :( if its' an inline def, we write the type. doing propper inference on generic structs have solved this stupidity.
+			if (!local_struct_def->fields[i]->type()){
+				local_struct_def->fields[i]->type()=t;}}// special case :( if its' an inline def, we write the type. doing propper inference on generic structs have solved this stupidity.
 	}
 //	?. // if (this) return this->.... else return None.
 	
@@ -1844,7 +1848,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		} else {
 			block->scope=0; // todo delete.
 		}
-		block->def=(Node*)call_target;
+		block->def=(Expr*)call_target;
 		if (call_target->resolved) {
 			Type * fnr=call_target->return_type();
 			return propogate_type_fwd(flags,block, desired, block->type_ref(),fnr);
@@ -1975,7 +1979,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 		auto arglist=new Type(TUPLE);
 		this->fn_type->push_back(arglist);
 		for (auto a:this->args) {
-			arglist->push_back(a->type?((Type*)a->type->clone()):new Type(AUTO));
+			arglist->push_back(a->type()?((Type*)a->type()->clone()):new Type(AUTO));
 		}
 		this->fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(AUTO));
 
@@ -2485,7 +2489,7 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	auto a=new ArgDef(src.pos,argname);
 	a->pos=src.pos;
 	if (src.eat_if(COLON)) {
-		a->type=parse_type(src,CLOSE_PAREN);
+		a->type()=parse_type(src,CLOSE_PAREN);
 	}
 	if (src.eat_if(ASSIGN)){
 		a->default_expr=parse_expr(src);
@@ -2758,7 +2762,7 @@ ExprStructDef* Scope::find_struct(const Node* node) {
 bool ExprStructDef::is_generic()const{
 	if (typeparams.size())
 		return true;
-	for (auto f:fields){if (!f->type)return true;}//TODO: is typeparam?
+	for (auto f:fields){if (!f->type())return true;}//TODO: is typeparam?
 	return false;
 }
 ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
@@ -3059,12 +3063,15 @@ const char* g_TestProg=
 	"	xs1:=xs[1]; xs2:=xs[2];  \n"
 	"	printf(\"Hello From My Language %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
 	"	0  \n"
-	"}  \n\0"
+	"}  \n\0";
 
-//"	fn foo(x:float,y:float)->float{ x+y  }      "
-//"	fn main(argc:int, argv:**char)->int{	"
-//"		argc+=foo(argc,0);		"
-//"	,0}"
+const char* g_TestProg2=
+"fn printf(s:str,...)->int;\n"
+"	fn foo(x:int)->int{ printf(\"hello from fn ptr %d\\n\",x);  0}      \n"
+"	fn main(argc:int, argv:**char)->int{	\n"
+"		fp:=foo;		\n"
+"		fp(2);fp(3);		\n"
+"	,0}\n"
 /*
 	"struct Foo{x:int,y:int, struct Bar{x:float}, fn method(i:int)->int{printf(\"hello from method %d\n\",i);0};};"
 	"fn printf(s:str,...)->int;"
@@ -3259,6 +3266,8 @@ int main(int argc, const char** argv) {
 				if (a[j]=='r') options|=B_RUN|B_EXECUTABLE;
 				if (a[j]=='e') options|=B_EXECUTABLE;
 				if (a[j]=='v') options|=B_VERBOSE;
+				if (a[j]=='E') {printf("%s",g_TestProg);}
+
 			}
 		}
 	}
@@ -3275,11 +3284,9 @@ int main(int argc, const char** argv) {
 	}
 	if (argc<=1) {
 		printf("no sources given so running inbuilt test.\n");
-		auto ret=compile_source(g_TestProg,"g_TestProg","test.ll",B_TYPES|B_EXECUTABLE|B_RUN);
+		auto ret=compile_source(g_TestProg2,"g_TestProg2","test.ll",B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		if (!ret) {
-			printf("\nSource we just compiled, use for reference..\n");
-			printf("%s",g_TestProg);
-			printf("\noptions    -r compile & run   -l emit llvm IR only    -e emit executable only  -t dump AST with types   -a just dump ast\n");
+			printf("\noptions    -r compile & run   -l emit llvm IR only    -e emit executable only  -t dump AST with types   -a just dump ast -E dump example\n");
 			printf("\ndefault: it will compile & run a source file;\ngenerates srcname.ll & srcname/srcname.out executable");
 		}
 	}

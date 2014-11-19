@@ -5,8 +5,9 @@ extern bool is_operator(int tok);
 extern bool is_ident(int tok);
 extern bool is_type(int tok);
 void write_reg(FILE* ofp, RegisterName dst );
-void write_type(FILE* ofp, Type* t, bool is_ref);
-void emit_function_type(FILE* ofp,ExprFnDef* fn_node,int* regname);
+void write_type(FILE* ofp, const Type* t, bool is_ref=false);
+void write_function_type(FILE* ofp,ExprFnDef* fn_node,int* regname);
+void write_function_type(FILE* ofp, const Type* t);
 
 // If you just compiled to C..
 // this would all work by now.
@@ -20,7 +21,6 @@ int next_reg_name(Name prefix_name, int *next_reg_index){
 	return getStringIndex(tmp);
 }
 void write_reg(FILE* ofp, RegisterName reg);
-void write_type(FILE* ofp, Type* t);
 
 void write_store(FILE* ofp, RegisterName reg, Type* type, RegisterName addr){
 	fprintf(ofp, "\t store ");
@@ -55,6 +55,22 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 			reg=v->regname;
 		};
 		this->type=v->type();
+	}
+	explicit CgValue(Expr* n) {
+		lit=0; addr=0; reg=0; ofs=0;
+		var = n;
+		if (auto fd=dynamic_cast<ExprFnDef*>(n)){ // variable is a function pointer?
+			reg=0; // it needs to be loaded
+		}
+		if (auto v=dynamic_cast<Variable*>(n)){
+			if (v->reg_is_addr){
+				addr=v->regname;
+			}
+			else{
+				reg=v->regname;
+			};
+		}
+		this->type=n->type();
 	}
 	CgValue():lit(0),reg(0),addr(0),ofs(0),var(0),type(nullptr){};
 	bool is_valid()const{return lit!=0||reg!=0;}
@@ -104,8 +120,16 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 	RegisterName load(FILE* ofp,int *next_reg_index) {
 		//		return CgValue();
 		if (var) {	// we have a reference to a variable - we must load it.
-			if (!reg)
-			reg=var->get_reg(var->name,next_reg_index,false); // TODO is that false, or do we need to force new?
+			// TODO - if its' a memvar we really do need to load something.
+			if (!reg) {
+				reg=var->get_reg(var->name,next_reg_index,false); // TODO is that false, or do we need to force new?
+			}
+			if (auto fp=dynamic_cast<ExprFnDef*>(var)){
+				fprintf(ofp,"\t%%%s = load ", str(reg));
+				// function type..
+				write_type(ofp,this->type,true);
+				fprintf(ofp,"@%s\n",var->name_str());
+			}
 			return reg;
 		}
 		if (addr) {
@@ -115,8 +139,26 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 		return reg;
 	}
 	RegisterName load_into(FILE* ofp, RegisterName req_reg){
+		if (var)
+		if (auto fp=dynamic_cast<ExprFnDef*>(var)){
+			reg=req_reg;
+			fprintf(ofp,"\t%%hack_value =alloca ");write_function_type(ofp,fp->type());fprintf(ofp,",align 8\n");
+			fprintf(ofp,"\tstore ");write_function_type(ofp,fp->type());fprintf(ofp," @%s, \n",fp->name_str());
+			write_function_type(ofp,fp->type());fprintf(ofp,"* %%hack_value,align 4");
+			fprintf(ofp,"\t%%%s = load ",str(reg)); write_function_type(ofp,fp->type()); fprintf(ofp,"* %%hack_value\n");
+			return reg;
+			/*
+			fprintf(ofp,"\t%%%s = load ", str(reg));
+			// function type..
+			write_function_type(ofp,fp->type());
+			fprintf(ofp," @%s\n",fp->name_str());
+			return reg;
+			 */
+		}
+
 		if (!addr || !type)
 			return reg; // actual reg.
+
 		reg=req_reg;
 		fprintf(ofp,"\t%%%s = load ",str(reg));
 //				type->is_struct()?"%%":"", type->is_struct()?getString(type->name):get_llvm_type_str(type->name),
@@ -196,12 +238,12 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 		int areg=next_reg_name(next_reg_index);
 		int index=sd->field_index(field_name);
 		auto field=sd->find_field(field_name);
-		fprintf(ofp,"\t;%s.%s :%s\n",str(type->name),str(field_name->as_ident()),str(field->type->name));
+		fprintf(ofp,"\t;%s.%s :%s\n",str(type->name),str(field_name->as_ident()),str(field->type()->name));
 		fprintf(ofp,"\t%%%s = getelementptr inbounds %%%s* %%%s, i32 0, i32 %d\n",
 				str(areg), str(type->name), str(basereg),
 				index);
 		
-		return CgValue(0,field?field->type:nullptr,areg);
+		return CgValue(0,field?field->type():nullptr,areg);
 	}
 	CgValue index(RegisterName index){ // calculates & returns adress
 		return CgValue();
@@ -229,7 +271,7 @@ int reg_of(Node* n, ExprFnDef* owner) {
 void write_reg(FILE* ofp, RegisterName dst ) {
 	fprintf(ofp,"%%%s ",str(dst));
 }
-void write_type(FILE* ofp, Type* t, bool ref) {
+void write_type(FILE* ofp, const Type* t, bool ref) {
 	if (!t) { fprintf(ofp,"<type_expected>");return;}
 	if (t->is_pointer()){
 		write_type(ofp,t->sub,ref); fprintf(ofp,"*");
@@ -239,6 +281,10 @@ void write_type(FILE* ofp, Type* t, bool ref) {
 		fprintf(ofp," x ");
 		write_type(ofp,t->sub,0); // TODO: assert its a numeric constant
 		fprintf(ofp,"]");
+	}
+	else if (t->is_function()){
+		error(t,"TODO,write function type unified ");
+		write_function_type(ofp, t);
 	}
 	else {
 //		dbprintf(";%s is struct %p\n", str(t->name), t->struct_def);
@@ -304,8 +350,8 @@ void compile_struct_def(FILE* ofp, ExprStructDef* st, Scope* sc) {
 		// todo: properly wrap translations to LLVM types.
 		int i=0; for (auto fi: st->fields){
 			if (i++)fprintf(ofp,",");
-			ASSERT(fi->type);
-			write_type(ofp,fi->type, false);
+			ASSERT(fi->type());
+			write_type(ofp,fi->type(), false);
 		};
 		fprintf(ofp," }\n");
 	}
@@ -317,7 +363,7 @@ CgValue alloca_struct(FILE* ofp, Expr* holder, ExprStructDef* sd,int *next_index
 	return CgValue(r,holder->get_type(), 0);
 }
 
-void emit_local_vars(FILE* ofp,Expr* n, ExprFnDef* fn, Scope* sc, RegisterName* new_reg) {
+void write_local_vars(FILE* ofp,Expr* n, ExprFnDef* fn, Scope* sc, RegisterName* new_reg) {
 	for (auto v=sc->vars; v;v=v->next){
 		if (v->kind!=Local) continue;
 		auto vt=v->expect_type();
@@ -566,7 +612,6 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 						return dstreg;
 					}else {
 						// RISClike 3operand dst=src1,src2
-						printf("\n%s %s %s\n",e->name_str(),e->lhs->name_str(),e->rhs->name_str());
 						lhs.load(ofp,next_index); rhs.load(ofp,next_index);
 						write_instruction(ofp,opname,t,dst,lhs,rhs);
 						dst.type=e->get_type();
@@ -647,7 +692,18 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			return CgValue(0,inner_type,dst);
 		}
 		//[3] FUNCTION CALL
-		else if (auto call_fn=e->get_fn_call()){
+		else if (e->is_function_call()){
+			auto call_fn=e->get_fn_call();
+			RegisterName indirect_call=0;
+
+			if (e->call_expr->is_function_name()) {
+				
+			} else {
+				dbprintf("indirect call\n");
+				auto fptr = compile_node(ofp, e->call_expr, curr_fn, sc, next_index);
+				indirect_call=fptr.load(ofp, next_index);
+			}
+
 			vector<CgValue> l_args;
 			vector<CgValue> l_args_reg;
 			// process function argumetns & load
@@ -661,7 +717,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 				}
 				l_args_reg.push_back(reg);
 			}
-			fprintf(ofp,"\t;fncall %s\n", str(call_fn->name));
+			fprintf(ofp,"\t;fncall %s\n", call_fn?str(call_fn->name):e->call_expr->name_str());
 			int i=0;
 			for (auto reg:l_args_reg){
 				if (reg.addr && !reg.reg) {
@@ -674,17 +730,29 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 				i++;
 			}
 
-			auto dst=n->get_reg_new(call_fn->name, next_index);
-			auto rt=call_fn->get_return_value();
+			auto dst=n->get_reg_new(call_fn?call_fn->name:FN, next_index);
+			//auto rt=call_fn->get_return_value();
+			auto ret_type=e->type();	// semantic analysis should have done this
+		
+//			if (call_fn){ ASSERT(0!=call_fn->get_return_value()->type()->eq(e->type()));}
 			fprintf(ofp,"\t");
-			if (call_fn->has_return_value()) {
+			//if (call_fn->has_return_value())
+			if (e->type()->name!=VOID)
+			{
 				write_reg(ofp,dst); fprintf(ofp," = ");
 			}
-			// TODO: we've hard coded printf prototype! bad news..
-//			dump_locals(sc);
 			fprintf(ofp,"call ");
-			emit_function_type(ofp, call_fn,next_index);
-			fprintf(ofp,"@%s",getString(call_fn->name));fprintf(ofp,"(");
+			if (call_fn)
+				write_function_type(ofp, call_fn,next_index);
+			else
+				write_function_type(ofp,e->call_expr->type());
+			if (!indirect_call) {
+				fprintf(ofp,"@%s",getString(call_fn->name));
+			} else {
+				write_reg(ofp,indirect_call);
+			}
+			
+			fprintf(ofp,"(");
 			for (auto i=0; i<l_args.size(); i++){
 				if (i) {fprintf(ofp," ,");}
 				auto reg=l_args[i];
@@ -692,8 +760,8 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 				reg.write_operand(ofp);
 			}
 			fprintf(ofp,")\n");
-			if (call_fn->has_return_value()) {
-				return CgValue(dst,call_fn->return_type());
+			if (ret_type && ret_type->name!=VOID) {
+				return CgValue(dst,ret_type);
 			} else{
 				return CgValue();
 			}
@@ -704,6 +772,10 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 	} else if (auto id=dynamic_cast<ExprIdent*>(n)){
 		auto var=sc->find_variable_rec(n->name);
 		if (!var){
+			if (n->def) {
+				dbprintf("\n place %s:%s into new lazy value\n",n->def->name_str(),n->def->kind_str());
+				return CgValue(n->def);
+			}
 			error(n,"var not found %s\n",n->name_str());
 			return CgValue();
 		}
@@ -729,7 +801,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 
 // Emit function header..
 enum EmitFnMode {EmitDefinition,EmitDeclaration,EmitType};
-void emit_function_signature(FILE* ofp,ExprFnDef* fn_node,int *regname, EmitFnMode mode){
+void write_function_signature(FILE* ofp,ExprFnDef* fn_node,int *regname, EmitFnMode mode){
 	auto scope=fn_node->scope;
 	fn_node->clear_reg();
 	auto rtype=fn_node->return_type();
@@ -741,7 +813,7 @@ void emit_function_signature(FILE* ofp,ExprFnDef* fn_node,int *regname, EmitFnMo
 	int inter=0;
 	for (auto a:fn_node->args){
 		if (inter++){fprintf(ofp,",");};
-		write_type(ofp,a->type,a->type->is_complex());
+		write_type(ofp,a->type(),a->type()->is_complex());
 		if (mode==EmitDefinition){
 			auto var=scope->get_or_create_scope_variable(a,a->name, VkArg);
 			var->get_reg(a->name, regname, false);
@@ -756,8 +828,22 @@ void emit_function_signature(FILE* ofp,ExprFnDef* fn_node,int *regname, EmitFnMo
 	if (mode==EmitType)fprintf(ofp,"*");
 	else fprintf(ofp,"\n");
 }
-void emit_function_type(FILE* ofp,ExprFnDef* fn_node,int* regname){
-	emit_function_signature(ofp,fn_node,regname,EmitType);
+void write_function_type(FILE* ofp, const Type* t) {
+	auto argtuple=t->sub;
+	ASSERT(argtuple);
+	auto retn=argtuple->next;
+	write_type(ofp,retn,0);
+	fprintf(ofp,"(");
+	for (auto arg=argtuple->sub; arg;arg=arg->next){
+		write_type(ofp,arg);
+		if (arg->next)fprintf(ofp,",");
+	}
+	fprintf(ofp,")");
+	fprintf(ofp,"*");
+	
+}
+void write_function_type(FILE* ofp,ExprFnDef* fn_node,int* regname){
+	write_function_signature(ofp,fn_node,regname,EmitType);
 }
 
 Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
@@ -766,7 +852,7 @@ Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
 	if (!fn_node){return nullptr;}
 	if (fn_node->is_undefined()) {
 		fprintf(ofp,";fn %s prot\n",getString(fn_node->name));
-		emit_function_signature(ofp,fn_node,&regname,EmitDeclaration);
+		write_function_signature(ofp,fn_node,&regname,EmitDeclaration);
 
 		return nullptr;
 	}
@@ -792,9 +878,9 @@ Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
 //		return rt;
 //	}
 	
-	emit_function_signature(ofp,fn_node,&regname,EmitDefinition);
+	write_function_signature(ofp,fn_node,&regname,EmitDefinition);
  	fprintf(ofp,"{\n");
-	emit_local_vars(ofp, fn_node->body, fn_node, scope, &regname);
+	write_local_vars(ofp, fn_node->body, fn_node, scope, &regname);
 	auto rtn=fn_node->get_return_value();
 	auto ret=compile_node(ofp, fn_node->body, fn_node,scope,&regname);
 //	printf("%p\n",ret.type);
