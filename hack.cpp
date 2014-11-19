@@ -1704,7 +1704,10 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 }
 
 ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
-	auto sd=sc->find_struct_named(si->call_expr);
+
+	auto sd=sc->find_struct(si->call_expr);
+	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
+	if (local_struct_def)sc->add_struct(local_struct_def); // todo - why did we need this?
 	if (!si->type()){
 		si->set_type(new Type(sd));
 	}
@@ -1721,6 +1724,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 		auto op=dynamic_cast<ExprOp*>(a);
 		int field_index=0;
 		ArgDef* field=nullptr;
+		Type*t = nullptr;
 		if (op&&(op->name==ASSIGN||op->name==COLON||op->name==LET_ASSIGN)){
 			field=sd->find_field(op->lhs);
 			op->rhs->resolve(sc,field->type,flags); // todo, need type params fwd here!
@@ -1729,15 +1733,21 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			op->lhs->def=field;
 			next_field_index=sd->field_index(op->lhs);
 			this->value.push_back(op->rhs);
+			t=op->rhs->type();
 		}else if (next_field_index>=0){
 			if (field_index>=sd->fields.size()){error(a,sd,"too many fields");}
 			field=sd->fields[field_index++];
 			this->value.push_back(a);
 			a->resolve(sc,field->type,flags); // todo, need generics!
+			t=a->type();
 		}else{error(a,"named field expected");}
 		this->field_refs.push_back(field);
 		this->field_indices.push_back(field_index);
+		if (local_struct_def){
+			if (!local_struct_def->fields[i]->type){
+				local_struct_def->fields[i]->type=t;}}// special case :( if its' an inline def, we write the type. doing propper inference on generic structs have solved this stupidity.
 	}
+//	?. // if (this) return this->.... else return None.
 	
 	return propogate_type_fwd(flags,si, desiredType);
 }
@@ -2289,8 +2299,12 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 			if (was_operand){// struct initializer
 				operands.push_back(parse_call(src,CLOSE_BRACE,COMMA,pop(operands)));
 			}
-			else//progn aka scope block with return value.
-				operands.push_back(parse_call(src,CLOSE_BRACE,SEMICOLON,nullptr));
+			else{//progn aka scope block with return value.
+				auto sub=parse_call(src,CLOSE_BRACE,SEMICOLON,nullptr);
+				operands.push_back(sub);
+				if (sub->delimiter==COMMA)
+					sub->create_anon_struct_initializer();
+			}
 		} else if (src.eat_if(delim)) {
 			flush_op_stack(node,operators,operands);
 			node->set_delim(delim);
@@ -2351,7 +2365,7 @@ ExprBlock::create_anon_struct_initializer(){
 	char tmp[256]="anon_";
 	for (auto i=0; i<argls.size();i++){
 		auto p=dynamic_cast<ExprOp*>(argls[i]);
-		if (!p || p->name!=ASSIGN){
+		if (!p || !(p->name==ASSIGN||p->name==COLON)){
 			error(this,"anon struct initializer must have named elements {n0=expr,n1=expr,..}");
 		}
 		if (i) strcat(tmp,"_");
@@ -2359,11 +2373,14 @@ ExprBlock::create_anon_struct_initializer(){
 	}
 	// TODO - these need to be hashed somewhere, dont want each unique!
 	ExprStructDef* sd=new ExprStructDef(this->pos);
+	sd->name=getStringIndex(tmp);
 	ASSERT(sd->type()==0&&"todo-struct def creates its own type");
 	sd->set_type(new Type(sd));
 	sd->name=getStringIndex(tmp);
 	for (auto i=0; i<argls.size();i++){
-		sd->fields.push_back(new ArgDef(argls[i]->pos, argls[i]->as_op()->lhs->as_ident()) );
+		auto a=argls[i];
+		auto nf=new ArgDef(a->pos, a->as_op()->lhs->as_ident(),a->type());
+		sd->fields.push_back(nf );
 	}
 	this->call_expr=sd;
 	this->def=sd;
@@ -2678,6 +2695,12 @@ void ExprStructDef::dump(int depth) const{
 	for (auto f:this->functions){f->dump(depth+1);}
 	newline(depth);dbprintf("}");
 }
+
+ExprStructDef* Scope::find_struct(const Node* node) {
+	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){return sd;} return find_struct_named(node);
+}
+
+
 bool ExprStructDef::is_generic()const{
 	if (typeparams.size())
 		return true;
@@ -2962,6 +2985,7 @@ const char* g_TestProg=
 	"	ys.num=10;   \n"
 	"	yp:=ys.data;  \n"
 	"	mv4:=Vec4{vx=1.0,vy=2.0,vz=0.5,vw=1.0};\n"
+	"	mv5:={key=0,value=10};\n"
 	"	push_back(ys,2);  \n"
 //	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\\n\");b};  \n"
 //	"	r:=f(0.1,2);  \n"

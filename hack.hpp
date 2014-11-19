@@ -595,6 +595,7 @@ public:
 	ExprStructDef* find_struct_sub(Scope* original,const Type* t);
 	ExprStructDef* find_struct_named(Name name);
 	ExprStructDef* find_struct_named(const Node* node){return find_struct_named(node->as_ident());}
+	ExprStructDef* find_struct(const Node* node);
 	ExprFnDef*	find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags);
 	void add_struct(ExprStructDef*);
 	void add_fn(ExprFnDef*);

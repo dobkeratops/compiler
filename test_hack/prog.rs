@@ -5,7 +5,7 @@ fn printf(s:str,...)->int;
 struct Foo {
 	vx:int, vy:int, vz:int
 }
-struct Vec4{ vx:float,vy:float,vz:float,vw:float}
+struct Vec4{ vx:int,vy:int,vz:int,vw:int}
 struct Triangle{ i0:int,i1:int,i2:int}
 struct Mesh {
 	vertices:array[Vec4,20],
@@ -15,6 +15,7 @@ fn something(f:Foo)->int{
 	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz);
 	0
 }
+
 
 fn main(argc:int,argv:**char)->int{
 	xs=:array[int,512];
@@ -28,7 +29,9 @@ fn main(argc:int,argv:**char)->int{
 	fv=:Foo;
 	fv.vx=3; fv.vy=4; fv.vz=5;
 	something(&fv);
-	mv:=Foo{vx=0,vy=1,vz=20};
+
+	mv:=Vec4{vx=0,vy=1,vz=20};
+	mv2:={key=12,value=13};
 
 	ff:=mv.vz;
 	
@@ -41,11 +44,9 @@ fn main(argc:int,argv:**char)->int{
 
 	x:=if argc<2{printf("argc is <2\n");1}else{printf("argc is>2\n");2};
 	printf("yada yada yada\n");
-	printf("\nHelloWorld %.3f %d foo bar baz\n",lerp(5.0,10.0,7.0), mv.vz);
+	printf("\nHelloWorld %.3f %d %d foo bar baz\n",lerp(5.0,10.0,7.0), mv.vz , mv2.key);
 	0
 }
-
-
 
 
 
