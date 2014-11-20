@@ -143,8 +143,8 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 		if (auto fp=dynamic_cast<ExprFnDef*>(var)){
 			reg=req_reg;
 			fprintf(ofp,"\t%%pre%s =alloca ",str(reg));write_function_type(ofp,fp->type());fprintf(ofp,",align 8\n");
-			fprintf(ofp,"\tstore ");write_function_type(ofp,fp->type());fprintf(ofp," @%s, \n",fp->name_str());
-			write_function_type(ofp,fp->type());fprintf(ofp,"* %%pre%s,align 4",str(reg));
+			fprintf(ofp,"\tstore ");write_function_type(ofp,fp->type());fprintf(ofp," @%s, ",fp->name_str());
+			write_function_type(ofp,fp->type());fprintf(ofp,"* %%pre%s,align 4\n",str(reg));
 			fprintf(ofp,"\t%%%s = load ",str(reg)); write_function_type(ofp,fp->type()); fprintf(ofp,"* %%pre%s\n",str(reg));
 			return reg;
 			/*
@@ -369,7 +369,7 @@ void write_local_vars(FILE* ofp,Expr* n, ExprFnDef* fn, Scope* sc, RegisterName*
 		auto vt=v->expect_type();
 		if (!vt->is_complex())
 			continue;//its just a reg
-		auto r= v->get_reg(v->name, new_reg, false);
+		auto r= v->get_reg(v->name, new_reg, true);
 		if (vt->is_struct()) {
 			// alloc_struct
 			fprintf(ofp,"\t"); write_reg(ofp,r); fprintf(ofp," = alloca %%%s , align %d\n",getString(vt->name),vt->struct_def->alignment());
@@ -581,6 +581,19 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 						//					lhs_v->regname=dst.reg;
 						return CgValue(0,lhs_v->type(),dst.reg);
 					}
+					else if(opname==AS) {
+						// if (prim to prim) {do fpext, etc} else..
+						lhs.load(ofp,next_index);
+						fprintf(ofp,"\t");
+						write_reg(ofp, dst.reg); fprintf(ofp," = bitcast ");
+						write_type(ofp,e->lhs->type(),0);
+						write_reg(ofp,lhs.reg);
+						fprintf(ofp," to ");
+						write_type(ofp,e->rhs->type(),0);
+						fprintf(ofp,"\n");
+						return dst;
+					}
+					else
 					if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
 						auto v=sc->find_variable_rec(e->lhs->name); WARN(v &&"semantic analysis should have created var");
 						auto dst=v->get_reg(v->name, next_index, true);
@@ -699,7 +712,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			if (e->call_expr->is_function_name()) {
 				
 			} else {
-				dbprintf("indirect call\n");
+				//dbprintf("indirect call\n");
 				auto fptr = compile_node(ofp, e->call_expr, curr_fn, sc, next_index);
 				indirect_call=fptr.load(ofp, next_index);
 			}
@@ -773,7 +786,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 		auto var=sc->find_variable_rec(n->name);
 		if (!var){
 			if (n->def) {
-				dbprintf("\n place %s:%s into new lazy value\n",n->def->name_str(),n->def->kind_str());
+				//dbprintf("\n place %s:%s into new lazy value\n",n->def->name_str(),n->def->kind_str());
 				return CgValue(n->def);
 			}
 			error(n,"var not found %s\n",n->name_str());

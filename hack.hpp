@@ -99,7 +99,7 @@ enum Token {
 	OPEN_BRACKET,CLOSE_BRACKET,
 	// operators
 	ARROW,DOT,FAT_ARROW,REV_ARROW,DOUBLE_COLON,SWAP,
-	COLON,
+	COLON,AS,
 	ADD,SUB,MUL,DIV,
 	AND,OR,XOR,MOD,SHL,SHR,
 	LT,GT,LE,GE,EQ,NE,
@@ -395,7 +395,6 @@ struct Type : Expr{
 	VResult visit(Visitor* v){ auto r= v->visit(this);return r;}
 	virtual VResult recurse(Visitor* v){v->pre_visit(this);for (auto s=this->sub; s; s=s->next){s->visit(v);} v->post_visit(this); return 0;}
 	virtual ResolvedType resolve(Scope* s, const Type* desired,int flags){return ResolvedType(this,ResolvedType::COMPLETE);}
-
 };
 
 struct ExprScopeBlock : Expr{};
@@ -599,9 +598,10 @@ public:
 	Variable* get_or_create_scope_variable(Node* creator,Name name,VarKind k);
 	ExprStructDef* try_find_struct(const Type* t){return this->find_struct_sub(this,t);}
 	ExprStructDef* find_struct(const Type* t){
-		auto r=try_find_struct(t);
+		auto sname=t->deref_all();
+		auto r=try_find_struct(sname);
 		if (!r)
-			error(t,"cant find struct %s", t->name_str());
+			error(t,"cant find struct %s", sname->name_str());
 		return r;
 	}//original scope because typarams might use it.
 	ExprStructDef* find_struct_sub(Scope* original,const Type* t);

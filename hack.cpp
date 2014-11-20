@@ -197,7 +197,7 @@ const char* g_token_str[]={
 	"{","}",
 	"[","]",
 	"->",".","=>","<-","::","<->",			//arrows,accessors
-	":",
+	":","as",
 	"+","-","*","/",					//arithmetic
 	"&","|","^","%","<<",">>",					//bitwise
 	"<",">","<=",">=","==","!=",		//compares
@@ -227,7 +227,7 @@ int g_tok_info[]={
 	0,0, //{ }
 	0,0, // [ ]
 	READ|10,READ|2,READ|10,READ|10,READ|13,WRITE|10,	   // arrows
-	READ|9,
+	READ|9,READ|9,
 	READ|6,READ|6,READ|5,READ|5,		//arithmetic
 	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,		//bitwise
 	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,	// COMPARES
@@ -1294,7 +1294,7 @@ ExprFnDef* Scope::find_unique_fn_named(const Node* name_node,int flags, const Ty
 		}
 	}
 	if (flags&R_FINAL){
-		error(name_node,"can't find fn");
+		//error(name_node,"can't find fn");
 	}
 	return ambiguous?nullptr:found;
 	
@@ -1513,7 +1513,7 @@ T* expect_cast(Node* n){
 ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	Type* ret=0;
 	auto op_ident=name;
-	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
+//	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
 		ASSERT(this->lhs && this->rhs);
 		auto rhs_t=rhs->resolve(sc,desired,flags);
@@ -1560,7 +1560,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			return ResolvedType();
 		}
 	}
-	else if (op_ident==COLON){ // TYPE ASSERTION,
+	else if (op_ident==COLON){ // TYPE ASSERTION
 		// todo: get this in the main parser
 		ASSERT(dynamic_cast<ExprIdent*>(rhs)); // todo- not just that
 		int tname=rhs->name;
@@ -1571,6 +1571,16 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 		lhs->set_def(v);
 		return propogate_type(flags, this, v->type_ref(),type_ref());
+	} else if (op_ident==AS){
+		this->lhs->resolve(sc,nullptr,flags);
+		if (this->rhs->name==PLACEHOLDER) {
+			this->rhs->set_type(desired);
+			this->set_type(desired);
+			return ResolvedType(this->type(),ResolvedType::COMPLETE);
+		} else {
+			this->set_type(this->rhs->type());
+			return propogate_type_fwd(flags,this,desired);
+		}
 	}
 	else if (op_ident==DOT || op_ident==ARROW) {
 		auto lhs_t=lhs->resolve(sc, 0,flags);//type doesn't push up- the only info we have is what field it needs
@@ -2188,7 +2198,7 @@ struct TextInput {
 
 	Name peek_tok(){return curr_tok;}
 	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
-	Name expect(Name t){ int x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s",str(t), str(x));exit(0);} return x;}
+	Name expect(Name t){ int x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s\n",str(t), str(x));exit(0);} return x;}
 };
 
 void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
@@ -2387,6 +2397,14 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 						break;
 					pop_operator_call(operators,operands);
 				}
+				if (tok==AS){
+					Type *t=parse_type(src,0);
+					if (!was_operand) error(t,"as must follow operand");
+					auto lhs=operands.back(); operands.pop_back();
+					operands.push_back(new ExprOp(AS,src.pos,lhs,t));
+					was_operand=true;
+					t->set_type(t);
+				}else
 				if (tok==COLON){// special case: : invokes parsing type. TODO: we actually want to get rid of this? type could be read from other nodes, parsed same as rest?
 					Type *t=parse_type(src,0);
 					auto lhs=operands.back();
@@ -2470,6 +2488,7 @@ Type* parse_type(TokenStream& src, int close) {
 			fn_type->push_back(fn_ret);
 			return fn_type;
 		}
+ 
 	} else {
 		// prefixes in typegrammar..
 		if (tok==MUL || tok==AND) {
@@ -3080,13 +3099,23 @@ const char* g_TestProg=
 	"}  \n\0";
 
 const char* g_TestProg2=
+"	fn take_ptr(f:(int)->int)->int{ f(5);0}\n"
 "fn printf(s:str,...)->int;\n"
 "	fn foo(x:int)->int{ printf(\"hello from fn ptr %d\\n\",x);  0}      \n"
-"	fn take_ptr(f:(int)->int)->int{ f(5);0}"
+"	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0}\n"
+"	struct FooStruct{x:int,y:int};"
+"	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
+//"	struct Foo{x:int,y:int}"
 "	fn main(argc:int, argv:**char)->int{	\n"
+"		x:= {a:=10;b:=20; a+b};	\n"
 "		fp:=foo;		\n"
-"		fp(2);fp(3);		\n"
+"		fs:=FooStruct{100,200};		\n"
+"		pfs:=&fs;\n"
+"		py:=pfs as *int;\n"
+"		printf(\"foostruct int val recast %d; foostruct raw value %d\n\",*py,fs.x);\n"
+"		fp(2);fp(x);		\n"
 "		take_ptr(fp);\n"
+"		bar(1,2,3);	\n"
 "	,0}\n"
 /*
 	"struct Foo{x:int,y:int, struct Bar{x:float}, fn method(i:int)->int{printf(\"hello from method %d\n\",i);0};};"
@@ -3300,9 +3329,9 @@ int main(int argc, const char** argv) {
 	}
 	if (argc<=1) {
 		printf("no sources given so running inbuilt test.\n");
-		auto ret=compile_source(g_TestProg2,"g_TestProg2","test.ll",B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
+		auto ret=compile_source(g_TestProg2,"g_TestProg2","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		if (!ret) {
-			printf("\noptions    -r compile & run   -l emit llvm IR only    -e emit executable only  -t dump AST with types   -a just dump ast -E dump example\n");
+			printf("\n\noptions    -r compile & run   -l emit llvm IR only    -e emit executable only  -t dump AST with types   -a just dump ast -E dump example\n");
 			printf("\ndefault: it will compile & run a source file;\ngenerates srcname.ll & srcname/srcname.out executable");
 		}
 	}
