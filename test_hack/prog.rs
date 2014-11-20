@@ -16,6 +16,7 @@ fn something(f:Foo)->int{
 	0
 }
 
+
 fn foo()->int{
 	printf("hello from foo\n");
 	0
@@ -41,6 +42,10 @@ fn main(argc:int,argv:**char)->int{
 	fp2:=bar;
 	if (argc<1) {fp1()} else {fp2()}
 
+	fv.0 = 10;
+	fv.1 = 20;
+	fv=(1,2,3,5);
+	printf(fv.1, fv.2);
 
 	mv:=Vec4{vx=0,vy=1,vz=20};
 	mv2:={key=12,value=13};
@@ -59,11 +64,6 @@ fn main(argc:int,argv:**char)->int{
 	printf("\nHelloWorld %.3f %d %d foo bar baz\n",lerp(5.0,10.0,7.0), mv.vz , mv2.key);
 	0
 }
-
-
-
-
-
 
 
 

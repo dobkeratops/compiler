@@ -241,6 +241,7 @@ struct ExprBlock;
 struct ExprLiteral;
 struct ExprIdent;
 struct ArgDef;
+struct ExprDef;
 
 struct Visitor {
 	
@@ -273,12 +274,9 @@ public:
 	bool reg_is_addr=false;
 	SrcPos pos;						// where is it
 	Node(){}
-	Expr*	def=0;		// definition of the entity here. (function call, struct,type,field);
-	void set_def(Expr* d){
-		def=d;
-//		if (!this->def)this->def=d;
-//		else //ASSERT(d==this->def);
-	}
+	ExprDef*	def=0;		// definition of the entity here. (function call, struct,type,field);
+	Node*		next_of_def;
+	void set_def(ExprDef* d);
 	virtual  ~Node(){};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
@@ -306,8 +304,10 @@ public:
 		error(this,"expected ident %s",str(this->name));
 		return PLACEHOLDER;
 	};
-	bool is_ident()const ;
+	bool is_ident()const;
 	virtual ExprStructDef* as_struct_def()const;
+	template<typename T> T* as()const{ auto ret= const_cast<T*>(dynamic_cast<T*>(this)); if (!ret){error(this,"expected,but got %s",this->kind_str());} return ret;};
+	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
 };
 
 struct TypeParam: Node{
@@ -331,7 +331,7 @@ struct Type;
 struct ExprBlock;
 struct ExprOp;
 
-struct Expr : Node{
+struct Expr : Node{					// anything yielding a value
 private:Type* m_type;
 public:
 	int visited;					// anti-recursion flag.
@@ -441,6 +441,7 @@ struct ExprBlock :public ExprScopeBlock{
 	bool is_compound_expression()const{return !call_expr && !name;}
 	bool is_tuple()const{ return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
 	bool is_struct_initializer()const{ return this->bracket_type==OPEN_BRACE && this->delimiter==COMMA;}
+	bool is_match() const{return false;}
 	bool is_function_call()const{return (this->call_expr!=0) && this->bracket_type==OPEN_PAREN && (this->delimiter==COMMA||this->delimiter==0);}
 	bool is_anon_struct()const{ return this->is_struct_initializer() && !this->call_expr;}
 	bool is_array_initializer()const{ return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
@@ -461,6 +462,9 @@ struct ExprBlock :public ExprScopeBlock{
 	VResult visit(Visitor* v){ return v->visit(this);}
 	void create_anon_struct_initializer();
 };
+struct ExprMatch : ExprBlock {
+	// todo..
+};
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
 	T_NONE,
@@ -479,12 +483,20 @@ struct ExprIf;
 struct VarDecl;
 
 
-struct ExprLiteral : Expr {
+struct ExprFlow:Expr{	// control flow statements
+};
+
+struct ExprDef :Expr{	// any that is a definition
+	Node*	refs;
+};
+
+
+struct ExprLiteral : ExprDef {
 	TypeId	type_id;
 	ExprLiteral* next_of_scope=0;	// collected..
 	Scope* owner_scope=0;
 	int llvm_strlen;
-
+	
 	union  {int val_int; int val_uint; float val_float; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
 	void dump(int depth) const;
@@ -503,7 +515,8 @@ struct ExprLiteral : Expr {
 	VResult visit(Visitor* v){ return v->visit(this);}
 };
 
-struct ArgDef :Expr{
+
+struct ArgDef :ExprDef{
 	uint32_t size,offset;
 	//Type* type=0;
 	Expr* default_expr=0;
@@ -553,7 +566,7 @@ struct Call {
 };
 */
 enum VarKind{VkArg,Local,Global};
-struct Variable : Expr{
+struct Variable : ExprDef{
 	VarKind kind;
 	Scope* owner=0;
 	Variable* next=0;
@@ -635,7 +648,7 @@ public:
 
 };
 ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
-struct ExprIf :  Expr {
+struct ExprIf :  ExprFlow {
 	Expr* cond=0;
 	Expr* body=0;
 	Expr* else_block=0;
@@ -651,7 +664,7 @@ struct ExprIf :  Expr {
 	virtual VResult recurse(Visitor* v){if (cond)cond->visit(v);if (body)body->visit(v);if(else_block)else_block->visit(v);return 0;}
 	VResult visit(Visitor* v){ return v->visit(this);}
 };
-struct ExprFor :  Expr {
+struct ExprFor :  ExprFlow {
 	Expr* pattern=0;
 	Expr* init=0;
 	Expr* cond=0;
@@ -678,8 +691,7 @@ struct ExprFor :  Expr {
 struct Call;
 struct FnName;
 
-
-struct ExprStructDef: Expr {
+struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
 	// but its' backwards.
 	// it'll want TypeParams aswell.
@@ -687,8 +699,9 @@ struct ExprStructDef: Expr {
 	bool is_enum() { return is_enum_;}
 	uint32_t size;
 	vector<TypeParam> typeparams;
-	vector<ArgDef*> fields;
 	vector<Type*> instanced_types;
+	vector<ExprLiteral*> literals;
+	vector<ArgDef*> fields;
 	vector<ExprStructDef*> structs;
 	vector<ExprFnDef*> functions;
 	Type*	inherits_type=0;
@@ -701,9 +714,18 @@ struct ExprStructDef: Expr {
 	NamedItems* name_ptr=0;
 //	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} error(this,"no field %s",str(name));return nullptr;}
 	ArgDef* find_field(const Node* rhs)const;
-	int field_index(const Node* rhs){auto name=rhs->as_ident(); for (auto i=0; i<fields.size(); i++){if(fields[i]->name==name)return i;} return -1;}
+	int field_index(const Node* rhs){
+		auto name=rhs->as_ident();
+		for (auto i=0; i<fields.size(); i++){
+			if(fields[i]->name==name){
+				((Node*)rhs)->set_def((ExprDef*)fields[i]);
+				return i;
+			}
+		}
+		return -1;
+	}
 	ExprStructDef* next_of_name;
-	ExprStructDef(SrcPos sp){pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
+	ExprStructDef(SrcPos sp,Name n){name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
 	ExprStructDef* get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
 	void dump(int depth)const;
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
@@ -714,9 +736,18 @@ struct ExprStructDef: Expr {
 	virtual VResult recurse(Visitor* v);
 	VResult visit(Visitor* v){ return v->visit(this);}
 	ExprStructDef* as_struct_def()const{return const_cast<ExprStructDef*>(this);}
+	Node* clone_sub(ExprStructDef* into) const;
+};
+
+struct EnumDef  : ExprStructDef {
+//	void dump(int depth)const;
+//	virtual void translate_typeparams(const TypeParamXlat& tpx);
+	Node* clone()const;
+	const char* kind_str()const{return "enum";}
+	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){}
 };
 // todo.. generic instantiation: typeparam logic, and adhoc mo
-struct ExprFnDef : Expr {
+struct ExprFnDef : ExprDef {
 	ExprFnDef*	next_of_module=0;
 	ExprFnDef*	next_of_name=0;	//link of all functions of same name...
 	ExprFnDef*	instance_of=0;	// Original function, when this is a template instance
@@ -767,7 +798,9 @@ struct ExprFnDef : Expr {
 		for (auto a:this->args)a->visit(v);
 		if (this->body)this->body->visit(v);
 		for (auto i=this->instances; i; i=i->next_instance)
-			i->visit(v);v->post_visit(this);return 0;
+			i->visit(v);
+		v->post_visit(this);
+		return 0;
 	};
 	VResult visit(Visitor* v){ return v->visit(this);}
 };

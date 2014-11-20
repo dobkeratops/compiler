@@ -437,6 +437,15 @@ ResolvedType assert_types_eq(const Node* n, const Type* a,const Type* b) {
 	}
 	return ResolvedType(a,ResolvedType::COMPLETE);
 }
+void Node::set_def(ExprDef *d){
+	if (!def) {
+		this->next_of_def=d->refs; d->refs=this;
+		def=d;
+	}
+	else
+		ASSERT(d==this->def);
+}
+
 ExprStructDef* Node::as_struct_def()const{ error(this,"expect struct def"); return nullptr;};
 RegisterName Node::get_reg_existing(){ASSERT(regname); return regname;}
 RegisterName Node::get_reg(Name baseName, int *new_index, bool force_new){
@@ -806,6 +815,7 @@ Type::Type(ExprStructDef* sd)
 void ExprLiteral::dump(int depth) const{
 	if (!this) return;
 	newline(depth);
+	if (this->name!=0){dbprintf("%s=",str(this->name));}
 	if (type_id==T_VOID){dbprintf("void");}
 	if (type_id==T_INT){dbprintf("%d",u.val_int);}
 	if (type_id==T_FLOAT){dbprintf("%.7f",u.val_float);}
@@ -1439,7 +1449,6 @@ void Scope::add_struct(ExprStructDef* sd){
 	sd->name_ptr=ni;
 	sd->next_of_name=ni->structs;
 	ni->structs=sd;
-	
 }
 Variable* Scope::find_scope_variable(Name name){
 	for (auto v=this->vars; v;v=v->next){
@@ -1855,7 +1864,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 
 	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_ident(), block,block->argls, desired,flags);
 	auto fnc=call_target;
-	block->call_expr->def=call_target;
+	block->call_expr->set_def(call_target);
 	if (call_target!=block->get_fn_call()) {
 		if (block->get_fn_call()) {
 			error(block,"call target changed during resolving, we're not sure how to handle this yet\n");
@@ -1863,7 +1872,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		} else {
 			block->scope=0; // todo delete.
 		}
-		block->def=(Expr*)call_target;
+		block->def=(ExprDef*)call_target;
 		if (call_target->resolved) {
 			Type * fnr=call_target->return_type();
 			return propogate_type_fwd(flags,block, desired, block->type_ref(),fnr);
@@ -2009,6 +2018,8 @@ void gather_named_items(Node* node, Scope* sc) {
 		sc->add_fn(fd);
 	} else if (auto sd=dynamic_cast<ExprStructDef*>(node)){
 		sc->add_struct(sd);
+	} else if (auto sd=dynamic_cast<EnumDef*>(node)){
+		sc->add_struct(sd);								// TODO make sure we differentiate that..
 	} else if (auto b=dynamic_cast<ExprBlock*>(node)) {
 		for (auto sub:b->argls) {
 			gather_named_items(sub,sc);
@@ -2215,6 +2226,9 @@ ExprFor* parse_for(TokenStream&src);
 ExprIf* parse_if(TokenStream&src);
 TypeDef* parse_typedef(TokenStream&src);
 ExprStructDef* parse_struct(TokenStream& src);
+ExprStructDef* parse_enum(TokenStream& src);
+ExprMatch* parse_match(TokenStream& src);
+ExprLiteral* parse_literal(TokenStream& src);
 
 
 template<typename T>
@@ -2277,7 +2291,6 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 	was_operand=true;
 }
 Type* parse_type(TokenStream& src, int close);
-
 LLVMType Expr::get_type_llvm() const
 {
 	if (!this) return LLVMType{VOID,0};
@@ -2318,17 +2331,7 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 		}
 
 		if (src.is_next_literal()) {
-			ExprLiteral* ln=0;
-			if (src.is_next_number()) {
-				auto n=src.eat_number();
-				if (n.denom==1) {ln=new ExprLiteral(src.pos,n.num);}
-				else {ln=new ExprLiteral(src.pos, (float)n.num/(float)n.denom);}
-			} else if (src.is_next_string()) {
-				ln=new ExprLiteral(src.pos,src.eat_string());
-			} else {
-				error(0,"error parsing literal\n");
-				exit(0);
-			}
+			auto ln=parse_literal(src);
 			operands.push_back(ln);
 			was_operand=true;
 			continue;
@@ -2336,6 +2339,10 @@ ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
 		else if (src.eat_if(STRUCT)){
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_struct(src));
+		}
+		else if (src.eat_if(ENUM)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			operands.push_back(parse_enum(src));
 		}
 		else if (src.eat_if(FN)) {
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
@@ -2453,7 +2460,7 @@ ExprBlock::create_anon_struct_initializer(){
 		strcat(tmp,str(p->lhs->as_ident()));
 	}
 	// TODO - these need to be hashed somewhere, dont want each unique!
-	ExprStructDef* sd=new ExprStructDef(this->pos);
+	ExprStructDef* sd=new ExprStructDef(this->pos,0);
 	sd->name=getStringIndex(tmp);
 	ASSERT(sd->type()==0&&"todo-struct def creates its own type");
 	sd->set_type(new Type(sd));
@@ -2466,6 +2473,20 @@ ExprBlock::create_anon_struct_initializer(){
 	this->call_expr=sd;
 	this->def=sd;
 	this->set_type(sd->get_type());
+}
+ExprLiteral* parse_literal(TokenStream& src) {
+	ExprLiteral* ln=0;
+	if (src.is_next_number()) {
+		auto n=src.eat_number();
+		if (n.denom==1) {ln=new ExprLiteral(src.pos,n.num);}
+		else {ln=new ExprLiteral(src.pos, (float)n.num/(float)n.denom);}
+	} else if (src.is_next_string()) {
+		ln=new ExprLiteral(src.pos,src.eat_string());
+	} else {
+		error(0,"error parsing literal\n");
+		exit(0);
+	}
+	return ln;
 }
 
 
@@ -2547,20 +2568,24 @@ void parse_typeparams(TokenStream& src,vector<TypeParam>& out) {
 	}
 }
 
+ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name);
 ExprStructDef* parse_struct(TokenStream& src) {
-	auto sd=new ExprStructDef(src.pos);
+	auto pos=src.pos;
 	auto tok=src.eat_ident();
-	sd->name=tok;
+	return parse_struct_body(src,pos,tok);
+}
+ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name){
+	auto sd=new ExprStructDef(pos,name);
 	if (src.eat_if(OPEN_BRACKET)) {
 		parse_typeparams(src,sd->typeparams);
 	}
 	if (src.eat_if(COLON)) {
 		sd->inherits_type = parse_type(src,0); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
 	}
-
 	if (!src.eat_if(OPEN_BRACE))
 		return sd;
 	// todo: type-params.
+	Name tok;
 	while (NONE!=(tok=src.peek_tok())){
 		if (tok==CLOSE_BRACE){src.eat_tok(); break;}
 		if (src.eat_if(STRUCT)) {
@@ -2575,6 +2600,53 @@ ExprStructDef* parse_struct(TokenStream& src) {
 	}
 	return sd;
 }
+ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
+	Name tok;
+	auto sd=new ExprStructDef(pos,name);
+	if (src.eat_if(OPEN_BRACKET)) {
+		parse_typeparams(src,sd->typeparams);
+	}
+	if (!src.eat_if(OPEN_PAREN))
+		return sd;
+
+	while (NONE!=(tok=src.peek_tok())){
+		if (tok==CLOSE_PAREN){src.eat_tok(); break;}
+		sd->fields.push_back(new ArgDef(pos,0,parse_type(src,0)));
+		src.eat_if(COMMA); src.eat_if(SEMICOLON);
+	}
+	return sd;
+}
+
+ExprStructDef* parse_enum(TokenStream& src) {
+	auto pos=src.pos;
+	auto tok=src.eat_ident();
+	auto ed=new EnumDef(src.pos,tok);
+	if (src.eat_if(OPEN_BRACKET)) {
+		parse_typeparams(src,ed->typeparams);
+	}
+	if (src.eat_if(COLON)) {
+		ed->inherits_type = parse_type(src,0); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
+	}
+	if (!src.eat_if(OPEN_BRACE))
+		return ed;
+	// todo: type-params.
+	while (NONE!=(tok=src.eat_tok())){
+		auto subpos=src.pos;
+		if (tok==CLOSE_BRACE){break;}
+		// got an ident, now what definition follows.. =value, {fields}, (types), ..
+		if (src.peek_tok()==OPEN_BRACE){
+			ed->structs.push_back(parse_struct_body(src,subpos,tok));
+		} else if (src.peek_tok()==OPEN_BRACKET){
+			ed->structs.push_back(parse_tuple_struct_body(src,subpos,tok));
+		} else if (src.eat_if(ASSIGN)){
+			auto lit=parse_literal(src); lit->name=tok;
+			ed->literals.push_back(lit);
+		}
+		src.eat_if(COMMA); src.eat_if(SEMICOLON);
+	}
+	return ed;
+}
+
 
 struct TypeParamXlat{
 	const vector<TypeParam>& typeparams; const vector<Type*>& given_types;
@@ -2641,8 +2713,7 @@ void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 	}
 }
 
-ArgDef*	ExprStuctDef::find_field(const Node* rhs)const{
-	if (s)
+ArgDef*	ExprStructDef::find_field(const Node* rhs)const{
 	auto name=rhs->as_ident();
 	for (auto a:fields){if (a->name==name) return a;}
 	error(this,rhs,"no field %s",str(name));
@@ -2760,14 +2831,19 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 }
 
 Node* ExprStructDef::clone() const{
-	ExprStructDef* d=new ExprStructDef(this->pos);
-	d->name=this->name;
+	return this->clone_sub(new ExprStructDef(this->pos,this->name));
+}
+Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
 	for (auto m:this->fields) {d->fields.push_back((ArgDef*)m->clone());}
 //	for (auto t:this->typeparams) {d->typeparams.push_back(t->clone());}
 	d->typeparams = this->typeparams;
 	for (auto f:this->functions){d->functions.push_back((ExprFnDef*)f->clone());}
 	for (auto s:this->structs){d->structs.push_back((ExprStructDef*)s->clone());}
+	for (auto l:this->literals){d->literals.push_back((ExprLiteral*)l->clone());}
 	return d;
+}
+Node* EnumDef::clone()const {
+	return this->clone_sub(new EnumDef(this->pos,this->name));
 }
 
 void ExprStructDef::inherit_from(Scope * sc,Type *base_type){
@@ -2782,7 +2858,7 @@ void ExprStructDef::inherit_from(Scope * sc,Type *base_type){
 
 void ExprStructDef::dump(int depth) const{
 	newline(depth);
-	dbprintf("struct %s",getString(this->name));dump_typeparams(this->typeparams);
+	dbprintf("%s %s",this->kind_str(), getString(this->name));dump_typeparams(this->typeparams);
 	dbprintf("[");
 	if (this->instanced_types.size()){
 		for (auto t:this->instanced_types)
@@ -2794,6 +2870,7 @@ void ExprStructDef::dump(int depth) const{
 	dbprintf("]");
 	if (this->inherits) {dbprintf(" : %s", str(inherits->name));}
 	dbprintf("{");
+	for (auto m:this->literals){m->dump(depth+1);}
 	for (auto m:this->fields){m->dump(depth+1);}
 	for (auto s:this->structs){s->dump(depth+1);}
 	for (auto f:this->functions){f->dump(depth+1);}
@@ -3112,6 +3189,7 @@ const char* g_TestProg=
 	"}  \n\0";
 
 const char* g_TestProg2=
+"	enum FooBar{  Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
 "	fn take_ptr(f:(int)->int)->int{ f(5);0}\n"
 "fn printf(s:str,...)->int;\n"
 "	fn foo(x:int)->int{ printf(\"hello from fn ptr %d\\n\",x);  0}      \n"

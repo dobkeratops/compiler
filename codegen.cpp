@@ -11,7 +11,6 @@ void write_function_type(FILE* ofp, const Type* t);
 
 // If you just compiled to C..
 // this would all work by now.
-
 int next_reg_name(int *next_reg_index){
 	char tmp[64]; sprintf(tmp,"r%d",(*next_reg_index)++);
 	return getStringIndex(tmp);
@@ -46,6 +45,7 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){lit=0;addr=0;ofs=0;var=0;}
 	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg):reg(v){lit=0;reg=v;addr=address_reg; type=t;ofs=0;var=0;}
 	explicit CgValue(Variable* v){
+		// todo - unift with 'expr'
 		lit=0; addr=0; reg=0; ofs=0;
 		var=v;
 		if (v->reg_is_addr){
@@ -57,6 +57,7 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 		this->type=v->type();
 	}
 	explicit CgValue(Expr* n) {
+		// todo - unify with 'expr'
 		lit=0; addr=0; reg=0; ofs=0;
 		var = n;
 		if (auto fd=dynamic_cast<ExprFnDef*>(n)){ // variable is a function pointer?
