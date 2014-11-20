@@ -238,9 +238,10 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 		int areg=next_reg_name(next_reg_index);
 		int index=sd->field_index(field_name);
 		auto field=sd->find_field(field_name);
+		auto ptr_t=type;if (ptr_t->name==PTR) ptr_t=ptr_t->sub;
 		fprintf(ofp,"\t;%s.%s :%s\n",str(type->name),str(field_name->as_ident()),str(field->type()->name));
 		fprintf(ofp,"\t%%%s = getelementptr inbounds %%%s* %%%s, i32 0, i32 %d\n",
-				str(areg), str(type->name), str(basereg),
+				str(areg), str(ptr_t->name), str(basereg),
 				index);
 		
 		return CgValue(0,field?field->type():nullptr,areg);
@@ -826,7 +827,7 @@ void write_function_signature(FILE* ofp,ExprFnDef* fn_node,int *regname, EmitFnM
 	int inter=0;
 	for (auto a:fn_node->args){
 		if (inter++){fprintf(ofp,",");};
-		write_type(ofp,a->type(),a->type()->is_complex());
+		write_type(ofp,a->type(),false);//was a->is_complex. confusion here over pass by ref/val. we think fn sigs should be 1:1. but raw struct type should  be pass by val? will we have to copy struct val?
 		if (mode==EmitDefinition){
 			auto var=scope->get_or_create_scope_variable(a,a->name, VkArg);
 			var->get_reg(a->name, regname, false);

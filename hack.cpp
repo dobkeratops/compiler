@@ -427,7 +427,7 @@ ResolvedType assert_types_eq(const Node* n, const Type* a,const Type* b) {
 		a->dump(-1);
 		dbprintf("b=\n");
 		b->dump(-1);
-		error(n,"\ntype error: %p vs %p %s %s",a,b, str(a->name),str(b->name));
+		error(n,"\ntype error:%s vs %s",str(a->name),str(b->name));
 		return ResolvedType(a,ResolvedType::ERROR);
 	}
 	return ResolvedType(a,ResolvedType::COMPLETE);
@@ -3111,6 +3111,7 @@ const char* g_TestProg2=
 "		fp:=foo;		\n"
 "		fs:=FooStruct{100,200};		\n"
 "		pfs:=&fs;\n"
+"		foo_struct(&fs);		\n"
 "		py:=pfs as *int;\n"
 "		printf(\"foostruct int val recast %d; foostruct raw value %d\n\",*py,fs.x);\n"
 "		fp(2);fp(x);		\n"
