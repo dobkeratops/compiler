@@ -5,7 +5,28 @@
 const char** g_pp,*g_p;
 const char* g_filename=0;
 /*
- features needed:-
+ features wanted:-
+ 
+ 
+ RAII
+ 
+ INTS IN TYPEPARAMS - buffers like C++
+ 
+ TYPEPARAMETERS - structs, functions, bounding in inference
+
+ LAMBDAS - its not a modern langauge without them.
+
+ LOCAL FUNCTIONS - NAMED LAMBDAS ? fn foo()
+
+ MOVE SEMANTIC
+
+ UFCS
+
+ SIMD support - codegen - recognize appropriate structs?
+
+ VARIANTS:
+ - adhoc variants
+ 
 
  VECTOR LITERALS
  
@@ -15,22 +36,10 @@ const char* g_filename=0;
  
  LAZY ARGUMENTS
  
- RAII
- 
- FUNCTION TYPE PARAMETER INFERENCE (instead of *just* typeless case)
  
  NESTED ENTITY TYPE INFERENCE
  
- SIMD support - codegen - recognize appropriate structs?
- 
- LAMBDAS - its not a modern langauge without them.
-
- UFCS
-
- TYPEPARAMETERS - structs, functions, bounding in inference
-
  HKT - type type params
- INTS IN TYPEPARAMS - buffers like C++
 
  C++ bindings - emit
  
@@ -38,9 +47,6 @@ const char* g_filename=0;
  
  debug information
  
- VARIANTS:
-  - adhoc variants
-  
  CLASSES
   - vtable generation
   - dynamic cast- as variant?
@@ -54,7 +60,6 @@ const char* g_filename=0;
  
  DUMP TYPE INFORMATION
  
- LOCAL FUNCTIONS - NAMED LAMBDAS ? fn foo()
 
  BREAK EXPRESSIONS
  
@@ -2634,6 +2639,14 @@ void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 	{
 		this->typeparams.resize(0);
 	}
+}
+
+ArgDef*	ExprStuctDef::find_field(const Node* rhs)const{
+	if (s)
+	auto name=rhs->as_ident();
+	for (auto a:fields){if (a->name==name) return a;}
+	error(this,rhs,"no field %s",str(name));
+	return nullptr;
 }
 
 void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)

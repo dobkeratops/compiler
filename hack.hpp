@@ -700,7 +700,7 @@ struct ExprStructDef: Expr {
 	ExprFnDef* constructor_fn=0;
 	NamedItems* name_ptr=0;
 //	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} error(this,"no field %s",str(name));return nullptr;}
-	ArgDef* find_field(const Node* rhs)const{ auto name=rhs->as_ident(); for (auto a:fields){if (a->name==name) return a;} error(this,rhs,"no field %s",str(name));return nullptr;}
+	ArgDef* find_field(const Node* rhs)const;
 	int field_index(const Node* rhs){auto name=rhs->as_ident(); for (auto i=0; i<fields.size(); i++){if(fields[i]->name==name)return i;} return -1;}
 	ExprStructDef* next_of_name;
 	ExprStructDef(SrcPos sp){pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
