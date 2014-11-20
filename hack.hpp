@@ -353,6 +353,7 @@ public:
 	virtual bool is_function_name()const{return false;}
 	virtual bool is_variable_name()const{return false;}
 };
+
 struct Type : Expr{
 	int marker;
 	vector<TypeParam> typeparams;
@@ -488,6 +489,10 @@ struct ExprFlow:Expr{	// control flow statements
 
 struct ExprDef :Expr{	// any that is a definition
 	Node*	refs;
+};
+
+struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
+	vector<TypeParam> typeparams;
 };
 
 

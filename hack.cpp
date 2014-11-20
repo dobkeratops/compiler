@@ -1801,10 +1801,10 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 	int next_field_index=0;
 	// todo encapsulate StructInitializer to reuse logic for codegen
 	field_indices.reserve(si->argls.size());
+	int field_index=0;
 	for (auto i=0; i<si->argls.size(); i++)  {
 		auto a=si->argls[i];
 		auto op=dynamic_cast<ExprOp*>(a);
-		int field_index=0;
 		ArgDef* field=nullptr;
 		Type*t = nullptr;
 		if (op&&(op->name==ASSIGN||op->name==COLON||op->name==LET_ASSIGN)){
@@ -1822,12 +1822,17 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			this->value.push_back(a);
 			a->resolve(sc,field->type(),flags); // todo, need generics!
 			t=a->type();
-		}else{error(a,"named field expected");}
+		}else{
+			error(a,"named field expected");
+		}
 		this->field_refs.push_back(field);
 		this->field_indices.push_back(field_index);
 		if (local_struct_def){
+			// special case :( if its' an inline def, we write the type. doing propper inference on generic structs have solved this stupidity.
 			if (!local_struct_def->fields[i]->type()){
-				local_struct_def->fields[i]->type()=t;}}// special case :( if its' an inline def, we write the type. doing propper inference on generic structs have solved this stupidity.
+				local_struct_def->fields[i]->type()=t;
+			}
+		}
 	}
 //	?. // if (this) return this->.... else return None.
 	
@@ -2047,7 +2052,7 @@ T& operator<<(T& dst, const Foo& src) { dst<<src.bar; dst<<src.indices;return ds
 bool isSymbolStart(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_';}
 bool isSymbolCont(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || (c>='0' && c<='9');}
 bool isNumStart(char c){return (c>='0'&&c<='9');};
-bool isNum(char c){return (c>='0'&&c<='9') ||c=='.';};
+bool isNum(char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c=='e')||(c=='x') ||c=='.';};
 bool isWhitespace(char c){return  c==' '||c=='\n'||c=='\a'||c=='\t';};
 bool isOperator(char c){return c=='+'||c=='-'||c=='*'||c=='/'||c=='.'||c=='='||c=='>'||c=='<'||c=='&'||c=='|'||c=='~'||c=='%'||c=='^'||c=='+';}
 
@@ -2176,6 +2181,11 @@ struct TextInput {
 	NumDenom eat_number()  {
 		int	val=0;
 		int	frac=0;
+		if ((tok_start+2)<=tok_end){
+			if (tok_start[0]=='0' && tok_start[1]=='x'){
+				return eat_number_hex();
+			}
+		}
 		for (const char* p=tok_start;p<tok_end; p++) {
 			if (*p=='.') { frac=1;}
 			else {
@@ -2187,6 +2197,23 @@ struct TextInput {
 		if (frac==0) {frac=1;}
 		advance_tok();
 		return NumDenom{val,frac};
+	}
+	NumDenom eat_number_hex()  {
+		int	val=0;
+		int	frac=0;
+		for (const char* p=tok_start;p<tok_end; p++) {
+			char c=*p;
+			if (c=='.') { frac=1;}
+			else {
+				val*=16;
+				frac*=16;
+				val+=(c>='0'&&c<='9')?(c-'0'):(c>='a'&&c<='f')?(10+(c-'a')):0;
+			}
+		}
+		if (frac==0) {frac=1;}
+		advance_tok();
+		return NumDenom{val,frac};
+		
 	}
 	float eat_float() {
 		auto nd=eat_number();
@@ -3200,7 +3227,7 @@ const char* g_TestProg2=
 "	fn main(argc:int, argv:**char)->int{	\n"
 "		x:= {a:=10;b:=20; a+b};	\n"
 "		fp:=foo;		\n"
-"		fs:=FooStruct{100,200};		\n"
+"		fs:=FooStruct{0xff,0x7f};		\n"
 "		pfs:=&fs;\n"
 "		foo_struct(&fs);		\n"
 "		py:=pfs as *int;\n"
