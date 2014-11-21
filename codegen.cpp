@@ -8,6 +8,7 @@ void write_reg(FILE* ofp, RegisterName dst );
 void write_type(FILE* ofp, const Type* t, bool is_ref=false);
 void write_function_type(FILE* ofp,ExprFnDef* fn_node,int* regname);
 void write_function_type(FILE* ofp, const Type* t);
+CgValue alloca_type(FILE* ofp, Expr* holder, Type* t,int *next_reg);
 
 // If you just compiled to C..
 // this would all work by now.
@@ -65,13 +66,14 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 	bool is_reg()const { return reg!=0;}
 	bool is_any()const{return is_literal()||is_reg();}
 	bool is_addr() const {return reg && addr;}
-	CgValue addr_op(Type* t) { // take type calculated by sema
+	CgValue addr_op(FILE* ofp,Type* t,int* next_reg) { // take type calculated by sema
 		ASSERT(this->type);
 		if (!reg && addr) {	// we were given a *reference*, we make the vlaue the adress
 			ASSERT(t->name==PTR);
 			ASSERT(t->sub->eq(this->type));
 			return CgValue(addr,t,0);
 		} else {
+			return this->to_stack(ofp,next_reg).addr_op(ofp,t,next_reg);
 			// must return adress-of-adress
 			// path must have been flagged as a memvar.
 			// or we must have been given array-ref[i], or 'dot' member ref.
@@ -82,18 +84,31 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 			return CgValue();
 		}
 	}
-	CgValue deref_op(FILE* ofp, Type* t,int* next_reg_index) {
+	CgValue to_stack(FILE* ofp,int* next_reg){
+		CgValue stack_val(0,this->type,alloca_type(ofp,nullptr,this->type,next_reg).addr,this->elem);
+		stack_val.store(ofp,next_reg,this->reg);
+		return stack_val;
+	}
+	CgValue deref_op(FILE* ofp, Type* t,int* next_reg) {
 		// todo type assertion 't' is the output type.
 		if (!addr) {		// the value we were given is now the *adress* - we return a reference, not a pointer.
 			return CgValue(0,t,reg);
 		} else {
 			// it its'  a reference type, we need to load that first.
-			auto ret=load(ofp,next_reg_index);
+			auto ret=load(ofp,next_reg);
 			return CgValue(0,t,ret); // ... and return it as another reference: eg given T&* p,  returning T& q=*p
 		}
 	}
 	
 	RegisterName load(FILE* ofp,int *next_reg_index,RegisterName force_regname=0) {
+		if (elem>=0){
+			auto newreg=force_regname?force_regname:next_reg_name(next_reg_index);
+			fprintf(ofp,"\t"); write_reg(ofp,newreg); fprintf(ofp," = extractelement ");
+			write_type(ofp,this->type,false);write_reg(ofp,reg); fprintf(ofp,", %d\n", this->elem);
+			this->type=this->type->get_elem(elem);
+			this->reg=newreg;
+			return newreg;
+		}
 		if(val) {
 			if (force_regname){reg=force_regname;}
 			else if (!reg) reg=next_reg_name(next_reg_index);
@@ -169,18 +184,32 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 		ASSERT(0 && "missing register type");
 		fprintf(ofp," <?CgV?> ");
 	}
-	RegisterName store(FILE* ofp,int* next_index){// for read-modify-write
+	RegisterName store(FILE* ofp,int* next_reg_index,int srcreg=0){// for read-modify-write
 		if (!addr || !type) return reg;
 //		fprintf(ofp,"\tstore  %s %%%s, %s* %%%s, align 4\n",get_llvm_type_str(type->name), str(reg),get_llvm_type_str(type->name),str(addr));
-		write_store(ofp, reg, type, addr);
+		write_store(ofp, srcreg?srcreg:reg, type, addr);
 		return reg;
 	}
 
 
-	RegisterName store_from(FILE* ofp,RegisterName valreg){
+	RegisterName store_from(FILE* ofp,int* next_reg_index,RegisterName valreg){
 		if (val){
 			val->regname=valreg;
 			reg=valreg;
+		}
+		if (elem>=0){
+			auto srcreg=valreg;
+			auto newreg=next_reg_name(next_reg_index);
+			fprintf(ofp,"\t"); write_reg(ofp,newreg); fprintf(ofp," = insertelement ");
+			write_type(ofp,this->type,false);write_reg(ofp,reg); fprintf(ofp,",");
+			auto elem_t=this->type->get_elem(elem);
+			write_type(ofp,elem_t);fprintf(ofp," ");
+			write_reg(ofp,valreg);
+			fprintf(ofp,", i32 %d\n", this->elem);
+			this->reg=newreg;
+			// elem remains - this value has been mutated.
+			// TODO, i think this would be much more elegant returning a new CgValue.
+			return newreg;
 		}
 		else if (addr && type) {
 			if (reg!=0){dbprintf("warning %s overwrite %s?\n", str(reg),str(valreg));}
@@ -202,19 +231,23 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 //			type->dump(-1);
 //			fprintf(ofp,";ERROR %s:%d:\n;",__FILE__,__LINE__);return CgValue();
 //		}
-		
-		auto basereg=reg?reg:addr;
-		ASSERT(basereg);			// TODO: detail: if it's addr, extra or lesser *?
-		int areg=next_reg_name(next_reg_index);
 		int index=sd->field_index(field_name);
 		auto field=sd->find_field(field_name);
-		auto ptr_t=type;if (ptr_t->name==PTR) ptr_t=ptr_t->sub;
-		fprintf(ofp,"\t;%s.%s :%s\n",str(type->name),str(field_name->as_ident()),str(field->type()->name));
-		fprintf(ofp,"\t%%%s = getelementptr inbounds %%%s* %%%s, i32 0, i32 %d\n",
+		if (reg && !addr){			// lazy ref to field index,turn into extract/insert for load/store
+			return CgValue(reg,type,0,index);
+		}
+		else {
+			auto basereg=reg?reg:addr;
+			ASSERT(basereg);			// TODO: detail: if it's addr, extra or lesser *?
+			int areg=next_reg_name(next_reg_index);
+			auto ptr_t=type;if (ptr_t->name==PTR) ptr_t=ptr_t->sub;
+			fprintf(ofp,"\t;%s.%s :%s\n",str(type->name),str(field_name->as_ident()),str(field->type()->name));
+			fprintf(ofp,"\t%%%s = getelementptr inbounds %%%s* %%%s, i32 0, i32 %d\n",
 				str(areg), str(ptr_t->name), str(basereg),
 				index);
 		
-		return CgValue(0,field?field->type():nullptr,areg);
+			return CgValue(0,field?field->type():nullptr,areg);
+		}
 	}
 	CgValue index(RegisterName index){ // calculates & returns adress
 		return CgValue();
@@ -242,6 +275,7 @@ int reg_of(Node* n, ExprFnDef* owner) {
 void write_reg(FILE* ofp, RegisterName dst ) {
 	fprintf(ofp,"%%%s ",str(dst));
 }
+Scope* g_Sc;
 void write_type(FILE* ofp, const Type* t, bool ref) {
 	if (!t) { fprintf(ofp,"<type_expected>");return;}
 	if (t->is_pointer()){
@@ -251,7 +285,31 @@ void write_type(FILE* ofp, const Type* t, bool ref) {
 		fprintf(ofp, "%s",str(t->sub->next->name));
 		fprintf(ofp," x ");
 		write_type(ofp,t->sub,0); // TODO: assert its a numeric constant
-		fprintf(ofp,"]%s",ref?"*":"");
+		fprintf(ofp,"]"/*%s,ref?"*":""*/);
+	}
+	else if (t->name==TUPLE) {
+		fprintf(ofp,"{");
+		for (auto s=t->sub;s;s=s->next){
+			write_type(ofp,s,false);
+			if (s->next){fprintf(ofp,",");}
+		}
+		fprintf(ofp,"}");
+	} else if (t->is_struct()){
+		auto sd=t->struct_def;
+		if (!sd) {
+			sd=g_Sc->find_struct(t);
+			
+		}
+		if (sd->name) fprintf(ofp, "%%%s",str(sd->name));
+		else {
+		fprintf(ofp,"{");
+			//error(t,"no struct def");
+		for (auto i=0; i<sd->fields.size(); i++){
+			if (i){fprintf(ofp,",");}
+			write_type(ofp,sd->fields[i]->type(),false);
+		}
+		fprintf(ofp,"}");
+		}
 	}
 	else if (t->is_function()){
 		//error(t,"TODO,write function type unified ");
@@ -260,11 +318,13 @@ void write_type(FILE* ofp, const Type* t, bool ref) {
 	else {
 //		dbprintf(";%s is struct %p\n", str(t->name), t->struct_def);
 		if (t->is_complex()) {
-			fprintf(ofp,"%%%s%s", str(t->name), ref?"*":"");
+			fprintf(ofp,"%%%s%s", str(t->name));
 		}
 		else
-			fprintf(ofp,"%s%s",t?get_llvm_type_str(t->name):"???",ref?"*":"");//,t.is_pointer?"*":"");
+			fprintf(ofp,"%s",t?get_llvm_type_str(t->name):"???");//,t.is_pointer?"*":"");
 	}
+	if (ref)
+		fprintf(ofp,"*");
 }
 
 void write_instruction_sub(FILE* ofp, Name opname,Type* type,  CgValue dst,CgValue src1){
@@ -321,16 +381,20 @@ void compile_struct_def(FILE* ofp, ExprStructDef* st, Scope* sc) {
 	}
 }
 
-CgValue alloca_struct(FILE* ofp, Expr* holder, ExprStructDef* sd,int *next_index) {
-	auto r= holder->get_reg(sd->name, next_index, false);
-	fprintf(ofp,"\t"); write_reg(ofp,r); fprintf(ofp," = alloca %%%s , align %d\n",str(sd->name),sd->alignment());
-	return CgValue(r,holder->get_type(), 0);
+CgValue alloca_type(FILE* ofp, Expr* holder, Type* t,int *next_reg) {
+	RegisterName r= holder?holder->get_reg(t->name, next_reg, false):next_reg_name(next_reg);
+	fprintf(ofp,"\t"); write_reg(ofp,r);
+	fprintf(ofp," = alloca " ); write_type(ofp,t,false);
+	fprintf(ofp,", align %d\n", t->alignment());
+	return CgValue(0,t, r);
 }
 
 void write_local_vars(FILE* ofp,Expr* n, ExprFnDef* fn, Scope* sc, RegisterName* new_reg) {
 	for (auto v=sc->vars; v;v=v->next_of_scope){
 		if (v->kind!=Local) continue;
 		auto vt=v->expect_type();
+		//if (!v->on_stack)
+		//	continue; //reg vars experiment
 		if (!vt->is_complex())
 			continue;//its just a reg
 		auto r= v->get_reg(v->name, new_reg, true);
@@ -513,9 +577,9 @@ fn compile_node {
 */
 
 CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterName* next_index){
+	g_Sc=sc;
 	if (auto e=dynamic_cast<ExprOp*>(n)) {
 			auto opname = e->name;
-			//			printf("operator? %s %p %p\n",getString(opname),e->call_operator,e->call_target);
 			int opflags = operator_flags(opname);
 			auto t=e->get_type();//get_type_llvm();
 			
@@ -567,15 +631,23 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 							rhs.load(ofp,next_index,dst);
 							return CgValue(dst,rhs.type);
 						}
-						dst=rhs.load(ofp,next_index,dst);
-						v->regname=dst; // YUK todo - reallyw wanted reg copy
-						return CgValue(dst, n->get_type(), 0);
+						if (rhs.type->is_struct()){
+							v->regname=rhs.reg?rhs.reg:rhs.addr;
+							v->reg_is_addr=!rhs.reg;
+							return rhs;
+							
+						}
+						else{
+							dst=rhs.load(ofp,next_index,dst);
+							v->regname=dst; // YUK todo - reallyw wanted reg copy
+							return CgValue(dst, n->get_type(), 0);
+						}
 					}
 					else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
 						//assignment  =
 						if (lhs_v) dst.reg=n->regname=lhs.reg=lhs_v->regname;
 						rhs.load(ofp,next_index,0);
-						lhs.store_from(ofp,rhs.reg);
+						lhs.store_from(ofp,next_index,rhs.reg);
 						rhs.type=e->get_type();
 						return rhs;
 					}
@@ -585,7 +657,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 						auto dstreg=lhs;
 						lhs.load(ofp,next_index); // turns it into a value.
 						write_instruction(ofp,opname,t?t:rhs.type, dst,lhs,rhs);
-						int out=dstreg.store_from(ofp,dst.reg);
+						int out=dstreg.store_from(ofp,next_index,dst.reg);
 						return dstreg;
 					}else {
 						// RISClike 3operand dst=src1,src2
@@ -601,7 +673,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 							n->dump(-1);
 							error(n,"something wrong\n");
 						}
-						return src.addr_op(n->type());
+						return src.addr_op(ofp,n->type(),next_index);
 					}
 					else if (opname==DEREF){
 						return src.deref_op(ofp,n->type(),next_index);
@@ -634,10 +706,8 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			StructInitializer si(sc,e); si.map_fields();
 			// '.this' is the main node, type struct
 			//auto struct_val =CgValue(0,e->get_type(),*next_index++);
-			auto struct_val= alloca_struct(ofp, e, e->def->as_struct_def(),next_index);
-
-//			auto struct_ptr=
-			struct_val.load(ofp,next_index);
+			auto struct_val= alloca_type(ofp, e, e->type()/*e->def->as_struct_def()*/,next_index);
+//			struct_val.load(ofp,next_index);
 			e->regname=struct_val.reg; // YUK todo - reallyw wanted reg copy
 			// can we trust llvm to cache the small cases in reg..
 			for (int i=0; i<e->argls.size();i++) {
@@ -645,7 +715,9 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 				auto rvalue=compile_node(ofp,si.value[i],curr_fn,sc,next_index);
 				auto dst = struct_val.dot(ofp,si.field_refs[i],next_index,sc);
 				auto srcreg = rvalue.load(ofp,next_index,0);
-				dst.store_from(ofp,srcreg);
+				dst.store_from(ofp,next_index,srcreg);
+				if (dst.type==struct_val.type)
+					struct_val=dst; // mutate by insertion
 			}
 			return struct_val;
 		}
@@ -662,8 +734,8 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			
 			index.load(ofp,next_index,0);
 			fprintf(ofp,"\t%%%s = getelementptr inbounds ",str(dst));
-			write_type(ofp,array_type,false);
-			fprintf(ofp,"* %%%s,i32 0, i32 ",str(expr.reg));//%%%d\n",getString(expr.reg),
+			write_type(ofp,array_type,true);//!expr.reg);
+			fprintf(ofp," %%%s,i32 0, i32 ",str(expr.reg));//%%%d\n",getString(expr.reg),
 			index.write_operand(ofp);
 			fprintf(ofp,"\n");
 			return CgValue(0,inner_type,dst);
@@ -733,7 +805,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			for (auto i=0; i<l_args.size(); i++){
 				if (i) {fprintf(ofp," ,");}
 				auto reg=l_args[i];
-				write_type(ofp,/*e->argls[i]->get_type()*/ reg.type, reg.is_addr());
+				write_type(ofp,/*e->argls[i]->get_type()*/ reg.type, !reg.reg &&!reg.val );//reg.is_addr());
 				reg.write_operand(ofp);
 			}
 			fprintf(ofp,")\n");

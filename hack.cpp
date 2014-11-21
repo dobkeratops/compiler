@@ -705,7 +705,17 @@ const char* Scope::name() const {
 // type Mul[float,float]->float
 // type Foo[a]->tuple[a.node,a.foo] // accessors for associated types?
 
-void Type::push_back(Type* t) {	
+ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
+{
+	if (!this->struct_def){
+		this->struct_def=sc->find_struct_named(this->name);
+	}
+	for (auto s=this->sub;s;s=s->next) s->resolve(sc,desired,flags);
+	
+	return ResolvedType(this,ResolvedType::COMPLETE);
+}
+
+void Type::push_back(Type* t) {
 	if (!sub) sub=t;
 	else {
 		auto s=sub;
@@ -1113,6 +1123,7 @@ Node*
 Type::clone() const{
 	if (!this) return nullptr;
 	auto r= new Type(this->name);
+	r->struct_def=this->struct_def;
 	auto *src=this->sub;
 	Type** p=&r->sub;
 	while (src) {
@@ -2869,6 +2880,7 @@ instantiate tree<vector,int>
 		}
 		else error(this,"trying to instantiate complex typeparameter into non-root of another complex typeparameter,we dont support this yet");
 	}
+	//this->struct_def=tpx.
 	for (auto sub=this->sub; sub; sub=sub->next) {
 		sub->translate_typeparams(tpx);
 	}

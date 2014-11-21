@@ -390,6 +390,8 @@ struct Type : Expr{
 	bool is_function() const { return name==FN;}
 	Type* fn_return() const { return sub->next;}
 	Type* fn_args() const { return sub->sub;}
+	const Type* get_elem(int index) const;
+	Type* get_elem(int index);
 	int num_pointers()const;
 	bool is_pointer()const {return (this && this->name==PTR) || (this->name==REF);}
 	bool is_void()const {return !this || this->name==VOID;}
@@ -404,7 +406,7 @@ struct Type : Expr{
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	VResult visit(Visitor* v){ auto r= v->visit(this);return r;}
 	virtual VResult recurse(Visitor* v){v->pre_visit(this);for (auto s=this->sub; s; s=s->next){s->visit(v);} v->post_visit(this); return 0;}
-	virtual ResolvedType resolve(Scope* s, const Type* desired,int flags){return ResolvedType(this,ResolvedType::COMPLETE);}
+	virtual ResolvedType resolve(Scope* s, const Type* desired,int flags);
 };
 
 struct ExprScopeBlock : Expr{};
@@ -581,6 +583,7 @@ struct Call {
 */
 enum VarKind{VkArg,Local,Global};
 struct Variable : ExprDef{
+	bool on_stack=false;
 	Capture* capture_in=0;	// todo: scope or capture could be unified?
 	VarKind kind;
 	Scope* owner=0;
@@ -759,6 +762,17 @@ struct ExprStructDef: ExprDef {
 	ExprStructDef* as_struct_def()const{return const_cast<ExprStructDef*>(this);}
 	Node* clone_sub(ExprStructDef* into) const;
 };
+
+inline Type* Type::get_elem(int index){
+	if (this->struct_def)
+		return this->struct_def->fields[index]->type();
+	ASSERT(index>=0);
+	auto s=sub;
+	for (auto;s&&index>0;s=s->next,--index){};
+	ASSERT(index==0);
+	return s;
+}
+				   
 
 struct EnumDef  : ExprStructDef {
 //	void dump(int depth)const;
