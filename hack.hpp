@@ -271,6 +271,7 @@ struct Capture {
 	Variable*	vars;
 	Capture* next_of_from;
 	ExprStructDef* the_struct;
+	void coalesce_with(Capture* other);
 };
 
 struct Expr;
@@ -654,7 +655,7 @@ public:
 	Scope* parent_or_global()const{
 		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
 	}
-	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner=0){
+	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner){
 		if (!*pp_scope){
 			auto sc=new Scope;
 			push_child(sc);
@@ -667,6 +668,7 @@ public:
 };
 ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
 struct ExprIf :  ExprFlow {
+	Scope* scope=0;
 	Expr* cond=0;
 	Expr* body=0;
 	Expr* else_block=0;
@@ -772,7 +774,7 @@ struct ExprFnDef : ExprDef {
 	ExprFnDef*	instance_of=0;	// Original function, when this is a template instance
 	ExprFnDef*	instances=0;		// Linklist of it's instanced functions.
 	ExprFnDef*	next_instance=0;
-	ExprFnDef*	next_of_capture=0;
+	ExprFnDef*	next_of_capture=0; // one capture can be shared by multiple fn
 	ExprBlock* callers=0;	// linklist of callers to here
 	NamedItems*		name_ptr=0;
 	Scope*	scope=0;

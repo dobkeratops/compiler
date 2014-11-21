@@ -30,36 +30,21 @@ void write_store(FILE* ofp, RegisterName reg, Type* type, RegisterName addr){
 //		fprintf(ofp,"\tstore  %s %%%s, %s* %%%s, align 4\n",get_llvm_type_str(type->name), str(reg),get_llvm_type_str(type->name),str(addr));
 }
 
-struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
+struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
 	// TODO: t	his should be a tagged-union. we just can't be arsed rolling it manually, thats one of many reasons why we're writing a language
 	// these values aren't persistent so it doesn't matter too much.
-	ExprLiteral* lit;
 	RegisterName reg;
+	int elem;     // if its a struct
 	Type* type;
 	RegisterName addr;
-	Node*	var;		// TODO: rename value.could be variable(in reg?) or function pointer (just a label of functoin..) TODO unify with literal case.
+	Node*	val;		// TODO: rename value.could be variable(in reg?) or function pointer (just a label of functoin..) TODO unify with literal case.
 	int ofs;
-	// adress?
-	explicit CgValue(ExprLiteral* l):lit(l){reg=0;addr=0;ofs=0;var=0;type=l->get_type();};
-//	explicit CgValue(RegisterName n):reg(n){lit=0;addr=0;ofs=0;var=0;type=0;}
-	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){lit=0;addr=0;ofs=0;var=0;}
-	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg):reg(v){lit=0;reg=v;addr=address_reg; type=t;ofs=0;var=0;}
-	explicit CgValue(Variable* v){
-		// todo - unift with 'expr'
-		lit=0; addr=0; reg=0; ofs=0;
-		var=v;
-		if (v->reg_is_addr){
-			addr=v->regname;
-		}
-		else{
-			reg=v->regname;
-		};
-		this->type=v->type();
-	}
+	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
+	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
 	explicit CgValue(Expr* n) {
 		// todo - unify with 'expr'
-		lit=0; addr=0; reg=0; ofs=0;
-		var = n;
+		addr=0; reg=0; ofs=0;elem=-1;
+		val = n;
 		if (auto fd=dynamic_cast<ExprFnDef*>(n)){ // variable is a function pointer?
 			reg=0; // it needs to be loaded
 		}
@@ -73,9 +58,10 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 		}
 		this->type=n->type();
 	}
-	CgValue():lit(0),reg(0),addr(0),ofs(0),var(0),type(nullptr){};
-	bool is_valid()const{return lit!=0||reg!=0;}
-	bool is_literal()const{return lit!=0;}
+	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
+	bool is_struct_elem()const{return elem>=0;}
+	bool is_valid()const{return val!=0||reg!=0;}
+	bool is_literal()const{return dynamic_cast<ExprLiteral*>(val)!=0;}
 	bool is_reg()const { return reg!=0;}
 	bool is_any()const{return is_literal()||is_reg();}
 	bool is_addr() const {return reg && addr;}
@@ -107,99 +93,81 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 		}
 	}
 	
-	RegisterName load_literal(FILE* ofp,int *next_reg_index,RegisterName force_regname) {
-		if(lit) {
-			reg=force_regname?force_regname:next_reg_name(next_reg_index);
-			if (lit->type()->name==INT){
-				fprintf(ofp,"\t%%%s = add i32 0,",str(reg));  this->write_literal(ofp); fprintf(ofp,"\n");
-			} else if(lit->type()->name==FLOAT){
-				fprintf(ofp,"\t%%%s = fadd float 0.0, ",str(reg));  this->write_literal(ofp); fprintf(ofp,"\n");
+	RegisterName load(FILE* ofp,int *next_reg_index,RegisterName force_regname=0) {
+		if(val) {
+			if (force_regname){reg=force_regname;}
+			else if (!reg) reg=next_reg_name(next_reg_index);
+			
+			if (auto lit=dynamic_cast<ExprLiteral*>(val)){
+				if (lit->type()->name==INT){
+					fprintf(ofp,"\t%%%s = add i32 0,",str(reg));  this->write_literal(ofp,lit); fprintf(ofp,"\n");
+				} else if(lit->type()->name==FLOAT){
+					fprintf(ofp,"\t%%%s = fadd float 0.0, ",str(reg));  this->write_literal(ofp,lit); fprintf(ofp,"\n");
+				}
+				// todo: string literal, vector literals, bit formats
 			}
-			return reg;
-		} else return load(ofp,next_reg_index);
-	}
-	RegisterName load(FILE* ofp,int *next_reg_index) {
-		//		return CgValue();
-		if (var) {	// we have a reference to a variable - we must load it.
-			// TODO - if its' a memvar we really do need to load something.
-			if (!reg) {
-				reg=var->get_reg(var->name,next_reg_index,false); // TODO is that false, or do we need to force new?
-			}
-			if (auto fp=dynamic_cast<ExprFnDef*>(var)){
+			else if (auto fp=dynamic_cast<ExprFnDef*>(val)){
 				fprintf(ofp,"\t%%%s = load ", str(reg));
 				// function type..
-				write_type(ofp,this->type,true);
-				fprintf(ofp,"@%s\n",var->name_str());
+				write_type(ofp,this->type,false);
+				fprintf(ofp,"* @%s.ptr\n",val->name_str());
 			}
-			return reg;
+			else if (auto v=dynamic_cast<Variable*>(val)){
+//				fprintf(ofp,"\t%%%s = load ", str(reg));
+				// function type..
+//				write_type(ofp,this->type,false);
+//				fprintf(ofp,"* %%%s\n",str(val->regname));
+				if (v->reg_is_addr){reg=addr=v->regname;}else{reg=v->regname;}
+//				ret=v->regname;
+				return reg;
+			}
 		}
 		if (addr) {
-			reg=next_reg_name(next_reg_index);
-			return load_into(ofp,reg);
+			if (force_regname){reg=force_regname;}
+			else if (!reg) reg=next_reg_name(next_reg_index);
+			fprintf(ofp,"\t%%%s = load ",str(reg));
+			write_type(ofp, type, addr!=0);// an extra pointer level if its' a reference
+			fprintf(ofp," %%%s\n",str(addr));
+			addr=0;
+			return reg;
 		}
+		ASSERT(reg);
 		return reg;
 	}
-	RegisterName load_into(FILE* ofp, RegisterName req_reg){
-		if (var)
-		if (auto fp=dynamic_cast<ExprFnDef*>(var)){
-			reg=req_reg;
-			fprintf(ofp,"\t%%pre%s =alloca ",str(reg));write_function_type(ofp,fp->type());fprintf(ofp,",align 8\n");
-			fprintf(ofp,"\tstore ");write_function_type(ofp,fp->type());fprintf(ofp," @%s, ",fp->name_str());
-			write_function_type(ofp,fp->type());fprintf(ofp,"* %%pre%s,align 4\n",str(reg));
-			fprintf(ofp,"\t%%%s = load ",str(reg)); write_function_type(ofp,fp->type()); fprintf(ofp,"* %%pre%s\n",str(reg));
-			return reg;
-			/*
-			fprintf(ofp,"\t%%%s = load ", str(reg));
-			// function type..
-			write_function_type(ofp,fp->type());
-			fprintf(ofp," @%s\n",fp->name_str());
-			return reg;
-			 */
-		}
-
-		if (!addr || !type)
-			return reg; // actual reg.
-
-		reg=req_reg;
-		fprintf(ofp,"\t%%%s = load ",str(reg));
-//				type->is_struct()?"%%":"", type->is_struct()?getString(type->name):get_llvm_type_str(type->name),
-		write_type(ofp, type, addr!=0);// an extra pointer level if its' a reference
-		fprintf(ofp," %%%s\n",str(addr));
-		addr=0; // its no longer an adress.
-		return reg;
-	}
-	void write_literal(FILE* ofp){
-		switch (lit->type_id){
-		case T_INT:
-			fprintf(ofp," %d ",lit->u.val_int);
-			break;
-		case T_UINT:
-			fprintf(ofp," %u ",lit->u.val_uint);
-			break;
-		case T_FLOAT:
-			fprintf(ofp," %f ",lit->u.val_float);
-			break;
-			//					getelementptr inbounds ([21 x i8]* @.str3, i32 0, i32 0)
-		case T_CONST_STRING:
-			fprintf(ofp," getelementptr inbounds([%d x i8]* @.%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
-			break;
-		default:
-			fprintf(ofp," @TODO_LITERAL_FORMAT %s", getString(lit->name));
-			break;
-		}
+	void write_literal(FILE* ofp,ExprLiteral* lit){
+		switch (lit->type_id) {
+			case T_INT:
+				fprintf(ofp," %d ",lit->u.val_int);
+				break;
+			case T_UINT:
+				fprintf(ofp," %u ",lit->u.val_uint);
+				break;
+			case T_FLOAT:
+				fprintf(ofp," %f ",lit->u.val_float);
+				break;
+				//					getelementptr inbounds ([21 x i8]* @.str3, i32 0, i32 0)
+			case T_CONST_STRING:
+				fprintf(ofp," getelementptr inbounds([%d x i8]* @.%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
+				break;
+			default:
+				fprintf(ofp," @TODO_LITERAL_FORMAT %s", getString(lit->name));
+				break;
+			}
 	}
 	void write_operand(FILE* ofp){
 		if (reg!=0){
 			fprintf(ofp,"%%%s ",str(reg));
-		} else
-		if (lit){ write_literal(ofp);
+			return;
+		} else if (val){
+			if (auto lit=dynamic_cast<ExprLiteral*>(val)) {
+				write_literal(ofp,lit);
+			}
+			return;
 		}
-		else{
-			this->type->dump_if(0);
-			ASSERT(this->type);
-			ASSERT(0 && "missing register type");
-			fprintf(ofp," <?CgV?> ");
-		}
+		this->type->dump_if(0);
+		ASSERT(this->type);
+		ASSERT(0 && "missing register type");
+		fprintf(ofp," <?CgV?> ");
 	}
 	RegisterName store(FILE* ofp,int* next_index){// for read-modify-write
 		if (!addr || !type) return reg;
@@ -210,13 +178,13 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 
 
 	RegisterName store_from(FILE* ofp,RegisterName valreg){
-		if (var){
-			var->regname=valreg;
+		if (val){
+			val->regname=valreg;
 			reg=valreg;
 		}
 		else if (addr && type) {
 			if (reg!=0){dbprintf("warning %s overwrite %s?\n", str(reg),str(valreg));}
-//			ASSERT(reg==0);
+			ASSERT(reg==0);
 			reg=valreg;
 //			fprintf(ofp,"\tstore  %s %%%s, %s* %%%s, align 4\n",get_llvm_type_str(type->name), 	str(valreg),get_llvm_type_str(type->name),str(addr));
 			write_store(ofp, valreg, type, addr);
@@ -234,6 +202,7 @@ struct CgValue {	// abstraction for value-or-address. So we can do a.m=v or v=a.
 //			type->dump(-1);
 //			fprintf(ofp,";ERROR %s:%d:\n;",__FILE__,__LINE__);return CgValue();
 //		}
+		
 		auto basereg=reg?reg:addr;
 		ASSERT(basereg);			// TODO: detail: if it's addr, extra or lesser *?
 		int areg=next_reg_name(next_reg_index);
@@ -279,10 +248,10 @@ void write_type(FILE* ofp, const Type* t, bool ref) {
 		write_type(ofp,t->sub,ref); fprintf(ofp,"*");
 	}else if (t->is_array()) {
 		fprintf(ofp,"[");
-		fprintf(ofp, "%s%s",str(t->sub->next->name),ref?"*":"");
+		fprintf(ofp, "%s",str(t->sub->next->name));
 		fprintf(ofp," x ");
 		write_type(ofp,t->sub,0); // TODO: assert its a numeric constant
-		fprintf(ofp,"]");
+		fprintf(ofp,"]%s",ref?"*":"");
 	}
 	else if (t->is_function()){
 		//error(t,"TODO,write function type unified ");
@@ -297,13 +266,6 @@ void write_type(FILE* ofp, const Type* t, bool ref) {
 			fprintf(ofp,"%s%s",t?get_llvm_type_str(t->name):"???",ref?"*":"");//,t.is_pointer?"*":"");
 	}
 }
-//void write_lit_or_reg(FILE* ofp, CgValue x ) {
-//	if (x.is_reg())
-//		write_reg(ofp,x.reg);
-//	else if (x.is_literal()){
-//	}
-//	else ASSERT(0);
-//}
 
 void write_instruction_sub(FILE* ofp, Name opname,Type* type,  CgValue dst,CgValue src1){
 //	ASSERT(dst.is_reg());
@@ -415,11 +377,11 @@ CgValue compile_if(FILE* ofp,ExprIf* ifn, ExprFnDef* curr_fn,Scope*sc,RegisterNa
 		emit_branch(ofp,condition,label_if,label_else, next_index);
 		emit_label(ofp,label_if);
 		auto if_result=compile_node(ofp,ifn->body,curr_fn,sc,next_index);
-		if_result.load_literal(ofp,next_index,0);
+		if_result.load(ofp,next_index,0);
 		emit_branch(ofp,label_endif);
 		emit_label(ofp,label_else);
 		auto else_result=compile_node(ofp,ifn->else_block,curr_fn,sc,next_index);
-		else_result.load_literal(ofp,next_index,0);
+		else_result.load(ofp,next_index,0);
 		emit_branch(ofp,label_endif);
 		emit_label(ofp,label_endif);
 		// phi node picks result, conditional assignment
@@ -602,17 +564,17 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 						if (rhs.is_literal()){//TODO simplify this, how does this case unify?
 							fprintf(ofp,";assigning literal to local %s %%%s %%%s %%%s\n", str(v->name),str(dst), str(v->regname),str(n->regname) );
 							v->regname=dst;
-							rhs.load_literal(ofp,next_index,dst);
+							rhs.load(ofp,next_index,dst);
 							return CgValue(dst,rhs.type);
 						}
-						dst=rhs.load_into(ofp,dst);
+						dst=rhs.load(ofp,next_index,dst);
 						v->regname=dst; // YUK todo - reallyw wanted reg copy
 						return CgValue(dst, n->get_type(), 0);
 					}
 					else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
 						//assignment  =
 						if (lhs_v) dst.reg=n->regname=lhs.reg=lhs_v->regname;
-						rhs.load_literal(ofp,next_index,0);
+						rhs.load(ofp,next_index,0);
 						lhs.store_from(ofp,rhs.reg);
 						rhs.type=e->get_type();
 						return rhs;
@@ -682,7 +644,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 				// struct->field=expr[i]
 				auto rvalue=compile_node(ofp,si.value[i],curr_fn,sc,next_index);
 				auto dst = struct_val.dot(ofp,si.field_refs[i],next_index,sc);
-				auto srcreg = rvalue.load_literal(ofp,next_index,0);
+				auto srcreg = rvalue.load(ofp,next_index,0);
 				dst.store_from(ofp,srcreg);
 			}
 			return struct_val;
@@ -696,9 +658,9 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			auto inner_type=array_type->sub;
 			auto dst=ar->get_reg(ARRAY,next_index,false);
 			expr.load(ofp,next_index);
-//			expr.load_into(ofp, *next_index++);
 			if (!n->regname){n->regname=expr.reg;}
-			index.load_literal(ofp,next_index,0);
+			
+			index.load(ofp,next_index,0);
 			fprintf(ofp,"\t%%%s = getelementptr inbounds ",str(dst));
 			write_type(ofp,array_type,false);
 			fprintf(ofp,"* %%%s,i32 0, i32 ",str(expr.reg));//%%%d\n",getString(expr.reg),
@@ -879,6 +841,11 @@ Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
 		}
 		return nullptr;
 	}
+	// write a literal global pointing to this (why? it seems we need it for load??)
+	fprintf(ofp,"@%s.ptr = global ",str(fn_node->name));
+	write_function_type(ofp, fn_node->type());
+	fprintf(ofp," @%s",str(fn_node->name));
+
 	if (!fn_node->get_type() && fn_node->fn_type && fn_node->scope ){
 		error(fn_node,"function name %s %p %p %p %p", str(fn_node->name), fn_node->instance_of, fn_node->get_type(), fn_node->fn_type, fn_node->scope);
 		ASSERT(0 && "function must be resolved to compile it");

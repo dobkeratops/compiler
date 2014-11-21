@@ -80,7 +80,7 @@ if x in {
  foo.bar()		// bar not available.  available functions:-.....
  */
 
-#define dbprintf_varscope dbprintf
+inline void dbprintf_varscope(const char*,...){}
 
 void dbprintf(const char* str, ... )
 {
@@ -1479,8 +1479,11 @@ Variable* Scope::try_capture_var(Name name) {
 			dbprintf_varscope("%s captured by %s from %s\n",str(name),this->name(),capture_from->name());
 			return v;
 		}
-		else if (v->capture_in!=cp)
-			error(v,ofn,"can't capture variable twice yet- TODO, coalesce capture blocks");
+		else if (v->capture_in!=cp) {
+			dbprintf_varscope("var %s already captured by %s, coalesce with %s\n",str(name),str(v->capture_in->capture_by->name),this->name());
+			cp->coalesce_with(v->capture_in);
+//			error(v,ofn,"can't capture variable twice yet- TODO, coalesce capture blocks");
+		}
 	}
 	return nullptr;// we can't capture.
 }
@@ -1965,9 +1968,32 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 	}
 }
 
+void Capture::coalesce_with(Capture *other){
+	// remap all functions that use the other to point to me
+	while (other->capture_by){
+		auto f=other->capture_by; // pop others' f
+		other->capture_by=f->next_of_capture;
+
+		f->next_of_capture= this->capture_by;	// push f to this' capture_by list.
+		this->capture_by=f;
+		f->capture=this;
+	}
+	// steal other's variables
+	while (other->vars){
+		auto v=other->vars;		// pop other's var
+		other->vars=v->next_of_capture;
+
+		v->next_of_capture=this->vars; // push to this
+		this->vars=v;
+		v->capture_in=this;
+	}
+}
+
 Capture* ExprFnDef::get_or_create_capture(){
 	if (!this->capture) {
 		this->capture = new Capture;
+		this->capture->capture_by = this;
+		this->next_of_capture=0;
 	}
 	return capture;
 }
@@ -1996,7 +2022,7 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags)
 	return propogate_type(flags,this, rt,this->ret_type); // todo: hide FnDef->type. its too confusing
 }
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
-	auto sc=outer_scope->make_inner_scope(&this->scope);
+	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn);
 	if (init) init->resolve(sc,0,flags);
 	if (cond) cond->resolve(sc,0,flags);
 	if (body) body->resolve(sc,0,flags);
@@ -3041,15 +3067,18 @@ void ExprIf::dump(int depth) const {
 	newline(depth);dbprintf("}\n");
 };
 
-ResolvedType ExprIf::resolve(Scope* s,const Type* desired,int flags){
+ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
+	auto sc=outer_s->make_inner_scope(&this->scope,outer_s->owner_fn);
+	
+
 	verify(this->cond->get_type());
-	this->cond->resolve(s,nullptr,flags); // condition can  be anything coercible to bool
-	auto body_type=this->body->resolve(s,desired,flags);
+	this->cond->resolve(sc,nullptr,flags); // condition can  be anything coercible to bool
+	auto body_type=this->body->resolve(sc,desired,flags);
 	Type* bt=body_type.type;
 	if (else_block){
 		propogate_type_fwd(flags,this, desired,bt);
 		propogate_type(flags,this, bt);
-		return else_block->resolve(s,bt,flags);
+		return else_block->resolve(sc,bt,flags);
 	}
 	else {
 		// TODO: Could it actually return Body|void ? perhaps we could implicityly ask for that?
@@ -3248,7 +3277,7 @@ const char* g_TestProg2=
 "	enum FooBar{  Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
 "	fn take_ptr(f:(int)->int)->int{ f(5);0}\n"
 "fn printf(s:str,...)->int;\n"
-"	fn foo(x:int)->int{ printf(\"hello from fn ptr %d\\n\",x);  0}      \n"
+"	fn foo(x:int)->int{ printf(\"Hello From indirect 	functionpointer call %d\\n\",x);  0}      \n"
 "	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0}\n"
 "	struct FooStruct{x:int,y:int};"
 "	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
@@ -3256,10 +3285,12 @@ const char* g_TestProg2=
 "	fn main(argc:int, argv:**char)->int{	\n"
 "		x:= {a:=10;b:=20; a+b};	\n"
 "		fp:=foo;		\n"
+"	xs=:array[int,512];  \n"
+"	p2:=&xs[1];  \n"
 "		fs:=FooStruct{0xff,0x7f};		\n"
 "		pfs:=&fs;\n"
 "		foo_struct(&fs);		\n"
-"	fn localtest(i:int)->int{i+argc}; \n"
+//"	fn localtest(i:int)->int{i+argc}; \n"
 "		py:=pfs as *int;\n"
 "		printf(\"foostruct int val recast %d; foostruct raw value %d\n\",*py,fs.x);\n"
 "		fp(2);fp(x);		\n"
