@@ -5,6 +5,7 @@ extern bool is_operator(int tok);
 extern bool is_ident(int tok);
 extern bool is_type(int tok);
 void write_reg(FILE* ofp, RegisterName dst );
+void write_type(FILE* ofp, CgValue& lv );
 void write_type(FILE* ofp, const Type* t, bool is_ref=false);
 void write_function_type(FILE* ofp,ExprFnDef* fn_node,int* regname);
 void write_function_type(FILE* ofp, const Type* t);
@@ -65,7 +66,7 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 	bool is_literal()const{return dynamic_cast<ExprLiteral*>(val)!=0;}
 	bool is_reg()const { return reg!=0;}
 	bool is_any()const{return is_literal()||is_reg();}
-	bool is_addr() const {return reg && addr;}
+	bool is_addr() const {return !reg && !val;}
 	CgValue addr_op(FILE* ofp,Type* t,int* next_reg) { // take type calculated by sema
 		ASSERT(this->type);
 		if (!reg && addr) {	// we were given a *reference*, we make the vlaue the adress
@@ -276,6 +277,10 @@ void write_reg(FILE* ofp, RegisterName dst ) {
 	fprintf(ofp,"%%%s ",str(dst));
 }
 Scope* g_Sc;
+void write_type(FILE* ofp, CgValue& lv) {
+	write_type(ofp,lv.type, lv.is_addr());
+}
+
 void write_type(FILE* ofp, const Type* t, bool ref) {
 	if (!t) { fprintf(ofp,"<type_expected>");return;}
 	if (t->is_pointer()){
@@ -333,7 +338,7 @@ void write_instruction_sub(FILE* ofp, Name opname,Type* type,  CgValue dst,CgVal
 	fprintf(ofp,"\t"); dst.write_operand(ofp);
 	fprintf(ofp,"= %s ", op?op->op_signed:str(opname));
 	if (is_comparison(opname))
-		write_type(ofp,src1.type, src1.is_addr());
+		write_type(ofp,src1);
 	else{
 		write_type(ofp,type,false);
 	}
@@ -576,6 +581,40 @@ fn compile_node {
 }
 */
 
+CgValue write_cast(FILE* ofp,CgValue dst, CgValue& lhsv, Expr* rhse ,int* next_index){
+	lhsv.load(ofp,next_index);
+	auto rhst=rhse->type();
+	auto lhst=lhsv.type;
+	
+	fprintf(ofp,"\t");
+	write_reg(ofp, dst.reg);fprintf(ofp," = ");
+	
+	if (rhst->is_int() && lhsv.type->is_int()){
+		if (rhst->size()>lhsv.type->size()){
+			fprintf(ofp,"sext ");
+		}
+		else{
+			fprintf(ofp,"trunc ");
+		}
+	}
+	else if (rhst->is_int() && lhst->is_float()){
+		fprintf(ofp,"sitofp");
+	}
+	else if (rhst->is_float() && lhst->is_int()){
+		fprintf(ofp,"fptosi ");
+	}
+	else if (rhst->is_pointer()){
+		fprintf(ofp,"bitcast ");
+		write_type(ofp,lhst,0);
+		write_reg(ofp,lhsv.reg);
+		fprintf(ofp," to ");
+		write_type(ofp,rhst,0);
+		fprintf(ofp,"\n");
+		return dst;
+	}
+	return dst;
+}
+
 CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterName* next_index){
 	g_Sc=sc;
 	if (auto e=dynamic_cast<ExprOp*>(n)) {
@@ -611,22 +650,13 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 					}
 					else if(opname==AS) {
 						// if (prim to prim) {do fpext, etc} else..
-						lhs.load(ofp,next_index);
-						fprintf(ofp,"\t");
-						write_reg(ofp, dst.reg); fprintf(ofp," = bitcast ");
-						write_type(ofp,e->lhs->type(),0);
-						write_reg(ofp,lhs.reg);
-						fprintf(ofp," to ");
-						write_type(ofp,e->rhs->type(),0);
-						fprintf(ofp,"\n");
-						return dst;
+						return write_cast(ofp, dst,lhs,e,next_index);
 					}
 					else
 					if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
 						auto v=sc->find_variable_rec(e->lhs->name); WARN(v &&"semantic analysis should have created var");
 						auto dst=v->get_reg(v->name, next_index, true);
 						if (rhs.is_literal()){//TODO simplify this, how does this case unify?
-							fprintf(ofp,";assigning literal to local %s %%%s %%%s %%%s\n", str(v->name),str(dst), str(v->regname),str(n->regname) );
 							v->regname=dst;
 							rhs.load(ofp,next_index,dst);
 							return CgValue(dst,rhs.type);
@@ -748,7 +778,6 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			if (e->call_expr->is_function_name()) {
 				
 			} else {
-				//dbprintf("indirect call\n");
 				auto fptr = compile_node(ofp, e->call_expr, curr_fn, sc, next_index);
 				indirect_call=fptr.load(ofp, next_index);
 			}
@@ -805,7 +834,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			for (auto i=0; i<l_args.size(); i++){
 				if (i) {fprintf(ofp," ,");}
 				auto reg=l_args[i];
-				write_type(ofp,/*e->argls[i]->get_type()*/ reg.type, !reg.reg &&!reg.val );//reg.is_addr());
+				write_type(ofp,reg);//reg.is_addr());
 				reg.write_operand(ofp);
 			}
 			fprintf(ofp,")\n");
@@ -937,17 +966,12 @@ Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
 	write_local_vars(ofp, fn_node->body, fn_node, scope, &regname);
 	auto rtn=fn_node->get_return_value();
 	auto ret=compile_node(ofp, fn_node->body, fn_node,scope,&regname);
-//	printf("%p\n",ret.type);
-	// return value
 	if (ret.is_valid() && !ret.type->is_void()) {
 		ret.load(ofp,&regname);
-//		ASSERT(ret.reg && !ret.addr);	//TODO: returning foo.bar requires '.load'...
 		fprintf(ofp,"\tret ");
-		write_type(ofp,rtn->get_type(),ret.is_addr());
-//		fprintf(ofp," %%%s\n", getString(ret.reg));
+		write_type(ofp,ret);//rtn->get_type(),ret.is_addr());
 		ret.write_operand(ofp);
 		fprintf(ofp,"\n");
-		//getString(ret->get_reg(0,&regname,false)));
 	} else {
 		fprintf(ofp,"\tret void\n");
 	}

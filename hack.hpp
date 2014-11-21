@@ -22,6 +22,7 @@ typedef int32_t OneBasedIndex;
 
 #define R_FINAL 0x0001
 #define R_REVERSE 0x0002
+#define R_STACK 0x8000
 
 struct SrcPos {
 	OneBasedIndex	line; //1-based line index
@@ -83,12 +84,19 @@ template<class T,class Y> T* isa(const Y& src){ return dynamic_cast<T>(src);}
 #define RWFLAGS (WRITE_LHS|READ_LHS|WRITE_RHS|READ_RHS)
 extern int operator_flags(int tok);
 bool isSymbolStart(char c);
+extern int g_raw_types[];
+#define RT_FLOATING 0x4000
+#define RT_INTEGER 0x8000
+#define RT_SIGNED 0x2000
+#define RT_POINTER 0x1000
+#define RT_SIMD 0x1000
+#define RT_SIZEMASK 0x0ff;
 enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
-	INT,UINT,SIZE_T,I8,I16,I32,I64,U8,U16,U32,U64,BOOL,	// int types
-	HALF,FLOAT,DOUBLE,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,	// float types,ptrs
-	PTR,REF,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
+	RAW_TYPES,INT=RAW_TYPES,UINT,SIZE_T,I8,I16,I32,I64,U8,U16,U32,U64,U128,BOOL,	// int types
+	HALF,FLOAT,DOUBLE,FLOAT4,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,	// float types,ptrs
+	PTR,REF,NUM_RAW_TYPES=REF,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
 	
 	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,
 	LET,SET,VAR,
@@ -380,8 +388,12 @@ struct Type : Expr{
 	Type(Name i);
 	Type(Name i,SrcPos sp);
 	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
-	int alignment() const{return  4;};
-	int size() const;
+	size_t alignment() const;
+	size_t size() const;
+	int raw_type_flags()const{int i=name-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
+	bool is_int()const{return raw_type_flags()&RT_INTEGER;}
+	bool is_float()const{return raw_type_flags()&RT_FLOATING;}
+	bool is_signed()const{return raw_type_flags()&RT_SIGNED;}
 	bool is_register()const{return !is_complex();}
 	bool is_complex()const;
 	bool is_struct()const;
@@ -533,7 +545,7 @@ struct ExprLiteral : ExprDef {
 
 
 struct ArgDef :ExprDef{
-	uint32_t size,offset;
+	uint32_t size_of,offset;
 	//Type* type=0;
 	Expr* default_expr=0;
 	//Type* get_type()const {return type;}
@@ -550,6 +562,7 @@ struct ArgDef :ExprDef{
 	virtual VResult recurse(Visitor*v){;return 0;}
 	VResult visit(Visitor* v){ return v->visit(this);}
 	Name as_ident()const{return this->name;}
+	size_t size()const{return this->type()?this->type()->size():0;}
 };
 
 struct ExprStructDef;
@@ -720,7 +733,6 @@ struct ExprStructDef: ExprDef {
 	// it'll want TypeParams aswell.
 	bool is_enum_=false;
 	bool is_enum() { return is_enum_;}
-	uint32_t size;
 	vector<TypeParam> typeparams;
 	vector<Type*> instanced_types;
 	vector<ExprLiteral*> literals;
@@ -752,6 +764,7 @@ struct ExprStructDef: ExprDef {
 	ExprStructDef(SrcPos sp,Name n){name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
 	ExprStructDef* get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
 	void dump(int depth)const;
+	size_t	size() const;
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	Node* clone()const;
 	int alignment() const {int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}

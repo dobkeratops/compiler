@@ -187,13 +187,41 @@ void print_tok(int i){dbprintf("%s ",getString(i));};
 bool g_lisp_mode=false;
 int g_size_of[]={
 	0,
-	4,4,8,1,2,4,8,1,2,4,8,1,
-	2,4,8,1,8,0,-1,-1,-1,8,8,8
+	4,4,8,1,2,4,8,1,2,4,8,16,1,
+	2,4,8,161,8,0,-1,-1,-1,8,8,8
+};
+int g_raw_types[]={
+	4|RT_SIGNED|RT_INTEGER,
+	4|RT_INTEGER,
+	8|RT_INTEGER,
+	1|RT_SIGNED|RT_INTEGER,
+	2|RT_SIGNED|RT_INTEGER,
+	4|RT_SIGNED|RT_INTEGER,
+	8|RT_SIGNED|RT_INTEGER,
+	1|RT_INTEGER,
+	2|RT_INTEGER,
+	4|RT_INTEGER,
+	8|RT_INTEGER,
+	16|RT_INTEGER,
+	1|RT_INTEGER,
+	2|RT_FLOATING,
+	4|RT_FLOATING,
+	8|RT_FLOATING,
+	16|RT_FLOATING|RT_SIMD,
+	1|RT_INTEGER,
+	8|RT_POINTER,
+	0|0,
+	0|0,
+	0|0,
+	0|0,
+	0|0,
+	0|0,
+	0|0
 };
 const char* g_token_str[]={
 	"",
-	"int","uint","size_t","i8","i16","i32","i64","u8","u16","u32","u64","bool",
-	"half","float","double","char","str","void","auto","one","zero","voidptr",
+	"int","uint","size_t","i8","i16","i32","i64","u8","u16","u32","u64","u128","bool",
+	"half","float","double","float4","char","str","void","auto","one","zero","voidptr",
 	"ptr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
 	"print___","fn","struct","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof",
@@ -614,6 +642,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		this->def=sd;
 	}
 	if (auto v=scope->find_variable_rec(this->name)){
+		v->on_stack=flags&R_STACK;
 		this->set_def(v);
 		return propogate_type(flags,this, this->type_ref(),v->type_ref());
 
@@ -632,7 +661,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 }
 void ExprIdent::dump(int depth) const {
 	if (!this) return;
-	newline(depth);dbprintf("%s: %p",getString(name),this->def);
+	newline(depth);dbprintf("%s ",getString(name));
 	if (this->get_type()) {this->get_type()->dump(-1);}
 }
 
@@ -806,12 +835,58 @@ int Type::num_pointers() const {
 		return 1+this->sub->is_pointer();
 	else return 0;
 }
+size_t Type::alignment() const{
+	if (this->raw_type_flags()){
+		return this->size();
+	}
+	size_t align=0;
+	for (auto s=this->sub;s;s=s->next){
+		if (auto sz=s->size()>align){align=sz;};
+	}
+	if (this->struct_def){
+		return this->struct_def->alignment();
+	}
+	return align?align:4;
+}
+
+size_t Type::size() const{
+	auto tf=this->raw_type_flags();
+	if (tf){return tf&RT_SIZEMASK};
+	if (this->name==VARIANT){
+		auto align=this->alignment();
+		int max_elem_size=0;
+		for (auto s=this->sub; s;s=s->next){
+			auto sz=s->size();
+			if (sz>max_elem_size)max_elem_size=sz;
+		}
+		return align+max_elem_size;
+	}
+	if (this->name==TUPLE){
+		int size=0;
+		for (auto s=this->sub; s;s=s->next){
+			size+=s->size();
+		}
+		return size;
+	}
+	if (this->struct_def){
+		return struct_def->size();
+	}
+	return 0;
+}
+
 ExprStructDef* Type::get_struct()const{
 	auto p=this;
 	while (p && !p->is_struct()){
 		p=p->sub;
 	}
 	return p?p->struct_def:0;
+}
+size_t ExprStructDef::size()const{
+	size_t sum=0;
+	for (auto i=0; i<fields.size();i++){
+		sum+=fields[i]->size();
+	}
+	return sum;
 }
 void Type::dump(int depth)const{
 	if (!this) return;
@@ -916,7 +991,7 @@ void Variable::dump(int depth) const{
 	if (type()) {dbprintf(":");type()->dump(-1);}
 	switch (this->kind){
 		case VkArg:dbprintf("(Arg)");break;
-		case Local:dbprintf("(Local)");break;
+		case Local:dbprintf("(%s Local)",this->on_stack?"stack":"reg");break;
 		case Global:dbprintf("(Local)");break;
 		default: break;
 	}
@@ -1658,14 +1733,14 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		ASSERT(!lhs && rhs);
 		Type* dt=nullptr;
 		if (desired){
-			if (desired->name!=PTR || desired->name!=REF) {
-				error(this,"taking adress, expected type");
+			if (!(desired->name==PTR)) {
+				error(this,"taking adress, expected type result");
 				desired->dump(-1);
 				newline(0);
 			}
 			dt=desired->sub;
 		}
-		auto ret=rhs->resolve(sc,dt,flags);
+		auto ret=rhs->resolve(sc,dt,flags|R_STACK);
 		if (!this->get_type() && ret.type){
 			auto ptr_type=new Type(PTR); ptr_type->sub=(Type*)ret.type->clone();
 			this->set_type(ptr_type);
@@ -1705,7 +1780,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// TODO propogate types for pointer-arithmetic - ptr+int->ptr   int+ptr->ptr  ptr-ptr->int
 		// defaults to same types all round.
 		auto lhst=lhs->resolve(sc,desired,flags);
-		auto rhst=rhs->resolve(sc,desired,flags);
+		auto rhst=rhs->resolve(sc,desired,flags&!R_STACK);
 		propogate_type(flags,this, lhst,type_ref());
 		propogate_type(flags,this, rhst,type_ref());
 		return propogate_type_fwd(flags,this, desired, type_ref());
@@ -1743,7 +1818,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 		if (array_type.type){
 			ASSERT(array_type.type->is_array()||array_type.type->is_pointer());
 			for (auto i=0; i<argls.size(); i++)  {
-				argls[i]->resolve(sc,nullptr,flags ); // TODO any indexing type? any type extracted from 'array' ?
+				argls[i]->resolve(sc,nullptr,flags&!R_STACK ); // TODO any indexing type? any type extracted from 'array' ?
 			}
 			const Type* array_elem_type=array_type.type->sub;
 			propogate_type_fwd(flags,this, array_elem_type);
@@ -3295,17 +3370,21 @@ const char* g_TestProg2=
 "	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
 //"	struct Foo{x:int,y:int}"
 "	fn main(argc:int, argv:**char)->int{	\n"
+"xs=:array[int,512];\n"
+"q:=xs[1]; p1:=&xs[1];\n"
+"*p1=42;\n"
 "		x:= {a:=10;b:=20; a+b};	\n"
 "		fp:=foo;		\n"
 "	xs=:array[int,512];  \n"
 "	p2:=&xs[1];  \n"
+"xs[1]+=3"
 "		fs:=FooStruct{0xff,0x7f};		\n"
 "		pfs:=&fs;\n"
 "		foo_struct(&fs);		\n"
 //"	fn localtest(i:int)->int{i+argc}; \n"
 "		py:=pfs as *int;\n"
 "		printf(\"foostruct int val recast %d; foostruct raw value %d\n\",*py,fs.x);\n"
-"		fp(2);fp(x);		\n"
+"		fp(2);fp(x);fp(xs[1]);		\n"
 "		take_ptr(fp);\n"
 "		bar(1,2,3);	\n"
 "	,0}\n"
