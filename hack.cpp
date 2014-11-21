@@ -1,5 +1,5 @@
 
-#include "hack.hpp"
+#include "hack.h"
 #include "codegen.h"
 #include "repl.h"
 

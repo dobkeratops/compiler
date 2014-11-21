@@ -1,5 +1,5 @@
 #pragma once
-#include "hack.hpp"
+#include "hack.h"
 
 void output_code(FILE* outfile, Scope* scope);
 void name_mangle(char* buffer, int size, const ExprFnDef* f);

@@ -446,7 +446,6 @@ struct ExprOp: public Expr{
 	virtual VResult recurse(Visitor* v){v->pre_visit(this);if (this->lhs) this->lhs->visit(v); if (this->rhs) this->rhs->visit(v); v->post_visit(this);return 0;}
 	virtual ExprOp* as_op()const{return const_cast<ExprOp*>(this);}
 };
-
 struct ExprBlock :public ExprScopeBlock{
 	// used for operators, function calls and compound statement
 	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
@@ -781,7 +780,7 @@ inline Type* Type::get_elem(int index){
 		return this->struct_def->fields[index]->type();
 	ASSERT(index>=0);
 	auto s=sub;
-	for (auto;s&&index>0;s=s->next,--index){};
+	for (;s&&index>0;s=s->next,--index){};
 	ASSERT(index==0);
 	return s;
 }

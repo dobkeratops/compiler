@@ -116,8 +116,9 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 			
 			if (auto lit=dynamic_cast<ExprLiteral*>(val)){
 				if (lit->type()->name==INT){
-					fprintf(ofp,"\t%%%s = add i32 0,",str(reg));  this->write_literal(ofp,lit); fprintf(ofp,"\n");
+					fprintf(ofp,"\t%%%s = or i32 0,",str(reg));  this->write_literal(ofp,lit); fprintf(ofp,"\n");
 				} else if(lit->type()->name==FLOAT){
+					// todo, i guess we're goint to have t make a global constants table
 					fprintf(ofp,"\t%%%s = fadd float 0.0, ",str(reg));  this->write_literal(ofp,lit); fprintf(ofp,"\n");
 				}
 				// todo: string literal, vector literals, bit formats
@@ -179,19 +180,20 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 				write_literal(ofp,lit);
 			}
 			return;
+		} else {
+			fprintf(ofp," <?CgV?> ");
+			this->type->dump_if(0);
+			ASSERT(this->type);
+			ASSERT(0 && "missing register type");
 		}
-		this->type->dump_if(0);
-		ASSERT(this->type);
-		ASSERT(0 && "missing register type");
-		fprintf(ofp," <?CgV?> ");
 	}
 	RegisterName store(FILE* ofp,int* next_reg_index,int srcreg=0){// for read-modify-write
-		if (!addr || !type) return reg;
-//		fprintf(ofp,"\tstore  %s %%%s, %s* %%%s, align 4\n",get_llvm_type_str(type->name), str(reg),get_llvm_type_str(type->name),str(addr));
+		ASSERT(type);
+		if (!addr || !type)
+			return reg;
 		write_store(ofp, srcreg?srcreg:reg, type, addr);
 		return reg;
 	}
-
 
 	RegisterName store_from(FILE* ofp,int* next_reg_index,RegisterName valreg){
 		if (val){
@@ -209,7 +211,7 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 			fprintf(ofp,", i32 %d\n", this->elem);
 			this->reg=newreg;
 			// elem remains - this value has been mutated.
-			// TODO, i think this would be much more elegant returning a new CgValue.
+			// TODO, i think this would be much more elegant to return a new CgValue.
 			return newreg;
 		}
 		else if (addr && type) {
@@ -323,7 +325,7 @@ void write_type(FILE* ofp, const Type* t, bool ref) {
 	else {
 //		dbprintf(";%s is struct %p\n", str(t->name), t->struct_def);
 		if (t->is_complex()) {
-			fprintf(ofp,"%%%s%s", str(t->name));
+			fprintf(ofp,"%%%s", str(t->name));
 		}
 		else
 			fprintf(ofp,"%s",t?get_llvm_type_str(t->name):"???");//,t.is_pointer?"*":"");
@@ -390,7 +392,7 @@ CgValue alloca_type(FILE* ofp, Expr* holder, Type* t,int *next_reg) {
 	RegisterName r= holder?holder->get_reg(t->name, next_reg, false):next_reg_name(next_reg);
 	fprintf(ofp,"\t"); write_reg(ofp,r);
 	fprintf(ofp," = alloca " ); write_type(ofp,t,false);
-	fprintf(ofp,", align %d\n", t->alignment());
+	fprintf(ofp,", align %zu\n", t->alignment());
 	return CgValue(0,t, r);
 }
 
@@ -410,7 +412,7 @@ void write_local_vars(FILE* ofp,Expr* n, ExprFnDef* fn, Scope* sc, RegisterName*
 		} else if (vt->is_array()){
 			auto t=vt->sub;
 			if (!t || !t->next){error(v,"array type needs 2 args");}
-			fprintf(ofp,"\t"); write_reg(ofp,r); fprintf(ofp," = alloca [%s x %s] , align %d\n",str(t->next->name),get_llvm_type_str(t->name),vt->alignment());
+			fprintf(ofp,"\t"); write_reg(ofp,r); fprintf(ofp," = alloca [%s x %s] , align %zu\n",str(t->next->name),get_llvm_type_str(t->name),vt->alignment());
 			v->reg_is_addr=true;
 		} else	if (vt->is_pointer() || vt->is_function()){
 			continue;
@@ -625,107 +627,107 @@ CgValue write_cast(FILE* ofp,CgValue dst, CgValue& lhsv, Expr* rhse ,int* next_i
 CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterName* next_index){
 	g_Sc=sc;
 	if (auto e=dynamic_cast<ExprOp*>(n)) {
-			auto opname = e->name;
-			int opflags = operator_flags(opname);
-			auto t=e->get_type();//get_type_llvm();
-			
-			// TODO 2operand form should copy regname for this node from the lhs.
-			// TODO - multiple forms:
-			//
-			// generalize by lvalue being in register or memory.
-			// 3-operand; assign-op; assign-op; mem-assign-op;
-			if (opname==DOT || opname==ARROW){
-				auto lhs=compile_node(ofp,e->lhs,curr_fn,sc,next_index);
-				return lhs.dot(ofp,e->rhs,next_index,sc);
+		auto opname = e->name;
+		int opflags = operator_flags(opname);
+		auto t=e->get_type();//get_type_llvm();
+		
+		// TODO 2operand form should copy regname for this node from the lhs.
+		// TODO - multiple forms:
+		//
+		// generalize by lvalue being in register or memory.
+		// 3-operand; assign-op; assign-op; mem-assign-op;
+		if (opname==DOT || opname==ARROW){
+			auto lhs=compile_node(ofp,e->lhs,curr_fn,sc,next_index);
+			return lhs.dot(ofp,e->rhs,next_index,sc);
+		}
+		else if (e->lhs && e->rhs){
+			auto lhs=compile_node(ofp,e->lhs,curr_fn,sc,next_index);
+			auto rhs=compile_node(ofp,e->rhs,curr_fn,sc,next_index);
+			auto lhs_v=sc->find_variable_rec(e->lhs->name);
+			auto outname=lhs_v?lhs_v->name:opname;
+			//printf_reg(lhs_v->regname);
+			//if (!n->regname && lhs_v){n->regname=lhs_v->regname;} // override if its a write.
+			auto dst=CgValue(n->get_reg(outname,next_index,false),n->get_type());
+			// assignments :=
+			//printf_reg(dst.reg);
+			if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
+				ASSERT(sc->find_scope_variable(e->lhs->name));
+				if (lhs_v) dst.reg=lhs_v->regname;
+				//					lhs_v->regname=dst.reg;
+				return CgValue(0,lhs_v->type(),dst.reg);
+			}
+			else if(opname==AS) {
+				// if (prim to prim) {do fpext, etc} else..
+				return write_cast(ofp, dst,lhs,e,next_index);
 			}
 			else
-				if (e->lhs && e->rhs){
-					auto lhs=compile_node(ofp,e->lhs,curr_fn,sc,next_index);
-					auto rhs=compile_node(ofp,e->rhs,curr_fn,sc,next_index);
-					auto lhs_v=sc->find_variable_rec(e->lhs->name);
-					auto outname=lhs_v?lhs_v->name:opname;
-					//printf_reg(lhs_v->regname);
-					//if (!n->regname && lhs_v){n->regname=lhs_v->regname;} // override if its a write.
-					auto dst=CgValue(n->get_reg(outname,next_index,false),n->get_type());
-					// assignments :=
-					//printf_reg(dst.reg);
-					if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
-						ASSERT(sc->find_scope_variable(e->lhs->name));
-						if (lhs_v) dst.reg=lhs_v->regname;
-						//					lhs_v->regname=dst.reg;
-						return CgValue(0,lhs_v->type(),dst.reg);
-					}
-					else if(opname==AS) {
-						// if (prim to prim) {do fpext, etc} else..
-						return write_cast(ofp, dst,lhs,e,next_index);
-					}
-					else
-					if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
-						auto v=sc->find_variable_rec(e->lhs->name); WARN(v &&"semantic analysis should have created var");
-						auto dst=v->get_reg(v->name, next_index, true);
-						if (rhs.is_literal()){//TODO simplify this, how does this case unify?
-							v->regname=dst;
-							rhs.load(ofp,next_index,dst);
-							return CgValue(dst,rhs.type);
-						}
-						if (rhs.type->is_struct()){
-							v->regname=rhs.reg?rhs.reg:rhs.addr;
-							v->reg_is_addr=!rhs.reg;
-							return rhs;
-							
-						}
-						else{
-							dst=rhs.load(ofp,next_index,dst);
-							v->regname=dst; // YUK todo - reallyw wanted reg copy
-							return CgValue(dst, n->get_type(), 0);
-						}
-					}
-					else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
-						//assignment  =
-						if (lhs_v) dst.reg=n->regname=lhs.reg=lhs_v->regname;
-						rhs.load(ofp,next_index,0);
-						lhs.store_from(ofp,next_index,rhs.reg);
-						rhs.type=e->get_type();
-						return rhs;
-					}
-					else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
-						// Assign-Operators += etc
-						rhs.load(ofp,next_index);
-						auto dstreg=lhs;
-						lhs.load(ofp,next_index); // turns it into a value.
-						write_instruction(ofp,opname,t?t:rhs.type, dst,lhs,rhs);
-						int out=dstreg.store_from(ofp,next_index,dst.reg);
-						return dstreg;
-					}else {
-						// RISClike 3operand dst=src1,src2
-						lhs.load(ofp,next_index); rhs.load(ofp,next_index);
-						write_instruction(ofp,opname,t,dst,lhs,rhs);
-						dst.type=e->get_type();
-						return dst;
-					}
-				} else if (!e->lhs && e->rhs){
-					auto src=compile_node(ofp,e->rhs,curr_fn,sc,next_index);
-					if (opname==ADDR){
-						if (!src.type || !n->type()) {
-							n->dump(-1);
-							error(n,"something wrong\n");
-						}
-						return src.addr_op(ofp,n->type(),next_index);
-					}
-					else if (opname==DEREF){
-						return src.deref_op(ofp,n->type(),next_index);
-					}
-					else {
-						if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){printf(";TODO: logic for modifications to memory");}}
-						// todo: handle read/modify-writeness.
-						// postincrement/preincrement etc go here..
-						auto dst=CgValue(n->get_reg(opname,next_index,false), n->get_type());
-						write_instruction(ofp,opname,t,dst,src);
-						return dst;
-					}
-				} else if (e->lhs && e->rhs) {
-					error(e,"postfix operators not implemented yet.");
-				} else return CgValue();
+			if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
+				auto v=sc->find_variable_rec(e->lhs->name); WARN(v &&"semantic analysis should have created var");
+				auto dst=v->get_reg(v->name, next_index, true);
+				if (rhs.is_literal()){//TODO simplify this, how does this case unify?
+					v->regname=dst;
+					rhs.load(ofp,next_index,dst);
+					return CgValue(dst,rhs.type);
+				}
+				if (rhs.type->is_struct()){
+					v->regname=rhs.reg?rhs.reg:rhs.addr;
+					v->reg_is_addr=!rhs.reg;
+					return rhs;
+					
+				}
+				else{
+					dst=rhs.load(ofp,next_index,dst);
+					v->regname=dst; // YUK todo - reallyw wanted reg copy
+					return CgValue(dst, n->get_type(), 0);
+				}
+			}
+			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
+				//assignment  =
+				if (lhs_v) dst.reg=n->regname=lhs.reg=lhs_v->regname;
+				rhs.load(ofp,next_index,0);
+				lhs.store_from(ofp,next_index,rhs.reg);
+				rhs.type=e->get_type();
+				return rhs;
+			}
+			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
+				// Assign-Operators += etc
+				rhs.load(ofp,next_index);
+				auto dstreg=lhs;
+				lhs.load(ofp,next_index); // turns it into a value.
+				write_instruction(ofp,opname,t?t:rhs.type, dst,lhs,rhs);
+				int out=dstreg.store_from(ofp,next_index,dst.reg);
+				return dstreg;
+			}else {
+				// RISClike 3operand dst=src1,src2
+				lhs.load(ofp,next_index); rhs.load(ofp,next_index);
+				write_instruction(ofp,opname,t,dst,lhs,rhs);
+				dst.type=e->get_type();
+				return dst;
+			}
+		} else if (!e->lhs && e->rhs){
+			auto src=compile_node(ofp,e->rhs,curr_fn,sc,next_index);
+			if (opname==ADDR){
+				if (!src.type || !n->type()) {
+					n->dump(-1);
+					error(n,"something wrong\n");
+				}
+				return src.addr_op(ofp,n->type(),next_index);
+			}
+			else if (opname==DEREF){
+				return src.deref_op(ofp,n->type(),next_index);
+			}
+			else {
+				if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){printf(";TODO: logic for modifications to memory");}}
+				// todo: handle read/modify-writeness.
+				// postincrement/preincrement etc go here..
+				auto dst=CgValue(n->get_reg(opname,next_index,false), n->get_type());
+				write_instruction(ofp,opname,t,dst,src);
+				return dst;
+			}
+		} else if (e->lhs && e->rhs) {
+			error(e,"postfix operators not implemented yet.");
+		} else
+			return CgValue();
 	}
 	if (auto e=dynamic_cast<ExprBlock*>(n)) {
 		// [1] compound expression - last expression is the return .
