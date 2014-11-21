@@ -582,26 +582,19 @@ fn compile_node {
 */
 
 CgValue write_cast(FILE* ofp,CgValue dst, CgValue& lhsv, Expr* rhse ,int* next_index){
+	// todo rename 'src', 'dst' to avoid blah as blah confusion vs C cast (type)(expr)
 	lhsv.load(ofp,next_index);
 	auto rhst=rhse->type();
 	auto lhst=lhsv.type;
 	
 	fprintf(ofp,"\t");
 	write_reg(ofp, dst.reg);fprintf(ofp," = ");
-	
-	if (rhst->is_int() && lhsv.type->is_int()){
-		if (rhst->size()>lhsv.type->size()){
-			fprintf(ofp,"sext ");
-		}
-		else{
-			fprintf(ofp,"trunc ");
-		}
+
+	if (lhst->is_int() && rhst->is_float()){
+		fprintf(ofp,rhst->is_signed()?"sitofp":"uitofp");
 	}
-	else if (rhst->is_int() && lhst->is_float()){
-		fprintf(ofp,"sitofp");
-	}
-	else if (rhst->is_float() && lhst->is_int()){
-		fprintf(ofp,"fptosi ");
+	else if (lhst->is_float() && rhst->is_int()){
+		fprintf(ofp,lhst->is_signed()?"fptosi":"fptoui");
 	}
 	else if (rhst->is_pointer()){
 		fprintf(ofp,"bitcast ");
@@ -612,6 +605,20 @@ CgValue write_cast(FILE* ofp,CgValue dst, CgValue& lhsv, Expr* rhse ,int* next_i
 		fprintf(ofp,"\n");
 		return dst;
 	}
+	else if (lhst->size()>rhst->size()){
+		if (lhst->is_int() && rhst->is_int()){
+			if (lhst->is_signed()>rhst->is_signed())
+				fprintf(ofp,"sext ");
+			else
+				fprintf(ofp,"zext ");
+		} else
+			fprintf(ofp,"fpext ");
+	} else if (lhst->is_int() && rhst->is_int()){
+		fprintf(ofp,"trunc ");
+	}else{
+		fprintf(ofp,"fptrunc ");
+	}
+
 	return dst;
 }
 
