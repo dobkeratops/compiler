@@ -396,7 +396,7 @@ CgValue alloca_type(FILE* ofp, Expr* holder, Type* t,int *next_reg) {
 	return CgValue(0,t, r);
 }
 
-void write_local_vars(FILE* ofp,Expr* n, ExprFnDef* fn, Scope* sc, RegisterName* new_reg) {
+void CodeGen::write_local_vars(Expr* n, ExprFnDef* fn, Scope* sc) {
 	for (auto v=sc->vars; v;v=v->next_of_scope){
 		if (v->kind!=Local) continue;
 		auto vt=v->expect_type();
@@ -404,7 +404,7 @@ void write_local_vars(FILE* ofp,Expr* n, ExprFnDef* fn, Scope* sc, RegisterName*
 		//	continue; //reg vars experiment
 		if (!vt->is_complex())
 			continue;//its just a reg
-		auto r= v->get_reg(v->name, new_reg, true);
+		auto r= v->get_reg(v->name, next_reg, true);
 		if (vt->is_struct()) {
 			// alloc_struct
 			fprintf(ofp,"\t"); write_reg(ofp,r); fprintf(ofp," = alloca %%%s , align %d\n",getString(vt->name),vt->struct_def->alignment());
@@ -436,23 +436,23 @@ void emit_branch(FILE* ofp, CgValue cond, Name label_then, Name label_else,int* 
 	cond.load(ofp,next_index);
 	fprintf(ofp,"\tbr i1 %%%s, label %%%s, label %%%s\n",str(cond.reg), str(label_then), str(label_else));
 }
-CgValue compile_if(FILE* ofp,ExprIf* ifn, ExprFnDef* curr_fn,Scope*sc,RegisterName* next_index){
+CgValue compile_if(FILE* ofp,ExprIf* ifn, ExprFnDef* curr_fn,Scope*sc,RegisterName* next_reg){
 	// TODO: Collect phi-nodes for anything modified inside.
-	RegisterName outname=next_reg_name(next_index);
-	auto condition=compile_node(ofp,ifn->cond,curr_fn,sc,next_index);
-	int index=(*next_index)++;
+	RegisterName outname=next_reg_name(next_reg);
+	auto condition=compile_node(ofp,ifn->cond,curr_fn,sc,next_reg);
+	int index=(*next_reg)++;
 	auto label_if=gen_label("if",index);
 	auto label_endif=gen_label("endif",index);
 	if (ifn->else_block){
 		auto label_else=gen_label("else",index);
-		emit_branch(ofp,condition,label_if,label_else, next_index);
+		emit_branch(ofp,condition,label_if,label_else, next_reg);
 		emit_label(ofp,label_if);
-		auto if_result=compile_node(ofp,ifn->body,curr_fn,sc,next_index);
-		if_result.load(ofp,next_index,0);
+		auto if_result=compile_node(ofp,ifn->body,curr_fn,sc,next_reg);
+		if_result.load(ofp,next_reg,0);
 		emit_branch(ofp,label_endif);
 		emit_label(ofp,label_else);
-		auto else_result=compile_node(ofp,ifn->else_block,curr_fn,sc,next_index);
-		else_result.load(ofp,next_index,0);
+		auto else_result=compile_node(ofp,ifn->else_block,curr_fn,sc,next_reg);
+		else_result.load(ofp,next_reg,0);
 		emit_branch(ofp,label_endif);
 		emit_label(ofp,label_endif);
 		// phi node picks result, conditional assignment
@@ -463,8 +463,8 @@ CgValue compile_if(FILE* ofp,ExprIf* ifn, ExprFnDef* curr_fn,Scope*sc,RegisterNa
 		return CgValue(outname,return_type);
 	}
 	else {
-		emit_branch(ofp,condition,label_if,label_endif, next_index);
-		auto ifblock=compile_node(ofp,ifn->body,curr_fn,sc,next_index);
+		emit_branch(ofp,condition,label_if,label_endif, next_reg);
+		auto ifblock=compile_node(ofp,ifn->body,curr_fn,sc,next_reg);
 		emit_label(ofp,label_endif);
 		// TODO phi node
 		return CgValue();
@@ -491,7 +491,7 @@ void write_phi(FILE* ofp, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, Na
 	fprintf(ofp,"\n");
 }
 
-CgValue compile_for(FILE* ofp, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_sc, RegisterName* next_index){
+CgValue compile_for(FILE* ofp, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_sc, RegisterName* next_reg){
 //  initializer
 // for:
 //  test condition br else
@@ -505,11 +505,11 @@ CgValue compile_for(FILE* ofp, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_sc,
 
 	auto sc=nf->scope;
 	// write the initializer block first; it sets up variables initial state
-	int index=(*next_index)++;
+	int index=(*next_reg)++;
 	auto l_init=gen_label("init",index);
 	emit_branch(ofp,l_init);
 	emit_label(ofp,l_init);
-	auto init=compile_node(ofp,nf->init,curr_fn,sc,next_index);
+	auto init=compile_node(ofp,nf->init,curr_fn,sc,next_reg);
 	
 	set<Variable*> write_vars;
 	set<Variable*> else_vars;
@@ -523,7 +523,7 @@ CgValue compile_for(FILE* ofp, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_sc,
 //		phi.val=
 		phi.var=v;
 		phi.reg_pre=v->regname;
-		phi.reg_start=v->regname=next_reg_name(v->name,next_index);
+		phi.reg_start=v->regname=next_reg_name(v->name,next_reg);
 		phi.reg_end=0;//gen_label(str(v->name),next_index);
 		//todo: can we allocate regnames in the AST? find last-write?
 		phi_vars.push_back(phi);
@@ -537,14 +537,14 @@ CgValue compile_for(FILE* ofp, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_sc,
 	auto phipos=ftell(ofp);// YUK. any way around this? eg write condition at end?
 	write_phi(ofp,sc,phi_vars,l_init,l_for,true);//alloc space
 
-	auto cond_result=nf->cond?compile_node(ofp,nf->cond,curr_fn,sc,next_index):CgValue();
-	emit_branch(ofp, cond_result, l_body, l_else, next_index);
+	auto cond_result=nf->cond?compile_node(ofp,nf->cond,curr_fn,sc,next_reg):CgValue();
+	emit_branch(ofp, cond_result, l_body, l_else, next_reg);
 	emit_label(ofp,l_body);
-	if (nf->body) compile_node(ofp,nf->body,curr_fn,sc,next_index);
-	if (nf->incr) compile_node(ofp,nf->incr,curr_fn,sc,next_index);
+	if (nf->body) compile_node(ofp,nf->body,curr_fn,sc,next_reg);
+	if (nf->incr) compile_node(ofp,nf->incr,curr_fn,sc,next_reg);
 	emit_branch(ofp,l_for);
 	emit_label(ofp,l_else);
-	if (nf->else_block) compile_node(ofp,nf->else_block,curr_fn,sc,next_index);
+	if (nf->else_block) compile_node(ofp,nf->else_block,curr_fn,sc,next_reg);
 	emit_branch(ofp,l_endfor);
 	emit_label(ofp,l_endfor);
 	// now write the phi-nodes.
@@ -583,9 +583,9 @@ fn compile_node {
 }
 */
 
-CgValue write_cast(FILE* ofp,CgValue dst, CgValue& lhsv, Expr* rhse ,int* next_index){
+CgValue write_cast(FILE* ofp,CgValue dst, CgValue& lhsv, Expr* rhse ,int* next_reg){
 	// todo rename 'src', 'dst' to avoid blah as blah confusion vs C cast (type)(expr)
-	lhsv.load(ofp,next_index);
+	lhsv.load(ofp,next_reg);
 	auto rhst=rhse->type();
 	auto lhst=lhsv.type;
 	
@@ -624,7 +624,7 @@ CgValue write_cast(FILE* ofp,CgValue dst, CgValue& lhsv, Expr* rhse ,int* next_i
 	return dst;
 }
 
-CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterName* next_index){
+CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterName* next_reg){
 	g_Sc=sc;
 	if (auto e=dynamic_cast<ExprOp*>(n)) {
 		auto opname = e->name;
@@ -637,17 +637,17 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 		// generalize by lvalue being in register or memory.
 		// 3-operand; assign-op; assign-op; mem-assign-op;
 		if (opname==DOT || opname==ARROW){
-			auto lhs=compile_node(ofp,e->lhs,curr_fn,sc,next_index);
-			return lhs.dot(ofp,e->rhs,next_index,sc);
+			auto lhs=compile_node(ofp,e->lhs,curr_fn,sc,next_reg);
+			return lhs.dot(ofp,e->rhs,next_reg,sc);
 		}
 		else if (e->lhs && e->rhs){
-			auto lhs=compile_node(ofp,e->lhs,curr_fn,sc,next_index);
-			auto rhs=compile_node(ofp,e->rhs,curr_fn,sc,next_index);
+			auto lhs=compile_node(ofp,e->lhs,curr_fn,sc,next_reg);
+			auto rhs=compile_node(ofp,e->rhs,curr_fn,sc,next_reg);
 			auto lhs_v=sc->find_variable_rec(e->lhs->name);
 			auto outname=lhs_v?lhs_v->name:opname;
 			//printf_reg(lhs_v->regname);
 			//if (!n->regname && lhs_v){n->regname=lhs_v->regname;} // override if its a write.
-			auto dst=CgValue(n->get_reg(outname,next_index,false),n->get_type());
+			auto dst=CgValue(n->get_reg(outname,next_reg,false),n->get_type());
 			// assignments :=
 			//printf_reg(dst.reg);
 			if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
@@ -658,15 +658,15 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			}
 			else if(opname==AS) {
 				// if (prim to prim) {do fpext, etc} else..
-				return write_cast(ofp, dst,lhs,e,next_index);
+				return write_cast(ofp, dst,lhs,e,next_reg);
 			}
 			else
 			if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
 				auto v=sc->find_variable_rec(e->lhs->name); WARN(v &&"semantic analysis should have created var");
-				auto dst=v->get_reg(v->name, next_index, true);
+				auto dst=v->get_reg(v->name, next_reg, true);
 				if (rhs.is_literal()){//TODO simplify this, how does this case unify?
 					v->regname=dst;
-					rhs.load(ofp,next_index,dst);
+					rhs.load(ofp,next_reg,dst);
 					return CgValue(dst,rhs.type);
 				}
 				if (rhs.type->is_struct()){
@@ -676,7 +676,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 					
 				}
 				else{
-					dst=rhs.load(ofp,next_index,dst);
+					dst=rhs.load(ofp,next_reg,dst);
 					v->regname=dst; // YUK todo - reallyw wanted reg copy
 					return CgValue(dst, n->get_type(), 0);
 				}
@@ -684,43 +684,43 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
 				//assignment  =
 				if (lhs_v) dst.reg=n->regname=lhs.reg=lhs_v->regname;
-				rhs.load(ofp,next_index,0);
-				lhs.store_from(ofp,next_index,rhs.reg);
+				rhs.load(ofp,next_reg,0);
+				lhs.store_from(ofp,next_reg,rhs.reg);
 				rhs.type=e->get_type();
 				return rhs;
 			}
 			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
 				// Assign-Operators += etc
-				rhs.load(ofp,next_index);
+				rhs.load(ofp,next_reg);
 				auto dstreg=lhs;
-				lhs.load(ofp,next_index); // turns it into a value.
+				lhs.load(ofp,next_reg); // turns it into a value.
 				write_instruction(ofp,opname,t?t:rhs.type, dst,lhs,rhs);
-				int out=dstreg.store_from(ofp,next_index,dst.reg);
+				int out=dstreg.store_from(ofp,next_reg,dst.reg);
 				return dstreg;
 			}else {
 				// RISClike 3operand dst=src1,src2
-				lhs.load(ofp,next_index); rhs.load(ofp,next_index);
+				lhs.load(ofp,next_reg); rhs.load(ofp,next_reg);
 				write_instruction(ofp,opname,t,dst,lhs,rhs);
 				dst.type=e->get_type();
 				return dst;
 			}
 		} else if (!e->lhs && e->rhs){
-			auto src=compile_node(ofp,e->rhs,curr_fn,sc,next_index);
+			auto src=compile_node(ofp,e->rhs,curr_fn,sc,next_reg);
 			if (opname==ADDR){
 				if (!src.type || !n->type()) {
 					n->dump(-1);
 					error(n,"something wrong\n");
 				}
-				return src.addr_op(ofp,n->type(),next_index);
+				return src.addr_op(ofp,n->type(),next_reg);
 			}
 			else if (opname==DEREF){
-				return src.deref_op(ofp,n->type(),next_index);
+				return src.deref_op(ofp,n->type(),next_reg);
 			}
 			else {
 				if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){printf(";TODO: logic for modifications to memory");}}
 				// todo: handle read/modify-writeness.
 				// postincrement/preincrement etc go here..
-				auto dst=CgValue(n->get_reg(opname,next_index,false), n->get_type());
+				auto dst=CgValue(n->get_reg(opname,next_reg,false), n->get_type());
 				write_instruction(ofp,opname,t,dst,src);
 				return dst;
 			}
@@ -734,10 +734,10 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 		if(e->is_compound_expression()) {
 			if (auto num=e->argls.size()) {
 				for (int i=0; i<num-1; i++){
-					compile_node(ofp,e->argls[i],curr_fn,sc,next_index);
+					compile_node(ofp,e->argls[i],curr_fn,sc,next_reg);
 				}
 			if (e->argls.size())
-				return compile_node(ofp,e->argls[num-1],curr_fn,sc,next_index);
+				return compile_node(ofp,e->argls[num-1],curr_fn,sc,next_reg);
 			};
 		}
 		else if (e->is_struct_initializer()){
@@ -745,16 +745,16 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			StructInitializer si(sc,e); si.map_fields();
 			// '.this' is the main node, type struct
 			//auto struct_val =CgValue(0,e->get_type(),*next_index++);
-			auto struct_val= alloca_type(ofp, e, e->type()/*e->def->as_struct_def()*/,next_index);
+			auto struct_val= alloca_type(ofp, e, e->type()/*e->def->as_struct_def()*/,next_reg);
 //			struct_val.load(ofp,next_index);
 			e->regname=struct_val.reg; // YUK todo - reallyw wanted reg copy
 			// can we trust llvm to cache the small cases in reg..
 			for (int i=0; i<e->argls.size();i++) {
 				// struct->field=expr[i]
-				auto rvalue=compile_node(ofp,si.value[i],curr_fn,sc,next_index);
-				auto dst = struct_val.dot(ofp,si.field_refs[i],next_index,sc);
-				auto srcreg = rvalue.load(ofp,next_index,0);
-				dst.store_from(ofp,next_index,srcreg);
+				auto rvalue=compile_node(ofp,si.value[i],curr_fn,sc,next_reg);
+				auto dst = struct_val.dot(ofp,si.field_refs[i],next_reg,sc);
+				auto srcreg = rvalue.load(ofp,next_reg,0);
+				dst.store_from(ofp,next_reg,srcreg);
 				if (dst.type==struct_val.type)
 					struct_val=dst; // mutate by insertion
 			}
@@ -763,15 +763,15 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 		// [2] Operator
 		//[3] ARRAY ACCESS
 		else if (auto ar=n->is_subscript()){
-			auto expr=compile_node(ofp,ar->call_expr,curr_fn,sc,next_index);// expression[index]
-			auto index=compile_node(ofp,ar->argls[0],curr_fn,sc,next_index);
+			auto expr=compile_node(ofp,ar->call_expr,curr_fn,sc,next_reg);// expression[index]
+			auto index=compile_node(ofp,ar->argls[0],curr_fn,sc,next_reg);
 			auto array_type=expr.type;
 			auto inner_type=array_type->sub;
-			auto dst=ar->get_reg(ARRAY,next_index,false);
-			expr.load(ofp,next_index);
+			auto dst=ar->get_reg(ARRAY,next_reg,false);
+			expr.load(ofp,next_reg);
 			if (!n->regname){n->regname=expr.reg;}
 			
-			index.load(ofp,next_index,0);
+			index.load(ofp,next_reg,0);
 			fprintf(ofp,"\t%%%s = getelementptr inbounds ",str(dst));
 			write_type(ofp,array_type,true);//!expr.reg);
 			fprintf(ofp," %%%s,i32 0, i32 ",str(expr.reg));//%%%d\n",getString(expr.reg),
@@ -787,19 +787,19 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			if (e->call_expr->is_function_name()) {
 				
 			} else {
-				auto fptr = compile_node(ofp, e->call_expr, curr_fn, sc, next_index);
-				indirect_call=fptr.load(ofp, next_index);
+				auto fptr = compile_node(ofp, e->call_expr, curr_fn, sc, next_reg);
+				indirect_call=fptr.load(ofp, next_reg);
 			}
 
 			vector<CgValue> l_args;
 			vector<CgValue> l_args_reg;
 			// process function argumetns & load
 			for (auto arg:e->argls){
-				auto reg=compile_node(ofp,arg,call_fn,sc,next_index);
+				auto reg=compile_node(ofp,arg,call_fn,sc,next_reg);
 				if (!reg.type) {
 					fprintf(ofp,"\t; reg %s  %s\n", str(reg.reg), str(reg.addr));
 					arg->dump(0);
-					auto reg=compile_node(ofp,arg,call_fn,sc,next_index);
+					auto reg=compile_node(ofp,arg,call_fn,sc,next_reg);
 					ASSERT(reg.type);
 				}
 				l_args_reg.push_back(reg);
@@ -811,13 +811,13 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 					//dbprintf("warning writing adress of entity when we want entity\n");
 					//ASSERT(reg.reg==0);
 //					reg.type->dump(1);
-					reg.load(ofp,next_index);
+					reg.load(ofp,next_reg);
 				}
 				l_args.push_back(reg);
 				i++;
 			}
 
-			auto dst=n->get_reg_new(call_fn?call_fn->name:FN, next_index);
+			auto dst=n->get_reg_new(call_fn?call_fn->name:FN, next_reg);
 			//auto rt=call_fn->get_return_value();
 			auto ret_type=e->type();	// semantic analysis should have done this
 		
@@ -830,7 +830,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 			}
 			fprintf(ofp,"call ");
 			if (call_fn)
-				write_function_type(ofp, call_fn,next_index);
+				write_function_type(ofp, call_fn,next_reg);
 			else
 				write_function_type(ofp,e->call_expr->type());
 			if (!indirect_call) {
@@ -874,9 +874,9 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,RegisterNam
 	} else if (auto li=dynamic_cast<ExprLiteral*>(n)){
 		return CgValue(li);
 	} else if (auto ifn=dynamic_cast<ExprIf*>(n)) {
-		return compile_if(ofp,ifn,curr_fn,sc,next_index);
+		return compile_if(ofp,ifn,curr_fn,sc,next_reg);
 	} else if (auto ifn=dynamic_cast<ExprFor*>(n)) {
-		return compile_for(ofp,ifn,curr_fn,sc,next_index);
+		return compile_for(ofp,ifn,curr_fn,sc,next_reg);
 	} else if (auto ift=dynamic_cast<Type*>(n)) {
 		return CgValue(0,ift,0);
 	} else{
@@ -1012,8 +1012,6 @@ int translate_llvm_string_constant(char* dst, int size, const char* src){
 	printf("%s",dst);
 	return len;
 }
-class CodeGen{
-};
 
 CgValue Node::codegen(CodeGen& cg, bool just_contents) {
 	dbprintf("TODO refactor codegen to use this virtual. warning codegen not implemented for %s\n",this->kind_str());
@@ -1062,6 +1060,9 @@ char* name_mangle_append_name(char *dst,int size, Name n){
 
 
 void output_code(FILE* ofp, Scope* scope) {
+	CodeGen cg;
+	cg.ofp=ofp;
+	cg.next_reg=0;
 	fprintf(ofp,";from scope %s\n;\n",scope->name());
 	// output all inner items that outer stuff depends on..
 	for (auto sub=scope->child; sub; sub=sub->next) {
@@ -1077,12 +1078,12 @@ void output_code(FILE* ofp, Scope* scope) {
 	}
 	for (auto n=scope->named_items;n;n=n->next) {
 		for (auto s=n->structs; s;s=s->next_of_name) {
-			compile_struct_def(ofp, s, scope);
+			compile_struct_def(cg.ofp, s, scope);
 		}
 	}
 	for (auto n=scope->named_items;n;n=n->next) {
 		for(auto f=n->fn_defs; f; f=f->next_of_name){
-			compile_function(ofp,f,scope);
+			compile_function(cg.ofp,f,scope);
 		}
 	}
 }
