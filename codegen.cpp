@@ -332,7 +332,7 @@ void write_instruction(FILE* ofp, Name opname,Type* type,  CgValue dst,CgValue s
 
 void dump_locals(Scope* s){
 	for (;s;s=s->parent){
-		for (auto v=s->vars; v;v=v->next){
+		for (auto v=s->vars; v;v=v->next_of_scope){
 			printf("\t;%s:",str(v->name));v->get_type()->dump(-1); printf("%%%s\n",str(v->regname));
 		}
 	}
@@ -366,7 +366,7 @@ CgValue alloca_struct(FILE* ofp, Expr* holder, ExprStructDef* sd,int *next_index
 }
 
 void write_local_vars(FILE* ofp,Expr* n, ExprFnDef* fn, Scope* sc, RegisterName* new_reg) {
-	for (auto v=sc->vars; v;v=v->next){
+	for (auto v=sc->vars; v;v=v->next_of_scope){
 		if (v->kind!=Local) continue;
 		auto vt=v->expect_type();
 		if (!vt->is_complex())

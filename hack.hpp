@@ -265,6 +265,14 @@ struct Visitor {
 	virtual VResult visit(ArgDef* i);//		{newline(depth);dbprintf("For");return f->recurse(v);}
 };
 
+struct Capture {
+	ExprFnDef*	capture_from;
+	ExprFnDef*	capture_by;
+	Variable*	vars;
+	Capture* next_of_from;
+	ExprStructDef* the_struct;
+};
+
 struct Expr;
 class Node {
 	friend Visitor;
@@ -572,16 +580,18 @@ struct Call {
 */
 enum VarKind{VkArg,Local,Global};
 struct Variable : ExprDef{
+	Capture* capture_in=0;	// todo: scope or capture could be unified?
 	VarKind kind;
 	Scope* owner=0;
-	Variable* next=0;
+	Variable* next_of_scope=0;	// TODO could these be unified, var is owned by capture or scope
+	Variable* next_of_capture=0;
 	Expr* initialize=0; // if its an argdef, we instantiate an initializer list
 	Variable(SrcPos pos,Name n,VarKind k){this->pos=pos,name=n; initialize=0; owner=0;kind=k;this->set_type(0);}
 	Node* clone() const {
 		auto v=new Variable(this->pos,name,this->kind);
 		std::cout<<"clone "<<str(name)<<this<<" as "<<v<<"\n";
 		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
-		v->next=0; v->set_type(this->get_type()); return v;
+		v->next_of_scope=0; v->set_type(this->get_type()); return v;
 	}
 	virtual VResult visit(Visitor* v){ v->visit(this);return 0;}
 	virtual VResult recurse(Visitor* v){ v->pre_visit(this); this->visit(v); v->post_visit(this); return 0;;};
@@ -589,12 +599,13 @@ struct Variable : ExprDef{
 };
 // scopes are created when resolving; generic functions are evaluated
 struct Scope {
-	Expr*	owner=0;	// TODO: eliminate this, owner might be FnDef,Struct,ExprBlock
+	ExprDef*	owner_fn=0;	// TODO: eliminate this, owner might be FnDef,Struct,ExprBlock
 	Expr* node=0;
 	Scope* parent=0;
 	Scope* next=0;
 	Scope* child=0;
 	Scope* global=0;
+	Scope* capture_from=0;	// when resolving a local/lambda function, this is the owners' stack frame, look here for capturevars
 	ExprLiteral* literals=0;
 	//Call* calls;
 	Variable* vars=0;
@@ -604,10 +615,11 @@ struct Scope {
 	// captures.
 	const char* name()const;
 private:
-	Scope(){named_items=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
+	Scope(){named_items=0; owner_fn=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
 public:
-	Scope(Scope* p){ASSERT(p==0);named_items=0; owner=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
+	Scope(Scope* p){ASSERT(p==0);named_items=0; owner_fn=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
 	void visit_calls();
+	Variable* try_capture_var(Name ident);	//sets up the capture block ptr.
 	Variable* find_fn_variable(Name ident,ExprFnDef* f);
 	Variable* get_fn_variable(Name name,ExprFnDef* f);
 	Variable* find_variable_rec(Name ident);
@@ -622,6 +634,7 @@ public:
 			error(t,"cant find struct %s", sname->name_str());
 		return r;
 	}//original scope because typarams might use it.
+	Scope* parent_within_fn(){if (!parent) return nullptr; if (parent->owner_fn!=this->owner_fn) return nullptr; return parent;}
 	ExprStructDef* find_struct_sub(Scope* original,const Type* t);
 	ExprStructDef* find_struct_named(Name name);
 	ExprStructDef* find_struct_named(const Node* node){return find_struct_named(node->as_ident());}
@@ -636,16 +649,16 @@ public:
 	void add_fn_def(ExprFnDef*);
 	void dump(int depth) const;
 private:
-	void push_child(Scope* sub) { sub->owner=this->owner; sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
+	void push_child(Scope* sub) { sub->owner_fn=this->owner_fn; sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 public:
 	Scope* parent_or_global()const{
 		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
 	}
-	Scope* make_inner_scope(Scope** pp_scope,Expr* owner=0){
+	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner=0){
 		if (!*pp_scope){
 			auto sc=new Scope;
 			push_child(sc);
-			sc->owner=owner;
+			sc->owner_fn=owner;
 			*pp_scope=sc;
 		}
 		return *pp_scope;
@@ -729,6 +742,7 @@ struct ExprStructDef: ExprDef {
 		}
 		return -1;
 	}
+	virtual const char* kind_str()const{return"struct";}
 	ExprStructDef* next_of_name;
 	ExprStructDef(SrcPos sp,Name n){name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
 	ExprStructDef* get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
@@ -753,14 +767,19 @@ struct EnumDef  : ExprStructDef {
 };
 // todo.. generic instantiation: typeparam logic, and adhoc mo
 struct ExprFnDef : ExprDef {
-	ExprFnDef*	next_of_module=0;
+	ExprFnDef*	next_of_module=0; // todo: obsolete this.
 	ExprFnDef*	next_of_name=0;	//link of all functions of same name...
 	ExprFnDef*	instance_of=0;	// Original function, when this is a template instance
 	ExprFnDef*	instances=0;		// Linklist of it's instanced functions.
 	ExprFnDef*	next_instance=0;
+	ExprFnDef*	next_of_capture=0;
 	ExprBlock* callers=0;	// linklist of callers to here
 	NamedItems*		name_ptr=0;
 	Scope*	scope=0;
+	Capture*	capture=0; // TODO: generalize OOP and FP: is a Class a set of lambdas on a capture? is a lambda an optimization of a class with one method? the Capture can have a linklist of functions 'on' it. in a lambda, calling "this->fn.." could get another function from the originating scope?
+		// Captures should just desugar into local classes. local variables in the capture just desugar capture_struct.varname
+	// Inlined lambdas dont need all this
+	// we could simplify things alot ..
 	
 	Type* ret_type=0;
 	Type* fn_type=0;				// eg (args)->return
@@ -783,6 +802,7 @@ struct ExprFnDef : ExprDef {
 	void dump(int ind) const;
 	ResolvedType resolve(Scope* scope,const Type* desired,int flags);
 	ResolvedType resolve_call(Scope* scope,const Type* desired,int flags);
+	Capture* get_or_create_capture();
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	Expr* get_return_value() const;
 	Type* return_type()const {

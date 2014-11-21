@@ -1,3 +1,4 @@
+
 #include "hack.hpp"
 #include "codegen.h"
 #include "repl.h"
@@ -77,9 +78,9 @@ if x in {
  error reporting.
  foo.q // error q not available
  foo.bar()		// bar not available.  available functions:-.....
-
  */
 
+#define dbprintf_varscope dbprintf
 
 void dbprintf(const char* str, ... )
 {
@@ -684,7 +685,7 @@ ExprBlock::ExprBlock(const SrcPos& s){ pos=s;}
 ExprFnDef* ExprBlock::get_fn_call()const {return def?dynamic_cast<ExprFnDef*>(this->def):nullptr;}
 
 const char* Scope::name() const {
-	if (owner) return str(owner->name);
+	if (owner_fn) return str(owner_fn->name);
 	if (!parent){
 		return"<global>";
 	}  else return "<anon>";
@@ -1391,18 +1392,17 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 }
 Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 	// todo: This Pointer?
-	if (this->owner!=f) return nullptr;
-	for (auto v=this->vars; v; v=v->next) {
+	if (this->owner_fn!=f) return nullptr;
+	for (auto v=this->vars; v; v=v->next_of_scope) {
 		if (v->name==name) return v;
 	}
-	for (auto ps=this->parent; ps;ps=ps->parent_or_global()){
-		if (auto p=ps->find_fn_variable(name,f))
+	if (auto p=this->parent_within_fn())
+		if (auto v=p->find_fn_variable(name,f))
+			return v;
+	if (this->global && this->global!=this){
+		if (auto p=this->global->find_fn_variable(name,f))
 			return	p;
 	}
-//	if (this->global && this->global!=this){
-//		if (auto p=this->global->find_fn_variable(name,f))
-//			return	p;
-//	}
 	return nullptr;
 }
 ExprStructDef* Scope::find_struct_sub(Scope* original,const Type* t){
@@ -1451,16 +1451,40 @@ void Scope::add_struct(ExprStructDef* sd){
 	ni->structs=sd;
 }
 Variable* Scope::find_scope_variable(Name name){
-	for (auto v=this->vars; v;v=v->next){
+	for (auto v=this->vars; v;v=v->next_of_scope){
 		if (v->name==name) return v;
 	}
 	return nullptr;
 }
 Variable* Scope::find_variable_rec(Name name){
-	if (auto v=find_scope_variable(name)) return v;
-	if (this->parent) return this->parent->find_variable_rec(name);
+	dbprintf_varscope("find variable %s in %s\n",str(name),this->name());
+	for (auto sc=this; sc;sc=sc->parent_within_fn())
+		if (auto v=sc->find_scope_variable(name))
+			return v;
+	
+	if (this->capture_from && this->capture_from!=this){
+		auto cv=this->try_capture_var(name);
+		return cv;
+	}
+	
 	return nullptr;
 }
+
+Variable* Scope::try_capture_var(Name name) {
+	if (auto ofn=dynamic_cast<ExprFnDef*>(this->owner_fn)){
+		auto v=capture_from->find_variable_rec(name);
+		auto cp=ofn->get_or_create_capture();
+		if (v->capture_in==0){
+			v->capture_in=cp; v->next_of_capture=cp->vars; cp->vars=v;
+			dbprintf_varscope("%s captured by %s from %s\n",str(name),this->name(),capture_from->name());
+			return v;
+		}
+		else if (v->capture_in!=cp)
+			error(v,ofn,"can't capture variable twice yet- TODO, coalesce capture blocks");
+	}
+	return nullptr;// we can't capture.
+}
+
 /*
 Variable* Scope::get_or_create_variable(Name name,VarKind k){
 	if (auto v=this->find_variable_rec(name)) {
@@ -1473,7 +1497,7 @@ Variable* Scope::create_variable(Node* n, Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	if (exv) return exv;
 	ASSERT(exv==0);
-	auto v=new Variable(n->pos,name,k); v->next=this->vars; this->vars=v;
+	auto v=new Variable(n->pos,name,k); v->next_of_scope=this->vars; this->vars=v;
 	v->name=name;v->owner=this;
 	return v;
 }
@@ -1488,8 +1512,8 @@ Variable* Scope::get_or_create_scope_variable(Node* creator,Name name,VarKind k)
 	return v;
 }
 void Scope::dump(int depth)const {
-	newline(depth);dbprintf("scope: %s {", this->owner?getString(this->owner->name_str()):"<global>");
-	for (auto v=this->vars; v; v=v->next) {
+	newline(depth);dbprintf("scope: %s {",  this->name());
+	for (auto v=this->vars; v; v=v->next_of_scope) {
 		newline(depth+1); dbprintf("var %d %s:",(int)v->name, getString(v->name));
 		if (auto t=v->get_type()) t->dump(-1);
 	}
@@ -1940,6 +1964,14 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		return ResolvedType();
 	}
 }
+
+Capture* ExprFnDef::get_or_create_capture(){
+	if (!this->capture) {
+		this->capture = new Capture;
+	}
+	return capture;
+}
+
 int ExprFnDef::type_parameter_index(Name n) const {
 	for (auto i=0; i<typeparams.size(); i++){
 		if (n==typeparams[i].name)
@@ -1971,11 +2003,20 @@ ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	if (else_block) else_block->resolve(sc,0,flags);
 	return ResolvedType();
 }
-
+//global fn:   definer_scope->capture_from =0;
+//             so set 'capture_from' to its own scope.
+//
+//inner-function: 'definer_scope' has capture_from set - just take it.
 ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int flags) {
 
 	definer_scope->add_fn(this);
 	auto sc=definer_scope->make_inner_scope(&this->scope,this);
+	if (definer_scope->capture_from){
+		sc->capture_from=definer_scope->capture_from; // this is an 'inner function' (lambda, or local)
+	}
+	else{
+		sc->capture_from=sc; // This is a global function or class-method; nowhere to capture from.
+	}
 		//this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
 
 	// TODO: infer function type(args,return) to get a return type for body inference,maybe.
@@ -1995,6 +2036,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 			desired_ret=desired->fn_return();
 		else
 			desired=nullptr;
+		
 		if (this->body){
 			auto ret=this->body->resolve(sc, this->ret_type, flags);
 //			this->ret_type=ret.type;
@@ -2181,39 +2223,26 @@ struct TextInput {
 	NumDenom eat_number()  {
 		int	val=0;
 		int	frac=0;
+		const char* p=tok_start;
+		int sign=1; if (*p=='-') {sign=-1;p++;}
+		int base=10;
 		if ((tok_start+2)<=tok_end){
 			if (tok_start[0]=='0' && tok_start[1]=='x'){
-				return eat_number_hex();
+				base=16;
 			}
 		}
-		for (const char* p=tok_start;p<tok_end; p++) {
+		for (;p<tok_end; p++) {
+			char c=*p;
 			if (*p=='.') { frac=1;}
 			else {
-				val*=10;
-				frac*=10;
-				val+=*p-'0';
-			}
-		}
-		if (frac==0) {frac=1;}
-		advance_tok();
-		return NumDenom{val,frac};
-	}
-	NumDenom eat_number_hex()  {
-		int	val=0;
-		int	frac=0;
-		for (const char* p=tok_start;p<tok_end; p++) {
-			char c=*p;
-			if (c=='.') { frac=1;}
-			else {
-				val*=16;
-				frac*=16;
+				val*=base;
+				frac*=base;
 				val+=(c>='0'&&c<='9')?(c-'0'):(c>='a'&&c<='f')?(10+(c-'a')):0;
 			}
 		}
 		if (frac==0) {frac=1;}
 		advance_tok();
 		return NumDenom{val,frac};
-		
 	}
 	float eat_float() {
 		auto nd=eat_number();
@@ -3230,6 +3259,7 @@ const char* g_TestProg2=
 "		fs:=FooStruct{0xff,0x7f};		\n"
 "		pfs:=&fs;\n"
 "		foo_struct(&fs);		\n"
+"	fn localtest(i:int)->int{i+argc}; \n"
 "		py:=pfs as *int;\n"
 "		printf(\"foostruct int val recast %d; foostruct raw value %d\n\",*py,fs.x);\n"
 "		fp(2);fp(x);		\n"
