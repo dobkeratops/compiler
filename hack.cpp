@@ -224,8 +224,9 @@ const char* g_token_str[]={
 	"half","float","double","float4","char","str","void","auto","one","zero","voidptr",
 	"ptr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
-	"print___","fn","struct","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof",
+	"print___","fn","struct","class","trait","virtual","static","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof",
 	"let","set","var",
+	"const","mut","volatile",
 	"while","if","else","do","for","in","return","break",
 	"(",")",
 	"{","}",
@@ -255,8 +256,9 @@ int g_tok_info[]={
 	0,0,0,0,0,0,0,0,0,0,0,0,// int types
 	0,0,0,0,0,0,0,0,0,0,	// float types
 	0,0,0,0,0,0,			// type modifiers
-	0,0,0,0,0,0,0,0,0,0, 0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0, // keywords
 	0,0,0,			// let,set,var
+	0,0,0,			// modifiers const,mut,volatile
 	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
 	0,0, //( )
 	0,0, //{ }
@@ -3118,6 +3120,32 @@ void ExprStructDef::inherit_from(Scope * sc,Type *base_type){
 	ASSERT(inherits==0); next_of_inherits=base_instance->derived; base_instance->derived=this; this->inherits=base_instance;
 }
 
+void ExprStructDef::roll_vtable() {
+	if (this->vtable){ return;} // done already
+	if (this->inherits) {this->inherits->roll_vtable();}
+
+	// todo - it should be namespaced..
+	char vtn[512];sprintf(vtn,"%s__vtable",str(this->name));
+	this->vtable=new ExprStructDef(this->pos,getStringIndex(vtn));
+
+	// todo: we will create a global for the vtable
+	// we want to be able to emulate rust trait-objects
+	// & hotswap vtables at runtime for statemachines
+
+	for (int i=0; i<this->functions.size();i++) {
+		auto f=this->functions[i];
+		// todo: static-virtual fields go here!
+		this->vtable->fields.push_back(
+			new ArgDef(
+				this->pos,
+				f->name,
+				f->fn_type,//todo:  insertion of 'this'
+				new ExprIdent(this->pos, f->name)
+				));
+	}
+}
+
+
 void ExprStructDef::dump(int depth) const{
 	newline(depth);
 	dbprintf("%s %s",this->kind_str(), getString(this->name));dump_typeparams(this->typeparams);
@@ -3154,7 +3182,7 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 
 	definer_scope->add_struct(this);
 	if (!this->get_type()) {
-		this->set_type(new Type(this->name));	// name selects this struct.
+		this->set_type(new Type(this->name));	// name selects this struct
 	}
 
 	if (!this->is_generic()){
@@ -3162,6 +3190,15 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 		for (auto m:fields){ m->resolve(sc,nullptr,flags);}
 		for (auto s:structs){ s->resolve(sc,nullptr,flags);}
 		for (auto f:functions){ f->resolve(sc,nullptr,flags);}
+
+		if (this->inherits_type && !this->inherits){
+			this->inherits_type->resolve(definer_scope,desired,flags);
+			this->inherits=definer_scope->find_struct(this->inherits_type);
+		}
+		if (this->functions.size()){// ToDO: && is-class. and differentiate virtual functions. For the minute, *all* functoins defined in struct are virtual. we want UFCS for non-virtuals.
+			roll_vtable();
+		}
+		if (this->vtable) this->vtable->resolve(definer_scope,desired,flags);
 	}
 
 	return propogate_type_fwd(flags,this, desired);

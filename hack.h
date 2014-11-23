@@ -99,8 +99,9 @@ enum Token {
 	HALF,FLOAT,DOUBLE,FLOAT4,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,	// float types,ptrs
 	PTR,REF,NUM_RAW_TYPES=REF,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
 	
-	PRINT,FN,STRUCT,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,
+	PRINT,FN,STRUCT,CLASS,TRAIT,VIRTUAL,STATIC,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,THIS,SELF,SUPER,VTABLEOF,
 	LET,SET,VAR,
+	CONST,MUT,VOLATILE,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
 	// delimiters
 	OPEN_PAREN,CLOSE_PAREN,
@@ -294,6 +295,7 @@ struct Capture {
 class Node {
 	friend Visitor;
 public:
+	Node*	m_parent=0;					// for search & error messages,convenience TODO option to strip.
 	Name name;
 	RegisterName regname;			// temporary for llvm SSA calc. TODO: these are really in Expr, not NOde.
 	bool reg_is_addr=false;
@@ -317,6 +319,8 @@ public:
 	RegisterName get_reg(Name baseName, int* new_index, bool force_new);
 	RegisterName get_reg_new(Name baseName, int* new_index);
 	RegisterName get_reg_existing();
+	Node*	parent()					{return this->m_parent;}
+	void	set_parent(Node* p)			{this->m_parent=p;}
 	virtual CgValue codegen(CodeGen& cg,bool contents);
 	virtual bool is_undefined()const										{if (this && name==PLACEHOLDER) return true; return false;}
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const	{return ;}
@@ -737,7 +741,7 @@ struct ExprStructDef: ExprDef {
 	Type*	inherits_type=0;
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
-
+	ExprStructDef* vtable;
 	bool is_generic() const;
 	ExprStructDef* instances=0, *instance_of=0,*next_instance=0;
 	ExprFnDef* constructor_fn=0;
@@ -769,6 +773,7 @@ struct ExprStructDef: ExprDef {
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
+	void			roll_vtable();
 };
 
 inline Type* Type::get_elem(int index){
@@ -875,6 +880,7 @@ struct ExprIdent :Expr{
 	ExprIdent()	{};
 	ExprIdent(const char* s,const char* e)	{name=Name(s,e);set_type(nullptr);}
 	ExprIdent(Name n,SrcPos sp)				{pos=sp;name=n;set_type(nullptr);}
+	ExprIdent(SrcPos sp,Name n)				{pos=sp;name=n;set_type(nullptr);}
 	virtual const char*	kind_str()const		{return"ident";}
 	virtual VResult	recurse(Visitor* v)		{return 0;};
 	VResult			visit(Visitor* v)		{return v->visit(this);}
