@@ -46,6 +46,7 @@ extern void error(const Node*,const Node*,const char*,...);
 extern void error(const Node*,const char*,...);
 extern void error(const char*,...);
 extern bool is_comparison(Name n);
+int index_of(Name n);
 // todo: seperate Parser.
 
 #define ilist initializer_list
@@ -82,7 +83,7 @@ template<class T,class Y> T* isa(const Y& src){ return dynamic_cast<T>(src);}
 #define READ (READ_LHS|READ_RHS)
 #define MODIFY (READ_LHS|WRITE_LHS|READ_RHS|WRITE_RHS)
 #define RWFLAGS (WRITE_LHS|READ_LHS|WRITE_RHS|READ_RHS)
-extern int operator_flags(int tok);
+extern int operator_flags(Name n);
 bool isSymbolStart(char c);
 extern int g_raw_types[];
 #define RT_FLOATING 0x4000
@@ -151,7 +152,7 @@ class CgValue;
 
 Name getStringIndex(const char* str,const char* end=0);
 const char* str(int);
-
+inline int index(Name);
 #ifdef DEBUG_NAMES
 struct Name {
 	char* str;
@@ -164,35 +165,43 @@ struct Name {
 		index=getStringIndex(a,end);
 	}
 	Name(const Name& b)	{index=b.index; str=b.str;}
-	operator int()const	{return index;}
 	bool operator==(const Name& b)const	{return index==b.index;}
 	bool operator==(int b)const			{return index==b;}
 	void translate_typeparams(const TypeParamXlat& tpx);
+	bool operator!()const{return m_index==0;}
+	explicit operator bool()const{return m_index!=0;}
 };
+inline int index(Name n){return n.m_index;}
 
 
 #else
 struct Name {
-	int32_t index;
-	Name()			{index=0;}
-	Name(int i)		{index=i;}
+	int32_t m_index;
+	Name()			{m_index=0;}
+	Name(int i)		{m_index=i;}
 	Name(const char* a, const char* end=0){
 		if (!end)
 			end=a+strlen(a);
-		index=getStringIndex(a,end);
+		m_index=index(getStringIndex(a,end));
 	}
-	Name(const Name& b)	{index=b.index; }
+	Name(const Name& b)	{m_index=b.m_index; }
 	//	operator int32_t(){return index;}
-	operator int()const		{return index;}
-	bool operator==(int b)const	{return index==b;}
-	bool operator<(int b)const	{return index<b;}
-	bool operator>=(int b)const	{return index>=b;}
-	bool operator==(const Name& b)const	{return index==b.index;}
+	bool operator==(int b)const	{return m_index==b;}
+	bool operator<(int b)const	{return m_index<b;}
+	bool operator>(int b)const	{return m_index>b;}
+	bool operator>=(int b)const	{return m_index>=b;}
+	bool operator<=(int index)const {return m_index<=index;}
+	bool operator==(const Name& b)const	{return m_index==b.m_index;}
+	bool operator!=(const Name& b)const	{return m_index!=b.m_index;}
 	void translate_typeparams(const TypeParamXlat& tpx);
+	bool operator!()const{return m_index==0;}
+	explicit operator bool()const{return m_index!=0;}
 };
+int index(Name n){return n.m_index;}
 #endif
 
-typedef int32_t RegisterName;
+//typedef int32_t RegisterName;
+typedef Name RegisterName;
 
 bool is_operator(Name name);
 struct LLVMOp {
@@ -201,8 +210,8 @@ struct LLVMOp {
 	const char* op_unsigned;
 };
 
-const LLVMOp* get_op_llvm(int opname,int tyname); // for tokens with 1:1 llvm mapping
-const char* get_llvm_type_str(int tname);
+const LLVMOp* get_op_llvm(Name opname,Name tyname); // for tokens with 1:1 llvm mapping
+const char* get_llvm_type_str(Name tname);
 extern const char* g_token_str[];
 extern int g_tok_info[];
 
@@ -299,7 +308,7 @@ public:
 	virtual const char* kind_str()const	{return"node";}
 	virtual int get_name() const		{return 0;}
 	const char* get_name_str()const;
-	const char* name_str()const			{return this->name?str(this->name):"";}
+	const char* name_str()const			{return str(this->name);}
 //	Name ident() const					{if (this)return this->name;else return 0;}
 	virtual Node* clone() const=0;
 	Node* clone_if()const				{ if(this) return this->clone();else return nullptr;}
@@ -338,7 +347,7 @@ struct TypeParam: Node{
 
 
 struct LLVMType {
-	int name;
+	Name name;
 	bool is_pointer;
 };
 extern void verify(const Type* t);
@@ -385,7 +394,7 @@ struct Type : Expr{
 	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
 	size_t	alignment() const;
 	size_t	size() const;
-	int	raw_type_flags()const	{int i=name-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
+	int	raw_type_flags()const	{int i=index(name)-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
 	bool	is_int()const		{return raw_type_flags()&RT_INTEGER;}
 	bool	is_float()const		{return raw_type_flags()&RT_FLOATING;}
 	bool	is_signed()const	{return raw_type_flags()&RT_SIGNED;}
@@ -428,8 +437,8 @@ struct ExprOp: public Expr{
 	}
 	ExprOp(Name opname,SrcPos sp)			{name=opname; lhs=0; rhs=0;pos=sp;}
 	void	dump(int depth) const;
-	int		get_operator() const			{return this->name;}
-	int		get_op_name() const				{return this->name;}
+	int		get_operator() const			{return index(this->name);}
+	int		get_op_name() const				{return index(this->name);}
 	bool	is_undefined()const				{return (lhs?lhs->is_undefined():false)||(rhs?rhs->is_undefined():false);}
 	VResult	visit(Visitor* v)				{return v->visit(this);}
 	virtual VResult		recurse(Visitor* v)	{v->pre_visit(this);if (this->lhs) this->lhs->visit(v); if (this->rhs) this->rhs->visit(v); v->post_visit(this);return 0;}
@@ -449,13 +458,13 @@ struct ExprBlock :public ExprScopeBlock{
 	short	bracket_type;	//OPEN_PARENS,OPEN_BRACES,OPEN_BRACKETS,(ANGLE_BRACKETS?)
 	short	delimiter=0;//COMMA, SEMICOLON,SPACES?
 
-	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...}
+	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...} call_expr[argls..] call_expr{argls}
 	vector<Expr*>	argls;
 	//ExprFnDef*	call_target=0;
 	Scope*		scope=0;
 	ExprBlock*	next_of_call_target=0;	// to walk callers to a function
 	// these are supposed to be mutually exclusive substates, this would be an enum ideally.
-	bool	is_compound_expression()const	{return !call_expr && !name;}
+	bool	is_compound_expression()const	{return !call_expr && !index(name);}
 	bool	is_tuple()const					{return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
 	bool	is_struct_initializer()const	{return this->bracket_type==OPEN_BRACE && this->delimiter==COMMA;}
 	bool	is_match() const				{return false;}
@@ -549,6 +558,7 @@ struct ArgDef :ExprDef{
 	virtual VResult	recurse(Visitor*v)	{;return 0;}
 	VResult			visit(Visitor* v)	{ return v->visit(this);}
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
+	ResolvedType	resolve(Scope* sc, const Type* desired, int flags) override;
 };
 
 struct NamedItems {		// everything defined under a name
@@ -805,7 +815,7 @@ struct  ExprFnDef : ExprDef {
 	bool variadic;
 	ExprBlock* body=0;
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
-	int		get_name()const {return name;}
+	int		get_name()const {return index(name);}
 	bool	is_generic() const;
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
@@ -824,7 +834,7 @@ struct  ExprFnDef : ExprDef {
 	}
 	bool	has_return_value() const{
 		if (auto r=return_type()){
-			return r->name!=VOID;}
+			return index(r->name)!=VOID;}
 		else return false;
 	}
 	Node*	clone() const;

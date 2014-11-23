@@ -182,7 +182,7 @@ void error(const char* str, ... ){
 }
 ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
 
-void print_tok(int i){dbprintf("%s ",getString(i));};
+void print_tok(Name n){dbprintf("%s ",getString(n));};
 
 bool g_lisp_mode=false;
 int g_size_of[]={
@@ -289,31 +289,33 @@ bool is_condition(Name tok){
 bool is_comparison(Name tok){
 	return (tok>=LT && tok<=NE);
 }
-int operator_flags(int tok){return g_tok_info[tok];}
-int precedence(int tok){return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
-int is_prefix(int tok){return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
-int arity(int tok){return  (tok<IDENT)?((g_tok_info[tok] & (UNARY) )?1:2):-1;}
-int is_right_assoc(int tok){return (tok<IDENT)?(g_tok_info[tok]&ASSOC):0;}
-int is_left_assoc(int tok){return (tok<IDENT)?(!(g_tok_info[tok]&ASSOC)):0;}
-int get_prefix_operator(int tok) {
-	if (tok>IDENT) return tok;
-	switch (tok){
-	case POST_INC: return PRE_INC;
-	case POST_DEC: return PRE_DEC;
-	case SUB: return NEG;
-	case MUL: return DEREF;
-	case AND: return ADDR;
+int operator_flags(Name tok){return g_tok_info[index(tok)];}
+int precedence(Name ntok){auto tok=index(ntok);return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
+int is_prefix(Name ntok){auto tok=index(ntok);return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
+int arity(Name ntok){auto tok=index(ntok);return  (tok<IDENT)?((g_tok_info[tok] & (UNARY) )?1:2):-1;}
+int is_right_assoc(Name ntok){auto tok=index(ntok);return (tok<IDENT)?(g_tok_info[tok]&ASSOC):0;}
+int is_left_assoc(Name ntok){auto tok=index(ntok);return (tok<IDENT)?(!(g_tok_info[tok]&ASSOC)):0;}
+Name get_prefix_operator(Name tok) {
+	auto itok=index(tok);
+	if (itok>IDENT) return tok;
+	switch (itok){
+	case POST_INC: return Name(PRE_INC);
+	case POST_DEC: return Name(PRE_DEC);
+	case SUB: return Name(NEG);
+	case MUL: return Name(DEREF);
+	case AND: return Name(ADDR);
 	default: return tok;
 	}
 }
-int get_infix_operator(int tok) {
-	if (tok>IDENT) return tok;
-	switch (tok){
-	case PRE_INC: return POST_INC;
-	case PRE_DEC: return POST_DEC;
-	case NEG: return SUB;
-	case DEREF: return MUL;
-	case ADDR: return AND;
+Name get_infix_operator(Name tok) {
+	auto itok=index(tok);
+	if (itok>IDENT) return tok;
+	switch (itok){
+	case PRE_INC: return Name(POST_INC);
+	case PRE_DEC: return Name(POST_DEC);
+	case NEG: return Name(SUB);
+	case DEREF: return Name(MUL);
+	case ADDR: return Name(AND);
 	default: return tok;
 	}
 }
@@ -345,7 +347,8 @@ LLVMOp2 g_llvm_cmp_ops[]= {
 //const char* g_llvm_type[]={
 //	"i32","i32","i1","float","i8","i8*"
 //};
-const char* get_llvm_type_str(int tname){
+const char* get_llvm_type_str(Name n_type_name){
+	auto tname=index(n_type_name);
 	switch (tname){
 		case INT:return "i32";	// TODO depend on arch 32/64bit
 		case SIZE_T:return "i64";	// TODO depend on arch 32/64bit
@@ -359,7 +362,8 @@ const char* get_llvm_type_str(int tname){
 	}
 }
 
-const LLVMOp* get_op_llvm(int tok,int type){
+const LLVMOp* get_op_llvm(Name ntok,Name ntype){
+	auto tok=index(ntok); auto type=index(ntype);
 	int ti=(type==FLOAT||type==DOUBLE||type==FLOAT)?1:0;
 	if (tok>=ADD && tok<=SHR)
 		return &g_llvm_ops[tok-ADD][ti];
@@ -414,8 +418,8 @@ StringTable g_Names(g_token_str);
 Name getStringIndex(const char* str,const char* end) {
 	return g_Names.get_index(str, end,0);
 }
-const char* getString(const Name& index) {
-	return g_Names.index_to_name[(int)index].c_str();
+const char* getString(const Name& n) {
+	return g_Names.index_to_name[index(n)].c_str();
 }
 Name getNumberIndex(int num){
 	char tmp[32];sprintf(tmp,"%d",num); return g_Names.get_index(tmp,0,StringTable::Number);
@@ -714,7 +718,7 @@ void ExprBlock::dump(int depth) const {
 void ExprOp::dump(int depth) const {
 	if (!this) return;
 	newline(depth);
-	int id=this->name;
+	auto id=this->name;
 	if (is_prefix(id))dbprintf("prefix");
 	else if (lhs && rhs)dbprintf("infix");
 	else dbprintf("postfix");print_tok(id);
@@ -754,9 +758,16 @@ ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 	if (!this->struct_def){
 		this->struct_def=sc->find_struct_named(this->name);
 	}
-	for (auto s=this->sub;s;s=s->next) s->resolve(sc,desired,flags);
+	for (auto s=this->sub;s;s=s->next)
+		s->resolve(sc,desired,flags);
 	
 	return ResolvedType(this,ResolvedType::COMPLETE);
+}
+ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
+	propogate_type_fwd(flags,this,desired,this->type_ref());
+	if (this->type()){this->type()->resolve(sc,desired,flags);}
+	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
+	return ResolvedType(this->type(), ResolvedType::COMPLETE);
 }
 
 void Type::push_back(Type* t) {
@@ -933,8 +944,8 @@ ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
 		sc->global->literals=this;
 		this->owner_scope=sc->global;
 	}
-	if (!this->name){
-		char str[256]; if (!this->name){sprintf(str,"str%x",(uint)(size_t)this); this->name=getStringIndex(str);}
+	if (this->name==0){
+		char str[256]; if (this->name==0){sprintf(str,"str%x",(uint)(size_t)this); this->name=getStringIndex(str);}
 	}
 	if (!this->get_type()) {
 		Type* t=nullptr;
@@ -1618,7 +1629,7 @@ Variable* Scope::get_or_create_scope_variable(Node* creator,Name name,VarKind k)
 void Scope::dump(int depth)const {
 	newline(depth);dbprintf("scope: %s {",  this->name());
 	for (auto v=this->vars; v; v=v->next_of_scope) {
-		newline(depth+1); dbprintf("var %d %s:",(int)v->name, getString(v->name));
+		newline(depth+1); dbprintf("var %d %s:",index(v->name), getString(v->name));
 		if (auto t=v->get_type()) t->dump(-1);
 	}
 	for (auto ni=this->named_items; ni;ni=ni->next){
@@ -1705,7 +1716,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	else if (op_ident==COLON){ // TYPE ASSERTION
 		// todo: get this in the main parser
 		ASSERT(dynamic_cast<ExprIdent*>(rhs)); // todo- not just that
-		int tname=rhs->name;
+		auto tname=rhs->name;
 		auto v=sc->find_variable_rec(lhs->name);
 		if (!v->get_type()){
 			v->set_type((const Type*)rhs);
@@ -2150,6 +2161,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 
 	if (!this->is_generic()){
 		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
+			this->args[i]->resolve(definer_scope, nullptr, flags); // todo: call with defaultparams & init-expr
 			auto arg=this->args[i];
 			auto v=sc->find_scope_variable(arg->name);
 			if (!v){v=sc->create_variable(arg,arg->name,VkArg);}
@@ -2452,7 +2464,7 @@ struct TextInput {
 
 	Name peek_tok(){return curr_tok;}
 	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
-	Name expect(Name t){ int x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s\n",str(t), str(x));exit(0);} return x;}
+	Name expect(Name t){ decltype(t) x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s\n",str(t), str(x));exit(0);} return x;}
 };
 
 void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
@@ -2479,7 +2491,7 @@ void dump(vector<Expr*>& v) {
 	}
 	dbprintf("\n");
 }
-struct SrcOp{ int op; SrcPos pos;};
+struct SrcOp{ Name op; SrcPos pos;};
 void pop_operator_call( vector<SrcOp>& operators,vector<Expr*>& operands) {
 	//takes the topmost operator from the operator stack
 	//creates an expression node calling it, consumes operands,
@@ -2552,7 +2564,7 @@ ExprBlock* parse_call(TokenStream& src,int close,int delim, Expr* op) {
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
 	node->bracket_type=(close==CLOSE_BRACKET)?OPEN_BRACKET:close==CLOSE_PAREN?OPEN_PAREN:close==CLOSE_BRACE?OPEN_BRACE:0;
 	while (true) {
-		if (!src.peek_tok()) break;
+		if (src.peek_tok()==0) break;
 		if (src.peek_tok()==IN) break;
 		// parsing a single expression TODO split this into 'parse expr()', 'parse_compound'
 		if (close || delim) { // compound expression mode.
@@ -2824,7 +2836,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name){
 		return sd;
 	// todo: type-params.
 	Name tok;
-	while (NONE!=(tok=src.peek_tok())){
+	while ((tok=src.peek_tok())!=NONE){
 		if (tok==CLOSE_BRACE){src.eat_tok(); break;}
 		if (src.eat_if(STRUCT)) {
 			sd->structs.push_back(parse_struct(src));
@@ -2847,7 +2859,7 @@ ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
 	if (!src.eat_if(OPEN_PAREN))
 		return sd;
 
-	while (NONE!=(tok=src.peek_tok())){
+	while ((tok=src.peek_tok())!=NONE){
 		if (tok==CLOSE_PAREN){src.eat_tok(); break;}
 		sd->fields.push_back(new ArgDef(pos,0,parse_type(src,0)));
 		src.eat_if(COMMA); src.eat_if(SEMICOLON);
@@ -2868,7 +2880,7 @@ ExprStructDef* parse_enum(TokenStream& src) {
 	if (!src.eat_if(OPEN_BRACE))
 		return ed;
 	// todo: type-params.
-	while (NONE!=(tok=src.eat_tok())){
+	while ((tok=src.eat_tok())!=NONE){
 		auto subpos=src.pos;
 		if (tok==CLOSE_BRACE){break;}
 		// got an ident, now what definition follows.. =value, {fields}, (types), ..
@@ -3134,9 +3146,12 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 		this->set_type(new Type(this->name));	// name selects this struct.
 	}
 
-	auto sc=definer_scope->make_inner_scope(&this->scope,this);
-	for (auto s:structs){ s->resolve(sc,nullptr,flags);}
-	for (auto f:functions){ f->resolve(sc,nullptr,flags);}
+	if (!this->is_generic()){
+		auto sc=definer_scope->make_inner_scope(&this->scope,this);
+		for (auto m:fields){ m->resolve(sc,nullptr,flags);}
+		for (auto s:structs){ s->resolve(sc,nullptr,flags);}
+		for (auto f:functions){ f->resolve(sc,nullptr,flags);}
+	}
 
 	return propogate_type_fwd(flags,this, desired);
 }
@@ -3294,7 +3309,7 @@ ExprFnDef* parse_fn(TokenStream&src) {
 		tok=src.expect(OPEN_PAREN);
 	} else fndef->name=NONE;
 	// read function arguments
-	while (NONE!=(tok=src.peek_tok())) {
+	while ((tok=src.peek_tok())!=NONE) {
 		if (tok==ELIPSIS){
 			fndef->variadic=true; src.eat_tok(); src.expect(CLOSE_PAREN); break;
 		}
@@ -3458,6 +3473,8 @@ const char* g_TestProg2=
 "		take_ptr(fp);\n"
 "		bar(1,2,3);	\n"
 "	,0}\n"
+
+
 /*
 	"struct Foo{x:int,y:int, struct Bar{x:float}, fn method(i:int)->int{printf(\"hello from method %d\n\",i);0};};"
 	"fn printf(s:str,...)->int;"
