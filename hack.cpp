@@ -230,6 +230,7 @@ const char* g_token_str[]={
 	"(",")",
 	"{","}",
 	"[","]",
+	"<[","]>",
 	"->",".","=>","<-","::","<->",			//arrows,accessors
 	":","as",
 	"+","-","*","/",					//arithmetic
@@ -260,6 +261,7 @@ int g_tok_info[]={
 	0,0, //( )
 	0,0, //{ }
 	0,0, // [ ]
+	0,0, //Type
 	READ|10,READ|2,READ|10,READ|10,READ|13,WRITE|10,	   // arrows
 	READ|9,READ|9,
 	READ|6,READ|6,READ|5,READ|5,		//arithmetic
@@ -513,9 +515,15 @@ void verify(const Type* a,const Type* b,const Type* c){
 const Type* any_not_zero(const Type* a, const Type* b){return a?a:b;}
 ResolvedType propogate_type(int flags,const Node*n, Type*& a,Type*& b) {
 	verify(a,b);
-	if (!(a || b)) return ResolvedType(0,ResolvedType::INCOMPLETE);
-	if (!a && b) {a=b; return ResolvedType(a,ResolvedType::COMPLETE);}
-	else if (!b && a) {b=a; return ResolvedType(b,ResolvedType::COMPLETE);}
+	if (!(a || b))
+		return ResolvedType(0,ResolvedType::INCOMPLETE);
+	if (!a && b) {
+		a=b;
+		return ResolvedType(a,ResolvedType::COMPLETE);}
+	else if (!b && a) {
+		b=a;
+		return ResolvedType(b,ResolvedType::COMPLETE);
+	}
 	else {
 		return assert_types_eq(n, a,b);
 	}
@@ -528,10 +536,18 @@ ResolvedType propogate_type(int flags, Expr *n, Type*& a,Type*& b) {
 }
 ResolvedType propogate_type_fwd(int flags,const Node* n, const Type*& a,Type*& b) {
 	verify(a,b);
-	if (!(a || b)) return ResolvedType(0,ResolvedType::INCOMPLETE);
-	if (!a && b){return ResolvedType(b,ResolvedType::INCOMPLETE);}
-	if (!b && a) {b=(Type*)a;return ResolvedType(a,ResolvedType::COMPLETE);}
-	if (a && b){return assert_types_eq(n, a,b);  }
+	if (!(a || b))
+		return ResolvedType(0,ResolvedType::INCOMPLETE);
+	if (!a && b){
+		return ResolvedType(b,ResolvedType::INCOMPLETE);
+	}
+	if (!b && a) {
+		b=(Type*)a;
+		return ResolvedType(a,ResolvedType::COMPLETE);
+	}
+	if (a && b){
+		return assert_types_eq(n, a,b);
+	}
 	ASSERT(0);
 }
 ResolvedType propogate_type_fwd(int flags,Expr* e, const Type*& a) {
@@ -573,7 +589,7 @@ ResolvedType propogate_type(int flags,const Node* n,ResolvedType& a,Type*& b,con
 	a.combine(propogate_type(flags,n, a.type,b));
 	return a;
 }
-StructDef* dump_find_struct(Scope* s, Name name){
+ExprStructDef* dump_find_struct(Scope* s, Name name){
 	for (;s;s=s->parent_or_global()){
 		dbprintf("find %s in in scope %s\n",getString(name),s->name());
 		for (auto ni=s->named_items;ni;ni=ni->next){
@@ -602,8 +618,7 @@ void ExprOp::find_vars_written(Scope* s, set<Variable *> &vs) const{
 			if (auto var=s->find_variable_rec(vname->name)){
 				vs.insert(var);
 			}
-		}
-		
+		}	
 	}
 }
 
@@ -617,14 +632,14 @@ void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const
 }
 void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{
 	cond->find_vars_written(s,vars);
-	if (body)body->find_vars_written(s,vars);
-	if (else_block)else_block->find_vars_written(s,vars);
+	if (body)	body->find_vars_written(s,vars);
+	if (else_block)	else_block->find_vars_written(s,vars);
 }
 void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
-	if (incr)incr->find_vars_written(s,vars);
-	if (cond)cond->find_vars_written(s,vars);
-	if (body)body->find_vars_written(s,vars);
-	if (else_block)else_block->find_vars_written(s,vars);
+	if (incr)	incr->find_vars_written(s,vars);
+	if (cond)	cond->find_vars_written(s,vars);
+	if (body)	body->find_vars_written(s,vars);
+	if (else_block)	else_block->find_vars_written(s,vars);
 }
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
@@ -2216,7 +2231,7 @@ struct TextInput {
 	char filename[512];
 	SrcPos	pos;
 	const char* buffer,*tok_start,*tok_end,*prev_start,*line_start;
-	Name curr_tok;
+	Name curr_tok;int typaram_depth=0;
 #ifdef WATCH_TOK
 	char watch_tok[64][12];
 #endif
@@ -2275,13 +2290,67 @@ struct TextInput {
 	}
 	void skip_whitespace(){
 		while (isWhitespace(*tok_end)&&*tok_end) {
-			if (*tok_end=='\n') {pos.line++;line_start=tok_end;}
+			if (*tok_end=='\n') {pos.line++;line_start=tok_end; typaram_depth=0;}
 			pos.col=tok_end-line_start;
 			tok_end++;
 		}
 	}
+	
+	void typeparam_hack(){
+		if (typaram_depth){
+			if (curr_tok==GT){
+				typaram_depth--;
+				curr_tok=CLOSE_TYPARAM;
+			}
+			if (typaram_depth>=2 &&curr_tok==SHR){	//< < >>  consume one..
+				typaram_depth--;
+				curr_tok=CLOSE_TYPARAM;
+				tok_end--;
+				
+			}
+		}
+		if (curr_tok==LT){
+		// hack for reading C++ template type parameters.
+		// we accept a subset of uses: when <..> appear on the same line, not seperated by close-other-pair ) ] }  or ";" or "->" - we assume it *is* a template.
+		// args(a<b,c>d) is an example of a false posative. we simply throw an error requiring disambiguation with more parens
+		// multiline typarams not accepted, etc.
 
+			const char* s;
+			int potential=0;
+			int paren_depth=0,brace_depth=0,bracket_depth=0,ambiguity=0;
+			for (s=tok_end; *s && s[1] && *s!='\n'; s++){
+				char c=s[0]; char c1=s[1];
+				if (c=='(') paren_depth++;
+				if (c=='[') brace_depth++;
+				if (c=='{') bracket_depth++;
+				if (c==')') paren_depth--;
+				if (c==']') brace_depth--;
+				if (c=='}') bracket_depth--;
+				if (c==',') ambiguity=1;
+				if (c==IF || c==ELSE||c==FOR||c==RETURN||c==BREAK||c==DO||c==WHILE)
+				{potential=0;break;}
+				if (paren_depth<0 || brace_depth<0 || bracket_depth<0 || c==';'){
+					{potential=0;break;} // we know its not a typeparam.
+				}
+				if ((c=='&'&&c1=='&')||(c=='|'||c1=='|'))break;//logic expressions win; no fancy TMP will parse
+				if (c=='\"' || c=='\'') break;
+				if (c=='<' && c1=='<') {s++; continue;}
+				//if (c=='>' && c1=='>') {s++; continue;} todo.. if typaram_depth>1??
+				if (c=='-' && c1=='>') {potential=0;break;}
+				if (c=='>') {potential=1;break;}
+				if (c=='/'&& c1=='/') break;
+			}
+			if (potential){
+				curr_tok=OPEN_TYPARAM;
+				typaram_depth++;
+			}
+		}
+	}
 	void advance_tok() {
+		advance_tok_sub();
+		typeparam_hack();
+	}
+	void advance_tok_sub() {
 		skip_whitespace();
 		tok_start=tok_end;
 		if (!*tok_end) { this->curr_tok=0; return;}
@@ -2300,6 +2369,7 @@ struct TextInput {
 		for (auto i=10; i>0; i--){strcpy(watch_tok[i],watch_tok[i-1]);}
 		memcpy(watch_tok[0],tok_start,tok_end-tok_start); watch_tok[0][tok_end-tok_start]=0;
 #endif
+		typeparam_hack();
 	}
 	Name eat_tok() {
 		prev_start=tok_start;
@@ -2471,7 +2541,7 @@ LLVMType Expr::get_type_llvm() const
 	return LLVMType{0,0};
 }
 
-ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op) {
+ExprBlock* parse_call(TokenStream& src,int close,int delim, Expr* op) {
 	// shunting yard expression parser
 	ExprBlock *node=new ExprBlock(src.pos); node->call_expr=op;
 	verify(node->type());
@@ -3499,6 +3569,7 @@ enum COMPILE_FLAGS {
 int compile_source(const char *buffer, const char* filename, const char* outname, int flags){
 
 	TextInput	src(buffer,filename);
+
 	auto node=parse_call(src,0,SEMICOLON,nullptr);
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
 	Visitor v;
@@ -3547,6 +3618,7 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	}
 	return 0;
 }
+
 
 int compile_source_file(const char* filename, int options) {
 	char outname[256];

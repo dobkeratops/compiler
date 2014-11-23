@@ -36,7 +36,7 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 	// TODO: t	his should be a tagged-union. we just can't be arsed rolling it manually, thats one of many reasons why we're writing a language
 	// these values aren't persistent so it doesn't matter too much.
 	RegisterName reg;
-	int elem;     // if its a struct
+	int elem;     // if its a struct-in-reg
 	Type* type;
 	RegisterName addr;
 	Node*	val;		// TODO: rename value.could be variable(in reg?) or function pointer (just a label of functoin..) TODO unify with literal case.
@@ -396,7 +396,7 @@ CgValue alloca_type(FILE* ofp, Expr* holder, Type* t,int *next_reg) {
 	return CgValue(0,t, r);
 }
 
-void CodeGen::write_local_vars(Expr* n, ExprFnDef* fn, Scope* sc) {
+void write_local_vars(FILE* ofp, int* next_reg, Expr* n, ExprFnDef* fn, Scope* sc) {
 	for (auto v=sc->vars; v;v=v->next_of_scope){
 		if (v->kind!=Local) continue;
 		auto vt=v->expect_type();
@@ -583,12 +583,11 @@ fn compile_node {
 }
 */
 
-CgValue write_cast(FILE* ofp,CgValue dst, CgValue& lhsv, Expr* rhse ,int* next_reg){
+CgValue write_cast(FILE* ofp,CgValue dst, CgValue&lhsv, Expr* rhse ,int* next_reg){
 	// todo rename 'src', 'dst' to avoid blah as blah confusion vs C cast (type)(expr)
 	lhsv.load(ofp,next_reg);
 	auto rhst=rhse->type();
 	auto lhst=lhsv.type;
-	
 	fprintf(ofp,"\t");
 	write_reg(ofp, dst.reg);fprintf(ofp," = ");
 
@@ -972,7 +971,7 @@ Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
 	
 	write_function_signature(ofp,fn_node,&regname,EmitDefinition);
  	fprintf(ofp,"{\n");
-	write_local_vars(ofp, fn_node->body, fn_node, scope, &regname);
+	write_local_vars(ofp,&regname, fn_node->body, fn_node, scope);
 	auto rtn=fn_node->get_return_value();
 	auto ret=compile_node(ofp, fn_node->body, fn_node,scope,&regname);
 	if (ret.is_valid() && !ret.type->is_void()) {
@@ -1060,9 +1059,6 @@ char* name_mangle_append_name(char *dst,int size, Name n){
 
 
 void output_code(FILE* ofp, Scope* scope) {
-	CodeGen cg;
-	cg.ofp=ofp;
-	cg.next_reg=0;
 	fprintf(ofp,";from scope %s\n;\n",scope->name());
 	// output all inner items that outer stuff depends on..
 	for (auto sub=scope->child; sub; sub=sub->next) {
@@ -1078,12 +1074,12 @@ void output_code(FILE* ofp, Scope* scope) {
 	}
 	for (auto n=scope->named_items;n;n=n->next) {
 		for (auto s=n->structs; s;s=s->next_of_name) {
-			compile_struct_def(cg.ofp, s, scope);
+			compile_struct_def(ofp, s, scope);
 		}
 	}
 	for (auto n=scope->named_items;n;n=n->next) {
 		for(auto f=n->fn_defs; f; f=f->next_of_name){
-			compile_function(cg.ofp,f,scope);
+			compile_function(ofp,f,scope);
 		}
 	}
 }
