@@ -523,6 +523,7 @@ struct ExprLiteral : ExprDef {
 	union  {int val_int; int val_uint; float val_float; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
 	void dump(int depth) const;
+	ExprLiteral(const SrcPos&s);
 	ExprLiteral(const SrcPos&s,float f);
 	ExprLiteral(const SrcPos&s,int i);
 	ExprLiteral(const SrcPos&s,const char* start,int length);

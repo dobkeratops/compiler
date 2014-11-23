@@ -965,6 +965,12 @@ size_t ExprLiteral::strlen() const{
 		return ::strlen(this->u.val_str);
 	else return 0;
 }
+ExprLiteral::ExprLiteral(const SrcPos& s) {
+	pos=s;
+	this->owner_scope=0;
+	set_type(new Type(VOID));
+	type_id=T_VOID;
+}
 
 ExprLiteral::ExprLiteral(const SrcPos& s,float f) {
 	pos=s;
@@ -2523,10 +2529,10 @@ void flush_op_stack(ExprBlock* block, vector<SrcOp>& ops,vector<Expr*>& vals) {
 	}
 }
 
-ExprBlock* parse_call(TokenStream&src,int close,int delim, Expr* op);
+ExprBlock* parse_block(TokenStream&src,int close,int delim, Expr* op);
 
 Expr* parse_expr(TokenStream&src) {
-	return parse_call(src,0,0,nullptr);
+	return parse_block(src,0,0,nullptr);
 }
 
 void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
@@ -2553,8 +2559,8 @@ LLVMType Expr::get_type_llvm() const
 	return LLVMType{0,0};
 }
 
-ExprBlock* parse_call(TokenStream& src,int close,int delim, Expr* op) {
-	// shunting yard expression parser
+ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
+	// shunting yard expression parser+dispatch to other contexts
 	ExprBlock *node=new ExprBlock(src.pos); node->call_expr=op;
 	verify(node->type());
 	vector<SrcOp> operators;
@@ -2609,28 +2615,28 @@ ExprBlock* parse_call(TokenStream& src,int close,int delim, Expr* op) {
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
-				operands.push_back(parse_call(src, CLOSE_PAREN,SEMICOLON, pop(operands)));
+				operands.push_back(parse_block(src, CLOSE_PAREN,SEMICOLON, pop(operands)));
 				// call result is operand
 			}
 			else {
-				operands.push_back(parse_call(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
+				operands.push_back(parse_block(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
 			}
 		} else if (src.eat_if(OPEN_BRACKET)){
 			if (was_operand){
-				operands.push_back(parse_call(src,CLOSE_BRACKET,COMMA,pop(operands)));
+				operands.push_back(parse_block(src,CLOSE_BRACKET,COMMA,pop(operands)));
 			} else {
 				error(operands.back()?operands.back():node,"TODO: array initializer");
-				operands.push_back(parse_call(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
+				operands.push_back(parse_block(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
 			}
 		} else if (src.eat_if(OPEN_BRACE)){
 //			error(operands.back()?operands.back():node,"struct initializer");
 			if (was_operand){// struct initializer
-				operands.push_back(parse_call(src,CLOSE_BRACE,COMMA,pop(operands)));
+				operands.push_back(parse_block(src,CLOSE_BRACE,COMMA,pop(operands)));
 			}
 			else{//progn aka scope block with return value.
-				auto sub=parse_call(src,CLOSE_BRACE,SEMICOLON,nullptr);
+				auto sub=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
 				operands.push_back(sub);
 				if (sub->delimiter==COMMA)
 					sub->create_anon_struct_initializer();
@@ -2691,7 +2697,12 @@ ExprBlock* parse_call(TokenStream& src,int close,int delim, Expr* op) {
 		//ASSERT(sub);
 		//node->argls.push_back(sub);
 	};
-	flush_op_stack(node,operators,operands);
+	if (operands.size()){
+		// final expression is also returnvalue,
+		flush_op_stack(node,operators,operands);
+	} else if (node->is_compound_expression()){
+		node->argls.push_back(new ExprLiteral(src.pos));
+	}
 	verify(node->get_type());
 	return node;
 }
@@ -3158,25 +3169,25 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 // iterator protocol. value.init. increment & end test.
 ExprFor* parse_for(TokenStream& src){
 	auto p=new ExprFor(src.pos);
-	auto first=parse_call(src,SEMICOLON,COMMA,0);
+	auto first=parse_block(src,SEMICOLON,COMMA,0);
 	if (src.eat_if(IN)){
 		p->pattern=first;
-		p->init=parse_call(src, OPEN_BRACE, 0, 0);
+		p->init=parse_block(src, OPEN_BRACE, 0, 0);
 		src.expect(OPEN_BRACE);
 	} else {//if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
 		p->pattern=0;
 		p->init=first;
 		p->cond=parse_expr(src);
 		src.expect(SEMICOLON);
-		p->incr=parse_call(src,OPEN_BRACE,COMMA,0);
+		p->incr=parse_block(src,OPEN_BRACE,COMMA,0);
 	}
  //else {
 //		error(p,"for..in.. or c style for loop, expect for init;cond;incr{body}");
 //	}
-	p->body=parse_call(src, CLOSE_BRACE, SEMICOLON, nullptr);
+	p->body=parse_block(src, CLOSE_BRACE, SEMICOLON, nullptr);
 	if (src.eat_if(ELSE)){
 		src.expect(OPEN_BRACE);
-		p->else_block=parse_call(src,CLOSE_BRACE, SEMICOLON, nullptr);
+		p->else_block=parse_block(src,CLOSE_BRACE, SEMICOLON, nullptr);
 	}
 	return p;
 }
@@ -3200,15 +3211,15 @@ ExprIf* parse_if(TokenStream& src){
 	// TODO: assignments inside the 'if ..' should be in-scope
 	// eg if (result,err)=do_something(),err==ok {....}  else {...}
 	auto p=new ExprIf(src.pos);
-	p->cond=parse_call(src, OPEN_BRACE, 0, 0);
-	p->body=parse_call(src, CLOSE_BRACE,SEMICOLON,0);
+	p->cond=parse_block(src, OPEN_BRACE, 0, 0);
+	p->body=parse_block(src, CLOSE_BRACE,SEMICOLON,0);
 	verify(p->cond->get_type());
 
 	if (src.eat_if(ELSE)) {
 		if (src.eat_if(IF)) {
 			p->else_block= parse_if(src);
 		} else if (src.eat_if(OPEN_BRACE)){
-			p->else_block=parse_call(src, CLOSE_BRACE, SEMICOLON, 0);
+			p->else_block=parse_block(src, CLOSE_BRACE, SEMICOLON, 0);
 		} else {
 			error(0,"if { }else {} expected\n");
 		}
@@ -3324,7 +3335,7 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	}
 	// implicit "progn" here..
 	if (src.eat_if(OPEN_BRACE)){
-		fndef->body = parse_call(src, CLOSE_BRACE, SEMICOLON, nullptr);
+		fndef->body = parse_block(src, CLOSE_BRACE, SEMICOLON, nullptr);
 	} else {
 		fndef->body=nullptr; // Its' just an extern prototype.
 	}
@@ -3447,9 +3458,9 @@ const char* g_TestProg=
 
 const char* g_TestProg2=
 "	enum FooBar{  Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
-"	fn take_ptr(f:(int)->int)->int{ f(5);0}\n"
+"	fn take_ptr(f:(int)->void){ f(5);}\n"
 "fn printf(s:str,...)->int;\n"
-"	fn foo(x:int)->int{ printf(\"Hello From indirect 	functionpointer call %d\\n\",x);  0}      \n"
+"	fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
 "	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0}\n"
 "	struct FooStruct{x:int,y:int};"
 "	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
@@ -3459,10 +3470,11 @@ const char* g_TestProg2=
 "q:=xs[1]; p1:=&xs[1];\n"
 "*p1=42;\n"
 "		x:= {a:=10;b:=20; a+b};	\n"
+"		x+=10;\n"
 "		fp:=foo;		\n"
 "	xs=:array[int,512];  \n"
 "	p2:=&xs[1];  \n"
-"xs[1]+=3"
+"xs[1]+=3;\n"
 "		fs:=FooStruct{0xff,0x7f};		\n"
 "		pfs:=&fs;\n"
 "		foo_struct(&fs);		\n"
@@ -3587,7 +3599,7 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 
 	TextInput	src(buffer,filename);
 
-	auto node=parse_call(src,0,SEMICOLON,nullptr);
+	auto node=parse_block(src,0,SEMICOLON,nullptr);
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
 	Visitor v;
 	if (flags & B_AST){
