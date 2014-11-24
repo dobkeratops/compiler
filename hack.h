@@ -22,7 +22,7 @@ typedef int32_t OneBasedIndex;
 
 #define R_FINAL 0x0001
 #define R_REVERSE 0x0002
-#define R_STACK 0x8000
+#define R_PUT_ON_STACK 0x8000
 
 struct SrcPos {
 	OneBasedIndex	line; //1-based line index
@@ -286,11 +286,15 @@ struct Visitor {
 struct Capture {
 	ExprFnDef*	capture_from;
 	ExprFnDef*	capture_by;
-	Variable*	vars;
+	Variable *vars;
 	Capture* next_of_from;
 	ExprStructDef* the_struct;
 	void coalesce_with(Capture* other);
 };
+// load data->vtb // if this matters it would be inlined
+// load vtb->fn
+// when the time comes - vtb->destroy()
+//                       vtb->trace
 
 class Node {
 	friend Visitor;
@@ -336,9 +340,13 @@ public:
 	virtual ExprStructDef* as_struct_def()const;
 	template<typename T> T* as()const{ auto ret= const_cast<T*>(dynamic_cast<T*>(this)); if (!ret){error(this,"expected,but got %s",this->kind_str());} return ret;};
 	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
+	virtual int recurse(std::function<int(Node* f)> f){dbprintf("recurse not implemented\n");return 0;};
 };
 
+
+
 struct TypeParam: Node{
+	Type* bound=0;
 	Type* defaultv=0;
 	TypeParam(){};
 	TypeParam(Name n, Type* dv){name=n;defaultv=dv;};
@@ -379,21 +387,25 @@ public:
 	virtual bool is_variable_name()const	{return false;}
 };
 
+
 struct Type : Expr{
 	int marker;
 	vector<TypeParam> typeparams;
 	ExprStructDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
+	Node* 	m_origin=0;				// where it comes from
+	void set_origin(Node* t){m_origin=t;}
+	Node* get_origin()const {return m_origin;}
 	void push_back(Type* t);
 	virtual const char* kind_str()const;
-	Type(Name a,Name b): Type(a)	{push_back(new Type(b)); marker=1000;}
-	Type(Name a,Name b,Name c): Type(a){
+	Type(Node* origin,Name a,Name b): Type(origin,a)	{push_back(new Type(origin,b)); marker=1000;}
+	Type(Node* origin,Name a,Name b,Name c): Type(origin,a){
 		marker=2000;
-		auto tc=new Type(c); auto tb=new Type(b); tb->push_back(tc); push_back(tb);
+		auto tc=new Type(origin,c); auto tb=new Type(origin,b); tb->push_back(tc); push_back(tb);
 	}
 	Type(ExprStructDef* sd);
-	Type(Name i);
+	Type(Node* origin,Name i);
 	Type(Name i,SrcPos sp);
 	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
 	size_t	alignment() const;
@@ -517,7 +529,6 @@ struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
 	vector<TypeParam> typeparams;
 };
 
-
 struct ExprLiteral : ExprDef {
 	TypeId	type_id;
 	ExprLiteral* next_of_scope=0;	// collected..
@@ -543,7 +554,6 @@ struct ExprLiteral : ExprDef {
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 };
 
-
 struct ArgDef :ExprDef{
 	uint32_t	size_of,offset;
 	//Type* type=0;
@@ -560,7 +570,7 @@ struct ArgDef :ExprDef{
 	Name	as_ident()const				{return this->name;}
 	size_t	size()const					{return this->type()?this->type()->size():0;}
 	int		alignment() const			{ return 4;}//todo, eval templates/other structs, consider pointers, ..
-	virtual VResult	recurse(Visitor*v)	{;return 0;}
+	virtual VResult	recurse(Visitor*v)	{return 0;}
 	VResult			visit(Visitor* v)	{ return v->visit(this);}
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	ResolvedType	resolve(Scope* sc, const Type* desired, int flags) override;

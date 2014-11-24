@@ -42,9 +42,7 @@ const char* g_filename=0;
  
  HKT - type type params
 
- C++ bindings - emit
- 
- C++ bindings - generate
+ C++ bindings ..
  
  debug information
  
@@ -105,20 +103,24 @@ void dbprintf(Node* n){n->dump(-1);}
 //template<typename X,typename Y,typename Z> void dbprintf(X x,Y y,Z z){dbprintf(x);dbprintf(y);dbprintf(z);}
 //template<typename X,typename Y,typename Z,typename W> void dbprintf(X x,Y y,Z z,W w){dbprintf(x);dbprintf(y);dbprintf(z);dbprintf(w);}
 // for real compiler errors. todo.. codelocations on nodes
+bool g_error_on_newline=false;
+void error_sub(const Node* n, char* level, const char* txt ){
+	if (!g_error_on_newline){
+		g_error_on_newline=true;printf("\n");}
+//	n->dump_if(-1);
+	if (n)
+		printf("%s:%d:",g_filename,n->pos.line);
+	if (level)printf("%s-",level);
+	printf("\t%s",txt);
+	if (txt[strlen(txt)-1]!='\n'){g_error_on_newline=false;}
+}
 void error(const Node* n, const char* str, ... ){
 	char buffer[1024];
 	va_list arglist;
 	va_start( arglist, str );
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
-	printf("error:-\n");
-	n->dump_if(-1);
-	printf("\n");
-	printf("%s:%d: error:",g_filename,n->pos.line);
-	printf(";%s\n",buffer);
-#ifdef DEBUG
-	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
-#endif
+	error_sub(n,"error",buffer);
 }
 void warning(const Node* n, const char* str, ... ){
 	char buffer[1024];
@@ -126,15 +128,17 @@ void warning(const Node* n, const char* str, ... ){
 	va_start( arglist, str );
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
-	printf("error:-\n");
-	n->dump_if(-1);
-	printf("\n");
-	printf("%s:%d: warning:",g_filename,n->pos.line);
-	printf("%s\n",buffer);
-#ifdef DEBUG
-	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
-#endif
+	error_sub(n,"warning",buffer);
 }
+void info(const Node* n, const char* str, ... ){
+	char buffer[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(buffer, str, arglist );
+	va_end( arglist );
+	error_sub(n,"info",buffer);
+}
+
 
 // for real compiler errors. todo.. codelocations on nodes
 void error(const Node* n,Scope* s, const char* str, ... ){
@@ -465,11 +469,11 @@ ResolvedType assert_types_eq(const Node* n, const Type* a,const Type* b) {
 	}
 	ASSERT(a && b);
 	if (!a->eq(b)){
-		dbprintf("a=\n");
-		a->dump(-1);
-		dbprintf("b=\n");
-		b->dump(-1);
-		error(n,"\ntype error:%s vs %s",str(a->name),str(b->name));
+		error(n," type mismatch:%s vs %s\n",str(a->name),str(b->name));
+		info(a->get_origin(),"(1)=");
+		a->dump(-1); newline(0);
+		info(b->get_origin(),"vs (2)=");
+		b->dump(-1);newline(0);
 		return ResolvedType(a,ResolvedType::ERROR);
 	}
 	return ResolvedType(a,ResolvedType::COMPLETE);
@@ -663,7 +667,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		this->def=sd;
 	}
 	if (auto v=scope->find_variable_rec(this->name)){
-		v->on_stack=flags&R_STACK;
+		v->on_stack=flags&R_PUT_ON_STACK;
 		this->set_def(v);
 		return propogate_type(flags,this, this->type_ref(),v->type_ref());
 
@@ -793,7 +797,8 @@ Type::Type(Name i,SrcPos sp){
 	next=0;
 	name=i; //todo: resolve-type should happen here.
 }
-Type::Type(Name i){
+Type::Type(Node* origin,Name i){
+	this->set_origin(origin);
 	marker=1234;
 	struct_def=0;
 	sub=0;
@@ -952,10 +957,10 @@ ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
 	if (!this->get_type()) {
 		Type* t=nullptr;
 		switch (type_id) {
-		case T_VOID: t=new Type(VOID); break;
-		case T_INT: t=new Type(INT); break;
-		case T_FLOAT: t=new Type(FLOAT); break;
-		case T_CONST_STRING: t=new Type(STR); break;
+		case T_VOID: t=new Type(this,VOID); break;
+		case T_INT: t=new Type(this,INT); break;
+		case T_FLOAT: t=new Type(this,FLOAT); break;
+		case T_CONST_STRING: t=new Type(this,STR); break;
 		default: break;
 		}
 		this->set_type(t); // one time resolve event.
@@ -970,28 +975,28 @@ size_t ExprLiteral::strlen() const{
 ExprLiteral::ExprLiteral(const SrcPos& s) {
 	pos=s;
 	this->owner_scope=0;
-	set_type(new Type(VOID));
+	set_type(new Type(this,VOID));
 	type_id=T_VOID;
 }
 
 ExprLiteral::ExprLiteral(const SrcPos& s,float f) {
 	pos=s;
 	this->owner_scope=0;
-	set_type(new Type(FLOAT));
+	set_type(new Type(this,FLOAT));
 	type_id=T_FLOAT;
 	u.val_float=f;
 }
 ExprLiteral::ExprLiteral(const SrcPos& s,int i) {
 	pos=s;
 	this->owner_scope=0;
-	set_type(new Type(INT));
+	set_type(new Type(this,INT));
 	type_id=T_INT;
 	u.val_int=i;
 }
 ExprLiteral::ExprLiteral(const SrcPos& s,const char* start,int length) {//copy
 	pos=s;
 	this->owner_scope=0;
-	set_type(new Type(STR));
+	set_type(new Type(this,STR));
 	type_id=T_CONST_STRING;
 	auto str=( char*)malloc(length+1); ;
 	u.val_str=str;memcpy(str,(void*)start,length);
@@ -1000,7 +1005,7 @@ ExprLiteral::ExprLiteral(const SrcPos& s,const char* start,int length) {//copy
 ExprLiteral::ExprLiteral(const SrcPos& s,const char* src) {//take ownership
 	pos=s;
 	this->owner_scope=0;
-	set_type(new Type(STR));
+	set_type(new Type(this,STR));
 	u.val_str=src;
 	type_id=T_CONST_STRING;
 }
@@ -1231,7 +1236,7 @@ ArgDef::clone() const{
 Node*
 Type::clone() const{
 	if (!this) return nullptr;
-	auto r= new Type(this->name);
+	auto r= new Type(this->get_origin(),this->name);
 	r->struct_def=this->struct_def;
 	auto *src=this->sub;
 	Type** p=&r->sub;
@@ -1774,9 +1779,9 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 			dt=desired->sub;
 		}
-		auto ret=rhs->resolve(sc,dt,flags|R_STACK);
+		auto ret=rhs->resolve(sc,dt,flags|R_PUT_ON_STACK);
 		if (!this->get_type() && ret.type){
-			auto ptr_type=new Type(PTR); ptr_type->sub=(Type*)ret.type->clone();
+			auto ptr_type=new Type(this,PTR); ptr_type->sub=(Type*)ret.type->clone();
 			this->set_type(ptr_type);
 			return propogate_type_fwd(flags,this, desired,ptr_type);
 		}
@@ -1805,7 +1810,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		verify(lhs->get_type());
 		verify(rhs->get_type());
 		if (!this->get_type()){
-			this->set_type(new Type(BOOL));
+			this->set_type(new Type(this,BOOL));
 		};
 		return rhst;
 	}
@@ -1814,7 +1819,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// TODO propogate types for pointer-arithmetic - ptr+int->ptr   int+ptr->ptr  ptr-ptr->int
 		// defaults to same types all round.
 		auto lhst=lhs->resolve(sc,desired,flags);
-		auto rhst=rhs->resolve(sc,desired,flags&!R_STACK);
+		auto rhst=rhs->resolve(sc,desired,flags&!R_PUT_ON_STACK);
 		propogate_type(flags,this, lhst,type_ref());
 		propogate_type(flags,this, rhst,type_ref());
 		return propogate_type_fwd(flags,this, desired, type_ref());
@@ -1824,7 +1829,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 	verify(this->get_type());
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
-		if (!this->get_type()) this->set_type(new Type(VOID));
+		if (!this->get_type()) this->set_type(new Type(this,VOID));
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
 	}
 	ExprIdent* p=nullptr;
@@ -1852,7 +1857,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 		if (array_type.type){
 			ASSERT(array_type.type->is_array()||array_type.type->is_pointer());
 			for (auto i=0; i<argls.size(); i++)  {
-				argls[i]->resolve(sc,nullptr,flags&!R_STACK ); // TODO any indexing type? any type extracted from 'array' ?
+				argls[i]->resolve(sc,nullptr,flags&!R_PUT_ON_STACK ); // TODO any indexing type? any type extracted from 'array' ?
 			}
 			const Type* array_elem_type=array_type.type->sub;
 			propogate_type_fwd(flags,this, array_elem_type);
@@ -1870,7 +1875,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 //		auto n=num_known_arg_types(this->argls);
 		if (call_expr->name==NAMEOF && strlen(str(this->argls[0]->name))>1) {
 			auto src=this->argls[0];
-			if (!this->type()){ this->set_type(new Type(STR));};
+			if (!this->type()){ this->set_type(new Type(this,STR));};
 			char tmp[512];
 			sprintf(tmp,"%s",str(src->name));
 			this->call_expr=0;
@@ -2193,13 +2198,13 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 	}
 
 	if (!this->fn_type) {
-		this->fn_type=new Type(FN);
-		auto arglist=new Type(TUPLE);
+		this->fn_type=new Type(this,FN);
+		auto arglist=new Type(this,TUPLE);
 		this->fn_type->push_back(arglist);
 		for (auto a:this->args) {
-			arglist->push_back(a->type()?((Type*)a->type()->clone()):new Type(AUTO));
+			arglist->push_back(a->type()?((Type*)a->type()->clone()):new Type(this,AUTO));
 		}
-		this->fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(AUTO));
+		this->fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(this,AUTO));
 
 		this->set_type(this->fn_type);
 	}
@@ -2548,7 +2553,7 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 	}
 	was_operand=true;
 }
-Type* parse_type(TokenStream& src, int close);
+Type* parse_type(TokenStream& src, int close,Node* owner);
 LLVMType Expr::get_type_llvm() const
 {
 	if (!this) return LLVMType{VOID,0};
@@ -2668,7 +2673,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 					pop_operator_call(operators,operands);
 				}
 				if (tok==AS){
-					Type *t=parse_type(src,0);
+					Type *t=parse_type(src,0,nullptr);
 					if (!was_operand) error(t,"as must follow operand");
 					auto lhs=operands.back(); operands.pop_back();
 					operands.push_back(new ExprOp(AS,src.pos,lhs,t));
@@ -2676,12 +2681,12 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 					t->set_type(t);
 				}else
 				if (tok==COLON){// special case: : invokes parsing type. TODO: we actually want to get rid of this? type could be read from other nodes, parsed same as rest?
-					Type *t=parse_type(src,0);
+					Type *t=parse_type(src,0,nullptr);
 					auto lhs=operands.back();
 					lhs->set_type(t);
 					was_operand=true;
 				} else if (tok==ASSIGN_COLON){ //x=:Type  ... creates a var of 'Type'.
-					Type *t=parse_type(src,0);
+					Type *t=parse_type(src,0,nullptr);
 					operators.push_back(SrcOp{tok,src.pos});
 					operands.push_back(t);
 					was_operand=true;
@@ -2753,26 +2758,26 @@ ExprLiteral* parse_literal(TokenStream& src) {
 }
 
 
-Type* parse_type(TokenStream& src, int close) {
+Type* parse_type(TokenStream& src, int close,Node* owner) {
 	auto tok=src.eat_tok();
 	Type* ret=0;	// read the first, its the form..
 	if (tok==close) return nullptr;
 	if (tok==FN){	// fn(arg0,arg1,...)->ret
 		ret=new Type(FN,src.pos);
-		ret->push_back(parse_type(src,0));// args
+		ret->push_back(parse_type(src,0,owner));// args
 		src.expect("->");
-		ret->push_back(parse_type(src,0));// return value
+		ret->push_back(parse_type(src,0,owner));// return value
 	}
 	else if (tok==OPEN_PAREN) {
 		ret=new Type(TUPLE,src.pos);
-		while (auto sub=parse_type(src, CLOSE_PAREN)){
+		while (auto sub=parse_type(src, CLOSE_PAREN,owner)){
 			ret->push_back(sub);
 			src.eat_if(COMMA);
 		}
 		if (src.eat_if(ARROW)){
 			// tuple->type  defines a function.
-			auto fn_ret=parse_type(src,0);
-			auto fn_type=new Type(FN);
+			auto fn_ret=parse_type(src,0,owner);
+			auto fn_type=new Type(owner,FN);
 			fn_type->push_back(ret);
 			fn_type->push_back(fn_ret);
 			return fn_type;
@@ -2781,28 +2786,29 @@ Type* parse_type(TokenStream& src, int close) {
 	} else {
 		// prefixes in typegrammar..
 		if (tok==MUL || tok==AND) {
-			ret=new Type(PTR);
-			ret->sub=parse_type(src,close);
+			ret=new Type(owner,PTR);
+			ret->sub=parse_type(src,close,owner);
 		}else {
 		// main: something[typeparams]..
-			ret = new Type(tok);
+			ret = new Type(owner,tok);
 			if (src.eat_if(OPEN_BRACKET)) {
-				while (auto sub=parse_type(src, CLOSE_BRACKET)){
+				while (auto sub=parse_type(src, CLOSE_BRACKET,owner)){
 					ret->push_back(sub);
 					src.eat_if(COMMA);
 				}
 			}
 		// postfixes:  eg FOO|BAR|BAZ todo  FOO*BAR*BAZ   FOO&BAR&BAZ
 			if (src.peek_tok()==OR){
-				Type* sub=ret; ret=new Type(VARIANT); ret->push_back(sub);
+				Type* sub=ret; ret=new Type(owner,VARIANT); ret->push_back(sub);
 				while (src.eat_if(OR)){
-					auto sub=parse_type(src,close);
+					auto sub=parse_type(src,close,owner);
 					ret->push_back(sub);
 				}
 			}
 		}
 	}
-	// todo: pointers, adresses, arrays..
+	if (!owner) ret->set_origin(ret);	// its a type declaration, 'origin is here'.
+ 	// todo: pointers, adresses, arrays..
 	return ret;
 }
 ArgDef* parse_arg(TokenStream& src, int close) {
@@ -2811,7 +2817,7 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	auto a=new ArgDef(src.pos,argname);
 	a->pos=src.pos;
 	if (src.eat_if(COLON)) {
-		a->type()=parse_type(src,CLOSE_PAREN);
+		a->type()=parse_type(src,CLOSE_PAREN,a);
 	}
 	if (src.eat_if(ASSIGN)){
 		a->default_expr=parse_expr(src);
@@ -2826,7 +2832,7 @@ void parse_typeparams(TokenStream& src,vector<TypeParam>& out) {
 //		if (src.eat_if(ASSIGN)) {
 //			int d=src.eat_tok();
 //		}
-		out.push_back(TypeParam{name,src.eat_if(ASSIGN)?parse_type(src,0):0});
+		out.push_back(TypeParam{name,src.eat_if(ASSIGN)?parse_type(src,0,nullptr):0});
 		src.eat_if(COMMA);
 	}
 }
@@ -2843,7 +2849,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name){
 		parse_typeparams(src,sd->typeparams);
 	}
 	if (src.eat_if(COLON)) {
-		sd->inherits_type = parse_type(src,0); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
+		sd->inherits_type = parse_type(src,0,nullptr); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
 	}
 	if (!src.eat_if(OPEN_BRACE))
 		return sd;
@@ -2874,7 +2880,7 @@ ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
 
 	while ((tok=src.peek_tok())!=NONE){
 		if (tok==CLOSE_PAREN){src.eat_tok(); break;}
-		sd->fields.push_back(new ArgDef(pos,0,parse_type(src,0)));
+		sd->fields.push_back(new ArgDef(pos,0,parse_type(src,0,sd)));
 		src.eat_if(COMMA); src.eat_if(SEMICOLON);
 	}
 	return sd;
@@ -2888,7 +2894,7 @@ ExprStructDef* parse_enum(TokenStream& src) {
 		parse_typeparams(src,ed->typeparams);
 	}
 	if (src.eat_if(COLON)) {
-		ed->inherits_type = parse_type(src,0); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
+		ed->inherits_type = parse_type(src,0,ed); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
 	}
 	if (!src.eat_if(OPEN_BRACE))
 		return ed;
@@ -3182,7 +3188,7 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 
 	definer_scope->add_struct(this);
 	if (!this->get_type()) {
-		this->set_type(new Type(this->name));	// name selects this struct
+		this->set_type(new Type(this,this->name));	// name selects this struct
 	}
 
 	if (!this->is_generic()){
@@ -3368,7 +3374,7 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	}
 	// TODO: multiple argument blocks for currying?.
 	if (src.eat_if(ARROW) || src.eat_if(COLON)) {
-		fndef->ret_type = parse_type(src, 0);
+		fndef->ret_type = parse_type(src, 0,fndef);
 	}
 	// implicit "progn" here..
 	if (src.eat_if(OPEN_BRACE)){
@@ -3506,6 +3512,7 @@ const char* g_TestProg2=
 "xs=:array[int,512];\n"
 "q:=xs[1]; p1:=&xs[1];\n"
 "*p1=42;\n"
+"		retval:=0;\n"
 "		x:= {a:=10;b:=20; a+b};	\n"
 "		x+=10;\n"
 "		fp:=foo;		\n"
@@ -3521,7 +3528,7 @@ const char* g_TestProg2=
 "		fp(2);fp(x);fp(xs[1]);		\n"
 "		take_ptr(fp);\n"
 "		bar(1,2,3);	\n"
-"	,0}\n"
+"	,retval}\n"
 
 
 /*

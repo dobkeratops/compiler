@@ -6,12 +6,16 @@ fn printf(s:str,...)->int;
 struct Foo {
 	vx:int, vy:int, vz:int
 }
+
 struct Vec4{ vx:int,vy:int,vz:int,vw:int}
+
 struct Triangle{ i0:int,i1:int,i2:int}
+
 struct Mesh {
 	vertices:array[Vec4,20],
-	triangles:array[Triangle,5]
+	triangles:array[Triangle,4]
 }
+
 fn something(f:*Foo)->int{
 	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz);
 	0
@@ -19,6 +23,9 @@ fn something(f:*Foo)->int{
 
 fn main(argc:int,argv:**char)->int{
 	x:=0;
+
+	retval:=0;
+	acc:=retval;
 	for i:=0,j:=0; i<10; i+=1,j+=10 {
 		x+=i;
 		printf("i,j=%d,%d,x=%d\n",i,j,x);
@@ -27,6 +34,6 @@ fn main(argc:int,argv:**char)->int{
 	}
 	x:=if argc<2{printf("argc is <2\n");1}else{printf("argc is>2\n");2};
 	printf("yada yada yada\n");
-	0
+	acc
 }
 
