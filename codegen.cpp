@@ -961,6 +961,9 @@ Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
 	
 	write_function_signature(ofp,fn_node,&reg_index,EmitDefinition);
  	fprintf(ofp,"{\n");
+	if (fn_node->instance_of!=nullptr){
+		fprintf(ofp,";compiling generic fn body\n");
+	}
 	write_local_vars(ofp,&reg_index, fn_node->body, fn_node, scope);
 	auto rtn=fn_node->get_return_value();
 	auto ret=compile_node(ofp, fn_node->body, fn_node,scope,&reg_index);

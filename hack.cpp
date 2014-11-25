@@ -1124,6 +1124,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, con
 	new_fn->instance_of = src;
 	new_fn->resolved=false;
 	new_fn->resolve(src_fn_owner,nullptr,flags);//todo: we can use output type ininstantiation too
+//	new_fn->dump(0);
 	return new_fn;	// welcome new function!
 }
 Node* ExprOp::clone() const {
@@ -1132,6 +1133,8 @@ Node* ExprOp::clone() const {
 Node* ExprBlock::clone() const {
 	if (!this) return nullptr;
 	auto r=new ExprBlock(this->pos);
+	r->bracket_type=this->bracket_type;
+	r->delimiter=this->delimiter;
 	if (this->call_expr) {
 		r->call_expr = (Expr*) this->call_expr->clone();
 	}
@@ -3443,6 +3446,7 @@ const char* g_TestProg2=
 "	enum FooBar{  Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
 "	fn take_ptr(f:(int)->void){ f(5);}\n"
 "fn printf(s:str,...)->int;\n"
+"	fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
 "	fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
 "	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0}\n"
 "	struct FooStruct{x:int,y:int};"
@@ -3464,6 +3468,7 @@ const char* g_TestProg2=
 "		foo_struct(&fs);		\n"
 //"	fn localtest(i:int)->int{i+argc}; \n"
 "		py:=pfs as *int;\n"
+"		foo_bar(&fs);\n"
 "		printf(\"foostruct int val recast %d; foostruct raw value %d %d\n\",*py,fs.y,pfs.y);\n"
 "		fp(2);fp(x);fp(xs[1]);		\n"
 "		take_ptr(fp);\n"
