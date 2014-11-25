@@ -138,7 +138,7 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 				fprintf(ofp,"\t%%%s = load ", str(reg));
 				// function type..
 				write_type(ofp,this->type,false);
-				fprintf(ofp,"* @%s.ptr\n",val->name_str());
+				fprintf(ofp,"* @%s.ptr\n",str(val->get_mangled_name()));
 			}
 			else if (auto v=dynamic_cast<Variable*>(val)){
 //				fprintf(ofp,"\t%%%s = load ", str(reg));
@@ -823,7 +823,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,int* next_r
 			else
 				write_function_type(ofp,e->call_expr->type());
 			if (!indirect_call) {
-				fprintf(ofp,"@%s",getString(call_fn->name));
+				fprintf(ofp,"@%s",getString(call_fn->get_mangled_name()));
 			} else {
 				write_reg(ofp,indirect_call);
 			}
@@ -884,7 +884,7 @@ void write_function_signature(FILE* ofp,ExprFnDef* fn_node,int *regname, EmitFnM
 	fprintf(ofp,mode==EmitDefinition?"define ":mode==EmitDeclaration?"declare ":" ");
 	write_type(ofp,rtype,false);
 	if (mode!=EmitType)
-		fprintf(ofp," @%s ",getString(fn_node->name));
+		fprintf(ofp," @%s ",getString(fn_node->get_mangled_name()));
 	fprintf(ofp,"(");
 	int inter=0;
 	for (auto a:fn_node->args){
@@ -933,17 +933,17 @@ Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
 		return nullptr;
 	}
 	if (fn_node->is_generic()) {
-		fprintf(ofp,";fn %s generic:-\n",getString(fn_node->name));
+		fprintf(ofp,";fn %s generic:-\n",getString(fn_node->get_mangled_name()));
 		for (auto f=fn_node->instances; f;f=f->next_instance){
-			fprintf(ofp,";fn %s generic instance\n",getString(fn_node->name));
+			fprintf(ofp,";fn %s generic instance\n",getString(fn_node->get_mangled_name()));
 			compile_function(ofp,f,outer_scope);
 		}
 		return nullptr;
 	}
 	// write a literal global pointing to this (why? it seems we need it for load??)
-	fprintf(ofp,"@%s.ptr = global ",str(fn_node->name));
+	fprintf(ofp,"@%s.ptr = global ",str(fn_node->get_mangled_name()));
 	write_function_type(ofp, fn_node->type());
-	fprintf(ofp," @%s",str(fn_node->name));
+	fprintf(ofp," @%s",str(fn_node->get_mangled_name()));
 
 	if (!fn_node->get_type() && fn_node->fn_type && fn_node->scope ){
 		error(fn_node,"function name %s %p %p %p %p", str(fn_node->name), fn_node->instance_of, fn_node->get_type(), fn_node->fn_type, fn_node->scope);
@@ -1009,36 +1009,60 @@ CgValue Node::codegen(CodeGen& cg, bool just_contents) {
 	dbprintf("TODO refactor codegen to use this virtual. warning codegen not implemented for %s\n",this->kind_str());
 	return CgValue();
 }
+void name_mangle_append_segment(char* dst, int size, const char* src){
+	int len=strlen(src);
+	dst+=strlen(dst);
+	sprintf(dst,"%d",len);
+	strcat(dst,src);
+}
 
-/*
-void name_mangle(char* dst, int size, ExprFnDef* src) {
+
+char* name_mangle_append_name(char *dst,int size, Name n){
+	if (n==PTR){ strcat(dst,"P");}
+	else if (n==BOOL){ strcat(dst,"b");}
+	else if (n==UINT){ strcat(dst,"u");}
+	else if (n==INT){ strcat(dst,"i");}
+	else if (n==U32){ strcat(dst,"l");}
+	else if (n==U16 || n==I16){ strcat(dst,"s");}
+	else if (n==FLOAT){strcat(dst,"f");}
+	else if (n==DOUBLE){strcat(dst,"d");}
+	else if (n==HALF){strcat(dst,"h");}
+	else if (n==CHAR || n==I8 || n==U8){strcat(dst,"c");}
+	else{ name_mangle_append_segment(dst,size,str(n));}
+	return dst+strlen(dst);
+}
+void name_mangle_append_type(char* dst,int size, const Type* t){
+	if (!t) return;
+		// todo - check how template params are suppsoed to mangle
+		// we suspect the template params cover this... fn's params are mangled and this should just be struct->name
+		//name_mangle_append_name(dst,size,t->struct_def->get_mangled_name());
+	name_mangle_append_name(dst,size,t->name);
+	for (auto ts=t->sub;ts;ts=ts->next){
+		name_mangle_append_type(dst,size,ts);
+	}
+}
+void name_mangle(char* dst, int size, const ExprFnDef* src) {
+	dst[0]=0;
+	// TODO - prefix scopes. Now, Overloading is the priority.
+	// todo - check how template params are suppsoed to mangle
+	sprintf(dst,"_Z");dst+=2;
+	int len=strlen(dst); size--; size-=len;
+	name_mangle_append_segment(dst, size, str(src->name));
+	for (auto a:src->args){
+		name_mangle_append_type(dst,size, a->type());
+	}
+}
+
+void name_mangle(char* dst, int size, const ExprStructDef* src) {
 	dst[0]=0;
 	// TODO - prefix scopes. Now, Overloading is the priority.
 	sprintf(dst,"_Z");dst+=2;
-	int len-=strlen(dst); size--; size-=len;
-	name_mangle_add_segment(dst, size, src->name, Name n);
-	for (auto a:src->args){
-		//a.
+	int len=strlen(dst); size--; size-=len;
+	name_mangle_append_segment(dst, size, str(src->name));
+	for (auto &a:src->typeparams){
+		name_mangle_append_type(dst,size, a.value);
 	}
-	
 }
-char* name_mangle_append_name(char *dst,int size, Name n){
-	if (n==BOOL){ strcat(dst,"b");}
-	if (n==UINT){ strcat(dst,"u");}
-	if (n==INT){ strcat(dst,"i");}
-	if (n==LONG){ strcat(dst,"l");}
-	else if (n==FLOAT){strcat(dst,"f");}
-	else if (n==CHAR){strcat(dst,"c");}
-	else if (n==){strcat(dst,"f");}
-		auto s=str(n);
-		int len=strlen(s);
-		dst+=strlen(dst);
-		sprintf(dst,"%d",len);
-		strcat(dst,n);
-	}
-	return dst+strlen(dst);
-}
- */
 
 
 

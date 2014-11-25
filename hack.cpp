@@ -49,6 +49,7 @@ void error_sub(const Node* n, const char* level, const char* txt ){
 	} else{
 		n->dump_if(-1);
 	}
+	if (auto x=n->instanced_by()){ printf("%s:%d:%d: referenced here",g_filename,x->pos.line,x->pos.col);}
 }
 void error_begin(const Node* n, const char* str, ... ){
 	char buffer[1024];
@@ -72,14 +73,14 @@ void info(const Node* n, const char* str="", ... ){
 	va_start( arglist, str );
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
-	error_sub(n,"info",buffer);
+	error_sub(n,"",buffer);
 }
 void error_end(const Node* n){
 	error_newline();
 	if (g_num_errors>0){exit(0);}
 }
 
-void error(const Node* n,Scope* s, const char* str, ... ){
+void error(const Node* n,const Scope* s, const char* str, ... ){
 	char buffer[1024];
 	va_list arglist;
 	va_start( arglist, str );
@@ -87,7 +88,7 @@ void error(const Node* n,Scope* s, const char* str, ... ){
 	va_end( arglist );
 	error_sub(n,"error",buffer);
 	error_newline();
-	printf("in scope %s\n",s->name());
+	info(s->owner_fn, "in scope %s\n",s->name());
 	error_end(n);
 }
 void error(const Node* n,const char* str, ... ){
@@ -107,7 +108,7 @@ void error(const Node* n,const Node* n2, const char* str, ... ){
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
 	error_sub(n,"error",buffer);
-	warning(n2,"see");
+	warning(n2,"see %s",n2->name_str());
 	error_end(n);
 }
 
@@ -163,10 +164,12 @@ const char* g_token_str[]={
 	"{","}",
 	"[","]",
 	"<[","]>",
-	"->",".","=>","<-","::","<->",			//arrows,accessors
+	"->",".","?.","=>","<-","::","<->",			//arrows,accessors
+	"|>","<|","<.>","<$>","<:",":>",
+
 	":","as",
 	"+","-","*","/",					//arithmetic
-	"&","|","^","%","<<",">>",					//bitwise
+	"&","|","^","%","<<",">>","?:","?>","?<",					//bitwise
 	"<",">","<=",">=","==","!=",		//compares
 	"&&","||",		//logical
 	"=",":=","=:",
@@ -175,7 +178,7 @@ const char* g_token_str[]={
 	"++","--","++","--", //inc/dec
 	"-","*","&","!","~", // unary ops
 	"*?","*!","&?","~[]","[]", // special pointers
-	",",";",
+	",",";",";;",
 	"...","..",
 	"_",
 	NULL,	
@@ -194,11 +197,12 @@ int g_tok_info[]={
 	0,0, //( )
 	0,0, //{ }
 	0,0, // [ ]
-	0,0, //Type
-	READ|10,READ|2,READ|10,READ|10,READ|13,WRITE|10,	   // arrows
+	0,0, //<[Type]>
+	READ|10,READ|2,READ|2,READ|10,READ|10,READ|13,WRITE|10,	   // dots, arrows
+	READ|17,READ|17,READ|17,READ|5,READ|17,READ|17,	// unusual stuff
 	READ|9,READ|9,
 	READ|6,READ|6,READ|5,READ|5,		//arithmetic
-	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,		//bitwise
+	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,READ|9,READ|9,READ|9,	//bitwise
 	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,	// COMPARES
 	READ|13,READ|14,	//logical
 	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
@@ -208,7 +212,7 @@ int g_tok_info[]={
 	MODIFY|PREFIX|UNARY|2,MODIFY|PREFIX|UNARY|2,MODIFY|UNARY|ASSOC|3,MODIFY|UNARY|ASSOC|3, // post/pre inc/dec
 	READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3, //unary ops
 	READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, /// special pointers
-	0,0, // delim
+	0,0,17, // delim
 	0,
 	0,0,
 	0, //placeholder
@@ -1117,6 +1121,8 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, con
 		new_fn->ret_type=const_cast<Type*>(return_type);
 	}
 	// todo: translate return type. for the minute we discard it..
+	new_fn->def=src;
+	new_fn->refs=(Node*)callsite;
 	new_fn->ret_type=nullptr;
 	new_fn->body->set_type(nullptr);// todo, inference upward..
 	new_fn->next_instance = src->instances;
@@ -1163,6 +1169,7 @@ ExprFnDef::clone() const{
 	if (!this) return nullptr;
 	auto r=new ExprFnDef(this->pos);
 	r->name=this->name;
+	r->c_linkage=false; //generic instance is not extern C.
 	r->body=(ExprBlock*)(this->body?this->body->clone():nullptr);
 	r->args.resize(this->args.size());
 	for (int i=0; i<this->args.size(); i++) {
@@ -1170,6 +1177,28 @@ ExprFnDef::clone() const{
 	}
 	return r;
 }
+
+Name ExprFnDef::get_mangled_name()const{
+	if (!mangled_name){
+		if (name==getStringIndex("main")||c_linkage){
+			const_cast<ExprFnDef*>(this)->mangled_name=name;
+		}else{
+			char buffer[1024];
+			name_mangle(buffer,1024,this);
+			const_cast<ExprFnDef*>(this)->mangled_name=getStringIndex(buffer);
+		}
+	}
+	return this->mangled_name;
+}
+Name ExprStructDef::get_mangled_name()const{
+	if (!mangled_name){
+		char buffer[1024];
+		name_mangle(buffer,1024,this);
+		const_cast<ExprStructDef*>(this)->mangled_name=getStringIndex(buffer);
+	}
+	return this->mangled_name;
+}
+
 Node*
 ArgDef::clone() const{
 	if (!this) return nullptr;
@@ -1423,15 +1452,12 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	if (ff.candidates.back().score<=0) {
 		if (flags & 1){
 		no_match_error:
-			dbprintf("\nCall with args:-\n");
-			for (auto i=0; i<args.size(); i++){
-				dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");
-			}
-			dbprintf("\ncandidate functoins:-\n");
+			error_begin(callsite,"no matching function %s() :-\n",str(name),ff.candidates.size());
+//			for (auto i=0; i<args.size(); i++){	dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");}
 			for (auto c:ff.candidates){
-				dbprintf(c.f->pos);c.f->dump_signature();dbprintf("\n");
+				warning(c.f);
 			}
-			error(callsite,"no matching function %s(), %d candidates\n",str(name),ff.candidates.size());
+			error_end(callsite);
 			return nullptr;
 		}
 		// SFINAE for caller
@@ -1715,9 +1741,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		Type* dt=nullptr;
 		if (desired){
 			if (!(desired->name==PTR)) {
-				error(this,"taking adress, expected type result");
-				desired->dump(-1);
-				newline(0);
+				error_begin(this,"taking adress, infered output isn't a ptr\n");
+				warning(desired->get_origin(),"infered from here: ");
+				desired->dump(-1);error_newline();
+				error_end(this);
 			}
 			dt=desired->sub;
 		}
@@ -2928,7 +2955,7 @@ void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 ArgDef*	ExprStructDef::find_field(const Node* rhs)const{
 	auto name=rhs->as_ident();
 	for (auto a:fields){if (a->name==name) return a;}
-	error(this,rhs,"no field %s",str(name));
+	error(rhs,this,"no field %s in ",str(name),str(this->name));
 	return nullptr;
 }
 
@@ -3324,6 +3351,7 @@ ExprFnDef* parse_fn(TokenStream&src) {
 		fndef->body = parse_block(src, CLOSE_BRACE, SEMICOLON, nullptr);
 	} else {
 		fndef->body=nullptr; // Its' just an extern prototype.
+		fndef->c_linkage=true;
 	}
 	return fndef;
 }
@@ -3452,10 +3480,18 @@ const char* g_TestProg2=
 "	struct FooStruct{x:int,y:int};"
 "	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
 //"	struct Foo{x:int,y:int}"
+//"fn something(f){\n"
+//"	printf(\"f.x= %d,.y= %d,.z= %d\n\", f.vx, f.vy, f.vz);\n"
+//"}\n"
+"	fn something(f){\n"
+"		printf(\"somethng(int) %d\\n\", f.vx);\n"
+"	}\n"
+
 "	fn main(argc:int, argv:**char)->int{	\n"
 "xs=:array[int,512];\n"
 "q:=xs[1]; p1:=&xs[1];\n"
 "*p1=42;\n"
+
 "		retval:=0;\n"
 "		x:= {a:=10;b:=20; a+b};	\n"
 "		x+=10;\n"
@@ -3464,6 +3500,7 @@ const char* g_TestProg2=
 "	p2:=&xs[1];  \n"
 "xs[1]+=3;\n"
 "		fs:=FooStruct{0xff,0x7f};		\n"
+"		something(&fs);\n"
 "		pfs:=&fs;\n"
 "		foo_struct(&fs);		\n"
 //"	fn localtest(i:int)->int{i+argc}; \n"

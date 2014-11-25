@@ -41,8 +41,10 @@ struct Span {
 
 struct Node;
 struct Name;
+struct Scope;
 extern void dbprintf(const char*,...);
 extern void error(const Node*,const Node*,const char*,...);
+void error(const Node* n,const Scope* s, const char* str, ... );
 extern void error(const Node*,const char*,...);
 extern void error(const char*,...);
 extern bool is_comparison(Name n);
@@ -109,10 +111,12 @@ enum Token {
 	OPEN_BRACKET,CLOSE_BRACKET,
 	OPEN_TYPARAM,CLOSE_TYPARAM,
 	// operators
-	ARROW,DOT,FAT_ARROW,REV_ARROW,DOUBLE_COLON,SWAP,
+	ARROW,DOT,MAYBE_DOT,FAT_ARROW,REV_ARROW,DOUBLE_COLON,SWAP,
+	// unusual
+	PIPE,BACKWARD_PIPE,COMPOSE,FMAP,SUBTYPE,SUPERTYPE,
 	COLON,AS,
 	ADD,SUB,MUL,DIV,
-	AND,OR,XOR,MOD,SHL,SHR,
+	AND,OR,XOR,MOD,SHL,SHR,OR_ELSE,MAX,MIN,
 	LT,GT,LE,GE,EQ,NE,
 	LOG_AND,LOG_OR,
 	ASSIGN,LET_ASSIGN,ASSIGN_COLON,
@@ -120,7 +124,7 @@ enum Token {
 	DOT_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
 	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,
-	COMMA,SEMICOLON,
+	COMMA,SEMICOLON,DOUBLE_SEMICOLON,
 	// after these indices, comes indents
 	ELIPSIS,RANGE,
 	PLACEHOLDER,
@@ -313,6 +317,7 @@ public:
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
 	virtual const char* kind_str()const	{return"node";}
 	virtual int get_name() const		{return 0;}
+	virtual Name get_mangled_name()const {return name;}
 	const char* get_name_str()const;
 	const char* name_str()const			{return str(this->name);}
 //	Name ident() const					{if (this)return this->name;else return 0;}
@@ -341,13 +346,15 @@ public:
 	template<typename T> T* as()const{ auto ret= const_cast<T*>(dynamic_cast<T*>(this)); if (!ret){error(this,"expected,but got %s",this->kind_str());} return ret;};
 	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
 	virtual int recurse(std::function<int(Node* f)> f){dbprintf("recurse not implemented\n");return 0;};
+	virtual Node* instanced_by()const{return nullptr;}
 };
 
 
 
 struct TypeParam: Node{
-	Type* bound=0;
+	Type* bound=0;	// eg traits/concepts
 	Type* defaultv=0;
+	Type* value=0;
 	TypeParam(){};
 	TypeParam(Name n, Type* dv){name=n;defaultv=dv;};
 	void dump(int depth)const;
@@ -655,6 +662,7 @@ public:
 	ExprStructDef*	try_find_struct(const Type* t){return this->find_struct_sub(this,t);}
 	ExprStructDef*	find_struct(const Type* t){
 		auto sname=t->deref_all();
+		if (!t->is_struct()) error(t,this,"expected struct, got %s",t->name_str());
 		auto r=try_find_struct(sname);
 		if (!r)
 			error(t,"cant find struct %s", sname->name_str());
@@ -740,6 +748,7 @@ struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
 	// but its' backwards.
 	// it'll want TypeParams aswell.
+	Name mangled_name=0;
 	bool is_enum_=false;
 	bool is_enum() { return is_enum_;}
 	vector<TypeParam>	typeparams;
@@ -770,6 +779,7 @@ struct ExprStructDef: ExprDef {
 	}
 	virtual const char* kind_str()const	{return"struct";}
 	ExprStructDef* next_of_name;
+	Name	get_mangled_name()const;
 	ExprStructDef(SrcPos sp,Name n)		{name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
 	int		alignment() const			{int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	VResult	visit(Visitor* v)			{ return v->visit(this);}
@@ -826,18 +836,22 @@ struct  ExprFnDef : ExprDef {
 	// Partial specialization may add one specific parameter...
 	// calls from un-instanced routines can partially implement?
 
+	Name mangled_name=0;
 	vector<TypeParam> typeparams;
 	vector<ArgDef*> args;
 	bool variadic;
+	bool c_linkage=false;
 	ExprBlock* body=0;
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
 	int		get_name()const {return index(name);}
+	Name	get_mangled_name()const;
 	bool	is_generic() const;
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
 	int		min_args()					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}
 	bool	is_enough_args(int x)		{if (x<min_args()) return false; if (x> args.size() && !variadic) return false; return true;}
 	virtual const char*	kind_str()const	{return"fn";}
+	Node*			instanced_by()const{if (this->instance_of){return this->refs;}else return nullptr;}
 	void			dump(int ind) const;
 	ResolvedType	resolve(Scope* scope,const Type* desired,int flags);
 	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);
