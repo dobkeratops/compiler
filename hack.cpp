@@ -3408,7 +3408,7 @@ const char* g_TestProg=
 //	"fn F[F,O,X,Y](o:O, x:X,y:Y){ o.vtable.F(o,x,y)   };"
 
 	"fn main(argc:int,argv:**char)->int{  \n"
-	"	printf(\"HELLO FROM NEW LANGUAGE\n\");\n"
+	"	printf(\"HELLO FROM PET LANGUAGE\n\");\n"
 "	t1:=argc<0 && argc>1;\n"
 	"	test_result:=if argc==0 || argc==1 {14} else {13} ;"
 	"	xs=:array[int,512];  \n"
@@ -3464,7 +3464,7 @@ const char* g_TestProg2=
 "		foo_struct(&fs);		\n"
 //"	fn localtest(i:int)->int{i+argc}; \n"
 "		py:=pfs as *int;\n"
-"		printf(\"foostruct int val recast %d; foostruct raw value %d\n\",*py,fs.x);\n"
+"		printf(\"foostruct int val recast %d; foostruct raw value %d %d\n\",*py,fs.y,pfs.y);\n"
 "		fp(2);fp(x);fp(xs[1]);		\n"
 "		take_ptr(fp);\n"
 "		bar(1,2,3);	\n"

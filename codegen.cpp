@@ -103,12 +103,19 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 	
 	RegisterName load(FILE* ofp,int *next_reg_index,RegisterName force_regname=0) {
 		if (elem>=0){
-			auto newreg=(bool)force_regname?force_regname:next_reg_name(next_reg_index);
-			fprintf(ofp,"\t"); write_reg(ofp,newreg); fprintf(ofp," = extractelement ");
-			write_type(ofp,this->type,false);write_reg(ofp,reg); fprintf(ofp,", %d\n", this->elem);
-			this->type=this->type->get_elem(elem);
-			this->reg=newreg;
-			return newreg;
+			if (this->type->is_pointer()) {
+				fprintf(ofp,";\tdot reg=%s addr=%s index=%d\n",str(reg),str(addr),elem);
+				auto sub=this->dot_sub(ofp,elem,next_reg_index);
+				return sub.load(ofp,next_reg_index);
+			} else{
+				// elem acess
+				auto newreg=(bool)force_regname?force_regname:next_reg_name(next_reg_index);
+				fprintf(ofp,"\t"); write_reg(ofp,newreg); fprintf(ofp," = extractelement ");
+				write_type(ofp,this->type,false);write_reg(ofp,reg); fprintf(ofp,", i32 %d\n", this->elem);
+				this->type=this->type->get_elem(elem);
+				this->reg=newreg;
+				return newreg;
+			}
 		}
 		if(val) {
 			if (force_regname){reg=force_regname;}
@@ -120,6 +127,10 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 				} else if(lit->type()->name==FLOAT){
 					// todo, i guess we're goint to have t make a global constants table
 					fprintf(ofp,"\t%%%s = fadd float 0.0, ",str(reg));  this->write_literal(ofp,lit); fprintf(ofp,"\n");
+				} else if (lit->type()->name==STR){
+					fprintf(ofp,"\t%%%s =  getelementptr inbounds [%d x i8]* @.%s, i32 0, i32 0 \n", str(reg),lit->llvm_strlen, getString(lit->name));
+				} else {
+					fprintf(ofp,";\tERROR literal type not handled %s\n",str(lit->name));
 				}
 				// todo: string literal, vector literals, bit formats
 			}
@@ -236,20 +247,26 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 //		}
 		int index=sd->field_index(field_name);
 		auto field=sd->find_field(field_name);
-		if ((bool)reg && !addr){			// lazy ref to field index,turn into extract/insert for load/store
-			return CgValue(reg,type,0,index);
+		return dot_sub(ofp,index,next_reg_index);
+	}
+	CgValue dot_sub(FILE* ofp,int f_index,int* next_reg){
+		if ((bool)reg && !addr && !(this->type->is_pointer())){			// lazy ref to field index,turn into extract/insert for load/store
+			fprintf(ofp,"\t;dot reg=%s index=%d\n",str(reg),f_index);
+			return CgValue(reg,type,0,f_index);
 		}
 		else {
 			auto basereg=(bool)reg?reg:addr;
 			ASSERT(basereg);			// TODO: detail: if it's addr, extra or lesser *?
-			auto areg=next_reg_name(next_reg_index);
+			auto areg=next_reg_name(next_reg);
 			auto ptr_t=type;if (ptr_t->name==PTR) ptr_t=ptr_t->sub;
-			fprintf(ofp,"\t;%s.%s :%s\n",str(type->name),str(field_name->as_ident()),str(field->type()->name));
+			auto field=ptr_t->struct_def->fields[f_index];
+			fprintf(ofp,"\t;dot reg=%s addr=%s\n",str(reg),str(addr));
+			fprintf(ofp,"\t;%s.%s :%s\n",str(type->name),str(field->name),str(field->type()->name));
 			fprintf(ofp,"\t%%%s = getelementptr inbounds %%%s* %%%s, i32 0, i32 %d\n",
 				str(areg), str(ptr_t->name), str(basereg),
-				index);
+				f_index);
 		
-			return CgValue(0,field?field->type():nullptr,areg);
+			return CgValue(0,field->type(),areg);
 		}
 	}
 	CgValue index(RegisterName index){ // calculates & returns adress
@@ -754,6 +771,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,int* next_r
 		else if (e->is_function_call()){
 			auto call_fn=e->get_fn_call();
 			RegisterName indirect_call=0;
+			fprintf(ofp,"\t;fncall %s\n", call_fn?str(call_fn->name):e->call_expr->name_str());
 
 			if (e->call_expr->is_function_name()) {
 				
@@ -768,14 +786,14 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,int* next_r
 			for (auto arg:e->argls){
 				auto reg=compile_node(ofp,arg,call_fn,sc,next_reg);
 				if (!reg.type) {
-					fprintf(ofp,"\t; reg %s  %s\n", str(reg.reg), str(reg.addr));
+					fprintf(ofp,"\t;ERROR no type???reg %s  %s\n", str(reg.reg), str(reg.addr));
 					arg->dump(0);
 					auto reg=compile_node(ofp,arg,call_fn,sc,next_reg);
 					ASSERT(reg.type);
 				}
-				l_args_reg.push_back(reg);
+				auto regval=CgValue(reg.load(ofp,next_reg),reg.type);
+				l_args_reg.push_back(regval);
 			}
-			fprintf(ofp,"\t;fncall %s\n", call_fn?str(call_fn->name):e->call_expr->name_str());
 			int i=0;
 			for (auto reg:l_args_reg){
 				if (reg.addr && !reg.reg) {
@@ -813,7 +831,7 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,int* next_r
 			fprintf(ofp,"(");
 			for (auto i=0; i<l_args.size(); i++){
 				if (i) {fprintf(ofp," ,");}
-				auto reg=l_args[i];
+				auto reg=l_args_reg[i];
 				write_type(ofp,reg);//reg.is_addr());
 				reg.write_operand(ofp);
 			}
