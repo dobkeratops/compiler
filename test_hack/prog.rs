@@ -16,15 +16,18 @@ struct Mesh {
 	triangles:array[Triangle,4]
 }
 
-fn something(f:*Foo)->int{
-	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz);
-	0
+fn something(f:*Foo){
+	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz)
+}
+fn something_int(f:int){
+	printf("something overloaded for int")
 }
 
 fn main(argc:int,argv:**char)->int{
 	x:=0;
 
 	retval:=0;
+	something_int(retval);
 	acc:=retval;
 	for i:=0,j:=0; i<10; i+=1,j+=10 {
 		x+=i;

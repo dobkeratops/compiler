@@ -5,78 +5,6 @@
 
 const char** g_pp,*g_p;
 const char* g_filename=0;
-/*
- features wanted:-
- 
- 
- RAII
- 
- INTS IN TYPEPARAMS - buffers like C++
- 
- TYPEPARAMETERS - structs, functions, bounding in inference
-
- LAMBDAS - its not a modern langauge without them.
-
- LOCAL FUNCTIONS - NAMED LAMBDAS ? fn foo()
-
- MOVE SEMANTIC
-
- UFCS
-
- SIMD support - codegen - recognize appropriate structs?
-
- VARIANTS:
- - adhoc variants
- 
-
- VECTOR LITERALS
- 
- COERSIONS
- 
- REAL INLINING
- 
- LAZY ARGUMENTS
- 
- 
- NESTED ENTITY TYPE INFERENCE
- 
- HKT - type type params
-
- C++ bindings ..
- 
- debug information
- 
- CLASSES
-  - vtable generation
-  - dynamic cast- as variant?
-  -
- 
- PATTERN MATCHING?
- 
- TUPLES?
- 
- DECENT ERROR MESSAGES?
- 
- DUMP TYPE INFORMATION
- 
-
- BREAK EXPRESSIONS
- 
- SOME RUST COMPATABILITY -parsing rust syntax?
-  -how far could we go there?
- 
- SOME C++ COMPATABILITY -parse a subset of c++?
-
-if x in {
-	foo=>....
- 	bar=>....
-	baz=>....
-}
-
- error reporting.
- foo.q // error q not available
- foo.bar()		// bar not available.  available functions:-.....
- */
 
 inline void dbprintf_varscope(const char*,...){}
 
@@ -93,7 +21,7 @@ void dbprintf(const char* str, ... )
 #endif
 }
 void dbprintf(SrcPos& pos){
-	dbprintf("%s:%d:",g_filename,pos.line);
+	dbprintf("%s:%d:%d:",g_filename,pos.line,pos.col);
 }
 void dbprintf(Name& n){
 	dbprintf("%s",str(n));
@@ -104,17 +32,25 @@ void dbprintf(Node* n){n->dump(-1);}
 //template<typename X,typename Y,typename Z,typename W> void dbprintf(X x,Y y,Z z,W w){dbprintf(x);dbprintf(y);dbprintf(z);dbprintf(w);}
 // for real compiler errors. todo.. codelocations on nodes
 bool g_error_on_newline=false;
-void error_sub(const Node* n, char* level, const char* txt ){
+int g_num_errors=0;
+void error_newline(){
 	if (!g_error_on_newline){
 		g_error_on_newline=true;printf("\n");}
-//	n->dump_if(-1);
+}
+void error_sub(const Node* n, const char* level, const char* txt ){
+	g_num_errors++;
+	error_newline();
 	if (n)
-		printf("%s:%d:",g_filename,n->pos.line);
+		printf("%s:%d:%d:",g_filename,n->pos.line,n->pos.col);
 	if (level)printf("%s-",level);
 	printf("\t%s",txt);
-	if (txt[strlen(txt)-1]!='\n'){g_error_on_newline=false;}
+	if (strlen(txt)){
+		if (txt[strlen(txt)-1]!='\n'){g_error_on_newline=false;}
+	} else{
+		n->dump_if(-1);
+	}
 }
-void error(const Node* n, const char* str, ... ){
+void error_begin(const Node* n, const char* str, ... ){
 	char buffer[1024];
 	va_list arglist;
 	va_start( arglist, str );
@@ -122,7 +58,7 @@ void error(const Node* n, const char* str, ... ){
 	va_end( arglist );
 	error_sub(n,"error",buffer);
 }
-void warning(const Node* n, const char* str, ... ){
+void warning(const Node* n, const char* str="", ... ){
 	char buffer[1024];
 	va_list arglist;
 	va_start( arglist, str );
@@ -130,7 +66,7 @@ void warning(const Node* n, const char* str, ... ){
 	va_end( arglist );
 	error_sub(n,"warning",buffer);
 }
-void info(const Node* n, const char* str, ... ){
+void info(const Node* n, const char* str="", ... ){
 	char buffer[1024];
 	va_list arglist;
 	va_start( arglist, str );
@@ -138,52 +74,43 @@ void info(const Node* n, const char* str, ... ){
 	va_end( arglist );
 	error_sub(n,"info",buffer);
 }
+void error_end(const Node* n){
+	error_newline();
+	if (g_num_errors>0){exit(0);}
+}
 
-
-// for real compiler errors. todo.. codelocations on nodes
 void error(const Node* n,Scope* s, const char* str, ... ){
 	char buffer[1024];
 	va_list arglist;
 	va_start( arglist, str );
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
-	printf("\n");
-	printf("%s:%d: error:",g_filename,n->pos.line);
-	n->dump_if(-1);
-	printf("%s\n",buffer);
-	printf("in scope of %s\n",s->name());
-#ifdef DEBUG
-	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
-#endif
+	error_sub(n,"error",buffer);
+	error_newline();
+	printf("in scope %s\n",s->name());
+	error_end(n);
 }
-// for real compiler errors. todo.. codelocations on nodes
+void error(const Node* n,const char* str, ... ){
+	char buffer[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(buffer, str, arglist );
+	va_end( arglist );
+	error_sub(n,"error",buffer);
+	error_end(n);
+}
+
 void error(const Node* n,const Node* n2, const char* str, ... ){
 	char buffer[1024];
 	va_list arglist;
 	va_start( arglist, str );
 	vsprintf(buffer, str, arglist );
 	va_end( arglist );
-	n->dump_if(-1);
-	printf("\n");
-	printf("%s:%d: error:\n",g_filename,n->pos.line);
-	printf("%s:%d: see:\n",g_filename,n2->pos.line);
-	printf("%s\n",buffer);
-#ifdef DEBUG
-	printf("compiler src: %s:%d: %s\n",__FILE__,__LINE__, __FUNCTION__);
-#endif
+	error_sub(n,"error",buffer);
+	warning(n2,"see");
+	error_end(n);
 }
 
-void error(const char* str, ... ){
-	char buffer[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(buffer, str, arglist );
-	va_end( arglist );
-	printf("\n");
-	printf(";%s\n",buffer);
-	ASSERT(0);
-
-}
 ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
 
 void print_tok(Name n){dbprintf("%s ",getString(n));};
@@ -360,10 +287,21 @@ const char* get_llvm_type_str(Name n_type_name){
 		case SIZE_T:return "i64";	// TODO depend on arch 32/64bit
 		case UINT:return "u32";
 		case BOOL:return "i1";
+		case HALF:return "half";
 		case FLOAT:return "float";
+		case DOUBLE:return "double";
 		case VOID:return "void";
 		case STR:return "i8*";
 		case CHAR:return "i8";
+		case I8:return "i8";
+		case I16:return "i16";
+		case I32:return "i32";
+		case I64:return "i64";
+		case U8:return "u8";
+		case U16:return "u16";
+		case U32:return "u32";
+		case U64:return "u64";
+		case FLOAT4:return "< 4 x float >";
 		default: return getString(tname);
 	}
 }
@@ -469,11 +407,12 @@ ResolvedType assert_types_eq(const Node* n, const Type* a,const Type* b) {
 	}
 	ASSERT(a && b);
 	if (!a->eq(b)){
-		error(n," type mismatch:%s vs %s\n",str(a->name),str(b->name));
-		info(a->get_origin(),"(1)=");
-		a->dump(-1); newline(0);
-		info(b->get_origin(),"vs (2)=");
-		b->dump(-1);newline(0);
+		error_begin(n," type mismatch\n");
+		warning(a->get_origin(),"from here:");
+		a->dump(-1);
+		warning(b->get_origin(),"vs from here:");
+		b->dump(-1);
+		error_end(n);
 		return ResolvedType(a,ResolvedType::ERROR);
 	}
 	return ResolvedType(a,ResolvedType::COMPLETE);
@@ -672,7 +611,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		return propogate_type(flags,this, this->type_ref(),v->type_ref());
 
 	} else if (!scope->find_named_items_rec(this->name)){
-		error(this,scope,"can't find variable/item %s",str(this->name));
+		error(this,scope,"\'%s\' undeclared",str(this->name));
 	}
 	if (auto f=scope->find_unique_fn_named(this,flags)){ // todo: filter using function type, because we'd be storing it as a callback frequently..
 		// TODO; loose end :( in case where arguments are known, this overrides the match
@@ -2378,6 +2317,7 @@ struct TextInput {
 	void advance_tok_sub() {
 		skip_whitespace();
 		tok_start=tok_end;
+		pos.col=tok_start-line_start;
 		if (!*tok_end) { this->curr_tok=0; return;}
 		auto c=*tok_end;
 		if (c=='_' && tok_end[1] && !isSymbolCont(tok_end[1])) tok_end++; //placeholder
@@ -3748,7 +3688,7 @@ int main(int argc, const char** argv) {
 		auto ret=compile_source(g_TestProg2,"g_TestProg2","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		if (!ret) {
 			printf("\n\noptions    -r compile & run   -l emit llvm IR only    -e emit executable only  -t dump AST with types   -a just dump ast -E dump example\n");
-			printf("\ndefault: it will compile & run a source file;\ngenerates srcname.ll & srcname/srcname.out executable");
+			printf("\ndefault: it will compile & run a source file;\ngenerates srcname.ll & srcname/srcname.out executable\n");
 		}
 	}
 }

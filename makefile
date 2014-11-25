@@ -1,11 +1,12 @@
-try: hack foo
-	./hack
-	cat test.ll
+debug: hack foo
+	./hack prog.rpp
 
 hack: foo hack.cpp codegen.cpp repl.cpp hack.h codegen.h repl.h
 	g++ hack.cpp repl.cpp codegen.cpp -o hack -std=c++1y -g3 -DDEBUG
-debug: hack
+
+test_llvm: hack
 	./hack 
+	cat test.ll
 
 #foo.c for investigating LLVM format
 foo: foo.c

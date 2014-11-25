@@ -1,4 +1,6 @@
 #include "codegen.h"
+
+// TODO: properly abstract llvm instruction generation to move to llvm api.
 extern Name getStringIndex(const char* str,const char* end) ;
 extern const char* getString(const Name&);
 extern bool is_operator(Name tok);
@@ -11,8 +13,6 @@ void write_function_type(FILE* ofp,ExprFnDef* fn_node,int* regname);
 void write_function_type(FILE* ofp, const Type* t);
 CgValue alloca_type(FILE* ofp, Expr* holder, Type* t,int *next_reg);
 
-// If you just compiled to C..
-// this would all work by now.
 Name next_reg_name(int *next_reg_index){
 	char tmp[64]; sprintf(tmp,"r%d",(*next_reg_index)++);
 	return getStringIndex(tmp);
@@ -33,13 +33,13 @@ void write_store(FILE* ofp, RegisterName reg, Type* type, RegisterName addr){
 }
 
 struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
-	// TODO: t	his should be a tagged-union. we just can't be arsed rolling it manually, thats one of many reasons why we're writing a language
+	// TODO: this should be a tagged-union?
 	// these values aren't persistent so it doesn't matter too much.
 	RegisterName reg;
 	int elem;     // if its a struct-in-reg
 	Type* type;
 	RegisterName addr;
-	Node*	val;		// TODO: rename value.could be variable(in reg?) or function pointer (just a label of functoin..) TODO unify with literal case.
+	Node*	val;		// which AST node it corresponds to
 	int ofs;
 	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
 	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
@@ -302,9 +302,8 @@ void write_type(FILE* ofp, const Type* t, bool ref) {
 		fprintf(ofp,"}");
 	} else if (t->is_struct()){
 		auto sd=t->struct_def;
-		if (!sd) { error(t,"struct not resolved\n");
-//			sd=g_Sc->find_struct(t);
-			
+		if (!sd) {
+			error(t,"struct not resolved\n");
 		}
 		if (sd->name) fprintf(ofp, "%%%s",str(sd->name));
 		else {
@@ -555,32 +554,6 @@ CgValue compile_for(FILE* ofp, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_sc,
 	//TODO: return value.
 	return CgValue();
 }
-
-/*
-// Allowing partial parsing
-template foo; - says foo is a template, typeparams are expected.  foo<x,y,z>.
-typename foo; - says foo is a typename. allows parsing grammar.
-'extern foo;' -says foo is *not* a template or typename.
-// decoupling syntax from modularity.
-
-Something::{
-	void yada();
-}
-
-same as
-class Something {
-	void yada();
- 
-fn compile_node {
-	(ExprFnDef* fnd){
- 	},
- 	(.....){
- 	},
- 	(....){
- 	},
-}
-}
-*/
 
 CgValue write_cast(FILE* ofp,CgValue dst, CgValue&lhsv, Expr* rhse ,int* next_reg){
 	// todo rename 'src', 'dst' to avoid blah as blah confusion vs C cast (type)(expr)
@@ -1007,7 +980,7 @@ int translate_llvm_string_constant(char* dst, int size, const char* src){
 		*d++=hexdigit(c & 0xf);
 	}
 	*d++=0;
-	printf("%s",dst);
+
 	return len;
 }
 

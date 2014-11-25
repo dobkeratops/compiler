@@ -1,5 +1,7 @@
 #include <stdio.h>
+#include <stdlib.h>
 
+// simple C sourcefile to investigate LLVM format
 float lerp(float a,float b, float f){
 	return (b-a)*f+a;
 }
