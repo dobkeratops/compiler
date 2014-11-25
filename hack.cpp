@@ -153,7 +153,7 @@ int g_raw_types[]={
 const char* g_token_str[]={
 	"",
 	"int","uint","size_t","i8","i16","i32","i64","u8","u16","u32","u64","u128","bool",
-	"half","float","double","float4","char","str","void","auto","one","zero","voidptr",
+	"half","float","double","float4","char","str","void","voidptr","one","zero","auto",
 	"ptr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
 	"print___","fn","struct","class","trait","virtual","static","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof",
@@ -284,30 +284,18 @@ LLVMOp2 g_llvm_cmp_ops[]= {
 //const char* g_llvm_type[]={
 //	"i32","i32","i1","float","i8","i8*"
 //};
+const char* g_llvm_type_str[]={
+	"i32","u32","i64",
+	"i8","i16","i32","i64","u8","u16","u32","u64","u128","i1",
+	"half","float","double","< 4 x float >", "i8", "i8*","void","void*",
+	nullptr
+};
 const char* get_llvm_type_str(Name n_type_name){
 	auto tname=index(n_type_name);
-	switch (tname){
-		case INT:return "i32";	// TODO depend on arch 32/64bit
-		case SIZE_T:return "i64";	// TODO depend on arch 32/64bit
-		case UINT:return "u32";
-		case BOOL:return "i1";
-		case HALF:return "half";
-		case FLOAT:return "float";
-		case DOUBLE:return "double";
-		case VOID:return "void";
-		case STR:return "i8*";
-		case CHAR:return "i8";
-		case I8:return "i8";
-		case I16:return "i16";
-		case I32:return "i32";
-		case I64:return "i64";
-		case U8:return "u8";
-		case U16:return "u16";
-		case U32:return "u32";
-		case U64:return "u64";
-		case FLOAT4:return "< 4 x float >";
-		default: return getString(tname);
+	if (tname>=INT && tname<=(VOIDPTR)){
+		return g_llvm_type_str[tname-INT];
 	}
+	return getString(tname);
 }
 
 const LLVMOp* get_op_llvm(Name ntok,Name ntype){
@@ -761,6 +749,15 @@ bool type_compare(const Type* t,int a0, int a1){
 
 bool Type::eq(const Type* other) const{
 	if ((!this) && (!other)) return true;
+	// if its' auto[...] match contents; if its plain auto, match anything.
+	if (this &&this->name==AUTO){
+		if (this->sub && other) return this->sub->eq(other->sub);
+		else return true;
+	}
+	if (other && other->name==AUTO){
+		if (other->sub && this) return other->sub->eq(this->sub);
+		else return true;
+	}
 	if (!(this && other)) return false;
 	if (this->name!=other->name)return false;
 //	if (!this->sub && other->sub)) return true;
@@ -1097,10 +1094,11 @@ void Scope::visit_calls() {
 */
 void ExprFnDef::dump_signature()const{
 	dbprintf("fn %s(",str(name));
-	for (auto a:args) a->dump(-1);
+	int i=0;for (auto a:args) {if(i)dbprintf(",");a->dump(-1);i++;}
+	if (this->variadic){dbprintf("...");};
 	dbprintf(")->");
-	this->return_type()->dump_if(-1);
-	dbprintf("\n");
+//	this->return_type()->dump_if(-1);
+	this->ret_type->dump_if(-1);
 }
 ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
 	if (src->type_parameter_index(src->name)>=0){
@@ -1269,6 +1267,7 @@ struct FindFunction {
 	const vector<Expr*>& args;
 	const Type* ret_type;
 	int flags;
+	int	max_candidates=5;
 	FindFunction(Name n, const vector<Expr*>& a, const Type* r,int f):name(n),args(a),ret_type(r),flags(f){}
 
 	void consider_candidate(ExprFnDef* f);
@@ -1277,35 +1276,57 @@ struct FindFunction {
 	void insert_candidate(ExprFnDef* f,int score);
 };
 void FindFunction::insert_candidate(ExprFnDef* f,int score){
+	if (candidates.size()>=max_candidates){
+		for (int i=0; i<candidates.size()-1;i++){
+			candidates[i]=candidates[i+1];
+		}
+		candidates.resize(candidates.size()-1);
+	}
 	for(int i=0; i<candidates.size();i++){
+		if (candidates[i].f==f)return;// no duplicate?!
 		if (candidates[i].score>score) {
 			candidates.resize(candidates.size()+1);
-			for (int j=i+1;j<candidates.size(); j++){ candidates[j]=candidates[j-1];}
+			for (size_t j=candidates.size();j>i; j--){ candidates[j]=candidates[j-1];}
 			candidates[i]=Candidate{f,score};
 			return;
 		}
 	}
 	candidates.push_back(Candidate{f,score});
 }
+
 void FindFunction::consider_candidate(ExprFnDef* f) {
+	for (auto& c:this->candidates){
+		if (c.f==f)
+			return;
+	}// ? shouldn't happen.
 	if (f->type_parameter_index(f->name)<0)
-		if (f->name!=name)
+		if (f->name!=name && name!=PLACEHOLDER)
 			return ;
-	
+	if (!f->is_enough_args((int)args.size()) || f->too_many_args(args.size())){
+		if (0==(this->flags&R_FINAL)) return;
+	}
 	// TODO: may need to continually update the function match, eg during resolving, as more types are found, more specific peices may appear?
 	// Find max number of matching arguments
-	if (args.size() >f->args.size() && !f->variadic)	// if we supplied too many args - we can't call it.
-		return;
-	if (args.size() <f->args.size())	//TODO:consider default args here
-		return;
 	
 	vector<const Type*> matched_type_params;
 	for (int i=0; i<f->typeparams.size(); i++){matched_type_params.push_back(nullptr);}
 
 	int score=0;
-	if (!f->is_enough_args((int)args.size())){
-		score=-1000*abs((int)args.size()-(int)f->args.size());
-		if (candidates.size()>=5) return;
+	// +1 for any matching arg type regardless of placement,bonus if aprox right order
+	for (int i=0; i<args.size(); i++) {
+		auto at=args[i]->get_type(); if (!at) continue;
+		for (int j=0; j<f->args.size(); j++) {
+			if (f->args[j]->get_type()->eq(at)){
+				score++;
+				if (j==i) score+=10*(1+args.size()-i); // exact positional match scores higher earlier
+			}
+		}
+	}
+	if (name==PLACEHOLDER){
+//		score-=1000;
+	}
+	else if (!f->is_enough_args((int)args.size()) || f->too_many_args(args.size())){
+		score-=1000;
 		insert_candidate(f,score);
 		return;
 	}
@@ -1371,9 +1392,17 @@ void FindFunction::find_fn_sub(Expr* src) {
 }
 void FindFunction::find_fn_from_scopes(Scope* s,Scope* ex)
 {
-	if (auto fname=s->find_named_items_local(name)){
-		for (auto f=fname->fn_defs; f;f=f->next_of_name) {
-			find_fn_sub((Expr*)f);
+	if (name!=PLACEHOLDER){
+		if (auto fname=s->find_named_items_local(name)){
+			for (auto f=fname->fn_defs; f;f=f->next_of_name) {
+				find_fn_sub((Expr*)f);
+			}
+		}
+	} else{
+		for (auto ni=s->named_items; ni; ni=ni->next){
+			for (auto f=ni->fn_defs; f;f=f->next_of_name) {
+				find_fn_sub((Expr*)f);
+			}
 		}
 	}
 	for (auto f=s->templated_name_fns; f;f=f->next_of_name) {
@@ -1447,15 +1476,30 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 //		return 0;f
 //	}
 	if (!ff.candidates.size()){
-		error(callsite,"can't find function\n",str(name));
+		error(callsite,"can't find function %s\n",str(name));
 	}
-	if (ff.candidates.back().score<=0) {
+	if (ff.candidates.back().score<=0 || name==PLACEHOLDER) {
 		if (flags & 1){
 		no_match_error:
-			error_begin(callsite,"no matching function %s() :-\n",str(name),ff.candidates.size());
-//			for (auto i=0; i<args.size(); i++){	dbprintf("%d :",i); args[i]->type()->dump(-1); dbprintf("\n");}
-			for (auto c:ff.candidates){
-				warning(c.f);
+			auto best=ff.candidates.back();
+			error_begin(callsite,(name!=PLACEHOLDER)?"unmatched call":"possible calls",str(name),ff.candidates.size());
+			// For the best match, say what you'd have to do to fix, then show all matches
+			if (args.size()<best.f->min_args()){info(best.f,"maybe requires %d args, %d given",best.f->min_args(),args.size());}
+			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
+				if (!args[i]->type()->eq(best.f->args[i]->type())){
+					info(best.f->args[i],"maybe arg %d should be ",i); best.f->args[i]->type()->dump_if(-1);
+					info(args[i],"was given "); args[i]->type()->dump_if(-1);newline(0);
+					break;
+				}
+			}       
+			info(callsite,"%s(",str(name));
+			for (auto i=0; i<args.size(); i++){	if (i)dbprintf(",");dbprintf("",i); args[i]->type()->dump(-1); }
+			dbprintf(")");
+			if (candidates.size()>1)info(callsite,"see candidates:-");
+			for (int i=ff.candidates.size()-1; i>=0; i--) {
+				auto &c=ff.candidates[i];
+				info(c.f," ");c.f->dump_signature();
+				
 			}
 			error_end(callsite);
 			return nullptr;
@@ -1465,7 +1509,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	}
 	if (flags & R_FINAL && !ff.candidates.size())
 	{
-		error(callsite,";No matchrs found for %s\n",str(name));
+		error(callsite,";No matches found for %s\n",str(name));
 		return nullptr;
 	}
 	for (int i=(int)ff.candidates.size()-1; i>=0; i--) {
@@ -1990,6 +2034,9 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 
 	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_ident(), block,block->argls, desired,flags);
 	auto fnc=call_target;
+	if (!call_target){
+		return ResolvedType();
+	}
 	block->call_expr->set_def(call_target);
 	if (call_target!=block->get_fn_call()) {
 		if (block->get_fn_call()) {
@@ -3483,10 +3530,12 @@ const char* g_TestProg2=
 //"fn something(f){\n"
 //"	printf(\"f.x= %d,.y= %d,.z= %d\n\", f.vx, f.vy, f.vz);\n"
 //"}\n"
-"	fn something(f){\n"
-"		printf(\"somethng(int) %d\\n\", f.vx);\n"
+"	fn something(f:int){\n"
+"		printf(\"somethng(int)\\n\");\n"
 "	}\n"
-
+"	fn something(f:float){\n"
+"		printf(\"somethng(int)\\n\");\n"
+"	}\n"
 "	fn main(argc:int, argv:**char)->int{	\n"
 "xs=:array[int,512];\n"
 "q:=xs[1]; p1:=&xs[1];\n"
@@ -3500,7 +3549,7 @@ const char* g_TestProg2=
 "	p2:=&xs[1];  \n"
 "xs[1]+=3;\n"
 "		fs:=FooStruct{0xff,0x7f};		\n"
-"		something(&fs);\n"
+"		something(1);\n"
 "		pfs:=&fs;\n"
 "		foo_struct(&fs);		\n"
 //"	fn localtest(i:int)->int{i+argc}; \n"
@@ -3633,7 +3682,7 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	}
 	gather_named_items(node,&global);
 	node->resolve(&global,nullptr,0);
-	node->resolve(&global,nullptr,(flags&B_LLVM)?R_FINAL:0);
+	node->resolve(&global,nullptr,flags&(B_EXECUTABLE|B_RUN|B_LLVM)?R_FINAL:0);// if we just want to dump/search, we dont fail for final errors.
 	if (flags & B_DEFS){
 		global.dump(0);
 	}

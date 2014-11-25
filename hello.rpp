@@ -6,10 +6,18 @@ struct Foo {
 	vx:int, vy:int, vz:int
 }
 fn something_foo(f:&Foo){
+	printf("f.x= %d\n", f.vx);
+}
+fn something_foo(f:&Foo,x:&Foo){
+    printf("something_foo with 2 args overloaded'n");
 	printf("f.x= %d,.y= %d,.z= %d\n", f.vx);
 }
-fn something(f){
+fn something(f:&Foo){
 	printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
+}
+fn something(f:float){
+}
+fn something(f:float,x){
 }
 
 fn main(argc:int,argv:**char)->int{
@@ -23,7 +31,7 @@ fn main(argc:int,argv:**char)->int{
 	x:=0;
 
 	fv:=Foo{vx=3,vy=4,vz=5};
-	something(1.0);
+	something_foo(&fv,&fv);
 
 
 

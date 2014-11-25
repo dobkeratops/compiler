@@ -98,7 +98,7 @@ enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
 	RAW_TYPES,INT=RAW_TYPES,UINT,SIZE_T,I8,I16,I32,I64,U8,U16,U32,U64,U128,BOOL,	// int types
-	HALF,FLOAT,DOUBLE,FLOAT4,CHAR,STR,VOID,AUTO,ONE,ZERO,VOIDPTR,	// float types,ptrs
+	HALF,FLOAT,DOUBLE,FLOAT4,CHAR,STR,VOID,VOIDPTR,ONE,ZERO,AUTO,	// float types,ptrs
 	PTR,REF,NUM_RAW_TYPES=REF,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
 	
 	PRINT,FN,STRUCT,CLASS,TRAIT,VIRTUAL,STATIC,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,THIS,SELF,SUPER,VTABLEOF,
@@ -424,6 +424,9 @@ struct Type : Expr{
 	bool	is_register()const	{return !is_complex();}
 	bool	is_complex()const;
 	bool	is_struct()const;
+	bool	is_ptr_to(const Type* other){return ((this->type==PTR) && this->sub->eq(other));}
+	bool	is_void_ptr()const	{if (this->type==VOIDPTR)return true;if(this->type==PTR && this->sub){if(this->type->sub==VOID) return true;}return false;};
+	
 	const Type*	get_elem(int index) const;
 	Type*		get_elem(int index);
 	int			num_pointers()const;
@@ -662,7 +665,7 @@ public:
 	ExprStructDef*	try_find_struct(const Type* t){return this->find_struct_sub(this,t);}
 	ExprStructDef*	find_struct(const Type* t){
 		auto sname=t->deref_all();
-		if (!t->is_struct()) error(t,this,"expected struct, got %s",t->name_str());
+		if (!sname->is_struct()) error(t,this,"expected struct, got %s",sname->name_str());
 		auto r=try_find_struct(sname);
 		if (!r)
 			error(t,"cant find struct %s", sname->name_str());
@@ -849,7 +852,9 @@ struct  ExprFnDef : ExprDef {
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
 	int		min_args()					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}
+	int 	max_args()					{return variadic?1024:args.size();}
 	bool	is_enough_args(int x)		{if (x<min_args()) return false; if (x> args.size() && !variadic) return false; return true;}
+	bool	too_many_args(int x)		{return x>max_args();}
 	virtual const char*	kind_str()const	{return"fn";}
 	Node*			instanced_by()const{if (this->instance_of){return this->refs;}else return nullptr;}
 	void			dump(int ind) const;
@@ -859,8 +864,8 @@ struct  ExprFnDef : ExprDef {
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	Expr*		get_return_value() const;
 	Type*		return_type()const {
-		auto x=get_return_value();
-		return x?x->get_type():this->ret_type;
+		auto x=get_return_value(); if (auto xt=x->get_type()) return xt;
+		return this->ret_type;
 	}
 	bool	has_return_value() const{
 		if (auto r=return_type()){
