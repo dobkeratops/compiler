@@ -182,14 +182,15 @@ inline int index(Name n){return n.m_index;}
 #else
 struct Name {
 	int32_t m_index;
+	const char* s;
 	Name()			{m_index=0;}
-	Name(int i)		{m_index=i;}
+	Name(int i)		{m_index=i; s=str(i);}
 	Name(const char* a, const char* end=0){
 		if (!end)
 			end=a+strlen(a);
 		m_index=index(getStringIndex(a,end));
 	}
-	Name(const Name& b)	{m_index=b.m_index; }
+	Name(const Name& b)	{m_index=b.m_index; s=str(m_index);}
 	//	operator int32_t(){return index;}
 	bool operator==(int b)const	{return m_index==b;}
 	bool operator<(int b)const	{return m_index<b;}
@@ -424,8 +425,8 @@ struct Type : Expr{
 	bool	is_register()const	{return !is_complex();}
 	bool	is_complex()const;
 	bool	is_struct()const;
-	bool	is_ptr_to(const Type* other){return ((this->type==PTR) && this->sub->eq(other));}
-	bool	is_void_ptr()const	{if (this->type==VOIDPTR)return true;if(this->type==PTR && this->sub){if(this->type->sub==VOID) return true;}return false;};
+//	bool	is_ptr_to(const Type* other){return ((this->type==PTR) && this->sub->eq(other));}
+//	bool	is_void_ptr()const	{if (this->type==VOIDPTR)return true;if(this->type==PTR && this->sub){if(this->type->sub==VOID) return true;}return false;};
 	
 	const Type*	get_elem(int index) const;
 	Type*		get_elem(int index);

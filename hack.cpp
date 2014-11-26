@@ -393,12 +393,16 @@ int get_typeparam_index(const vector<TypeParam>& tps, Name name) {
 }
 
 Expr::Expr(){ m_type=0;visited=0;regname=0;}
-ResolvedType assert_types_eq(const Node* n, const Type* a,const Type* b) {
+ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type* b) {
 	if (!n->pos.line){
 		error(n,"AST node hasn't been setup properly");
 	}
 	ASSERT(a && b);
 	if (!a->eq(b)){
+		if (!(flags & R_FINAL))
+			return ResolvedType(0,ResolvedType::INCOMPLETE);
+
+		n->dump(0);
 		error_begin(n," type mismatch\n");
 		warning(a->get_origin(),"from here:");
 		a->dump(-1);
@@ -465,9 +469,7 @@ ResolvedType propogate_type(int flags,const Node*n, Type*& a,Type*& b) {
 		b=a;
 		return ResolvedType(b,ResolvedType::COMPLETE);
 	}
-	else {
-		return assert_types_eq(n, a,b);
-	}
+	return assert_types_eq(flags,n, a,b);
 }
 ResolvedType propogate_type(int flags, Expr *n, Type*& a,Type*& b) {
 	verify(a,b);
@@ -486,10 +488,9 @@ ResolvedType propogate_type_fwd(int flags,const Node* n, const Type*& a,Type*& b
 		b=(Type*)a;
 		return ResolvedType(a,ResolvedType::COMPLETE);
 	}
-	if (a && b){
-		return assert_types_eq(n, a,b);
-	}
-	ASSERT(0);
+	return assert_types_eq(flags,n, a,b);
+	
+	return ResolvedType(b,ResolvedType::INCOMPLETE);
 }
 ResolvedType propogate_type_fwd(int flags,Expr* e, const Type*& a) {
 	return propogate_type_fwd(flags,e, a, e->type_ref());
@@ -618,6 +619,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 void ExprIdent::dump(int depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("%s ",getString(name));
+	if (this->def) {dbprintf("%d %x",this->def->pos.line, this->def);}
 	if (this->get_type()) {this->get_type()->dump(-1);}
 }
 
@@ -641,11 +643,14 @@ void ExprBlock::dump(int depth) const {
 		dbprintf(this->is_subscript()?"subscript: ":this->is_struct_initializer()?"struct_init":"call: ");
 		this->get_type()->dump_if(-1);
 		dbprintf(" (");
-//		dbprintf("%s",getString(get_fn_call()->name));
+//
+		if (auto f=this->get_fn_call())
+			dbprintf("%s",f->name_str());
 		this->call_expr->dump(depth+1);
 		if (this->get_type()) {dbprintf(":");this->get_type()->dump(-1);};
+	} else{
+		dbprintf(this->is_array_initializer()?"array_init ":this->is_tuple()?"tuple ":"");
 	}
-	dbprintf(this->is_array_initializer()?"array_init":this->is_tuple()?"tuple":"");
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
@@ -667,8 +672,16 @@ void ExprOp::dump(int depth) const {
 }
 
 ExprBlock::ExprBlock(const SrcPos& s){ pos=s;}
-ExprFnDef* ExprBlock::get_fn_call()const {return def?dynamic_cast<ExprFnDef*>(this->def):nullptr;}
-
+ExprFnDef* ExprBlock::get_fn_call()const {
+	if (!this->def)
+		return nullptr;
+	printf("fncall expr %s %d\n",this->def->name_str(), this->def->pos.line);
+	printf("fncall expr %s\n",this->def->kind_str());
+	auto d=dynamic_cast<ExprFnDef*>(this->def);
+	if (d)
+		return d;
+	return nullptr;
+}
 const char* Scope::name() const {
 	if (owner_fn) return str(owner_fn->name);
 	if (!parent){
@@ -1101,6 +1114,7 @@ void ExprFnDef::dump_signature()const{
 	this->ret_type->dump_if(-1);
 }
 ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
+	dbprintf("instantiating %s %d for call %s %d\n",str(name),src->pos.line, callsite->name_str(),callsite->pos.line);
 	if (src->type_parameter_index(src->name)>=0){
 		dbprintf("WARNING instantiated templated NAME function for %s, as no function of the right name was found.. experiment aimed at implementing OOP thru generics.. eg fn METHOD[OBJ,METHOD,ARG0,ARG1](o:OBJ,a0:ARG0,a1:ARG1){ o.vtable.METHOD(o,a0,a1)}", str(name));
 	}
@@ -1109,18 +1123,18 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, con
 	// fill any args we can from the callsite.
 	// TODO: translate generic-type-params
 	// because we may infer return from that
-	for (auto i=0; i<new_fn->args.size(); i++){
-		if (//!new_fn->args[i]->type &&
-			call_args[i]->get_type()) {
-				new_fn->args[i]->set_type((Type*)call_args[i]->get_type()->clone());
+	for (auto i=0; i<new_fn->args.size() && i<call_args.size(); i++){
+		auto t=call_args[i]->get_type();
+		if (t)// && !new_fn->args[i]->type()) TODO: proper translate call, because we might have defaults
+		{
+				new_fn->args[i]->set_type((Type*)t->clone());
 		}
 	}
 	if (return_type){
 		new_fn->ret_type=const_cast<Type*>(return_type);
 	}
 	// todo: translate return type. for the minute we discard it..
-	new_fn->def=src;
-	new_fn->refs=(Node*)callsite;
+	new_fn->set_def(src);
 	new_fn->ret_type=nullptr;
 	new_fn->body->set_type(nullptr);// todo, inference upward..
 	new_fn->next_instance = src->instances;
@@ -1250,6 +1264,8 @@ int match_generic_typeparams(const vector<TypeParam>& fn_tps, vector<const Type*
 			return ret_score+1;
 		}
 		else if (!(matched_tps[ti]->eq(given_arg))) {// or we already found it - match..
+			matched_tps[ti]->dump(-1);newline(0);
+			given_arg->dump(-1);newline(0);
 			return ret_score-1000;
 		}
 	} else {
@@ -1264,6 +1280,7 @@ struct FindFunction {
 	struct Candidate{ExprFnDef* f; int score;};
 	vector<Candidate> candidates;
 	Name	name;
+	const Expr* callsite;
 	const vector<Expr*>& args;
 	const Type* ret_type;
 	int flags;
@@ -1274,6 +1291,11 @@ struct FindFunction {
 	void find_fn_sub(Expr* src);
 	void find_fn_from_scopes(Scope* s,Scope* ex);
 	void insert_candidate(ExprFnDef* f,int score);
+	void dump(){
+		for (int i=0; i<candidates.size();i++){
+			dbprintf("candidate %d for %s: %d %p score=%d\n",i, str(name),candidates[i].f->pos.line, candidates[i].f->instance_of, candidates[i].score);
+		}
+	}
 };
 void FindFunction::insert_candidate(ExprFnDef* f,int score){
 	if (candidates.size()>=max_candidates){
@@ -1288,10 +1310,12 @@ void FindFunction::insert_candidate(ExprFnDef* f,int score){
 			candidates.resize(candidates.size()+1);
 			for (size_t j=candidates.size();j>i; j--){ candidates[j]=candidates[j-1];}
 			candidates[i]=Candidate{f,score};
+			this->dump();
 			return;
 		}
 	}
 	candidates.push_back(Candidate{f,score});
+	this->dump();
 }
 
 void FindFunction::consider_candidate(ExprFnDef* f) {
@@ -1333,19 +1357,21 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 
 	if (f->variadic && args.size()> f->args.size())
 		score=1;	// variadic functoin can match anything?
+	if (!f->typeparams.size())
 	for (int i=0; i<args.size() && i<f->args.size(); i++) {
 		if (!f->args[i]->get_type() || (!args[i])) {
 			score++; //1 point for an 'any' arg on either side
 		} else{
 			// both args are given:
 			if (f->args[i]->get_type()->eq(args[i]->get_type())) {
-				score+=100;// 1 exact match worth more than any number of anys
+				score+=10;// 1 exact match worth more than any number of anys
 			} else{
 				//if (!is_generic_type(f->typeparams,f->args[i]->get_type())
+				
 				{
 				// instant fail for incorrect concrete arg
 				//TODO consider conversion operators here.
-				//	score-=10000;
+					score-=1000;
 				//	if (candidates.size()>=4)
 				//		return;
 				}
@@ -1354,19 +1380,21 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	}
 	// find generic typeparams..
 	if (f->typeparams.size()){
+		dbprintf("typaram matcher for %s\n",f->name_str());
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
 			score+=match_generic_typeparams(f->typeparams, matched_type_params, f->args[i]->get_type(), args[i]->get_type());
 		}
 		score+=match_generic_typeparams(f->typeparams,matched_type_params,f->ret_type,ret_type);
 		auto dbp=[&](){
 			dbprintf("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
-			dbprintf("score=%d; matched typeparams{:-\n",str(f->name),score);
+			dbprintf("%s score=%d; matched typeparams{:-\n",str(f->name),score);
 			for (auto i=0; i<f->typeparams.size(); i++){
 				dbprintf("%s = %s;", str(f->typeparams[i].name), matched_type_params[i]?str(matched_type_params[i]->name):"" );
 			}
 			dbprintf("}\n");
 			dbprintf("\n");
 		};
+		dbp();
 	}
 	// fill any unmatched with defaults?
 
@@ -1384,8 +1412,11 @@ void FindFunction::find_fn_sub(Expr* src) {
 			find_fn_sub(x);
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
+		dbprintf("consider %s %d for %s %d\n",f->name_str(),f->pos.line, this->callsite->name_str(),this->callsite->pos.line);
 		consider_candidate(f);
-		for (auto ins=f->instances; ins; ins=ins->next_instance) {
+		int i=0;
+		for (auto ins=f->instances; ins; ins=ins->next_instance,i++) {
+			dbprintf("%s ins=%d\n",f->name_str(),i);
 			consider_candidate(ins);
 		}
 	}
@@ -1447,7 +1478,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	// make a type-code and have direct hash lookup of exact-match
 	// we only need all this search logic to execute once per permutation of args.
 	FindFunction ff(name,args,ret_type,flags);
-	
+	ff.callsite=callsite;
 
 	Scope* prev=nullptr;
 	vector<pair<ExprFnDef*,int>> candidates;
@@ -1512,15 +1543,17 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 		error(callsite,";No matches found for %s\n",str(name));
 		return nullptr;
 	}
+	ff.dump();
 	for (int i=(int)ff.candidates.size()-1; i>=0; i--) {
 		auto c=&ff.candidates[i];
 		auto next_best=c->f;
+		dbprintf("callsite %d got %d  score %d\n",callsite->pos.line,next_best->pos.line, c->score);
 		if (c->score<=0)continue;
 		if (!next_best->is_generic())
 			return next_best;
 		if (auto new_f= instantiate_generic_function(next_best, callsite,name, args,ret_type,flags))
 			return new_f;
-		//SFINAE here
+		//TODO SFINAE here resolve it, if it doesn't resolve, try next.
 	}
 	if (flags&1){
 		goto no_match_error;
@@ -1925,6 +1958,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 			argls[i]->resolve(sc,nullptr,flags );
 		}
 
+		this->dump(-1);
 		if (!this->get_fn_call()){
 			
 			for (auto i=0; i<argls.size(); i++)  {
@@ -2037,15 +2071,17 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 	if (!call_target){
 		return ResolvedType();
 	}
-	block->call_expr->set_def(call_target);
 	if (call_target!=block->get_fn_call()) {
+		block->call_expr->set_def(call_target);
+		dbprintf("setting callsite %s %d to call %d %p\n",call_target->name_str(), block->pos.line,call_target->pos.line,call_target->instance_of);
 		if (block->get_fn_call()) {
 			error(block,"call target changed during resolving, we're not sure how to handle this yet\n");
 			block->scope=0; // todo delete.
 		} else {
 			block->scope=0; // todo delete.
 		}
-		block->def=(ExprDef*)call_target;
+		block->set_def(call_target);
+		ASSERT(block->def==block->call_expr->def);
 		if (call_target->resolved) {
 			Type * fnr=call_target->return_type();
 			return propogate_type_fwd(flags,block, desired, block->type_ref(),fnr);
@@ -3113,7 +3149,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 		ins->translate_typeparams(TypeParamXlat(this->typeparams, ins->instanced_types));
 	}
 	if (!type->struct_def) { const_cast<Type*>(type)->struct_def=ins;}
-	else { ASSERT(type->struct_def==ins && "instantiated type should be unique")};
+//	else { ASSERT(type->struct_def==ins && "instantiated type should be unique")};
 	return ins;
 }
 
@@ -3516,9 +3552,28 @@ const char* g_TestProg=
 	"	printf(\"Hello From My Language %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
 	"	0  \n"
 	"}  \n\0";
-
+const char* g_TestProg3=
+/* 1*/"   struct Union[A,B]{a:A,b:B, tag:int};\n"
+/* 2*/"	fn setv[A,B](u:&Union[A,B], v:A)->void{\n"
+/* 3*/"		u.a=v; u.tag=0; \n"
+/* 4*/"	}\n"
+/* 5*/"	fn setv[A,B](u:&Union[A,B], v:B)->void{\n"
+/* 6*/"		u.b=v; u.tag=1; \n"
+/* 7*/"	}\n"
+/* 8*/"	fn main(argc:int, argv:**char)->int{	\n"
+/* 9*/"		u=:Union[int,float];\n"
+/*10*/"		setv(&u,10)	;\n"
+/*11*/"		setv(&u,10.0)	;\n"
+/*112*/"	0}\n";
 const char* g_TestProg2=
 "	enum FooBar{  Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
+"   struct Union[A,B]{a:A,b:B, tag:int};\n"
+"	fn setv[A,B](u:&Union[A,B], v:A){\n"
+"		u.a=v; u.tag=0; \n"
+"	}\n"
+"	fn setv[A,B](u:&Union[A,B], v:B){\n"
+"		u.b=v; u.tag=1; \n"
+"	}\n"
 "	fn take_ptr(f:(int)->void){ f(5);}\n"
 "fn printf(s:str,...)->int;\n"
 "	fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
@@ -3537,10 +3592,14 @@ const char* g_TestProg2=
 "		printf(\"somethng(int)\\n\");\n"
 "	}\n"
 "	fn main(argc:int, argv:**char)->int{	\n"
-"xs=:array[int,512];\n"
-"q:=xs[1]; p1:=&xs[1];\n"
-"*p1=42;\n"
-
+"		xs=:array[int,512];\n"
+"		q:=xs[1]; p1:=&xs[1];\n"
+"		*p1=42;\n"
+"		u=:Union[int,float];\n"
+"		setv(&u,10)	;\n"
+"		printf(\"u.tag=%d\\n\",u.tag);\n"
+"		setv(&u,10.0)	;\n"
+"		printf(\"u.tag=%d\\n\",u.tag);\n"
 "		retval:=0;\n"
 "		x:= {a:=10;b:=20; a+b};	\n"
 "		x+=10;\n"
@@ -3682,13 +3741,13 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	}
 	gather_named_items(node,&global);
 	node->resolve(&global,nullptr,0);
-	node->resolve(&global,nullptr,flags&(B_EXECUTABLE|B_RUN|B_LLVM)?R_FINAL:0);// if we just want to dump/search, we dont fail for final errors.
 	if (flags & B_DEFS){
 		global.dump(0);
 	}
 	if (flags & B_TYPES) {
 		node->dump(0);
 	}
+	node->resolve(&global,nullptr,flags&(B_EXECUTABLE|B_RUN|B_LLVM)?R_FINAL:0);// if we just want to dump/search, we dont fail for final errors.
 	if (flags & B_LLVM) {
 		output_code(stdout, &global);
 	}
@@ -3776,7 +3835,8 @@ int main(int argc, const char** argv) {
 	}
 	if (argc<=1) {
 		printf("no sources given so running inbuilt test.\n");
-		auto ret=compile_source(g_TestProg2,"g_TestProg2","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
+		auto ret=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
+//		auto ret=compile_source(g_TestProg2,"g_TestProg2","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		if (!ret) {
 			printf("\n\noptions    -r compile & run   -l emit llvm IR only    -e emit executable only  -t dump AST with types   -a just dump ast -E dump example\n");
 			printf("\ndefault: it will compile & run a source file;\ngenerates srcname.ll & srcname/srcname.out executable\n");

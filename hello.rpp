@@ -20,7 +20,23 @@ fn something(f:float){
 fn something(f:float,x){
 }
 
+
+struct Union[X,Y]{
+ tag:int,
+ x:X,y:Y,
+};
+
+fn setv[X,Y](u:&Union[X,Y],x:Y)->void{
+ printf("setv Y\n");
+}
+fn setv[X,Y](u:&Union[X,Y],x:X)->void{
+ printf("setv X\n");
+}
+
 fn main(argc:int,argv:**char)->int{
+ u=:Union[int,float];
+ setv(&u,0.0);
+ setv(&u,0);
 	xs=:array[int,512];
 	q:=xs[1]; p1:=&xs[1];
 	xs[2]=000;
@@ -32,7 +48,7 @@ fn main(argc:int,argv:**char)->int{
 
 	fv:=Foo{vx=3,vy=4,vz=5};
 	something_foo(&fv,&fv);
-
+ 
 
 
 	for i:=0,j:=0; i<10; i+=1,j+=10 {
