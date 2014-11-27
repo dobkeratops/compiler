@@ -101,7 +101,7 @@ enum Token {
 	HALF,FLOAT,DOUBLE,FLOAT4,CHAR,STR,VOID,VOIDPTR,ONE,ZERO,AUTO,	// float types,ptrs
 	PTR,REF,NUM_RAW_TYPES=REF,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
 	
-	PRINT,FN,STRUCT,CLASS,TRAIT,VIRTUAL,STATIC,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,THIS,SELF,SUPER,VTABLEOF,
+	PRINT,FN,STRUCT,CLASS,TRAIT,VIRTUAL,STATIC,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,THIS,SELF,SUPER,VTABLEOF,CLOSURE,
 	LET,SET,VAR,
 	CONST,MUT,VOLATILE,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
@@ -123,7 +123,7 @@ enum Token {
 	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,AND_ASSIGN,OR_ASSIGN,XOR_ASSIGN,MOD_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,
 	DOT_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
-	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,
+	NEG,DEREF,ADDR,NOT,COMPLEMENET, MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,SLICE_REF,
 	COMMA,SEMICOLON,DOUBLE_SEMICOLON,
 	// after these indices, comes indents
 	ELIPSIS,RANGE,
@@ -290,12 +290,13 @@ struct Visitor {
 };
 
 struct Capture {
-	ExprFnDef*	capture_from;
-	ExprFnDef*	capture_by;
-	Variable *vars;
-	Capture* next_of_from;
-	ExprStructDef* the_struct;
-	void coalesce_with(Capture* other);
+	ExprFnDef*		capture_from;
+	ExprFnDef*		capture_by;
+	Variable*		vars;
+	Capture*		next_of_from;
+	ExprStructDef*	the_struct;
+	void 			coalesce_with(Capture* other);
+	ExprStructDef*	get_struct();
 };
 // load data->vtb // if this matters it would be inlined
 // load vtb->fn
@@ -732,6 +733,9 @@ struct ExprIf :  ExprFlow {
 	virtual void	find_vars_written(Scope* s,set<Variable*>& vars ) const;
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 };
+
+/// For-Else loop. Currrently the lowest level loop construct
+/// TODO implement 'while..break' and make 'ForElse' desugar as while.
 struct ExprFor :  ExprFlow {
 	Expr* pattern=0;
 	Expr* init=0;
@@ -820,8 +824,8 @@ inline Type* Type::get_elem(int index){
 	ASSERT(index==0);
 	return s;
 }
-				   
 
+/// TODO - move to plugin-architecture, EnumDef should be there implementing Rust style enum.
 struct EnumDef  : ExprStructDef {
 //	void dump(int depth)const;
 //	virtual void translate_typeparams(const TypeParamXlat& tpx);
@@ -836,14 +840,11 @@ struct  ExprFnDef : ExprDef {
 	ExprFnDef*	instance_of=0;	// Original function, when this is a template instance
 	ExprFnDef*	instances=0;		// Linklist of it's instanced functions.
 	ExprFnDef*	next_instance=0;
-	ExprFnDef*	next_of_capture=0; // one capture can be shared by multiple fn
-	ExprBlock* callers=0;	// linklist of callers to here
-	NamedItems*		name_ptr=0;
-	Scope*	scope=0;
-	Capture*	capture=0; // TODO: generalize OOP and FP: is a Class a set of lambdas on a capture? is a lambda an optimization of a class with one method? the Capture can have a linklist of functions 'on' it. in a lambda, calling "this->fn.." could get another function from the originating scope?
-		// Captures should just desugar into local classes. local variables in the capture just desugar capture_struct.varname
-	// Inlined lambdas dont need all this
-	// we could simplify things alot ..
+	ExprFnDef*	next_of_capture=0;	// one capture can be shared by multiple fn
+	ExprBlock*	callers=0;			// linklist of callers to here
+	NamedItems*	name_ptr=0;
+	Scope*		scope=0;
+	Capture*	capture=0;			// for closures- hidden param,environment struct passed in
 	
 	Type* ret_type=0;
 	Type* fn_type=0;				// eg (args)->return
@@ -862,6 +863,7 @@ struct  ExprFnDef : ExprDef {
 	int		get_name()const {return index(name);}
 	Name	get_mangled_name()const;
 	bool	is_generic() const;
+	bool	is_closure() const			{return capture!=0;}
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
 	int		min_args()					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}

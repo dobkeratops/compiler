@@ -207,7 +207,7 @@ const char* g_token_str[]={
 	"half","float","double","float4","char","str","void","voidptr","one","zero","auto",
 	"ptr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
-	"print___","fn","struct","class","trait","virtual","static","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof",
+	"print___","fn","struct","class","trait","virtual","static","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
 	"let","set","var",
 	"const","mut","volatile",
 	"while","if","else","do","for","in","return","break",
@@ -216,7 +216,7 @@ const char* g_token_str[]={
 	"[","]",
 	"<[","]>",
 	"->",".","?.","=>","<-","::","<->",			//arrows,accessors
-	"|>","<|","<.>","<$>","<:",":>",
+	"|>","<|","<.>","<$>","<:",":>",			// some operators we might nick from other langs
 
 	":","as",
 	"+","-","*","/",					//arithmetic
@@ -228,7 +228,7 @@ const char* g_token_str[]={
 	".=",	// linklist follow
 	"++","--","++","--", //inc/dec
 	"-","*","&","!","~", // unary ops
-	"*?","*!","&?","~[]","[]", // special pointers
+	"*?","*!","&?","~[]","[]","&[]", // special pointers
 	",",";",";;",
 	"...","..",
 	"_",
@@ -241,7 +241,7 @@ int g_tok_info[]={
 	0,0,0,0,0,0,0,0,0,0,0,0,// int types
 	0,0,0,0,0,0,0,0,0,0,	// float types
 	0,0,0,0,0,0,			// type modifiers
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0, // keywords
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
 	0,0,0,			// let,set,var
 	0,0,0,			// modifiers const,mut,volatile
 	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
@@ -262,7 +262,7 @@ int g_tok_info[]={
 	WRITE_LHS|READ|ASSOC|16, // dot-assign
 	MODIFY|PREFIX|UNARY|2,MODIFY|PREFIX|UNARY|2,MODIFY|UNARY|ASSOC|3,MODIFY|UNARY|ASSOC|3, // post/pre inc/dec
 	READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3, //unary ops
-	READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, /// special pointers
+	READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3,READ|UNARY|ASSOC|3, /// special pointers
 	0,0,17, // delim
 	0,
 	0,0,
@@ -277,6 +277,7 @@ bool is_condition(Name tok){
 bool is_comparison(Name tok){
 	return (tok>=LT && tok<=NE);
 }
+bool is_callable(Name tok) { return (tok==FN || tok==CLOSURE);}
 int operator_flags(Name tok){return g_tok_info[index(tok)];}
 int precedence(Name ntok){auto tok=index(ntok);return tok<IDENT?(g_tok_info[tok] & PRECEDENCE):0;}
 int is_prefix(Name ntok){auto tok=index(ntok);return tok<IDENT?(g_tok_info[tok] & (PREFIX) ):0;}
@@ -670,8 +671,8 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 void ExprIdent::dump(int depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("%s ",getString(name));
-	if (this->def) {dbprintf("%d %x",this->def->pos.line, this->def);}
-	if (this->get_type()) {this->get_type()->dump(-1);}
+	if (this->def) {dbprintf("%d",this->def->pos.line);}
+	if (auto t=this->get_type()) {dbprintf(":");t->dump(-1);}
 }
 
 Name ExprBlock::get_fn_name()const
@@ -940,12 +941,16 @@ Type::Type(ExprStructDef* sd)
 void ExprLiteral::dump(int depth) const{
 	if (!this) return;
 	newline(depth);
+	dbprintf("literal ");
 	if (this->name!=0){dbprintf("%s=",str(this->name));}
 	if (type_id==T_VOID){dbprintf("void");}
 	if (type_id==T_INT){dbprintf("%d",u.val_int);}
 	if (type_id==T_FLOAT){dbprintf("%.7f",u.val_float);}
 	if (type_id==T_CONST_STRING){
 		dbprintf("\"%s\"",u.val_str);
+	}
+	if (auto t=this->type()){
+		dbprintf(":");t->dump(-1);
 	}
 }
 // TODO : 'type==type' in our type-engine
@@ -3950,7 +3955,23 @@ int compile_source_file(const char* filename, int options) {
 		return -1;
 	}
 }
+template<typename X,typename Y>
+struct Union{
+	int tag;
+	union {X x; Y y;};
+	template<class FX,class FY,class R> R map(std::function<R(X)> fx,std::function<R(Y)> fy){
+		if (tag==0) return fx(x);
+		else return fy(y);
+	}
+};
+// Union<int,float> u;
+// This is the sort of thing we want our language to handle - works fine in Rust.
+// C++ can't infer through to 'R' from the given 'function types', even less so with poly lambdas.
+// auto x=u.map([](int x)->int{return 0;}, [](float x)->int{return 1;});
+// printf("%d x\n",x);
+
 int main(int argc, const char** argv) {
+	
 //	compile_source_file("~/hack/test_hack/prog.rs",0xf);
 	int options=0,given_opts=0;
 	for (auto i=1; i<argc; i++) {

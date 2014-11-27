@@ -12,5 +12,5 @@ class CgValue;
 class CodeGen {
 	FILE* ofp;
 	RegisterName next_reg;
-	void write_local_vars(Expr* n, ExprFnDef* fn,Scope* sc);
+
 };
