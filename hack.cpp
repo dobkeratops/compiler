@@ -7,6 +7,8 @@ const char** g_pp,*g_p;
 const char* g_filename=0;
 
 inline void dbprintf_varscope(const char*,...){}
+inline void dbprintf_generic(const char*,...){}
+const int g_debug_get_instance=false;
 
 void dbprintf(const char* str, ... )
 {
@@ -675,9 +677,8 @@ ExprBlock::ExprBlock(const SrcPos& s){ pos=s;}
 ExprFnDef* ExprBlock::get_fn_call()const {
 	if (!this->def)
 		return nullptr;
-	printf("fncall expr %s %d\n",this->def->name_str(), this->def->pos.line);
-	printf("fncall expr %s\n",this->def->kind_str());
-	auto d=dynamic_cast<ExprFnDef*>(this->def);
+	auto df=this->def;
+	auto d=dynamic_cast<ExprFnDef*>(df);
 	if (d)
 		return d;
 	return nullptr;
@@ -706,7 +707,8 @@ const char* Scope::name() const {
 ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 {
 	if (!this->struct_def){
-		this->struct_def=sc->find_struct_named(this->name);
+		if (auto sd=sc->find_struct_named(this->name))
+			this->struct_def =sd->get_instance(sc,this);
 	}
 	for (auto s=this->sub;s;s=s->next)
 		s->resolve(sc,desired,flags);
@@ -796,6 +798,8 @@ void Type::dump_sub()const{
 		dbprintf(")");
 	} else{
 		dbprintf("%s",getString(name));
+		if (this->struct_def)
+			dbprintf(" %s", str(this->struct_def->get_mangled_name()));
 		if (sub){
 			dbprintf("[");
 			for (auto t=sub; t; t=t->next){
@@ -879,7 +883,7 @@ void Type::dump(int depth)const{
 	newline(depth);dump_sub();
 }
 Type::Type(ExprStructDef* sd)
-{	struct_def=sd; name=sd->name;sub=0;next=0;
+{	struct_def=sd; name=sd->get_mangled_name();sub=0;next=0;
 	marker=123456;
 }
 
@@ -897,6 +901,10 @@ void ExprLiteral::dump(int depth) const{
 }
 // TODO : 'type==type' in our type-engine
 //	then we can just make function expressions for types.
+
+void	ExprLiteral::translate_typeparams(const TypeParamXlat& tpx){
+	
+}
 
 ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
 	if (!this->owner_scope){
@@ -1113,33 +1121,40 @@ void ExprFnDef::dump_signature()const{
 //	this->return_type()->dump_if(-1);
 	this->ret_type->dump_if(-1);
 }
-ExprFnDef* instantiate_generic_function(ExprFnDef* src,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
-	dbprintf("instantiating %s %d for call %s %d\n",str(name),src->pos.line, callsite->name_str(),callsite->pos.line);
-	if (src->type_parameter_index(src->name)>=0){
+ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
+	dbprintf_generic("instantiating %s %d for call %s %d\n",str(name),srcfn->pos.line, callsite->name_str(),callsite->pos.line);
+	if (srcfn->type_parameter_index(srcfn->name)>=0){
 		dbprintf("WARNING instantiated templated NAME function for %s, as no function of the right name was found.. experiment aimed at implementing OOP thru generics.. eg fn METHOD[OBJ,METHOD,ARG0,ARG1](o:OBJ,a0:ARG0,a1:ARG1){ o.vtable.METHOD(o,a0,a1)}", str(name));
 	}
-	Scope* src_fn_owner=src->scope->parent_or_global();
-	ExprFnDef* new_fn =(ExprFnDef*) src->clone();
+	Scope* src_fn_owner=srcfn->scope->parent_or_global();
+	ExprFnDef* new_fn =(ExprFnDef*) srcfn->clone();
 	// fill any args we can from the callsite.
 	// TODO: translate generic-type-params
 	// because we may infer return from that
+	
 	for (auto i=0; i<new_fn->args.size() && i<call_args.size(); i++){
 		auto t=call_args[i]->get_type();
-		if (t)// && !new_fn->args[i]->type()) TODO: proper translate call, because we might have defaults
-		{
-				new_fn->args[i]->set_type((Type*)t->clone());
+		if (t && !new_fn->args[i]->type())	{
+			new_fn->args[i]->set_type((Type*)t->clone());
 		}
 	}
-	if (return_type){
+	if (return_type && !new_fn->return_type()){
 		new_fn->ret_type=const_cast<Type*>(return_type);
 	}
+	auto callsiteb=dynamic_cast<const ExprBlock*>(callsite);
+	ASSERT(callsiteb!=0 &&"ambiguity, when we come to do operator overloads, ExprOp & ExprBlock will call..");
+	vector<Type*>	ins_typarams;
+	match_typeparams(ins_typarams, srcfn,callsiteb);
+	TypeParamXlat xlat(srcfn->typeparams, ins_typarams);
+	new_fn->translate_typeparams(xlat);
+
 	// todo: translate return type. for the minute we discard it..
-	new_fn->set_def(src);
-	new_fn->ret_type=nullptr;
+	new_fn->set_def(srcfn);
+//	new_fn->ret_type=nullptr;
 	new_fn->body->set_type(nullptr);// todo, inference upward..
-	new_fn->next_instance = src->instances;
-	src->instances=new_fn;
-	new_fn->instance_of = src;
+	new_fn->next_instance = srcfn->instances;
+	srcfn->instances=new_fn;
+	new_fn->instance_of = srcfn;
 	new_fn->resolved=false;
 	new_fn->resolve(src_fn_owner,nullptr,flags);//todo: we can use output type ininstantiation too
 //	new_fn->dump(0);
@@ -1246,7 +1261,7 @@ int num_known_arg_types(vector<Expr*>& args) {
 	
 //}
 
-int match_generic_typeparams(const vector<TypeParam>& fn_tps, vector<const Type*>& matched_tps, const Type* fn_arg, const Type* given_arg)
+int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam>& fn_tps,  const Type* fn_arg, const Type* given_arg)
 {
 	int ret_score=0;
 //	if (!fn_arg && !given_arg) return 0;
@@ -1254,18 +1269,16 @@ int match_generic_typeparams(const vector<TypeParam>& fn_tps, vector<const Type*
 	if (!given_arg) return 0;
 	
 	for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->next,sub2=sub2->next) {
-		ret_score+=match_generic_typeparams(fn_tps, matched_tps, sub1, sub2);
+		ret_score+=match_typeparams_from_arg(matched_tps,fn_tps, sub1, sub2);
 	}
 	int ti = get_typeparam_index(fn_tps, fn_arg->name);
 	if (ti>=0) {
 		// Is this a generic typeparam?
 		if (matched_tps[ti]==0){ // new typeparam?
-			matched_tps[ti]=given_arg;
+			matched_tps[ti]=(Type*)given_arg;
 			return ret_score+1;
 		}
 		else if (!(matched_tps[ti]->eq(given_arg))) {// or we already found it - match..
-			matched_tps[ti]->dump(-1);newline(0);
-			given_arg->dump(-1);newline(0);
 			return ret_score-1000;
 		}
 	} else {
@@ -1276,6 +1289,16 @@ int match_generic_typeparams(const vector<TypeParam>& fn_tps, vector<const Type*
 	return ret_score;
 }
 
+void match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite){
+	// TODO: allow the types to feedback in the math
+	matched.resize(f->typeparams.size());
+	for (int i=0; i<f->typeparams.size();i++) matched[i]=0;
+	for (int i=0; i<callsite->argls.size(); i++) {
+		match_typeparams_from_arg(matched,f->typeparams, f->args[i]->type(), callsite->argls[i]->type());
+	}
+	match_typeparams_from_arg(matched, f->typeparams, f->ret_type, callsite->type());
+}
+
 struct FindFunction {
 	struct Candidate{ExprFnDef* f; int score;};
 	vector<Candidate> candidates;
@@ -1284,6 +1307,7 @@ struct FindFunction {
 	const vector<Expr*>& args;
 	const Type* ret_type;
 	int flags;
+	bool verbose=false;
 	int	max_candidates=5;
 	FindFunction(Name n, const vector<Expr*>& a, const Type* r,int f):name(n),args(a),ret_type(r),flags(f){}
 
@@ -1310,12 +1334,10 @@ void FindFunction::insert_candidate(ExprFnDef* f,int score){
 			candidates.resize(candidates.size()+1);
 			for (size_t j=candidates.size();j>i; j--){ candidates[j]=candidates[j-1];}
 			candidates[i]=Candidate{f,score};
-			this->dump();
 			return;
 		}
 	}
 	candidates.push_back(Candidate{f,score});
-	this->dump();
 }
 
 void FindFunction::consider_candidate(ExprFnDef* f) {
@@ -1332,7 +1354,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	// TODO: may need to continually update the function match, eg during resolving, as more types are found, more specific peices may appear?
 	// Find max number of matching arguments
 	
-	vector<const Type*> matched_type_params;
+	vector<Type*> matched_type_params;
 	for (int i=0; i<f->typeparams.size(); i++){matched_type_params.push_back(nullptr);}
 
 	int score=0;
@@ -1380,12 +1402,12 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	}
 	// find generic typeparams..
 	if (f->typeparams.size()){
-		dbprintf("typaram matcher for %s\n",f->name_str());
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
-			score+=match_generic_typeparams(f->typeparams, matched_type_params, f->args[i]->get_type(), args[i]->get_type());
+			score+=match_typeparams_from_arg(matched_type_params,f->typeparams, f->args[i]->get_type(), args[i]->get_type());
 		}
-		score+=match_generic_typeparams(f->typeparams,matched_type_params,f->ret_type,ret_type);
+		score+=match_typeparams_from_arg(matched_type_params, f->typeparams,f->ret_type,ret_type);
 		auto dbp=[&](){
+			dbprintf("typaram matcher for %s\n",f->name_str());
 			dbprintf("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
 			dbprintf("%s score=%d; matched typeparams{:-\n",str(f->name),score);
 			for (auto i=0; i<f->typeparams.size(); i++){
@@ -1394,7 +1416,6 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			dbprintf("}\n");
 			dbprintf("\n");
 		};
-		dbp();
 	}
 	// fill any unmatched with defaults?
 
@@ -1412,11 +1433,12 @@ void FindFunction::find_fn_sub(Expr* src) {
 			find_fn_sub(x);
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
-		dbprintf("consider %s %d for %s %d\n",f->name_str(),f->pos.line, this->callsite->name_str(),this->callsite->pos.line);
+		if (verbose)
+			dbprintf("consider %s %d for %s %d\n",f->name_str(),f->pos.line, this->callsite->name_str(),this->callsite->pos.line);
 		consider_candidate(f);
 		int i=0;
 		for (auto ins=f->instances; ins; ins=ins->next_instance,i++) {
-			dbprintf("%s ins=%d\n",f->name_str(),i);
+			if (verbose)dbprintf("%s ins=%d\n",f->name_str(),i);
 			consider_candidate(ins);
 		}
 	}
@@ -1543,11 +1565,11 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 		error(callsite,";No matches found for %s\n",str(name));
 		return nullptr;
 	}
-	ff.dump();
+	if (ff.verbose)
+		ff.dump();
 	for (int i=(int)ff.candidates.size()-1; i>=0; i--) {
 		auto c=&ff.candidates[i];
 		auto next_best=c->f;
-		dbprintf("callsite %d got %d  score %d\n",callsite->pos.line,next_best->pos.line, c->score);
 		if (c->score<=0)continue;
 		if (!next_best->is_generic())
 			return next_best;
@@ -1754,8 +1776,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			if (rhst->name>=IDENT && !rhst->sub) {
 				rhst->struct_def = sc->find_struct(rhst);
 			}
-			if (v->get_type()) {
-				sc->try_find_struct(v->get_type());// instantiate
+			if (auto t=v->get_type()) {
+				sc->try_find_struct(t);// instantiate
 			}
 			return propogate_type(flags, this, v->type_ref(),type_ref());
 		}
@@ -1839,13 +1861,21 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		auto ret=rhs->resolve(sc,0,flags);
 		// todo: its' a typeparam constraint.  ptr[desired]==argls[0]
 		if (!this->get_type() && ret.type){
-			if (ret.type->name!=PTR) {
-				this->dump(0);
-				rhs->dump(0);
-				ret.type->dump(0);
+//			if (ret.type->name!=PTR) {
+//				this->dump(0);
+//				rhs->dump(0);
+//				ret.type->dump(0);
+//			}
+//			ASSERT(ret.type->name==PTR);
+			if (ret.type->name!=PTR ){
+				if (flags & R_FINAL){
+					error_begin(this,"pointer expected for deref\n");
+					rhs->type()->dump(-1);
+					error_end(this);
+				}
+			} else {
+				this->set_type(ret.type->sub);
 			}
-			ASSERT(ret.type->name==PTR);
-			this->set_type(ret.type->sub);
 			return propogate_type_fwd(flags,this, desired, this->type_ref());
 		}
 		else return ResolvedType();
@@ -1958,7 +1988,6 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 			argls[i]->resolve(sc,nullptr,flags );
 		}
 
-		this->dump(-1);
 		if (!this->get_fn_call()){
 			
 			for (auto i=0; i<argls.size(); i++)  {
@@ -2073,7 +2102,6 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 	}
 	if (call_target!=block->get_fn_call()) {
 		block->call_expr->set_def(call_target);
-		dbprintf("setting callsite %s %d to call %d %p\n",call_target->name_str(), block->pos.line,call_target->pos.line,call_target->instance_of);
 		if (block->get_fn_call()) {
 			error(block,"call target changed during resolving, we're not sure how to handle this yet\n");
 			block->scope=0; // todo delete.
@@ -2970,18 +2998,6 @@ ExprStructDef* parse_enum(TokenStream& src) {
 }
 
 
-struct TypeParamXlat{
-	const vector<TypeParam>& typeparams; const vector<Type*>& given_types;
-	TypeParamXlat(	const vector<TypeParam>& t, const vector<Type*>& g):typeparams(t),given_types(g){}
-	bool typeparams_all_set()const{
-		for (int i=0; i<given_types.size(); i++) {
-			if (given_types[i]==0) return false;
-		}
-		return true;
-	}
-	int typeparam_index(const Name& n) const;
-};
-
 
 void ExprIf::translate_typeparams(const TypeParamXlat& tpx){
 	this->cond->translate_typeparams(tpx);
@@ -3015,7 +3031,8 @@ void ExprIdent::translate_typeparams(const TypeParamXlat& tpx)
 }
 
 void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
-	this->call_expr->translate_typeparams(tpx);
+	if (this->call_expr)
+		this->call_expr->translate_typeparams(tpx);
 	for (auto e:argls){
 		e->translate_typeparams(tpx);
 	}
@@ -3028,6 +3045,9 @@ void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
 
 void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 	for (auto &a:args) a->translate_typeparams(tpx);
+	if (this->ret_type)
+		this->ret_type->translate_typeparams(tpx);
+	this->body->translate_typeparams(tpx);
 	
 	if (tpx.typeparams_all_set())
 	{
@@ -3054,6 +3074,7 @@ void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)
 void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
 	this->name.translate_typeparams(tpx);
 	if (this->get_type()){
+		this->get_type()->struct_def=0; // needs resolving again
 		this->get_type()->translate_typeparams(tpx);
 	}
 	if (this->default_expr){
@@ -3095,6 +3116,7 @@ instantiate tree<vector,int>
 	// TODO: assert there is no shadowing in this types' own definitions
 
 	Type* new_type=0;
+	if (this->struct_def) this->struct_def=0;
 	int param_index=tpx.typeparam_index(this->name);
 	if (param_index>=0){
 		auto src_ty=tpx.given_types[param_index];
@@ -3119,37 +3141,52 @@ bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b) {
 	for (int i=0; i<a.size(); i++) { if (!a[i]->eq(b[i])) return false;}
 	return true;
 }
+bool type_params_eq(const vector<Type*>& a, const Type* tp){
+	for (auto
+		 i=0; i<a.size() && tp;i++,tp=tp->next){
+		if (!a[i]->eq(tp))
+			return false;
+	}
+	// TODO- defaults.
+	return true;
+}
 ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
-//	auto parent = sc->find_struct(type); //parent is this duh
 	auto parent=this;
-	vector<Type*> ty_params;
+	if (!this->is_generic())
+		return this;
 	// make the typeparams..
-	Type* tp=type->sub;
-	int i=0;
-	for (i=0; i<parent->typeparams.size() && tp; i++,tp=tp->next){
-		ty_params.push_back(tp);
-	}
-	for (;i<parent->typeparams.size(); i++) {
-		ty_params.push_back(parent->typeparams[i].defaultv);
-	}
 	// search for existing instance
 	ExprStructDef* ins=parent->instances;
 	for (;ins; ins=ins->next_instance) {
-		if (type_params_eq(ty_params, ins->instanced_types))
+		if (type_params_eq(ins->instanced_types,type->sub))
 			break;
 	}
 	if (!ins) {
+		// TODO: store a tree of partial instantiations eg by each type..
+		vector<Type*> ty_params;
+		int i=0;
+		Type* tp=type->sub;
+		for (i=0; i<parent->typeparams.size() && tp; i++,tp=tp->next){
+			ty_params.push_back(tp);
+		}
+		for (;i<parent->typeparams.size(); i++) {
+			ty_params.push_back(parent->typeparams[i].defaultv);
+		}
+		
 		ins = (ExprStructDef*)this->clone(); // todo: Clone could take typeparams
 							// cloning is usually for template instantiation?
 		ins->instanced_types=ty_params;
 		ins->instance_of=this;
 		ins->next_instance = this->instances; this->instances=ins;
 		ins->inherits_type= this->inherits_type; // TODO: typeparams! map 'parent' within context  to make new typeparam vector, and get an instance for that too.
-
+		if (g_debug_get_instance)
+			for (auto i=0; i<ins->instanced_types.size();i++)
+				dbprintf(ins->instanced_types[i]->name_str());
 		ins->translate_typeparams(TypeParamXlat(this->typeparams, ins->instanced_types));
 	}
 	if (!type->struct_def) { const_cast<Type*>(type)->struct_def=ins;}
 //	else { ASSERT(type->struct_def==ins && "instantiated type should be unique")};
+	
 	return ins;
 }
 
@@ -3512,7 +3549,7 @@ const char* g_TestProg=
 	"fn foo(a:int)->int{printf(\"foo_int\n\");0};  \n"
 	"fn bar(a:int)->int{printf(\"bar_int\n\");0};  \n"
 	"fn printf(s:str,...)->int;  \n"
-	"fn push_back[T](t:Vec[T],v:T)->int{  \n"
+	"fn push_back[T](t:*Vec[T],v:T)->int{  \n"
 	"	a:=t.num;   \n"
 	"	printf(\"push_back %d\n\", a);0  \n"
 	"}  \n"
@@ -3524,7 +3561,7 @@ const char* g_TestProg=
 	"fn main(argc:int,argv:**char)->int{  \n"
 	"	printf(\"HELLO FROM PET LANGUAGE\n\");\n"
 "	t1:=argc<0 && argc>1;\n"
-	"	test_result:=if argc==0 || argc==1 {14} else {13} ;"
+	"	test_result:=if argc==0 || argc==1 {14} else {13} ;\n"
 	"	xs=:array[int,512];  \n"
 //	"	fp:=foo;\n"
 	"	p2:=&xs[1];  \n"
@@ -3535,14 +3572,12 @@ const char* g_TestProg=
 	"	yp:=ys.data;  \n"
 	"	mv4:=Vec4{vx=1.0,vy=2.0,vz=0.5,vw=1.0};\n"
 	"	mv5:={key=0,value=10};\n"
-	"	push_back(ys,2);  \n"
+	"	push_back(&ys,2);  \n"
 //	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\\n\");b};  \n"
 //	"	r:=f(0.1,2);  \n"
 	"	my_vec=:Vec3[vecx];  my_vec.vecx=10.0;my_vec.vy=5.0;  \n"
-	"	q:=xs[1];  p1:=&xs[1];  q:=*p1; \n"
+	"	q:=&xs[1];  p1:=&xs[1];  p1val:=*p1; \n"
 	"	xs[1]=20;  xs[2]+=400;  xs[3]=500;  \n"
-	"	*ys.data += 20;  \n"
-	"	*p1=30;  \n"
 	"   z:=5;  foo(z);  \n"
 	"   y:=xs[1]+z+xs[2];  \n"
 	"	f0:=lerp(10.0,20.0,0.5);\n"
@@ -3563,8 +3598,12 @@ const char* g_TestProg3=
 /* 8*/"	fn main(argc:int, argv:**char)->int{	\n"
 /* 9*/"		u=:Union[int,float];\n"
 /*10*/"		setv(&u,10)	;\n"
-/*11*/"		setv(&u,10.0)	;\n"
-/*112*/"	0}\n";
+/*11*/" printf(\"u.tag=%d\\n\",u.tag);\n"
+/*12*/"		setv(&u,10.0)	;\n"
+/*13*/" printf(\"u.tag=%d\\n\",u.tag);\n"
+/*14*/"	0}\n"
+/*15*/"fn printf(s:str,...)->int;\n"
+;
 const char* g_TestProg2=
 "	enum FooBar{  Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
 "   struct Union[A,B]{a:A,b:B, tag:int};\n"
@@ -3834,13 +3873,12 @@ int main(int argc, const char** argv) {
 		}
 	}
 	if (argc<=1) {
-		printf("no sources given so running inbuilt test.\n");
-		auto ret=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
-//		auto ret=compile_source(g_TestProg2,"g_TestProg2","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
-		if (!ret) {
-			printf("\n\noptions    -r compile & run   -l emit llvm IR only    -e emit executable only  -t dump AST with types   -a just dump ast -E dump example\n");
-			printf("\ndefault: it will compile & run a source file;\ngenerates srcname.ll & srcname/srcname.out executable\n");
-		}
+		printf("no sources given so running inbuilt tests.\n");
+		printf("typeparam test\n");
+		auto ret0=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_RUN);
+		auto ret1=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
+		printf("bigger test, all features\n");
+		auto ret2=compile_source(g_TestProg,"g_TestProg","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 	}
 }
 

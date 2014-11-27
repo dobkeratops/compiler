@@ -259,11 +259,12 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 			ASSERT(basereg);			// TODO: detail: if it's addr, extra or lesser *?
 			auto areg=next_reg_name(next_reg);
 			auto ptr_t=type;if (ptr_t->name==PTR) ptr_t=ptr_t->sub;
-			auto field=ptr_t->struct_def->fields[f_index];
+			auto sd=ptr_t->struct_def;
+			auto field=sd->fields[f_index];
 			fprintf(ofp,"\t;dot reg=%s addr=%s\n",str(reg),str(addr));
 			fprintf(ofp,"\t;%s.%s :%s\n",str(type->name),str(field->name),str(field->type()->name));
 			fprintf(ofp,"\t%%%s = getelementptr inbounds %%%s* %%%s, i32 0, i32 %d\n",
-				str(areg), str(ptr_t->name), str(basereg),
+				str(areg), str(sd->get_mangled_name()), str(basereg),
 				f_index);
 		
 			return CgValue(0,field->type(),areg);
@@ -302,7 +303,8 @@ void write_type(FILE* ofp, CgValue& lv) {
 void write_type(FILE* ofp, const Type* t, bool ref) {
 	if (!t) { fprintf(ofp,"<type_expected>");return;}
 	if (t->is_pointer()){
-		write_type(ofp,t->sub,ref); fprintf(ofp,"*");
+//		dbprintf("THIS IS SUSPECT, REF ISn'T NEEDED TWICE");
+		write_type(ofp,t->sub,false); fprintf(ofp,"*");
 	}else if (t->is_array()) {
 		fprintf(ofp,"[");
 		fprintf(ofp, "%s",str(t->sub->next->name));
@@ -320,17 +322,18 @@ void write_type(FILE* ofp, const Type* t, bool ref) {
 	} else if (t->is_struct()){
 		auto sd=t->struct_def;
 		if (!sd) {
-			error(t,"struct not resolved\n");
+			error(t->m_origin?t->m_origin:t,"struct %s not resolved\n",str(t->name));
 		}
-		if (sd->name) fprintf(ofp, "%%%s",str(sd->name));
+		if (sd->name) fprintf(ofp, "%%%s",str(sd->get_mangled_name()));
 		else {
-		fprintf(ofp,"{");
+			// LLVM does allow listing an anonymous struct
+			fprintf(ofp,"{");
 			//error(t,"no struct def");
-		for (auto i=0; i<sd->fields.size(); i++){
-			if (i){fprintf(ofp,",");}
-			write_type(ofp,sd->fields[i]->type(),false);
-		}
-		fprintf(ofp,"}");
+			for (auto i=0; i<sd->fields.size(); i++){
+				if (i){fprintf(ofp,",");}
+				write_type(ofp,sd->fields[i]->type(),false);
+			}
+			fprintf(ofp,"}");
 		}
 	}
 	else if (t->is_function()){
@@ -392,7 +395,7 @@ void compile_struct_def(FILE* ofp, ExprStructDef* st, Scope* sc) {
 			compile_struct_def(ofp, ins, sc);
 		}
 	} else {
-		fprintf(ofp,"%%%s = type {", str(st->name));
+		fprintf(ofp,"%%%s = type {", str(st->get_mangled_name()));
 		// todo: properly wrap translations to LLVM types.
 		int i=0; for (auto fi: st->fields){
 			if (i++)fprintf(ofp,",");
@@ -422,7 +425,8 @@ void write_local_vars(FILE* ofp, int* next_reg, Expr* n, ExprFnDef* fn, Scope* s
 		auto r= v->get_reg(v->name, next_reg, true);
 		if (vt->is_struct()) {
 			// alloc_struct
-			fprintf(ofp,"\t"); write_reg(ofp,r); fprintf(ofp," = alloca %%%s , align %d\n",getString(vt->name),vt->struct_def->alignment());
+//			fprintf(ofp,"\t"); write_reg(ofp,r); fprintf(ofp," = alloca %%%s , align %d\n",getString(vt->name),vt->struct_def->alignment());
+			alloca_type(ofp, v, vt, next_reg);
 			v->reg_is_addr=true;
 		} else if (vt->is_array()){
 			auto t=vt->sub;
@@ -929,7 +933,6 @@ Type* compile_function(FILE* ofp,ExprFnDef* fn_node, Scope* outer_scope){
 	if (fn_node->is_undefined()) {
 		fprintf(ofp,";fn %s prot\n",getString(fn_node->name));
 		write_function_signature(ofp,fn_node,&reg_index,EmitDeclaration);
-
 		return nullptr;
 	}
 	if (fn_node->is_generic()) {
@@ -1017,7 +1020,13 @@ void name_mangle_append_segment(char* dst, int size, const char* src){
 }
 
 
-char* name_mangle_append_name(char *dst,int size, Name n){
+void name_mangle_append_type(char* dst,int size, const Type* t){
+	if (!t) return;
+		// todo - check how template params are suppsoed to mangle
+		// we suspect the template params cover this... fn's params are mangled and this should just be struct->name
+		//name_mangle_append_name(dst,size,t->struct_def->get_mangled_name());
+
+	auto n=t->name;
 	if (n==PTR){ strcat(dst,"P");}
 	else if (n==BOOL){ strcat(dst,"b");}
 	else if (n==UINT){ strcat(dst,"u");}
@@ -1028,15 +1037,15 @@ char* name_mangle_append_name(char *dst,int size, Name n){
 	else if (n==DOUBLE){strcat(dst,"d");}
 	else if (n==HALF){strcat(dst,"h");}
 	else if (n==CHAR || n==I8 || n==U8){strcat(dst,"c");}
-	else{ name_mangle_append_segment(dst,size,str(n));}
-	return dst+strlen(dst);
-}
-void name_mangle_append_type(char* dst,int size, const Type* t){
-	if (!t) return;
-		// todo - check how template params are suppsoed to mangle
-		// we suspect the template params cover this... fn's params are mangled and this should just be struct->name
-		//name_mangle_append_name(dst,size,t->struct_def->get_mangled_name());
-	name_mangle_append_name(dst,size,t->name);
+	else if (auto sd=t->struct_def){
+		name_mangle_append_segment(dst,size,str(sd->get_mangled_name()));
+		for (auto& it:sd->instanced_types){
+			dbprintf(" %s",it->name_str());newline(0);
+			name_mangle_append_type(dst,size,it);
+		}
+	}
+	else {name_mangle_append_segment(dst, size, str(t->name));}
+	
 	for (auto ts=t->sub;ts;ts=ts->next){
 		name_mangle_append_type(dst,size,ts);
 	}
@@ -1059,8 +1068,9 @@ void name_mangle(char* dst, int size, const ExprStructDef* src) {
 	sprintf(dst,"_Z");dst+=2;
 	int len=strlen(dst); size--; size-=len;
 	name_mangle_append_segment(dst, size, str(src->name));
-	for (auto &a:src->typeparams){
-		name_mangle_append_type(dst,size, a.value);
+
+	for (auto& it:src->instanced_types){
+		name_mangle_append_type(dst,size,it);
 	}
 }
 

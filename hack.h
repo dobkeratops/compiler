@@ -241,6 +241,7 @@ const char* getString(const Name& index);
 void indent(int depth);
 inline const char* str(const Name& n){return getString(n);}
 inline const char* str(int i){return g_Names.index_to_name[i].c_str();}
+void match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite);
 
 
 struct ResolvedType{
@@ -563,6 +564,7 @@ struct ExprLiteral : ExprDef {
 	VResult visit(Visitor* v)			{return v->visit(this);}
 	virtual VResult recurse(Visitor*v)	{return 0;}
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
+	void translate_typeparams(const TypeParamXlat& tpx);
 };
 
 struct ArgDef :ExprDef{
@@ -922,6 +924,19 @@ struct ExprIdent :Expr{
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 };
+
+struct TypeParamXlat{
+	const vector<TypeParam>& typeparams; const vector<Type*>& given_types;
+	TypeParamXlat(	const vector<TypeParam>& t, const vector<Type*>& g):typeparams(t),given_types(g){}
+	bool typeparams_all_set()const{
+		for (int i=0; i<given_types.size(); i++) {
+			if (given_types[i]==0) return false;
+		}
+		return true;
+	}
+	int typeparam_index(const Name& n) const;
+};
+
 
 
 
