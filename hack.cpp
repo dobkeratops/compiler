@@ -9,7 +9,56 @@ const char* g_filename=0;
 inline void dbprintf_varscope(const char*,...){}
 inline void dbprintf_generic(const char*,...){}
 const int g_debug_get_instance=false;
-
+struct VTablePtrs {
+	void* expr_op;
+	void* expr_ident;
+	void* expr_fn_def;
+	void* expr_block;
+	void* type;
+}
+g_vtable_ptrs;
+Node* g_pRoot;
+void lazy_cache_vtable_ptrs(){
+	if (g_vtable_ptrs.expr_op)
+		return;
+	auto p1=new ExprOp(0,SrcPos{},0,0);
+	g_vtable_ptrs.expr_op=*(void**)p1;
+	
+	auto p2=new ExprIdent();
+	g_vtable_ptrs.expr_ident=*(void**)p2;
+	
+	auto p3=new ExprFnDef();
+	g_vtable_ptrs.expr_fn_def=*(void**)p3;
+	
+	auto p4=new ExprBlock();
+	g_vtable_ptrs.expr_block=*(void**)p4;
+	
+	auto p5=new Type();
+	g_vtable_ptrs.type=*(void**)p5;
+}
+template<typename T>
+void dump_ptr(T* p){ dbprintf("%p{%p %p %p %p}\n",(void*)p,0[(void**)p],1[(void**)p],2[(void**)p],3[(void**)p]);}
+void verify_expr_op(const Node* p){
+	lazy_cache_vtable_ptrs();
+	ASSERT(g_vtable_ptrs.expr_op==*(void**)p)
+}
+void verify_expr_block(const Node* p){
+	lazy_cache_vtable_ptrs();
+	ASSERT(g_vtable_ptrs.expr_block==*(void**)p)
+}
+void verify_expr_fn_def(const Node* p){
+	lazy_cache_vtable_ptrs();
+	ASSERT(g_vtable_ptrs.expr_fn_def==*(void**)p)
+}
+void verify_expr_ident(const Node* p){
+	lazy_cache_vtable_ptrs();
+	ASSERT(g_vtable_ptrs.expr_ident==*(void**)p)
+}
+void verify_type(const Node* p){
+	lazy_cache_vtable_ptrs();
+	ASSERT(g_vtable_ptrs.type==*(void**)p)
+}
+void verify_all_dummy(){g_pRoot->verify();}
 void dbprintf(const char* str, ... )
 {
 	char tmp[1024];
@@ -1122,6 +1171,7 @@ void ExprFnDef::dump_signature()const{
 	this->ret_type->dump_if(-1);
 }
 ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
+	verify_all();
 	dbprintf_generic("instantiating %s %d for call %s %d\n",str(name),srcfn->pos.line, callsite->name_str(),callsite->pos.line);
 	if (srcfn->type_parameter_index(srcfn->name)>=0){
 		dbprintf("WARNING instantiated templated NAME function for %s, as no function of the right name was found.. experiment aimed at implementing OOP thru generics.. eg fn METHOD[OBJ,METHOD,ARG0,ARG1](o:OBJ,a0:ARG0,a1:ARG1){ o.vtable.METHOD(o,a0,a1)}", str(name));
@@ -1141,6 +1191,8 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	if (return_type && !new_fn->return_type()){
 		new_fn->ret_type=const_cast<Type*>(return_type);
 	}
+	verify_all();
+
 	auto callsiteb=dynamic_cast<const ExprBlock*>(callsite);
 	ASSERT(callsiteb!=0 &&"ambiguity, when we come to do operator overloads, ExprOp & ExprBlock will call..");
 	vector<Type*>	ins_typarams;
@@ -1158,6 +1210,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	new_fn->resolved=false;
 	new_fn->resolve(src_fn_owner,nullptr,flags);//todo: we can use output type ininstantiation too
 //	new_fn->dump(0);
+	verify_all();
 	return new_fn;	// welcome new function!
 }
 Node* ExprOp::clone() const {
@@ -1322,25 +1375,34 @@ struct FindFunction {
 	}
 };
 void FindFunction::insert_candidate(ExprFnDef* f,int score){
+	verify_all();
 	if (candidates.size()>=max_candidates){
 		for (int i=0; i<candidates.size()-1;i++){
 			candidates[i]=candidates[i+1];
 		}
 		candidates.resize(candidates.size()-1);
 	}
+	verify_all();
 	for(int i=0; i<candidates.size();i++){
 		if (candidates[i].f==f)return;// no duplicate?!
 		if (candidates[i].score>score) {
 			candidates.resize(candidates.size()+1);
-			for (size_t j=candidates.size();j>i; j--){ candidates[j]=candidates[j-1];}
+			verify_all();
+			for (size_t j=candidates.size()-1;j>i; j--){
+				candidates[j]=candidates[j-1];
+			}
+			verify_all();
 			candidates[i]=Candidate{f,score};
+			verify_all();
 			return;
 		}
 	}
 	candidates.push_back(Candidate{f,score});
+	verify_all();
 }
 
 void FindFunction::consider_candidate(ExprFnDef* f) {
+	verify_all();
 	for (auto& c:this->candidates){
 		if (c.f==f)
 			return;
@@ -1354,6 +1416,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	// TODO: may need to continually update the function match, eg during resolving, as more types are found, more specific peices may appear?
 	// Find max number of matching arguments
 	
+	verify_all();
 	vector<Type*> matched_type_params;
 	for (int i=0; i<f->typeparams.size(); i++){matched_type_params.push_back(nullptr);}
 
@@ -1417,6 +1480,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			dbprintf("\n");
 		};
 	}
+	verify_all();
 	// fill any unmatched with defaults?
 
 	// consider return type in call.
@@ -1425,9 +1489,12 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 
 	if (f->name==name) score*=100; // 'named' functions always win over un-named forms eg F[F,X](a:X),we may use unnamed to implement OOP..
 	// insert candidate
+	verify_all();
 	insert_candidate(f,score);
+	verify_all();
 }
 void FindFunction::find_fn_sub(Expr* src) {
+	verify_all();
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
 		for (auto x:sb->argls) {
 			find_fn_sub(x);
@@ -1442,6 +1509,7 @@ void FindFunction::find_fn_sub(Expr* src) {
 			consider_candidate(ins);
 		}
 	}
+	verify_all();
 }
 void FindFunction::find_fn_from_scopes(Scope* s,Scope* ex)
 {
@@ -1473,7 +1541,7 @@ void dbprint_find(const vector<ArgDef*>& args){
 	dbprintf(")\n");
 }
 ExprFnDef* Scope::find_unique_fn_named(const Node* name_node,int flags, const Type* fn_type){
-	auto name=name_node->as_ident();
+	auto name=name_node->as_name();
 	auto sc=this;
 	ExprFnDef* found=nullptr; bool ambiguous=false;
 	ASSERT(fn_type==0 &&"when we have type info here, remove this hack")
@@ -1495,6 +1563,8 @@ ExprFnDef* Scope::find_unique_fn_named(const Node* name_node,int flags, const Ty
 }
 
 ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags)  {
+	verify_all();
+
 	// TODO: rework this to take Type* fn_type fn[(args),ret] - for symetry with anything using function pointers
 	// TODO: ACCELERATION:
 	// make a type-code and have direct hash lookup of exact-match
@@ -1531,6 +1601,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	if (!ff.candidates.size()){
 		error(callsite,"can't find function %s\n",str(name));
 	}
+	verify_all();
 	if (ff.candidates.back().score<=0 || name==PLACEHOLDER) {
 		if (flags & 1){
 		no_match_error:
@@ -1567,6 +1638,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	}
 	if (ff.verbose)
 		ff.dump();
+	verify_all();
 	for (int i=(int)ff.candidates.size()-1; i>=0; i--) {
 		auto c=&ff.candidates[i];
 		auto next_best=c->f;
@@ -1744,6 +1816,7 @@ T* expect_cast(Node* n){
 }
 
 ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
+	verify_all();
 	Type* ret=0;
 	auto op_ident=name;
 //	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
@@ -1751,7 +1824,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		ASSERT(this->lhs && this->rhs);
 		auto rhs_t=rhs->resolve(sc,desired,flags);
 		if (op_ident==LET_ASSIGN){
-			auto vname=lhs->as_ident();	//todo: rvalue malarchy.
+			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			if (desired) {
 				desired->dump(-1);
 			}
@@ -1765,7 +1838,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 		}
 		else if (op_ident==ASSIGN_COLON){ // create a var, of given type.
-			auto vname=lhs->as_ident();	//todo: rvalue malarchy.
+			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			// todo: get this in the main parser
 			auto lhsi=expect_cast<ExprIdent>(lhs);
 			auto rhst=expect_cast<Type>(rhs);
@@ -1824,7 +1897,9 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		if (t) {
 			t=t->deref_all();
 			// now we have the elem..
-			ASSERT(dynamic_cast<ExprIdent*>(rhs));
+			verify_expr_op(this);
+			verify_expr_ident(rhs);
+			ASSERT(rhs->as_ident());
 			if (auto st=sc->find_struct(t)){
 				if (auto f=st->find_field(rhs)){
 					ret=f->type();
@@ -1883,8 +1958,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	else if (is_condition(op_ident)){
 		auto lhst=lhs->resolve(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
 		auto rhst=rhs->resolve(sc,lhs->type_ref(),flags);
-		verify(lhs->get_type());
-		verify(rhs->get_type());
+		::verify(lhs->get_type());
+		::verify(rhs->get_type());
 		if (!this->get_type()){
 			this->set_type(new Type(this,BOOL));
 		};
@@ -1903,7 +1978,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 }
 
 ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
-	verify(this->get_type());
+	verify_all();
+	::verify(this->get_type());
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->get_type()) this->set_type(new Type(this,VOID));
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
@@ -1964,7 +2040,7 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 		bool indirect_call=false;
 		auto call_ident=dynamic_cast<ExprIdent*>(this->call_expr);
 		if (call_ident){
-			if (sc->find_fn_variable(this->call_expr->as_ident(),nullptr))
+			if (sc->find_fn_variable(this->call_expr->as_name(),nullptr))
 				indirect_call=true;
 		}else {
 			indirect_call=true;
@@ -2069,6 +2145,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 
 
 ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) {
+	verify_all();
 
 	int num_resolved_args=0;
 	for (int i=0; i<block->argls.size(); i++) {
@@ -2094,12 +2171,14 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		}
 		return ResolvedType();
 	}
+	verify_all();
 
-	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_ident(), block,block->argls, desired,flags);
+	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_name(), block,block->argls, desired,flags);
 	auto fnc=call_target;
 	if (!call_target){
 		return ResolvedType();
 	}
+	verify_all();
 	if (call_target!=block->get_fn_call()) {
 		block->call_expr->set_def(call_target);
 		if (block->get_fn_call()) {
@@ -2165,12 +2244,15 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		}
 		
 		auto ret=call_target->resolve_call(fsc,desired,flags);
+		verify_all();
 		return propogate_type(flags,block, ret);
 	}
 	else  {
 		if (flags &1) error(block,"can't resolve call\n");
+		verify_all();
 		return ResolvedType();
 	}
+	verify_all();
 }
 
 void Capture::coalesce_with(Capture *other){
@@ -2221,7 +2303,7 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags)
 	propogate_type_fwd(flags,this, desired,this->ret_type);
 
 	auto rt=this->body->resolve(scope,desired,flags);
-	dbprintf("resolve %s yields type:", getString(this->as_ident()));if (rt.type) rt.type->dump(-1);printf("\n");
+	dbprintf("resolve %s yields type:", getString(this->as_name()));if (rt.type) rt.type->dump(-1);printf("\n");
 	// awkwardness says: type error return is more like an enum that doesn't return a type?
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
 	return propogate_type(flags,this, rt,this->ret_type); // todo: hide FnDef->type. its too confusing
@@ -2239,6 +2321,7 @@ ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 //
 //inner-function: 'definer_scope' has capture_from set - just take it.
 ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int flags) {
+	verify_all();
 
 	definer_scope->add_fn(this);
 	auto sc=definer_scope->make_inner_scope(&this->scope,this);
@@ -2792,6 +2875,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		node->argls.push_back(new ExprLiteral(src.pos));
 	}
 	verify(node->get_type());
+	node->verify();
 	return node;
 }
 
@@ -2806,7 +2890,7 @@ ExprBlock::create_anon_struct_initializer(){
 			error(this,"anon struct initializer must have named elements {n0=expr,n1=expr,..}");
 		}
 		if (i) strcat(tmp,"_");
-		strcat(tmp,str(p->lhs->as_ident()));
+		strcat(tmp,str(p->lhs->as_name()));
 	}
 	// TODO - these need to be hashed somewhere, dont want each unique!
 	ExprStructDef* sd=new ExprStructDef(this->pos,0);
@@ -2816,7 +2900,7 @@ ExprBlock::create_anon_struct_initializer(){
 	sd->name=getStringIndex(tmp);
 	for (auto i=0; i<argls.size();i++){
 		auto a=argls[i];
-		auto nf=new ArgDef(a->pos, a->as_op()->lhs->as_ident(),a->type());
+		auto nf=new ArgDef(a->pos, a->as_op()->lhs->as_name(),a->type());
 		sd->fields.push_back(nf );
 	}
 	this->call_expr=sd;
@@ -3056,7 +3140,7 @@ void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 }
 
 ArgDef*	ExprStructDef::find_field(const Node* rhs)const{
-	auto name=rhs->as_ident();
+	auto name=rhs->as_name();
 	for (auto a:fields){if (a->name==name) return a;}
 	error(rhs,this,"no field %s in ",str(name),str(this->name));
 	return nullptr;
@@ -3367,11 +3451,11 @@ Node* ExprIf::clone()const {
 	p->cond=(Expr*)this->cond->clone_if();
 	p->body=(Expr*)this->body->clone_if();
 	p->else_block=(Expr*)this->else_block->clone_if();
-	verify(p->cond->get_type());
+	::verify(p->cond->get_type());
 	return p;
 }
 void ExprIf::dump(int depth) const {
-	verify(cond->get_type());
+	::verify(cond->get_type());
 	newline(depth);dbprintf("if\n");
 	cond->dump(depth+1);
 	newline(depth);dbprintf("{\n");
@@ -3383,11 +3467,33 @@ void ExprIf::dump(int depth) const {
 	newline(depth);dbprintf("}\n");
 };
 
+void ExprOp::verify() {
+	verify_expr_op(this);
+	if (lhs) lhs->verify();
+	if (rhs) rhs->verify();
+}
+void ExprBlock::verify(){
+	verify_expr_block(this);
+	if (this->call_expr) this->call_expr->verify();
+	for (auto x:argls) x->verify();
+}
+void ExprFnDef::verify(){
+	verify_expr_fn_def(this);
+	if (body) this->body->verify();
+	for (auto x:args) x->verify();
+	for (auto s=this->instances; s;s=s->next_instance) s->verify();
+}
+void Type::verify(){
+	verify_type(this);
+	for (auto x=this->sub; x;x=x->next)
+		x->verify();
+}
+
 ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	auto sc=outer_s->make_inner_scope(&this->scope,outer_s->owner_fn);
 	
 
-	verify(this->cond->get_type());
+	::verify(this->cond->get_type());
 	this->cond->resolve(sc,nullptr,flags); // condition can  be anything coercible to bool
 	auto body_type=this->body->resolve(sc,desired,flags);
 	Type* bt=body_type.type;
@@ -3773,12 +3879,15 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	TextInput	src(buffer,filename);
 
 	auto node=parse_block(src,0,SEMICOLON,nullptr);
+	g_pRoot=node;
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
 	Visitor v;
 	if (flags & B_AST){
 		node->dump(0);
 	}
 	gather_named_items(node,&global);
+	
+	node->verify();
 	node->resolve(&global,nullptr,0);
 	if (flags & B_DEFS){
 		global.dump(0);

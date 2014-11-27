@@ -38,7 +38,7 @@ struct SrcPos {
 struct Span {
 	SrcPos start,end;
 };
-
+#define verify_all()
 struct Node;
 struct Name;
 struct Scope;
@@ -339,7 +339,7 @@ public:
 	virtual VResult recurse(Visitor* v);
 	virtual VResult visit(Visitor* v)=0;
 	virtual ExprOp* as_op()const			{error(this,"expected op, found %s:%s",str(this->name),this->kind_str());return nullptr;}
-	virtual Name as_ident()const {
+	virtual Name as_name()const {
 		error(this,"expected ident %s",str(this->name));
 		return PLACEHOLDER;
 	};
@@ -349,6 +349,10 @@ public:
 	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
 	virtual int recurse(std::function<int(Node* f)> f){dbprintf("recurse not implemented\n");return 0;};
 	virtual Node* instanced_by()const{return nullptr;}
+	virtual ExprIdent* as_ident() {return nullptr;}
+	virtual ExprFnDef* as_fn_def() {return nullptr;}
+	virtual ExprBlock* as_block() {return nullptr;}
+	virtual void verify() {};
 };
 
 
@@ -383,11 +387,11 @@ public:
 	Expr();
 	virtual const char* kind_str()const{return"expr";}
 	Type* expect_type() const;
-	Type* get_type() const		{ if(this) {verify(this->m_type);return this->m_type;}else return nullptr;}
-	Type*& type()				{verify(this->m_type);return this->m_type;}
-	const Type* type()const		{verify(this->m_type);return this->m_type;}
-	void type(const Type* t)	{verify(t);this->m_type=(Type*)t;}
-	void set_type(const Type* t){verify(t);this->m_type=(Type*)t;};
+	Type* get_type() const		{ if(this) {::verify(this->m_type);return this->m_type;}else return nullptr;}
+	Type*& type()				{::verify(this->m_type);return this->m_type;}
+	const Type* type()const		{::verify(this->m_type);return this->m_type;}
+	void type(const Type* t)	{::verify(t);this->m_type=(Type*)t;}
+	void set_type(const Type* t){::verify(t);this->m_type=(Type*)t;};
 	Type*& type_ref()			{return this->m_type;}
 	LLVMType get_type_llvm() const;
 	virtual Type* eval_as_type()const		{return nullptr;};
@@ -451,6 +455,7 @@ struct Type : Expr{
 	virtual VResult			recurse(Visitor* v)		{v->pre_visit(this);for (auto s=this->sub; s; s=s->next){s->visit(v);} v->post_visit(this); return 0;}
 	virtual void			translate_typeparams(const TypeParamXlat& tpx);
 	virtual ResolvedType	resolve(Scope* s, const Type* desired,int flags);
+	virtual void verify();
 };
 
 struct ExprScopeBlock : Expr{};
@@ -475,6 +480,7 @@ struct ExprOp: public Expr{
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	virtual void find_vars_written(Scope* s, set<Variable*>& vars) const;
+	virtual void verify();
 };
 
 struct ExprBlock :public ExprScopeBlock{
@@ -492,6 +498,8 @@ struct ExprBlock :public ExprScopeBlock{
 	Scope*		scope=0;
 	ExprBlock*	next_of_call_target=0;	// to walk callers to a function
 	// these are supposed to be mutually exclusive substates, this would be an enum ideally.
+	ExprBlock(){};
+	ExprBlock(const SrcPos& p);
 	bool	is_compound_expression()const	{return !call_expr && !index(name);}
 	bool	is_tuple()const					{return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
 	bool	is_struct_initializer()const	{return this->bracket_type==OPEN_BRACE && this->delimiter==COMMA;}
@@ -505,7 +513,6 @@ struct ExprBlock :public ExprScopeBlock{
 	Name		get_fn_name() const;
 	void		dump(int depth) const;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
-	ExprBlock(const SrcPos& p);
 	Node*	clone() const;
 	bool	is_undefined()const;
 	void	create_anon_struct_initializer();
@@ -515,6 +522,8 @@ struct ExprBlock :public ExprScopeBlock{
 	virtual VResult	recurse(Visitor*v)			{v->pre_visit(this);if (call_expr)call_expr->visit(v);for (auto a:argls)a->visit(v); v->post_visit(this);return 0;}
 	VResult			visit(Visitor* v)			{return v->visit(this);}
 	virtual const char* kind_str()const			{return"block";}
+	ExprBlock* 			as_block() override {return this;}
+	void 				verify();
 };
 struct ExprMatch : ExprBlock {
 	// todo..
@@ -580,7 +589,7 @@ struct ArgDef :ExprDef{
 	~ArgDef(){}
 	Node*	clone() const;
 	void	render_object();
-	Name	as_ident()const				{return this->name;}
+	Name	as_name()const				{return this->name;}
 	size_t	size()const					{return this->type()?this->type()->size():0;}
 	int		alignment() const			{ return 4;}//todo, eval templates/other structs, consider pointers, ..
 	virtual VResult	recurse(Visitor*v)	{return 0;}
@@ -677,7 +686,7 @@ public:
 	Scope*			parent_within_fn(){if (!parent) return nullptr; if (parent->owner_fn!=this->owner_fn) return nullptr; return parent;}
 	ExprStructDef*	find_struct_sub(Scope* original,const Type* t);
 	ExprStructDef*	find_struct_named(Name name);
-	ExprStructDef*	find_struct_named(const Node* node){return find_struct_named(node->as_ident());}
+	ExprStructDef*	find_struct_named(const Node* node){return find_struct_named(node->as_name());}
 	ExprStructDef*	find_struct(const Node* node);
 	ExprFnDef*	find_unique_fn_named(const Node* name_node,int flags=0, const Type* fn_type=nullptr); // todo: replace with fn type.
 	ExprFnDef*	find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags);
@@ -774,7 +783,7 @@ struct ExprStructDef: ExprDef {
 //	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} error(this,"no field %s",str(name));return nullptr;}
 	ArgDef* find_field(const Node* rhs)const;
 	int field_index(const Node* rhs){
-		auto name=rhs->as_ident();
+		auto name=rhs->as_name();
 		for (auto i=0; i<fields.size(); i++){
 			if(fields[i]->name==name){
 				((Node*)rhs)->set_def((ExprDef*)fields[i]);
@@ -848,6 +857,7 @@ struct  ExprFnDef : ExprDef {
 	bool variadic;
 	bool c_linkage=false;
 	ExprBlock* body=0;
+	ExprFnDef(){};
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
 	int		get_name()const {return index(name);}
 	Name	get_mangled_name()const;
@@ -859,6 +869,7 @@ struct  ExprFnDef : ExprDef {
 	bool	is_enough_args(int x)		{if (x<min_args()) return false; if (x> args.size() && !variadic) return false; return true;}
 	bool	too_many_args(int x)		{return x>max_args();}
 	virtual const char*	kind_str()const	{return"fn";}
+	virtual ExprFnDef* as_fn_def() {return this;}
 	Node*			instanced_by()const{if (this->instance_of){return this->refs;}else return nullptr;}
 	void			dump(int ind) const;
 	ResolvedType	resolve(Scope* scope,const Type* desired,int flags);
@@ -888,6 +899,7 @@ struct  ExprFnDef : ExprDef {
 		v->post_visit(this);
 		return 0;
 	};
+	void	verify();
 	VResult visit(Visitor* v)	{return v->visit(this);}
 };
 
@@ -916,7 +928,8 @@ struct ExprIdent :Expr{
 	virtual const char*	kind_str()const		{return"ident";}
 	virtual VResult	recurse(Visitor* v)		{return 0;};
 	VResult			visit(Visitor* v)		{return v->visit(this);}
-	virtual Name	as_ident()const			{return name;};
+	virtual Name	as_name()const			{return name;};
+	ExprIdent*		as_ident()				{return this;}
 	virtual bool	is_function_name()const	{return dynamic_cast<ExprFnDef*>(this->def)!=0;}
 	virtual bool	is_variable_name()const	{return dynamic_cast<Variable*>(this->def)!=0;}
 	bool			is_placeholder()const	{return name==PLACEHOLDER;}

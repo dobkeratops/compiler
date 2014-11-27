@@ -1086,6 +1086,8 @@ void name_mangle(char* dst, int size, const ExprStructDef* src) {
 
 
 void output_code(FILE* ofp, Scope* scope) {
+	verify_all();
+
 	fprintf(ofp,";from scope %s\n;\n",scope->name());
 	// output all inner items that outer stuff depends on..
 	for (auto sub=scope->child; sub; sub=sub->next) {
