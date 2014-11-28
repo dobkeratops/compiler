@@ -51,6 +51,8 @@ extern void error(const char*,...);
 extern void error_begin(const Node* n, const char* str, ... );
 extern void error_end(const Node* n);
 extern bool is_comparison(Name n);
+bool is_number(Name n);
+
 int index_of(Name n);
 // todo: seperate Parser.
 
@@ -178,6 +180,7 @@ struct Name {
 	void translate_typeparams(const TypeParamXlat& tpx);
 	bool operator!()const{return m_index==0;}
 	explicit operator bool()const{return m_index!=0;}
+	explicit operator int()const{return m_index;}
 };
 inline int index(Name n){return n.m_index;}
 
@@ -205,6 +208,7 @@ struct Name {
 	void translate_typeparams(const TypeParamXlat& tpx);
 	bool operator!()const{return m_index==0;}
 	explicit operator bool()const{return m_index!=0;}
+	explicit operator int()const{return m_index;}
 };
 int index(Name n){return n.m_index;}
 #endif
@@ -358,6 +362,7 @@ public:
 	virtual ExprIdent* as_ident() {return nullptr;}
 	virtual ExprFnDef* as_fn_def() {return nullptr;}
 	virtual ExprBlock* as_block() {return nullptr;}
+	virtual void	gather_named_items(Scope* s)	{}
 	virtual void verify() {};
 };
 
@@ -404,6 +409,7 @@ public:
 	virtual ExprBlock* is_subscript()const	{return (ExprBlock*)nullptr;}
 	virtual bool is_function_name()const	{return false;}
 	virtual bool is_variable_name()const	{return false;}
+	virtual Scope* get_scope()				{return nullptr;}
 };
 
 
@@ -525,19 +531,20 @@ struct ExprBlock :public ExprScopeBlock{
 	ExprFnDef*	get_fn_call()const;
 	Name		get_fn_name() const;
 	void		dump(int depth) const;
-	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
-	Node*	clone() const;
-	bool	is_undefined()const;
-	void	create_anon_struct_initializer();
+	Node*		clone() const;
+	bool		is_undefined()const;
+	void		create_anon_struct_initializer();
+	void			clear_reg()				{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); regname=0;};
+	virtual VResult	recurse(Visitor*v)		{v->pre_visit(this);if (call_expr)call_expr->visit(v);for (auto a:argls)a->visit(v); v->post_visit(this);return 0;}
+	VResult			visit(Visitor* v)		{return v->visit(this);}
+	virtual const char* kind_str()const		{return"block";}
+	ExprBlock* 		as_block() override 	{return this;}
+	virtual Scope*	get_scope()				{return this->scope;}
+	void 			verify();
+	CgValue 		compile(CodeGen& cg, Scope* sc);
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
-	virtual void	find_vars_written(Scope* s,set<Variable*>& vars ) const;
-	void			clear_reg()					{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); regname=0;};
-	virtual VResult	recurse(Visitor*v)			{v->pre_visit(this);if (call_expr)call_expr->visit(v);for (auto a:argls)a->visit(v); v->post_visit(this);return 0;}
-	VResult			visit(Visitor* v)			{return v->visit(this);}
-	virtual const char* kind_str()const			{return"block";}
-	ExprBlock* 			as_block() override {return this;}
-	void 				verify();
-	CgValue compile(CodeGen& cg, Scope* sc);
+	virtual void	find_vars_written(Scope* s,set<Variable*>& vars )const;
+	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 };
 struct ExprMatch : ExprBlock {
 	// todo..
@@ -660,7 +667,7 @@ struct Variable : ExprDef{
 	virtual VResult	recurse(Visitor* v){ v->pre_visit(this); this->visit(v); v->post_visit(this); return 0;;};
 	void dump(int depth) const;
 };
-// scopes are created when resolving; generic functions are evaluated
+// scopes are created when resolving
 struct Scope {
 	ExprDef*	owner_fn=0;	// TODO: eliminate this, owner might be FnDef,Struct,ExprBlock
 	Expr*		node=0;
@@ -695,8 +702,8 @@ public:
 		auto sname=t->deref_all();
 		if (!sname->is_struct()) error(srcloc,t,"expected struct, got %s",sname->name_str());
 		auto r=try_find_struct(sname);
-		if (!r)
-			error(srcloc,"cant find struct %s", sname->name_str());
+//		if (!r)
+//			error(srcloc,"cant find struct %s", sname->name_str());
 		return r;
 	}//original scope because typarams might use it.
 	Scope*			parent_within_fn(){if (!parent) return nullptr; if (parent->owner_fn!=this->owner_fn) return nullptr; return parent;}
@@ -748,6 +755,7 @@ struct ExprIf :  ExprFlow {
 	virtual void	find_vars_written(Scope* s,set<Variable*>& vars ) const;
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	CgValue			compile(CodeGen& cg, Scope* sc);
+	virtual Scope*	get_scope()				{return this->scope;}
 };
 
 /// For-Else loop. Currrently the lowest level loop construct
@@ -775,6 +783,7 @@ struct ExprFor :  ExprFlow {
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc);
+	virtual Scope*	get_scope()				{return this->scope;}
 };
 
 struct Call;
@@ -831,6 +840,7 @@ struct ExprStructDef: ExprDef {
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc);
+	virtual void	gather_named_items(Scope* s){};
 };
 
 inline Type* Type::get_elem(int index){
@@ -922,6 +932,8 @@ struct  ExprFnDef : ExprDef {
 	void	verify();
 	VResult visit(Visitor* v)	{return v->visit(this);}
 	CgValue compile(CodeGen& cg, Scope* sc);
+	virtual Scope*	get_scope()				{return this->scope;}
+	virtual void	gather_named_items(Scope* s){};
 };
 
 struct StructInitializer{ // named initializer

@@ -1,6 +1,7 @@
 #include "codegen.h"
 
 // TODO: properly abstract llvm instruction generation to move to llvm api.
+inline void dbprintf_mangle(const char*,...){}
 extern Name getStringIndex(const char* str,const char* end) ;
 extern const char* getString(const Name&);
 extern bool is_operator(Name tok);
@@ -420,7 +421,9 @@ void write_type(CodeGen& cg, const Type* t, bool ref) {
 	} else if (t->is_struct()){
 		auto sd=t->struct_def;
 		if (!sd) {
-			error(t->m_origin?t->m_origin:t,"struct %s not resolved\n",str(t->name));
+			t->m_origin->dump(0);
+			t->dump(-1);
+			error(t->m_origin?t->m_origin:t,"struct %s not resolved in %p\n",str(t->name),t);
 		}
 		if (sd->name) write_struct_name(cg, sd->get_mangled_name());
 		else {
@@ -492,7 +495,9 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 	auto st=this;
 	if (st->is_generic()) {	// emit generic struct instances
 		write_comment(cg,"instances of %s",str(st->name));
-		for (auto ins=st->instances; ins; ins=ins->next_instance){
+		int i=0;
+		for (auto ins=st->instances; ins; ins=ins->next_instance,i++){
+			write_comment(cg,"instance %d:",i);
 			ins->compile(cg, sc);
 		}
 	} else {
@@ -1163,7 +1168,7 @@ void name_mangle_append_type(char* dst,int size, const Type* t){
 	else if (auto sd=t->struct_def){
 		name_mangle_append_segment(dst,size,str(sd->get_mangled_name()));
 		for (auto& it:sd->instanced_types){
-			dbprintf(" %s",it->name_str());newline(0);
+			dbprintf_mangle(" %s\n",it->name_str());
 			name_mangle_append_type(dst,size,it);
 		}
 	}

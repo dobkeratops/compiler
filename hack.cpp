@@ -9,6 +9,8 @@ const char* g_filename=0;
 inline void dbprintf_varscope(const char*,...){}
 inline void dbprintf_generic(const char*,...){}
 inline void dbprintf_lambdas(const char*,...){}
+inline void dbprintf_instancing(const char*,...){}
+inline void dbprintf_resolve(const char*,...){}
 const int g_debug_get_instance=false;
 struct VTablePtrs {
 	void* expr_op;
@@ -413,6 +415,9 @@ const char* getString(const Name& n) {
 Name getNumberIndex(int num){
 	char tmp[32];sprintf(tmp,"%d",num); return g_Names.get_index(tmp,0,StringTable::Number);
 }
+bool is_number(Name n){
+	return g_Names.flags[(int)n]&StringTable::Number;
+}
 
 void indent(int depth) {
 	for (int i=0; i<depth; i++){dbprintf("\t");};
@@ -643,29 +648,33 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		propogate_type_fwd(flags,this, desired,this->type_ref());
 		return ResolvedType(this->type_ref(),ResolvedType::COMPLETE);
 	}
+	
 	propogate_type_fwd(flags,this, desired,this->type_ref());
+	if (this->type()) this->type()->resolve(scope,desired,flags);
 	if (auto sd=scope->find_struct_named(this->name)) {
+		this->set_def(sd);
 		if (!this->get_type()){
 			this->set_type(new Type(sd));
 			return propogate_type_fwd(flags,this, desired,this->type_ref());
 		}
-		this->def=sd;
-	}
+	} else
 	if (auto v=scope->find_variable_rec(this->name)){
 		v->on_stack=flags&R_PUT_ON_STACK;
 		this->set_def(v);
 		return propogate_type(flags,this, this->type_ref(),v->type_ref());
-
-	} else if (!scope->find_named_items_rec(this->name)){
-		error(this,scope,"\'%s\' undeclared",str(this->name));
-	}
+	} else
 	if (auto f=scope->find_unique_fn_named(this,flags)){ // todo: filter using function type, because we'd be storing it as a callback frequently..
 		// TODO; loose end :( in case where arguments are known, this overrides the match
 		//we eitehr need to pass in arguemnt informatino here *aswell*, or seperaete out the callsite case properly.
-		if (!this->def)
-			this->def=f;
+		this->set_def(f);
 		this->set_type(f->fn_type);
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
+	}
+	else if (!scope->find_named_items_rec(this->name)){
+		// didn't find it yet, can't do anything
+		if (flags & R_FINAL)
+			error(this,scope,"\'%s\' undeclared",str(this->name));
+		return ResolvedType();
 	}
 	return ResolvedType();
 }
@@ -758,18 +767,27 @@ const char* Scope::name() const {
 
 ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 {
-	if (!this->struct_def){
-		if (auto sd=sc->find_struct_named(this->name))
+	if(!this)return ResolvedType();
+	if (!this->struct_def && this->name>=IDENT && !is_number(this->name)){
+		if (auto sd=sc->find_struct_named(this->name)){
 			this->struct_def =sd->get_instance(sc,this);
+			dbprintf_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->struct_def,this);
+		}else{
+			dbprintf_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name());
+		}
 	}
-	for (auto s=this->sub;s;s=s->next)
-		s->resolve(sc,desired,flags);
+	auto ds=desired?desired->sub:nullptr;
+	for (auto s=this->sub;s;s=s->next,ds=ds?ds->next:nullptr)
+		s->resolve(sc,ds,flags);
 	
 	return ResolvedType(this,ResolvedType::COMPLETE);
 }
 ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
+	dbprintf_resolve("resolving arg %s\n",this->name_str());
 	propogate_type_fwd(flags,this,desired,this->type_ref());
-	if (this->type()){this->type()->resolve(sc,desired,flags);}
+	if (this->type()){
+		this->type()->resolve(sc,desired,flags);
+	}
 	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
 	return ResolvedType(this->type(), ResolvedType::COMPLETE);
 }
@@ -1611,7 +1629,9 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 //		return 0;f
 //	}
 	if (!ff.candidates.size()){
-		error(callsite,"can't find function %s\n",str(name));
+		if (flags & R_FINAL)
+			error(callsite,"can't find function %s\n",str(name));
+		return nullptr;
 	}
 	verify_all();
 	if (ff.candidates.back().score<=0 || name==PLACEHOLDER) {
@@ -1720,6 +1740,7 @@ void Scope::add_fn(ExprFnDef* fnd){
 	ni->fn_defs=fnd;
 }
 void Scope::add_struct(ExprStructDef* sd){
+	dbprintf_instancing("adding struct %s to %s\n",sd->name_str(),this->name());
 	if (sd->name_ptr) return;
 	auto ni=get_named_items_local(sd->name);
 	sd->name_ptr=ni;
@@ -1833,6 +1854,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	verify_all();
 	Type* ret=0;
 	auto op_ident=name;
+	if (this->type()) this->type()->resolve(sc,desired,flags);
 //	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
 		ASSERT(this->lhs && this->rhs);
@@ -1920,6 +1942,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 					ret=f->type();
 					return propogate_type(flags,this, ret,this->type_ref());
 				}
+			} else {
+				if (flags & R_FINAL){
+					error(this,"cant find struct %s", t->name_str());
+				}
 			}
 		}
 		verify_all();
@@ -1995,6 +2021,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 
 ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 	verify_all();
+	if (this->type()) this->type()->resolve(sc,nullptr,flags);
+	if (this->call_expr) this->call_expr->resolve(sc,nullptr,flags);
 	::verify(this->get_type());
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->get_type()) this->set_type(new Type(this,VOID));
@@ -2111,6 +2139,9 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 
 	auto sd=sc->find_struct(si->call_expr);
+	if (!sd){
+		return ResolvedType();
+	}
 	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
 	if (local_struct_def)sc->add_struct(local_struct_def); // todo - why did we need this?
 	if (!si->type()){
@@ -2371,7 +2402,12 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 	}
 		//this->scope->parent=this->scope->global=scope->global; this->scope->owner=this;}
 
-	// TODO: infer function type(args,return) to get a return type for body inference,maybe.
+	if (this->is_generic()){	// must resolve instances too, if they relied on args that aren't resolved? TODO: dont instance until all symbols are found
+		for (auto ins=this->instances; ins;ins=ins->next_instance){
+			ins->resolve(scope,nullptr,flags);
+		}
+		return ResolvedType();
+	}
 
 	if (!this->is_generic()){
 		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
@@ -2409,12 +2445,20 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 
 		this->set_type(this->fn_type);
 	}
+	if (!this->is_generic()){
+		this->fn_type->resolve(scope,nullptr,flags);
+		this->return_type()->resolve(scope,nullptr,flags);
+	}
 	return ResolvedType(fn_type,ResolvedType::COMPLETE);
 }
 
 void gather_named_items(Node* node, Scope* sc) {
+	// TODO - this is a bit ambiguous
+	// should we just accumulate these while we parse,
+	// or should we accumulate whilst we resolve
+	// do we gain anything by this seperate pass?
+	// also is this even correct - if,for should gather into local scopes?
 	if (auto fd=dynamic_cast<ExprFnDef*>(node)) {
-		// todo: local functions should only be findable inside.
 		sc->add_fn(fd);
 	} else if (auto sd=dynamic_cast<ExprStructDef*>(node)){
 		sc->add_struct(sd);
@@ -2423,7 +2467,17 @@ void gather_named_items(Node* node, Scope* sc) {
 	} else if (auto b=dynamic_cast<ExprBlock*>(node)) {
 		for (auto sub:b->argls) {
 			gather_named_items(sub,sc);
-		}		
+		}
+	} else if (auto x=dynamic_cast<ExprIf*>(node)){
+		gather_named_items(x->cond,sc);
+		gather_named_items(x->body,sc);
+		gather_named_items(x->else_block,sc);
+	} else if (auto x=dynamic_cast<ExprFor*>(node)){
+		gather_named_items(x->init,sc);
+		gather_named_items(x->cond,sc);
+		gather_named_items(x->body,sc);
+		gather_named_items(x->incr,sc);
+		gather_named_items(x->else_block,sc);
 	} else if (auto op=dynamic_cast<ExprOp*>(node)){
 		gather_named_items(op->lhs,sc);
 		gather_named_items(op->rhs,sc);
@@ -3293,6 +3347,9 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 			break;
 	}
 	if (!ins) {
+		dbprintf_instancing("instantiating %s with[",this->name_str());
+		for (auto t=type->sub;t;t=t->next)dbprintf_instancing("%s,",t->name_str());
+		dbprintf_instancing("]\n");
 		// TODO: store a tree of partial instantiations eg by each type..
 		vector<Type*> ty_params;
 		int i=0;
@@ -3795,7 +3852,6 @@ const char* g_TestProg2=
 "	fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
 "	fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
 "	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0};\n"
-"	struct FooStruct{x:int,y:int};"
 "	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
 "	fn something(f:int){\n"
 "		printf(\"somethng(int)\\n\");\n"
@@ -3823,15 +3879,18 @@ const char* g_TestProg2=
 "		something(1);\n"
 "		pfs:=&fs;\n"
 "		foo_struct(&fs);		\n"
-//"	fn localtest(i:int)->int{i+argc}; \n"
+"	fn localtest(i:int)->void{printf(\"hello from local fn %d\\n\",i);}; \n"
 "		py:=pfs as *int;\n"
 "		foo_bar(&fs);\n"
 "		printf(\"foostruct int val recast %d; foostruct raw value %d %d\n\",*py,fs.y,pfs.y);\n"
 "		fp(2);fp(x);fp(xs[1]);		\n"
 "		take_ptr(fp);\n"
+"		take_ptr(localtest);\n"
+"		localtest(10);\n"
 "		take_ptr(|x|{printf(\"hello from anon function %d\\n\",x);});\n"
 "		bar(1,2,3);	\n"
 "	,retval}\n"
+"	struct FooStruct{x:int,y:int};\n"
 
 
 /*
@@ -3952,7 +4011,7 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	if (flags & B_AST){
 		node->dump(0);
 	}
-	gather_named_items(node,&global);
+//	gather_named_items(node,&global);
 	
 	node->verify();
 	node->resolve(&global,nullptr,0);
@@ -4069,7 +4128,7 @@ int main(int argc, const char** argv) {
 		printf("no sources given so running inbuilt tests.\n");
 		printf("typeparam test\n");
 		auto ret0=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_RUN);
-		auto ret1=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
+		//auto ret1=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		printf("bigger test, all features\n");
 		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_RUN);
 	}
