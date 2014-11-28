@@ -62,13 +62,13 @@ void verify_type(const Node* p){
 void verify_all_sub(){g_pRoot->verify();}
 void dbprintf(const char* str, ... )
 {
+#ifdef DEBUG
 	char tmp[1024];
 	va_list arglist;
 	
 	va_start( arglist, str );
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
-#ifdef DEBUG
 	printf("%s",tmp);
 #endif
 }

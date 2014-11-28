@@ -14,4 +14,12 @@ class CodeGen {
 public:
 	FILE* ofp;
 	int next_reg;
+	CodeGen(FILE* _ofp, int nr){
+		ofp=_ofp; next_reg=nr;
+		comma=false;
+		depth=0;
+	}
+	bool comma;
+	int depth;
+	bool commas[32];
 };
