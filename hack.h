@@ -352,6 +352,8 @@ public:
 	template<typename T> T* as()const{ auto ret= const_cast<T*>(dynamic_cast<T*>(this)); if (!ret){error(this,"expected,but got %s",this->kind_str());} return ret;};
 	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
 	virtual int recurse(std::function<int(Node* f)> f){dbprintf("recurse not implemented\n");return 0;};
+
+	virtual CgValue compile(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
 	virtual ExprIdent* as_ident() {return nullptr;}
 	virtual ExprFnDef* as_fn_def() {return nullptr;}
@@ -465,6 +467,7 @@ struct Type : Expr{
 	virtual void			translate_typeparams(const TypeParamXlat& tpx);
 	virtual ResolvedType	resolve(Scope* s, const Type* desired,int flags);
 	virtual void verify();
+	CgValue	compile(CodeGen& cg, Scope* sc);
 };
 
 struct ExprScopeBlock : Expr{};
@@ -490,6 +493,7 @@ struct ExprOp: public Expr{
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	virtual void find_vars_written(Scope* s, set<Variable*>& vars) const;
 	virtual void verify();
+	CgValue compile(CodeGen& cg, Scope* sc);
 };
 
 struct ExprBlock :public ExprScopeBlock{
@@ -533,6 +537,7 @@ struct ExprBlock :public ExprScopeBlock{
 	virtual const char* kind_str()const			{return"block";}
 	ExprBlock* 			as_block() override {return this;}
 	void 				verify();
+	CgValue compile(CodeGen& cg, Scope* sc);
 };
 struct ExprMatch : ExprBlock {
 	// todo..
@@ -583,6 +588,7 @@ struct ExprLiteral : ExprDef {
 	virtual VResult recurse(Visitor*v)	{return 0;}
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	void translate_typeparams(const TypeParamXlat& tpx);
+	CgValue compile(CodeGen& cg, Scope* sc);
 };
 
 struct ArgDef :ExprDef{
@@ -741,6 +747,7 @@ struct ExprIf :  ExprFlow {
 	ResolvedType	resolve(Scope* scope,const Type*,int flags) ;
 	virtual void	find_vars_written(Scope* s,set<Variable*>& vars ) const;
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
+	CgValue			compile(CodeGen& cg, Scope* sc);
 };
 
 /// For-Else loop. Currrently the lowest level loop construct
@@ -767,6 +774,7 @@ struct ExprFor :  ExprFlow {
 	ResolvedType resolve(Scope* scope,const Type*,int flags);
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
+	CgValue compile(CodeGen& cg, Scope* sc);
 };
 
 struct Call;
@@ -822,6 +830,7 @@ struct ExprStructDef: ExprDef {
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 	void			roll_vtable();
+	CgValue compile(CodeGen& cg, Scope* sc);
 };
 
 inline Type* Type::get_elem(int index){
@@ -912,6 +921,7 @@ struct  ExprFnDef : ExprDef {
 	};
 	void	verify();
 	VResult visit(Visitor* v)	{return v->visit(this);}
+	CgValue compile(CodeGen& cg, Scope* sc);
 };
 
 struct StructInitializer{ // named initializer
@@ -947,6 +957,7 @@ struct ExprIdent :Expr{
 	bool			is_undefined()const		{return is_placeholder();}
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
+	CgValue			compile(CodeGen&cg, Scope* sc);
 };
 
 struct TypeParamXlat{

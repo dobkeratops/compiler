@@ -896,7 +896,7 @@ size_t Type::size() const{
 	if (tf){return tf&RT_SIZEMASK};
 	if (this->name==VARIANT){
 		auto align=this->alignment();
-		int max_elem_size=0;
+		size_t max_elem_size=0;
 		for (auto s=this->sub; s;s=s->next){
 			auto sz=s->size();
 			if (sz>max_elem_size)max_elem_size=sz;
@@ -1632,7 +1632,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 			for (auto i=0; i<args.size(); i++){	if (i)dbprintf(",");dbprintf("",i); args[i]->type()->dump(-1); }
 			dbprintf(")");
 			if (candidates.size()>1)info(callsite,"see candidates:-");
-			for (int i=ff.candidates.size()-1; i>=0; i--) {
+			for (auto i=(int)ff.candidates.size()-1; i>=0; i--) {
 				auto &c=ff.candidates[i];
 				info(c.f," ");c.f->dump_signature();
 				

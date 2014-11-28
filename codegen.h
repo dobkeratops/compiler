@@ -18,8 +18,11 @@ public:
 		ofp=_ofp; next_reg=nr;
 		comma=false;
 		depth=0;
+		curr_fn=0;
 	}
 	bool comma;
 	int depth;
 	bool commas[32];
+	vector<Node*> compile_later;
+	ExprFnDef*	curr_fn;	// The current function being compiled - no nesting allowed. (defer 'later')
 };

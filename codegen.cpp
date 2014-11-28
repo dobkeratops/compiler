@@ -488,14 +488,12 @@ void dump_locals(Scope* s){
 	}
 }
 
-CgValue compile_node(CodeGen& cg,Expr* n, ExprFnDef* f,Scope*s);
-
-
-void compile_struct_def(CodeGen& cg, ExprStructDef* st, Scope* sc) {
+CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
+	auto st=this;
 	if (st->is_generic()) {	// emit generic struct instances
 		write_comment(cg,"instances of %s",str(st->name));
 		for (auto ins=st->instances; ins; ins=ins->next_instance){
-			compile_struct_def(cg, ins, sc);
+			ins->compile(cg, sc);
 		}
 	} else {
 		write_struct_name(cg,st->get_mangled_name());
@@ -509,6 +507,7 @@ void compile_struct_def(CodeGen& cg, ExprStructDef* st, Scope* sc) {
 		struct_end(cg);
 		ins_end(cg);
 	}
+	return CgValue();	// todo: could return symbol? or its' constructor-function?
 }
 
 CgValue alloca_type(CodeGen& cg, Expr* holder, Type* t) {
@@ -565,11 +564,14 @@ void emit_branch(CodeGen& cg, CgValue cond, Name label_then, Name label_else){
 	fprintf(cg.ofp,"i1 %%%s, label %%%s, label %%%s",str(cond.reg), str(label_then), str(label_else));
 	ins_end(cg);
 }
-CgValue compile_if(CodeGen& cg,ExprIf* ifn, ExprFnDef* curr_fn,Scope*sc){
+
+CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
+	auto curr_fn=cg.curr_fn;
+	auto ifn=this;
 	auto ofp=cg.ofp;
 	// TODO: Collect phi-nodes for anything modified inside.
 	RegisterName outname=next_reg_name(&cg.next_reg);
-	auto condition=compile_node(cg,ifn->cond,curr_fn,sc);
+	auto condition=ifn->cond->compile(cg,sc);
 	int index=cg.next_reg++;
 	auto label_if=gen_label("if",index);
 	auto label_endif=gen_label("endif",index);
@@ -577,11 +579,11 @@ CgValue compile_if(CodeGen& cg,ExprIf* ifn, ExprFnDef* curr_fn,Scope*sc){
 		auto label_else=gen_label("else",index);
 		emit_branch(cg,condition,label_if,label_else);
 		emit_label(cg,label_if);
-		auto if_result=compile_node(cg,ifn->body,curr_fn,sc);
+		auto if_result=ifn->body->compile(cg,sc);
 		if_result.load(cg,0);
 		emit_branch(cg,label_endif);
 		emit_label(cg,label_else);
-		auto else_result=compile_node(cg,ifn->else_block,curr_fn,sc);
+		auto else_result=ifn->else_block->compile(cg,sc);
 		else_result.load(cg,0);
 		emit_branch(cg,label_endif);
 		emit_label(cg,label_endif);
@@ -598,7 +600,7 @@ CgValue compile_if(CodeGen& cg,ExprIf* ifn, ExprFnDef* curr_fn,Scope*sc){
 	}
 	else {
 		emit_branch(cg,condition,label_if,label_endif);
-		auto ifblock=compile_node(cg,ifn->body,curr_fn,sc);
+		auto ifblock=ifn->body->compile(cg,sc);
 		emit_label(cg,label_endif);
 		// TODO phi node
 		return CgValue();
@@ -626,7 +628,7 @@ void write_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, 
 	fprintf(ofp,"\n");
 }
 
-CgValue compile_for(CodeGen& cg, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_sc){
+CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 //  initializer
 // for:
 //  test condition br else
@@ -637,7 +639,8 @@ CgValue compile_for(CodeGen& cg, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_s
 // break:
 // else:
 // endfor:
-
+	auto nf=this;
+	auto curr_fn=cg.curr_fn;
 	auto sc=nf->scope;
 	// write the initializer block first; it sets up variables initial state
 	auto ofp=cg.ofp;
@@ -645,7 +648,7 @@ CgValue compile_for(CodeGen& cg, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_s
 	auto l_init=gen_label("init",index);
 	emit_branch(cg,l_init);
 	emit_label(cg,l_init);
-	auto init=compile_node(cg,nf->init,curr_fn,sc);
+	auto init=nf->init->compile(cg,sc);
 	
 	set<Variable*> write_vars;
 	set<Variable*> else_vars;
@@ -673,14 +676,14 @@ CgValue compile_for(CodeGen& cg, ExprFor* nf, ExprFnDef* curr_fn, Scope* outer_s
 	auto phipos=ftell(ofp);// YUK. any way around this? eg write condition at end?
 	write_phi(cg,sc,phi_vars,l_init,l_for,true);//alloc space
 
-	auto cond_result=nf->cond?compile_node(cg,nf->cond,curr_fn,sc):CgValue();
+	auto cond_result=nf->cond?nf->cond->compile(cg,sc):CgValue();
 	emit_branch(cg, cond_result, l_body, l_else);
 	emit_label(cg,l_body);
-	if (nf->body) compile_node(cg,nf->body,curr_fn,sc);
-	if (nf->incr) compile_node(cg,nf->incr,curr_fn,sc);
+	if (nf->body) nf->body->compile(cg,sc);
+	if (nf->incr) nf->incr->compile(cg,sc);
 	emit_branch(cg,l_for);
 	emit_label(cg,l_else);
-	if (nf->else_block) compile_node(cg,nf->else_block,curr_fn,sc);
+	if (nf->else_block) nf->else_block->compile(cg,sc);
 	emit_branch(cg,l_endfor);
 	emit_label(cg,l_endfor);
 	// now write the phi-nodes.
@@ -730,278 +733,259 @@ CgValue write_cast(CodeGen& cg,CgValue dst, CgValue&lhsv, Expr* rhse){
 	write_type(cg,rhst,0);
 	ins_end(cg);
 	return dst;
-
 }
 
-CgValue compile_node(CodeGen& cg,Expr *n, ExprFnDef *curr_fn,Scope *sc){
-	g_Sc=sc;
-	auto ofp=cg.ofp;
-	auto next_reg=&cg.next_reg;
-	if (auto e=dynamic_cast<ExprOp*>(n)) {
-		auto opname = e->name;
-		int opflags = operator_flags(opname);
-		auto t=e->get_type();//get_type_llvm();
+CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
+	auto n=this;
+	auto e=this;
+	auto opname = e->name;
+	int opflags = operator_flags(opname);
+	auto t=e->get_type();//get_type_llvm();
+	
+	// TODO 2operand form should copy regname for this node from the lhs.
+	// TODO - multiple forms:
+	//
+	// generalize by lvalue being in register or memory.
+	// 3-operand; assign-op; assign-op; mem-assign-op;
+	if (opname==DOT || opname==ARROW){
+		auto lhs=e->lhs->compile(cg,sc);
+		return lhs.dot(cg,e->rhs,sc);
+	}
+	else if (e->lhs && e->rhs){
+		auto lhs=e->lhs->compile(cg,sc);
+		auto rhs=e->rhs->compile(cg,sc);
+		auto lhs_v=sc->find_variable_rec(e->lhs->name);
+		auto outname=lhs_v?lhs_v->name:opname;
 		
-		// TODO 2operand form should copy regname for this node from the lhs.
-		// TODO - multiple forms:
-		//
-		// generalize by lvalue being in register or memory.
-		// 3-operand; assign-op; assign-op; mem-assign-op;
-		if (opname==DOT || opname==ARROW){
-			auto lhs=compile_node(cg,e->lhs,curr_fn,sc);
-			return lhs.dot(cg,e->rhs,sc);
-		}
-		else if (e->lhs && e->rhs){
-			auto lhs=compile_node(cg,e->lhs,curr_fn,sc);
-			auto rhs=compile_node(cg,e->rhs,curr_fn,sc);
-			auto lhs_v=sc->find_variable_rec(e->lhs->name);
-			auto outname=lhs_v?lhs_v->name:opname;
-			//printf_reg(lhs_v->regname);
-			//if (!n->regname && lhs_v){n->regname=lhs_v->regname;} // override if its a write.
-			auto dst=CgValue(n->get_reg(outname,&cg.next_reg,false),n->get_type());
-			// assignments :=
-			//printf_reg(dst.reg);
-			if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
-				ASSERT(sc->find_scope_variable(e->lhs->name));
-				if (lhs_v) dst.reg=lhs_v->regname;
+		auto dst=CgValue(n->get_reg(outname,&cg.next_reg,false),n->get_type());
+		
+		if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
+			ASSERT(sc->find_scope_variable(e->lhs->name));
+			if (lhs_v) dst.reg=lhs_v->regname;
 				//					lhs_v->regname=dst.reg;
 				return CgValue(0,lhs_v->type(),dst.reg);
-			}
-			else if(opname==AS) {
-				// if (prim to prim) {do fpext, etc} else..
-				return write_cast(cg, dst,lhs,e);
-			}
-			else
-			if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
-				auto v=sc->find_variable_rec(e->lhs->name); WARN(v &&"semantic analysis should have created var");
-				auto dst=v->get_reg(v->name, &cg.next_reg, true);
-				if (rhs.is_literal()){//TODO simplify this, how does this case unify?
-					v->regname=dst;
-					rhs.load(cg,dst);
-					return CgValue(dst,rhs.type);
 				}
-				if (rhs.type->is_struct()){
-					v->regname=rhs.reg?rhs.reg:rhs.addr;
-					v->reg_is_addr=!rhs.reg;
-					return rhs;
-					
-				}
-				else{
-					dst=rhs.load(cg,dst);
-					v->regname=dst; // YUK todo - reallyw wanted reg copy
-					return CgValue(dst, n->get_type(), 0);
-				}
+		else if(opname==AS) {
+			// if (prim to prim) {do fpext, etc} else..
+			return write_cast(cg, dst,lhs,e);
+		}
+		else
+		if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
+			auto v=sc->find_variable_rec(e->lhs->name); WARN(v &&"semantic analysis should have created var");
+			auto dst=v->get_reg(v->name, &cg.next_reg, true);
+			if (rhs.is_literal()){//TODO simplify this, how does this case unify?
+				v->regname=dst;
+				rhs.load(cg,dst);
+				return CgValue(dst,rhs.type);
 			}
-			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
-				//assignment  =
-				if (lhs_v) dst.reg=n->regname=lhs.reg=lhs_v->regname;
+			if (rhs.type->is_struct()){
+				v->regname=rhs.reg?rhs.reg:rhs.addr;
+				v->reg_is_addr=!rhs.reg;
+				return rhs;
+				
+			}
+			else{
+				dst=rhs.load(cg,dst);
+				v->regname=dst; // YUK todo - reallyw wanted reg copy
+				return CgValue(dst, n->get_type(), 0);
+			}
+		}
+		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
+			//assignment  =
+			if (lhs_v) dst.reg=n->regname=lhs.reg=lhs_v->regname;
 				rhs.load(cg,0);
 				lhs.store_from(cg,rhs.reg);
 				rhs.type=e->get_type();
 				return rhs;
-			}
-			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
-				// Assign-Operators += etc
-				rhs.load(cg);
-				auto dstreg=lhs;
-				lhs.load(cg); // turns it into a value.
-				write_instruction(cg,opname,t?t:rhs.type, dst,lhs,rhs);
-				auto out=dstreg.store_from(cg,dst.reg);
-				return dstreg;
-			}else {
-				// RISClike 3operand dst=src1,src2
-				lhs.load(cg); rhs.load(cg);
-				write_instruction(cg,opname,t,dst,lhs,rhs);
-				dst.type=e->get_type();
-				return dst;
-			}
-		} else if (!e->lhs && e->rhs){
-			auto src=compile_node(cg,e->rhs,curr_fn,sc);
-			if (opname==ADDR){
-				if (!src.type || !n->type()) {
-					n->dump(-1);
-					error(n,"something wrong\n");
-				}
-				return src.addr_op(cg,n->type());
-			}
-			else if (opname==DEREF){
-				return src.deref_op(cg,n->type());
-			}
-			else {
-				if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){printf(";TODO: logic for modifications to memory");}}
-				// todo: handle read/modify-writeness.
-				// postincrement/preincrement etc go here..
-				auto dst=CgValue(n->get_reg(opname,&cg.next_reg,false), n->get_type());
-				write_instruction(cg,opname,t,dst,src);
-				return dst;
-			}
-		} else if (e->lhs && e->rhs) {
-			error(e,"postfix operators not implemented yet.");
-		} else
-			return CgValue();
-	}
-	if (auto e=dynamic_cast<ExprBlock*>(n)) {
-		// [1] compound expression - last expression is the return .
-		if(e->is_compound_expression()) {
-			if (auto num=e->argls.size()) {
-				for (int i=0; i<num-1; i++){
-					compile_node(cg,e->argls[i],curr_fn,sc);
-				}
-			if (e->argls.size())
-				return compile_node(cg,e->argls[num-1],curr_fn,sc);
-			};
 		}
-		else if (e->is_struct_initializer()){
-//			error(n,"can't compile struct initializer  expression, TODO, desugar it\n");
-			StructInitializer si(sc,e); si.map_fields();
-			// '.this' is the main node, type struct
-			//auto struct_val =CgValue(0,e->get_type(),*next_index++);
-			auto struct_val= alloca_type(cg, e, e->type()/*e->def->as_struct_def()*/);
-//			struct_val.load(ofp,next_index);
-			e->regname=struct_val.reg; // YUK todo - reallyw wanted reg copy
-			// can we trust llvm to cache the small cases in reg..
-			for (int i=0; i<e->argls.size();i++) {
-				// struct->field=expr[i]
-				auto rvalue=compile_node(cg,si.value[i],curr_fn,sc);
-				auto dst = struct_val.dot(cg,si.field_refs[i],sc);
-				auto srcreg = rvalue.load(cg,0);
-				dst.store_from(cg,srcreg);
-				if (dst.type==struct_val.type)
-					struct_val=dst; // mutate by insertion
-			}
-			return struct_val;
+		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
+			// Assign-Operators += etc
+			rhs.load(cg);
+			auto dstreg=lhs;
+			lhs.load(cg); // turns it into a value.
+			write_instruction(cg,opname,t?t:rhs.type, dst,lhs,rhs);
+			auto out=dstreg.store_from(cg,dst.reg);
+			return dstreg;
+		}else {
+			// RISClike 3operand dst=src1,src2
+			lhs.load(cg); rhs.load(cg);
+			write_instruction(cg,opname,t,dst,lhs,rhs);
+			dst.type=e->get_type();
+			return dst;
 		}
-		// [2] Operator
-		//[3] ARRAY ACCESS
-		else if (auto ar=n->is_subscript()){
-			auto expr=compile_node(cg,ar->call_expr,curr_fn,sc);// expression[index]
-			auto index=compile_node(cg,ar->argls[0],curr_fn,sc);
-			auto array_type=expr.type;
-			auto inner_type=array_type->sub;
-			auto dst=ar->get_reg(ARRAY,next_reg,false);
-			expr.load(cg);
-			if (!n->regname){n->regname=expr.reg;}
-			
-			index.load(cg,0);
-			ins_begin_reg_op(cg,dst,"getelementptr inbounds");
-			write_type(cg,array_type,true);//!expr.reg);
-			write_reg(cg,expr.reg);
-			fprintf(cg.ofp,",i32 0, i32 ");//%%%d\n",getString(expr.reg),
-			index.write_operand(cg);
-			ins_end(cg);
-			return CgValue(0,inner_type,dst);
+	} else if (!e->lhs && e->rhs){ // prefix operator
+		auto src=e->rhs->compile(cg,sc);
+		if (opname==ADDR){
+			if (!src.type || !n->type()) {
+				n->dump(-1);
+				error(n,"something wrong\n");
+			}
+			return src.addr_op(cg,n->type());
 		}
-		//[3] FUNCTION CALL
-		else if (e->is_function_call()){
-			auto call_fn=e->get_fn_call();
-			RegisterName indirect_call=0;
-			fprintf(ofp,"\t;fncall %s\n", call_fn?str(call_fn->name):e->call_expr->name_str());
-
-			if (e->call_expr->is_function_name()) {
-				
-			} else {
-				auto fptr = compile_node(cg, e->call_expr, curr_fn, sc);
-				indirect_call=fptr.load(cg);
-			}
-
-			vector<CgValue> l_args;
-			vector<CgValue> l_args_reg;
-			// process function argumetns & load
-			for (auto arg:e->argls){
-				auto reg=compile_node(cg,arg,call_fn,sc);
-				if (!reg.type) {
-					error_begin(arg,"arg type not resolved in call to %s\n", call_fn->name_str());
-//					fprintf(ofp,"\t;ERROR no type???reg %s  %s\n", str(reg.reg), str(reg.addr));
-					dbprintf("arg type=");arg->dump(-1);newline(0);
-					auto reg=compile_node(cg,arg,call_fn,sc);
-					error_end(arg);
-					ASSERT(reg.type);
-				}
-				auto regval=CgValue(reg.load(cg),reg.type);
-				l_args_reg.push_back(regval);
-			}
-			int i=0;
-			for (auto reg:l_args_reg){
-				if (reg.addr && !reg.reg) {
-					//dbprintf("warning writing adress of entity when we want entity\n");
-					//ASSERT(reg.reg==0);
-//					reg.type->dump(1);
-					reg.load(cg);
-				}
-				l_args.push_back(reg);
-				i++;
-			}
-
-			auto dst=n->get_reg_new(call_fn?call_fn->name:FN, next_reg);
-			//auto rt=call_fn->get_return_value();
-			auto ret_type=e->type();	// semantic analysis should have done this
-		
-//			if (call_fn){ ASSERT(0!=call_fn->get_return_value()->type()->eq(e->type()));}
-			//if (call_fn->has_return_value())
-			if (e->type()->name!=VOID)
-			{
-				ins_begin_reg_op(cg,dst,"call");
-			} else
-				ins_begin_name(cg,"call");
-			
-			if (call_fn)
-				write_function_type(cg, call_fn);
-			else
-				write_function_type(cg,e->call_expr->type());
-			if (!indirect_call) {
-				write_global(cg,call_fn->get_mangled_name());
-			} else {
-				write_reg(cg,indirect_call);
-			}
-			
-			fprintf(ofp,"(");
-			for (auto i=0; i<l_args.size(); i++){
-				if (i) {fprintf(ofp," ,");}
-				auto reg=l_args_reg[i];
-				write_type(cg,reg);//reg.is_addr());
-				reg.write_operand(cg);
-			}
-			fprintf(ofp,")");
-			ins_end(cg);
-			if (ret_type && ret_type->name!=VOID) {
-				return CgValue(dst,ret_type);
-			} else{
-				return CgValue();
-			}
+		else if (opname==DEREF){
+			return src.deref_op(cg,n->type());
 		}
-	} else if (auto st=dynamic_cast<ExprStructDef*>(n)){
-		// todo - were inner-structs to be allowed?
-		compile_struct_def(cg,st,sc);
-	} else if (auto id=dynamic_cast<ExprIdent*>(n)){
-		auto var=sc->find_variable_rec(n->name);
-		if (!var){
-			if (n->def) {
-				//dbprintf("\n place %s:%s into new lazy value\n",n->def->name_str(),n->def->kind_str());
-				return CgValue(n->def);
-			}
-			error(n,"var not found %s\n",n->name_str());
-			return CgValue();
+		else {
+			if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){printf(";TODO: logic for modifications to memory");}}
+			// todo: handle read/modify-writeness.
+			// postincrement/preincrement etc go here..
+			auto dst=CgValue(n->get_reg(opname,&cg.next_reg,false), n->get_type());
+			write_instruction(cg,opname,t,dst,src);
+			return dst;
 		}
-		if (var && var!=n->def){
-//			error(n,"var/def out of synx %s %s\n",n->name_str(),var->name_str());
-//			return CgValue();
-		}
-		return CgValue(var);
-	} else if (auto li=dynamic_cast<ExprLiteral*>(n)){
-		return CgValue(li);
-	} else if (auto ifn=dynamic_cast<ExprIf*>(n)) {
-		return compile_if(cg,ifn,curr_fn,sc);
-	} else if (auto nfor=dynamic_cast<ExprFor*>(n)) {
-		return compile_for(cg,nfor,curr_fn,sc);
-	} else if (auto nt=dynamic_cast<Type*>(n)) {
-		return CgValue(0,nt,0);
-	} else if (auto nfp=dynamic_cast<ExprFnDef*>(n)){
-		return CgValue(nfp);
-	} else{
-		fprintf(ofp,"\t;TODO: node not handled %s\n",n->kind_str());
+	} else if (e->lhs && !e->rhs) {
+		error(e,"postfix operators not implemented yet.");
 		return CgValue();
+	} else
+		return CgValue();
+}
+
+
+CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
+	auto n=this;
+	auto e=this; auto curr_fn=cg.curr_fn;
+	// [1] compound expression - last expression is the return .
+	if(e->is_compound_expression()) {
+		if (auto num=e->argls.size()) {
+			for (int i=0; i<num-1; i++){
+				e->argls[i]->compile(cg,sc);
+			}
+			if (e->argls.size())
+				return e->argls[num-1]->compile(cg,sc);
+		};
+	}
+	else if (e->is_struct_initializer()){
+		StructInitializer si(sc,e); si.map_fields();
+		auto struct_val= alloca_type(cg, e, e->type());
+		e->regname=struct_val.reg; // YUK todo - reallyw wanted reg copy
+		// can we trust llvm to cache the small cases in reg..
+		for (int i=0; i<e->argls.size();i++) {
+			auto rvalue=si.value[i]->compile(cg,sc);
+			auto dst = struct_val.dot(cg,si.field_refs[i],sc);
+			auto srcreg = rvalue.load(cg,0);
+			dst.store_from(cg,srcreg);
+			if (dst.type==struct_val.type)
+				struct_val=dst; // mutate by insertion
+		}
+		return struct_val;
+	}
+	// [2] Operator
+	//[3] ARRAY ACCESS
+	else if (auto ar=n->is_subscript()){
+		auto expr=ar->call_expr->compile(cg,sc);// expression[index]
+		auto index=ar->argls[0]->compile(cg,sc);
+		auto array_type=expr.type;
+		auto inner_type=array_type->sub;
+		auto dst=ar->get_reg(ARRAY,&cg.next_reg,false);
+		expr.load(cg);
+		if (!n->regname){n->regname=expr.reg;}
+		
+		index.load(cg,0);
+		ins_begin_reg_op(cg,dst,"getelementptr inbounds");
+		write_type(cg,array_type,true);//!expr.reg);
+		write_reg(cg,expr.reg);
+		fprintf(cg.ofp,",i32 0, i32 ");//%%%d\n",getString(expr.reg),
+		index.write_operand(cg);
+		ins_end(cg);
+		return CgValue(0,inner_type,dst);
+	}
+	//[3] FUNCTION CALL
+	else if (e->is_function_call()){
+		auto call_fn=e->get_fn_call();
+		RegisterName indirect_call=0;
+		write_comment(cg,"fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
+
+		if (e->call_expr->is_function_name()) {
+			
+		} else {
+			auto fptr = e->call_expr->compile(cg, sc);
+			indirect_call=fptr.load(cg);
+		}
+
+		vector<CgValue> l_args;
+		vector<CgValue> l_args_reg;
+		// process function argumetns & load
+		for (auto arg:e->argls){
+			auto reg=arg->compile(cg,sc);
+			if (!reg.type) {
+				error_begin(arg,"arg type not resolved in call to %s\n", call_fn->name_str());
+				dbprintf("arg type=");arg->dump(-1);newline(0);
+				auto reg=arg->compile(cg,sc);
+				error_end(arg);
+				ASSERT(reg.type);
+			}
+			auto regval=CgValue(reg.load(cg),reg.type);
+			l_args_reg.push_back(regval);
+		}
+		int i=0;
+		for (auto reg:l_args_reg){
+			if (reg.addr && !reg.reg) {
+				reg.load(cg);
+			}
+			l_args.push_back(reg);
+			i++;
+		}
+
+		auto dst=n->get_reg_new(call_fn?call_fn->name:FN, &cg.next_reg);
+		//auto rt=call_fn->get_return_value();
+		auto ret_type=e->type();	// semantic analysis should have done this
+		if (e->type()->name!=VOID)
+		{
+			ins_begin_reg_op(cg,dst,"call");
+		} else
+			ins_begin_name(cg,"call");
+		
+		if (call_fn)
+			write_function_type(cg, call_fn);
+		else
+			write_function_type(cg,e->call_expr->type());
+		if (!indirect_call) {
+			write_global(cg,call_fn->get_mangled_name());
+		} else {
+			write_reg(cg,indirect_call);
+		}
+		
+		fprintf(cg.ofp,"(");
+		for (auto i=0; i<l_args.size(); i++){
+			if (i) {fprintf(cg.ofp,",");}
+			auto reg=l_args_reg[i];
+			write_type(cg,reg);//reg.is_addr());
+			reg.write_operand(cg);
+		}
+		fprintf(cg.ofp,")");
+		ins_end(cg);
+		if (ret_type && ret_type->name!=VOID) {
+			return CgValue(dst,ret_type);
+		} else{
+			return CgValue();
+		}
 	}
 	return CgValue();
+}
+
+CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc){
+	auto n=this;
+	auto var=sc->find_variable_rec(n->name);
+	if (!var){
+		if (n->def) {
+			return CgValue(n->def);
+		}
+		error(n,"var not found %s\n",n->name_str());
+		return CgValue();
+	}
+	if (var && var!=n->def){
+//			error(n,"var/def out of synx %s %s\n",n->name_str(),var->name_str());
+//			return CgValue();
+	}
+	return CgValue(var);
+}
+
+CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc) {
+	return CgValue(this);
+}
+
+CgValue Type::compile(CodeGen& cg, Scope* sc){
+	return CgValue(0,this,0);	// TODO - not sure this makes sense, probably not.
 }
 
 // Emit function header..
@@ -1053,41 +1037,45 @@ void write_function_type(CodeGen& cg,ExprFnDef* fn_node){
 	write_function_signature(cg,fn_node,EmitType);
 }
 
-Type* compile_function(CodeGen& cg,ExprFnDef* fn_node, Scope* outer_scope){
+CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
+	auto fn_node = this;
 	auto ofp=cg.ofp;
 
-	if (!fn_node){return nullptr;}
+	if (!fn_node){return CgValue();}
 	if (fn_node->is_undefined()) {
 		fprintf(ofp,";fn %s prot\n",getString(fn_node->name));
 		write_function_signature(cg,fn_node,EmitDeclaration);
-		return nullptr;
+		return CgValue();
 	}
 	if (fn_node->is_generic()) {
 		fprintf(ofp,";fn %s generic:-\n",getString(fn_node->get_mangled_name()));
 		for (auto f=fn_node->instances; f;f=f->next_instance){
 			fprintf(ofp,";fn %s generic instance\n",getString(fn_node->get_mangled_name()));
-			compile_function(cg,f,outer_scope);
+			f->compile(cg,outer_scope);
 		}
-		return nullptr;
+		return CgValue();
 	}
-	// write a literal global pointing to this (why? it seems we need it for load??)
+
+	if (cg.curr_fn) // we can't nest function compilation - push to CodeGen stack
+	{
+		cg.compile_later.push_back(this);
+		return CgValue(this);
+	} else{
+		cg.curr_fn=this;
+	}
+
 	write_fn_ptr(cg,fn_node->get_mangled_name());
 	write_ins_name(cg,"global");
 	write_function_type(cg, fn_node->type());
 	write_global(cg,fn_node->get_mangled_name());
 	if (!fn_node->get_type() && fn_node->fn_type && fn_node->scope ){
-		error(fn_node,"function name %s %p %p %p %p", str(fn_node->name), fn_node->instance_of, fn_node->get_type(), fn_node->fn_type, fn_node->scope);
+		error(fn_node,"function name %s %s %p %p %p %p", str(fn_node->name),str(fn_node->get_mangled_name()), fn_node->instance_of, fn_node->get_type(), fn_node->fn_type, fn_node->scope);
 		ASSERT(0 && "function must be resolved to compile it");
-		return nullptr;
+		return CgValue();
 	}
 	write_comment(cg,"fn %s (%p) :- ins=%p of %p ", str(fn_node->name),fn_node, fn_node->instances, fn_node->instance_of);
 
 	auto scope=fn_node->scope;
-//	auto rt=fn_node->resolve(scope, nullptr);
-//	if (rt.status!=ResolvedType::COMPLETE) {
-//		fprintf(ofp,";can't compile function %s- not resolved\n",getString(fn_node->name));
-//		return rt;
-//	}
 	
 	write_function_signature(cg,fn_node,EmitDefinition);
  	fprintf(ofp,"{\n");
@@ -1096,7 +1084,7 @@ Type* compile_function(CodeGen& cg,ExprFnDef* fn_node, Scope* outer_scope){
 	}
 	write_local_vars(cg, fn_node->body, fn_node, scope);
 	auto rtn=fn_node->get_return_value();
-	auto ret=compile_node(cg, fn_node->body, fn_node,scope);
+	auto ret=fn_node->body->compile(cg,scope);
 	if (ret.is_valid() && !ret.type->is_void()) {
 		ret.load(cg);
 		ins_begin_name(cg,"ret");
@@ -1109,8 +1097,15 @@ Type* compile_function(CodeGen& cg,ExprFnDef* fn_node, Scope* outer_scope){
 		ins_end(cg);
 	}
 	fprintf(ofp,"}\n");
-	return fn_node->fn_type;
+	cg.curr_fn=0;
+	return CgValue(fn_node);
 }
+
+CgValue Node::compile(CodeGen& cg, Scope* sc){
+	error(this,"compile not implemented for %s",this->kind_str());
+	return CgValue();
+}
+
 
 // extern function; - just use the function name, and mangle arguments given at the callsite.
 // this is the default assumed for unfound symbols?
@@ -1142,12 +1137,11 @@ CgValue Node::codegen(CodeGen& cg, bool just_contents) {
 	return CgValue();
 }
 void name_mangle_append_segment(char* dst, int size, const char* src){
-	int len=strlen(src);
+	auto len=strlen(src);
 	dst+=strlen(dst);
-	sprintf(dst,"%d",len);
+	sprintf(dst,"%lu",len);
 	strcat(dst,src);
 }
-
 
 void name_mangle_append_type(char* dst,int size, const Type* t){
 	if (!t) return;
@@ -1184,7 +1178,7 @@ void name_mangle(char* dst, int size, const ExprFnDef* src) {
 	// TODO - prefix scopes. Now, Overloading is the priority.
 	// todo - check how template params are suppsoed to mangle
 	sprintf(dst,"_Z");dst+=2;
-	int len=strlen(dst); size--; size-=len;
+	size_t len=strlen(dst); size--; size-=len;
 	name_mangle_append_segment(dst, size, str(src->name));
 	for (auto a:src->args){
 		name_mangle_append_type(dst,size, a->type());
@@ -1195,22 +1189,13 @@ void name_mangle(char* dst, int size, const ExprStructDef* src) {
 	dst[0]=0;
 	// TODO - prefix scopes. Now, Overloading is the priority.
 	sprintf(dst,"_Z");dst+=2;
-	int len=strlen(dst); size--; size-=len;
+	size_t len=strlen(dst); size--; size-=len;
 	name_mangle_append_segment(dst, size, str(src->name));
 
 	for (auto& it:src->instanced_types){
 		name_mangle_append_type(dst,size,it);
 	}
 }
-
-
-
-// operand bracket  means call
-// operands are just a tuple
-//
-
-// operand
-// lambda expression
 
 void output_code(FILE* ofp, Scope* scope) {
 	verify_all();
@@ -1233,12 +1218,12 @@ void output_code(FILE* ofp, Scope* scope) {
 	}
 	for (auto n=scope->named_items;n;n=n->next) {
 		for (auto s=n->structs; s;s=s->next_of_name) {
-			compile_struct_def(cg, s, scope);
+			s->compile(cg, scope);
 		}
 	}
 	for (auto n=scope->named_items;n;n=n->next) {
 		for(auto f=n->fn_defs; f; f=f->next_of_name){
-			compile_function(cg,f,scope);
+			f->compile(cg,scope);
 		}
 	}
 }
