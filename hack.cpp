@@ -1080,14 +1080,6 @@ Node*	TypeParam::clone() const
 {	return new TypeParam(this->name, (Type*) (this->defaultv?this->defaultv->clone():nullptr));
 }
 
-VResult TypeParam::recurse(Visitor* v)
-{
-	v->pre_visit(this);
-	if (this->defaultv) this->defaultv->visit(v);
-	v->post_visit(this);
-	return 0;
-}
-
 void TypeParam::dump(int depth) const {
 	newline(depth);dbprintf("%s",str(name));
 	if (defaultv) {dbprintf("=");defaultv->dump(-1);}
@@ -2452,37 +2444,6 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 	return ResolvedType(fn_type,ResolvedType::COMPLETE);
 }
 
-void gather_named_items(Node* node, Scope* sc) {
-	// TODO - this is a bit ambiguous
-	// should we just accumulate these while we parse,
-	// or should we accumulate whilst we resolve
-	// do we gain anything by this seperate pass?
-	// also is this even correct - if,for should gather into local scopes?
-	if (auto fd=dynamic_cast<ExprFnDef*>(node)) {
-		sc->add_fn(fd);
-	} else if (auto sd=dynamic_cast<ExprStructDef*>(node)){
-		sc->add_struct(sd);
-	} else if (auto sd=dynamic_cast<EnumDef*>(node)){
-		sc->add_struct(sd);								// TODO make sure we differentiate that..
-	} else if (auto b=dynamic_cast<ExprBlock*>(node)) {
-		for (auto sub:b->argls) {
-			gather_named_items(sub,sc);
-		}
-	} else if (auto x=dynamic_cast<ExprIf*>(node)){
-		gather_named_items(x->cond,sc);
-		gather_named_items(x->body,sc);
-		gather_named_items(x->else_block,sc);
-	} else if (auto x=dynamic_cast<ExprFor*>(node)){
-		gather_named_items(x->init,sc);
-		gather_named_items(x->cond,sc);
-		gather_named_items(x->body,sc);
-		gather_named_items(x->incr,sc);
-		gather_named_items(x->else_block,sc);
-	} else if (auto op=dynamic_cast<ExprOp*>(node)){
-		gather_named_items(op->lhs,sc);
-		gather_named_items(op->rhs,sc);
-	}
-}
 void call_graph(Node* root,Scope* scope) {
 }
 
@@ -3965,39 +3926,6 @@ should be able to code assetless
  		.typedef // gives its' type.
  	}
 */
-
-//VResult Visitor::visit(Node* n)			{
-//	dbprintf(n->kind_str());
-//	ASSERT(0 && "missing nodes if this is ever called. must have a visitor member fn for every type");
-//}
-VResult Visitor::visit(Type* t)			{newline(depth);dbprintf("type %s",t->name_str()); return t->recurse(this);};
-VResult Visitor::visit(TypeParam* op)		{newline(depth);dbprintf("Op %s",op->name_str());return op->recurse(this);};
-VResult Visitor::visit(ExprOp* op)		{newline(depth);dbprintf("Op %s",op->name_str());return op->recurse(this);};
-VResult Visitor::visit(ExprBlock* b)		{newline(depth);dbprintf("Block %s",b->name_str());return b->recurse(this);}
-VResult Visitor::visit(ExprLiteral* l)	{newline(depth);dbprintf("Literal %s",l->name_str());return l->recurse(this);}
-VResult Visitor::visit(ExprStructDef* s)	{newline(depth);dbprintf("StructDef %s",s->name_str());return s->recurse(this);}
-VResult Visitor::visit(ExprFnDef* f)		{newline(depth);dbprintf("FnDef %s",f->name_str());return f->recurse(this);}
-VResult Visitor::visit(ExprIf* i)		{newline(depth);dbprintf("If %s",i->name_str());return i->recurse(this);}
-VResult Visitor::visit(ExprFor* f)		{newline(depth);dbprintf("For %s",f->name_str());return f->recurse(this);}
-VResult Visitor::visit(ExprIdent* i)		{newline(depth);dbprintf("Ident %s",i->name_str());return i->recurse(this);}
-VResult Visitor::visit(Variable* v)		{newline(depth);dbprintf("Variable %s",v->name_str());return v->recurse(this);}
-VResult Visitor::visit(ArgDef* a)		{newline(depth);dbprintf("ArgDef %s",a->name_str());return a->recurse(this);}
-VResult Node::recurse(Visitor* v){
-	dbprintf(this->kind_str());
-	{ASSERT(0 && "visitor recurse not defined"); return 0;};
-};
-
-VResult ExprStructDef::recurse(Visitor* v){
-	v->pre_visit(this);
-	for (auto t:typeparams)t.visit(v);
-	for (auto a:fields)a->visit(v);
-	for (auto s:structs){s->visit(v);};
-	for (auto f:functions){f->visit(v);};
-	for (auto s=this->instances;s;s=s->next_instance)s->visit(v);
-	v->post_visit(this);
-	return 0;
-}
-
 enum COMPILE_FLAGS {
 	B_AST=0x0001,B_DEFS=0x0002,B_GENERICS=0x0004, B_TYPES=0x0008,B_LLVM=0x0010,B_EXECUTABLE=0x0020,B_RUN=0x0040,B_VERBOSE=0x0080
 };
@@ -4007,11 +3935,9 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 
 	auto node=parse_block(src,0,SEMICOLON,nullptr);
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
-	Visitor v;
 	if (flags & B_AST){
 		node->dump(0);
 	}
-//	gather_named_items(node,&global);
 	
 	node->verify();
 	node->resolve(&global,nullptr,0);
