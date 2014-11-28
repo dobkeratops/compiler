@@ -434,6 +434,11 @@ struct Type : Expr{
 	bool	is_register()const	{return !is_complex();}
 	bool	is_complex()const;
 	bool	is_struct()const;
+	
+	Name array_size()const{
+		ASSERT(this->sub);
+		return this->sub->next->name;
+	}
 //	bool	is_ptr_to(const Type* other){return ((this->type==PTR) && this->sub->eq(other));}
 //	bool	is_void_ptr()const	{if (this->type==VOIDPTR)return true;if(this->type==PTR && this->sub){if(this->type->sub==VOID) return true;}return false;};
 	

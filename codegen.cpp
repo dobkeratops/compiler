@@ -7,6 +7,7 @@ extern bool is_operator(Name tok);
 extern bool is_ident(Name tok);
 extern bool is_type(Name tok);
 void write_reg(CodeGen& cg, RegisterName dst );
+void write_struct_name(CodeGen& cg, RegisterName dst ){write_reg(cg,dst);}
 void write_type(CodeGen& cg, CgValue& lv );
 void write_type(CodeGen& cg, const Type* t, bool is_ref=false);
 void write_function_type(CodeGen& cg,ExprFnDef* fn_node);
@@ -33,9 +34,10 @@ void write_store(CodeGen& cg, RegisterName reg, Type* type, RegisterName addr){
 //		fprintf(ofp,"\tstore  %s %%%s, %s* %%%s, align 4\n",get_llvm_type_str(type->name), str(reg),get_llvm_type_str(type->name),str(addr));
 }
 void write_global(CodeGen& cg, Name n){
-	fprintf(cg.ofp," @%s",str(n));
+	fprintf(cg.ofp,"@%s ",str(n));
 }
-
+void ins_begin(CodeGen& cg){fprintf(cg.ofp,"\t");}
+void ins_end(CodeGen& cg){fprintf(cg.ofp,"\n");}
 
 struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
 	// TODO: this should be a tagged-union?
@@ -129,24 +131,29 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			else if (!reg) reg=next_reg_name(&cg.next_reg);
 			
 			if (auto lit=dynamic_cast<ExprLiteral*>(val)){
+				ins_begin(cg);
+				write_reg(cg,reg);
 				if (lit->type()->name==INT){
-					fprintf(cg.ofp,"\t%%%s = or i32 0,",str(reg));  this->write_literal(cg,lit); fprintf(ofp,"\n");
+					fprintf(cg.ofp,"= or i32 0,");  this->write_literal(cg,lit);
 				} else if(lit->type()->name==FLOAT){
 					// todo, i guess we're goint to have t make a global constants table
-					fprintf(cg.ofp,"\t%%%s = fadd float 0.0, ",str(reg));  this->write_literal(cg,lit); fprintf(cg.ofp,"\n");
+					fprintf(cg.ofp,"= fadd float 0.0, ");  this->write_literal(cg,lit);
 				} else if (lit->type()->name==STR){
-					fprintf(cg.ofp,"\t%%%s =  getelementptr inbounds [%d x i8]* @.%s, i32 0, i32 0 \n", str(reg),lit->llvm_strlen, getString(lit->name));
+					fprintf(cg.ofp,"=  getelementptr inbounds [%d x i8]* @%s, i32 0, i32 0 ",lit->llvm_strlen, getString(lit->name));
 					ASSERT(lit->llvm_strlen);
 				} else {
-					fprintf(cg.ofp,";\tERROR literal type not handled %s\n",str(lit->name));
+					error(lit,"literal type not handled yet");
 				}
+				ins_end(cg);
 				// todo: string literal, vector literals, bit formats
 			}
 			else if (auto fp=dynamic_cast<ExprFnDef*>(val)){
-				fprintf(cg.ofp,"\t%%%s = load ", str(reg));
+				ins_begin(cg); write_reg(cg,reg);
+				fprintf(cg.ofp," = load ");
 				// function type..
 				write_type(cg,this->type,false);
-				fprintf(cg.ofp,"* @%s.ptr\n",str(fp->get_mangled_name()));
+				fprintf(cg.ofp,"* @%s.ptr",str(fp->get_mangled_name()));
+				ins_end(cg);
 			}
 			else if (auto v=dynamic_cast<Variable*>(val)){
 //				fprintf(ofp,"\t%%%s = load ", str(reg));
@@ -161,9 +168,11 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		if ((bool)addr) {
 			if (force_regname){reg=force_regname;}
 			else if (!reg) reg=next_reg_name(&cg.next_reg);
-			fprintf(cg.ofp,"\t%%%s = load ",str(reg));
+			ins_begin(cg); write_reg(cg,reg);
+			fprintf(cg.ofp,"= load ");
 			write_type(cg, type, addr!=0);// an extra pointer level if its' a reference
-			fprintf(cg.ofp," %%%s\n",str(addr));
+			write_reg(cg,addr);
+			ins_end(cg);
 			addr=0;
 			return reg;
 		}
@@ -184,7 +193,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 				break;
 				//					getelementptr inbounds ([21 x i8]* @.str3, i32 0, i32 0)
 			case T_CONST_STRING:
-				fprintf(ofp," getelementptr inbounds([%d x i8]* @.%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
+				fprintf(ofp," getelementptr inbounds([%d x i8]* @%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
 				break;
 			default:
 				fprintf(ofp," @TODO_LITERAL_FORMAT %s", getString(lit->name));
@@ -194,7 +203,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	void write_operand(CodeGen& cg){
 		auto ofp=cg.ofp;
 		if (reg!=0){
-			fprintf(ofp,"%%%s ",str(reg));
+			write_reg(cg,reg);
 			return;
 		} else if (val){
 			if (auto lit=dynamic_cast<ExprLiteral*>(val)) {
@@ -225,12 +234,14 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		if (elem>=0){
 			auto srcreg=valreg;
 			auto newreg=next_reg_name(&cg.next_reg);
-			fprintf(ofp,"\t"); write_reg(cg,newreg); fprintf(ofp," = insertelement ");
+			ins_begin(cg);
+			write_reg(cg,newreg); fprintf(ofp," = insertelement ");
 			write_type(cg,this->type,false);write_reg(cg,reg); fprintf(ofp,",");
 			auto elem_t=this->type->get_elem(elem);
 			write_type(cg,elem_t);fprintf(ofp," ");
 			write_reg(cg,valreg);
-			fprintf(ofp,", i32 %d\n", this->elem);
+			fprintf(ofp,", i32 %d", this->elem);
+			ins_end(cg);
 			this->reg=newreg;
 			// elem remains - this value has been mutated.
 			// TODO, i think this would be much more elegant to return a new CgValue.
@@ -322,9 +333,7 @@ void write_type(CodeGen& cg, const Type* t, bool ref) {
 //		dbprintf("THIS IS SUSPECT, REF ISn'T NEEDED TWICE");
 		write_type(cg,t->sub,false); fprintf(ofp,"*");
 	}else if (t->is_array()) {
-		fprintf(ofp,"[");
-		fprintf(ofp, "%s",str(t->sub->next->name));
-		fprintf(ofp," x ");
+		fprintf(ofp,"[ %s x ",str(t->array_size())); //sub->next->name));
 		write_type(cg,t->sub,0); // TODO: assert its a numeric constant
 		fprintf(ofp,"]"/*%s,ref?"*":""*/);
 	}
@@ -340,7 +349,7 @@ void write_type(CodeGen& cg, const Type* t, bool ref) {
 		if (!sd) {
 			error(t->m_origin?t->m_origin:t,"struct %s not resolved\n",str(t->name));
 		}
-		if (sd->name) fprintf(ofp, "%%%s",str(sd->get_mangled_name()));
+		if (sd->name) write_struct_name(cg, sd->get_mangled_name());
 		else {
 			// LLVM does allow listing an anonymous struct
 			fprintf(ofp,"{");
@@ -371,26 +380,27 @@ void write_type(CodeGen& cg, const Type* t, bool ref) {
 void write_instruction_sub(CodeGen& cg, Name opname,Type* type,  CgValue dst,CgValue src1){
 //	ASSERT(dst.is_reg());
 	const LLVMOp* op=get_op_llvm(opname,type?type->name:VOID);
-	fprintf(cg.ofp,"\t"); dst.write_operand(cg);
+	dst.write_operand(cg);
 	fprintf(cg.ofp,"= %s ", op?op->op_signed:str(opname));
 	if (is_comparison(opname))
 		write_type(cg,src1);
 	else{
 		write_type(cg,type,false);
 	}
-	
 	src1.write_operand(cg);
 }
 void write_instruction(CodeGen& cg, Name opname,Type* type,  CgValue dst,CgValue src1){
+	ins_begin(cg);
 	write_instruction_sub(cg,opname,type,dst,src1);
-	fprintf(cg.ofp,"\n");
+	ins_end(cg);
 }
 void write_instruction(CodeGen& cg, Name opname,Type* type,  CgValue dst,CgValue src1,CgValue src2){
 	ASSERT(type!=0);
+	ins_begin(cg);
 	write_instruction_sub(cg,opname,type,dst,src1);
 	fprintf(cg.ofp,",");
 	src2.write_operand(cg);
-	fprintf(cg.ofp,"\n");
+	ins_end(cg);
 }
 
 void dump_locals(Scope* s){
@@ -411,7 +421,8 @@ void compile_struct_def(CodeGen& cg, ExprStructDef* st, Scope* sc) {
 			compile_struct_def(cg, ins, sc);
 		}
 	} else {
-		fprintf(cg.ofp,"%%%s = type {", str(st->get_mangled_name()));
+		write_struct_name(cg,st->get_mangled_name());
+		fprintf(cg.ofp," = type {");
 		// todo: properly wrap translations to LLVM types.
 		int i=0; for (auto fi: st->fields){
 			if (i++)fprintf(cg.ofp,",");
@@ -424,9 +435,11 @@ void compile_struct_def(CodeGen& cg, ExprStructDef* st, Scope* sc) {
 
 CgValue alloca_type(CodeGen& cg, Expr* holder, Type* t) {
 	RegisterName r= holder?holder->get_reg(t->name, &cg.next_reg, false):next_reg_name(&cg.next_reg);
-	fprintf(cg.ofp,"\t"); write_reg(cg,r);
+	ins_begin(cg);
+	write_reg(cg,r);
 	fprintf(cg.ofp," = alloca " ); write_type(cg,t,false);
-	fprintf(cg.ofp,", align %zu\n", t->alignment());
+	fprintf(cg.ofp,", align %zu", t->alignment());
+	ins_end(cg);
 	return CgValue(0,t, r);
 }
 
@@ -600,9 +613,9 @@ CgValue write_cast(CodeGen& cg,CgValue dst, CgValue&lhsv, Expr* rhse){
 	// todo rename 'src', 'dst' to avoid blah as blah confusion vs C cast (type)(expr)
 	auto ofp=cg.ofp;
 	lhsv.load(cg);
-	auto rhst=rhse->type();
 	auto lhst=lhsv.type;
-	fprintf(ofp,"\t");
+	auto rhst=rhse->type();
+	ins_begin(cg);
 	write_reg(cg, dst.reg);fprintf(ofp," = ");
 
 	if (lhst->is_int() && rhst->is_float()){
@@ -613,12 +626,6 @@ CgValue write_cast(CodeGen& cg,CgValue dst, CgValue&lhsv, Expr* rhse){
 	}
 	else if (rhst->is_pointer()){
 		fprintf(ofp,"bitcast ");
-		write_type(cg,lhst,0);
-		write_reg(cg,lhsv.reg);
-		fprintf(ofp," to ");
-		write_type(cg,rhst,0);
-		fprintf(ofp,"\n");
-		return dst;
 	}
 	else if (lhst->size()>rhst->size()){
 		if (lhst->is_int() && rhst->is_int()){
@@ -633,8 +640,13 @@ CgValue write_cast(CodeGen& cg,CgValue dst, CgValue&lhsv, Expr* rhse){
 	}else{
 		fprintf(ofp,"fptrunc ");
 	}
-
+	write_type(cg,lhsv.type,0);
+	write_reg(cg,lhsv.reg);
+	fprintf(ofp," to ");
+	write_type(cg,rhst,0);
+	ins_end(cg);
 	return dst;
+
 }
 
 CgValue compile_node(CodeGen& cg,Expr *n, ExprFnDef *curr_fn,Scope *sc){
@@ -787,11 +799,14 @@ CgValue compile_node(CodeGen& cg,Expr *n, ExprFnDef *curr_fn,Scope *sc){
 			if (!n->regname){n->regname=expr.reg;}
 			
 			index.load(cg,0);
-			fprintf(cg.ofp,"\t%%%s = getelementptr inbounds ",str(dst));
+			ins_begin(cg);
+			write_reg(cg,dst);
+			fprintf(cg.ofp,"= getelementptr inbounds ");
 			write_type(cg,array_type,true);//!expr.reg);
-			fprintf(cg.ofp," %%%s,i32 0, i32 ",str(expr.reg));//%%%d\n",getString(expr.reg),
+			write_reg(cg,expr.reg);
+			fprintf(cg.ofp,",i32 0, i32 ");//%%%d\n",getString(expr.reg),
 			index.write_operand(cg);
-			fprintf(cg.ofp,"\n");
+			ins_end(cg);
 			return CgValue(0,inner_type,dst);
 		}
 		//[3] FUNCTION CALL
@@ -852,7 +867,7 @@ CgValue compile_node(CodeGen& cg,Expr *n, ExprFnDef *curr_fn,Scope *sc){
 			else
 				write_function_type(cg,e->call_expr->type());
 			if (!indirect_call) {
-				fprintf(ofp,"@%s",getString(call_fn->get_mangled_name()));
+				write_global(cg,call_fn->get_mangled_name());
 			} else {
 				write_reg(cg,indirect_call);
 			}
@@ -916,7 +931,7 @@ void write_function_signature(CodeGen& cg,ExprFnDef* fn_node, EmitFnMode mode){
 	fprintf(ofp,mode==EmitDefinition?"define ":mode==EmitDeclaration?"declare ":" ");
 	write_type(cg,rtype,false);
 	if (mode!=EmitType)
-		fprintf(ofp," @%s ",getString(fn_node->get_mangled_name()));
+		write_global(cg,fn_node->get_mangled_name());
 	fprintf(ofp,"(");
 	int inter=0;
 	for (auto a:fn_node->args){
@@ -1123,7 +1138,8 @@ void output_code(FILE* ofp, Scope* scope) {
 		const char* name=getString(l->name);
 			char buffer[512];
 			l->llvm_strlen=translate_llvm_string_constant(buffer,512, l->as_str())+1;
-			fprintf(ofp,"@.%s = private unnamed_addr constant [%d x i8] c\"%s\\00\"\n", getString(l->name), l->llvm_strlen, buffer);
+			write_global(cg, l->name);
+			fprintf(ofp,"= private unnamed_addr constant [%d x i8] c\"%s\\00\"\n", l->llvm_strlen, buffer);
 		}
 	}
 	for (auto sub=scope->child; sub; sub=sub->next) {
