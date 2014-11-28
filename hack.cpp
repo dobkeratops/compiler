@@ -8,6 +8,7 @@ const char* g_filename=0;
 
 inline void dbprintf_varscope(const char*,...){}
 inline void dbprintf_generic(const char*,...){}
+inline void dbprintf_lambdas(const char*,...){}
 const int g_debug_get_instance=false;
 struct VTablePtrs {
 	void* expr_op;
@@ -58,7 +59,7 @@ void verify_type(const Node* p){
 	lazy_cache_vtable_ptrs();
 	ASSERT(g_vtable_ptrs.type==*(void**)p)
 }
-void verify_all_dummy(){g_pRoot->verify();}
+void verify_all_sub(){g_pRoot->verify();}
 void dbprintf(const char* str, ... )
 {
 	char tmp[1024];
@@ -208,7 +209,7 @@ const char* g_token_str[]={
 	"ptr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
 	"print___","fn","struct","class","trait","virtual","static","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
-	"let","set","var",
+	"let","var",
 	"const","mut","volatile",
 	"while","if","else","do","for","in","return","break",
 	"(",")",
@@ -238,11 +239,11 @@ const char* g_token_str[]={
 
 int g_tok_info[]={
 	0,
-	0,0,0,0,0,0,0,0,0,0,0,0,// int types
-	0,0,0,0,0,0,0,0,0,0,	// float types
+	0,0,0,0,0,0,0,0,0,0,0,0,0,// int types
+	0,0,0,0,0,0,0,0,0,0,0,	// float types
 	0,0,0,0,0,0,			// type modifiers
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
-	0,0,0,			// let,set,var
+	0,0,			// let,var
 	0,0,0,			// modifiers const,mut,volatile
 	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
 	0,0, //( )
@@ -529,7 +530,7 @@ ResolvedType propogate_type(int flags, Expr *n, Type*& a,Type*& b) {
 	propogate_type(flags,(const Node*)n,n->type_ref(),b);
 	return propogate_type(flags,(const Node*)n,n->type_ref(),a);
 }
-ResolvedType propogate_type_fwd(int flags,const Node* n, const Type*& a,Type*& b) {
+ResolvedType propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b) {
 	verify(a,b);
 	if (!(a || b))
 		return ResolvedType(0,ResolvedType::INCOMPLETE);
@@ -711,15 +712,16 @@ void ExprBlock::dump(int depth) const {
 
 void ExprOp::dump(int depth) const {
 	if (!this) return;
-	newline(depth);
+	newline(depth);dbprintf("(");
 	auto id=this->name;
-	if (is_prefix(id))dbprintf("prefix");
+	if (lhs) {lhs->dump(depth+1);}
+	
+	newline(depth);if (is_prefix(id))dbprintf("prefix");
 	else if (lhs && rhs)dbprintf("infix");
 	else dbprintf("postfix");print_tok(id);
 
-	if (get_type()) {dbprintf(":");get_type()->dump(-1);};dbprintf("(");
-	if (lhs) {lhs->dump(depth+1);}else{dbprintf("(none)");}
-	if (rhs) {rhs->dump(depth+1);}else{dbprintf("(none)");}
+	if (get_type()) {dbprintf(":");get_type()->dump(-1);};
+	if (rhs) {rhs->dump(depth+1);}
 	newline(depth);dbprintf(")");
 }
 
@@ -933,7 +935,7 @@ void Type::dump(int depth)const{
 	newline(depth);dump_sub();
 }
 Type::Type(ExprStructDef* sd)
-{	struct_def=sd; name=sd->get_mangled_name();sub=0;next=0;
+{	struct_def=sd; name=sd->name; sub=0; next=0;
 	marker=123456;
 }
 
@@ -1105,7 +1107,9 @@ void ExprFnDef::dump(int ind) const {
 	if (variadic) dbprintf(args.size()?",...":"...");
 	dbprintf(")");
 	if (this->ret_type) {dbprintf("->");this->ret_type->dump(-1);};
-	if (ind && this->fn_type) {newline(ind);this->fn_type->dump(-1);newline(ind);}
+	if (ind && this->fn_type) {
+		newline(ind);dbprintf(":");this->fn_type->dump(-1);newline(ind);
+	}
 	dbprintf(" {");
 	if (this->body) {
 		this->body->dump(ind);
@@ -1611,7 +1615,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 		if (flags & 1){
 		no_match_error:
 			auto best=ff.candidates.back();
-			error_begin(callsite,(name!=PLACEHOLDER)?"unmatched call":"possible calls",str(name),ff.candidates.size());
+			error_begin(callsite,(name!=PLACEHOLDER)?"unmatched call %s":"possible calls for %s",str(name));
 			// For the best match, say what you'd have to do to fix, then show all matches
 			if (args.size()<best.f->min_args()){info(best.f,"maybe requires %d args, %d given",best.f->min_args(),args.size());}
 			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
@@ -1742,16 +1746,18 @@ Variable* Scope::find_variable_rec(Name name){
 Variable* Scope::try_capture_var(Name name) {
 	if (auto ofn=dynamic_cast<ExprFnDef*>(this->owner_fn)){
 		auto v=capture_from->find_variable_rec(name);
-		auto cp=ofn->get_or_create_capture();
-		if (v->capture_in==0){
-			v->capture_in=cp; v->next_of_capture=cp->vars; cp->vars=v;
-			dbprintf_varscope("%s captured by %s from %s\n",str(name),this->name(),capture_from->name());
-			return v;
-		}
-		else if (v->capture_in!=cp) {
-			dbprintf_varscope("var %s already captured by %s, coalesce with %s\n",str(name),str(v->capture_in->capture_by->name),this->name());
-			cp->coalesce_with(v->capture_in);
+		if (v) {
+			auto cp=ofn->get_or_create_capture();
+			if (v->capture_in==0){
+				v->capture_in=cp; v->next_of_capture=cp->vars; cp->vars=v;
+				dbprintf_varscope("%s captured by %s from %s\n",str(name),this->name(),capture_from->name());
+				return v;
+			}
+			else if (v->capture_in!=cp) {
+				dbprintf_varscope("var %s already captured by %s, coalesce with %s\n",str(name),str(v->capture_in->capture_by->name),this->name());
+				cp->coalesce_with(v->capture_in);
 //			error(v,ofn,"can't capture variable twice yet- TODO, coalesce capture blocks");
+			}
 		}
 	}
 	return nullptr;// we can't capture.
@@ -1899,19 +1905,21 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 //		dbprintf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);dbprintf("\n");
 	
 		// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
+		verify_all();
 		if (t) {
 			t=t->deref_all();
 			// now we have the elem..
 			verify_expr_op(this);
 			verify_expr_ident(rhs);
 			ASSERT(rhs->as_ident());
-			if (auto st=sc->find_struct(t)){
+			if (auto st=sc->find_struct_of(lhs)){
 				if (auto f=st->find_field(rhs)){
 					ret=f->type();
 					return propogate_type(flags,this, ret,this->type_ref());
 				}
 			}
 		}
+		verify_all();
 		return ResolvedType(this->type(),ResolvedType::INCOMPLETE);
 	}
 	else if (op_ident==ADDR){  //result=&lhs
@@ -2057,6 +2065,9 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 		if (fn_type) {
 			// propogate types we have into argument expressions
 			for (auto a=fn_type->fn_args(); arg_index<argls.size() && a; arg_index++,a=a->next)  {
+				if (a->name==FN){
+					dbprintf_lambdas("resolving fn type into function argument %s\n", argls[arg_index]->name_str());
+				}
 				argls[arg_index]->resolve(sc,a,flags);
 			}
 			for (;arg_index<argls.size(); arg_index++){ // variadic args.
@@ -2327,6 +2338,25 @@ ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 //inner-function: 'definer_scope' has capture_from set - just take it.
 ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int flags) {
 	verify_all();
+	
+	// propogate given arguments eg polymorphic lambda..
+	if (desired){
+		if (desired->name!=FN){
+			error(this,desired,"creating lambda function,but trying to infer non function type\n");
+		}
+		// fn[(args..),ret]
+		if (auto args_ret=desired->sub){
+			dbprintf_lambdas("infering polymorphic lambda types");
+			int i=0;
+			for (auto desired_arg=args_ret->sub; desired_arg; desired_arg=desired_arg->next,i++){
+				auto arg=this->args[i];
+				propogate_type_fwd(flags, arg, (const Type*)desired_arg,arg->type_ref() );
+			}
+			auto desired_ret=args_ret->next;
+			propogate_type_fwd(flags,this,desired_ret, this->ret_type);
+			// inference between the whole function type backwards is done via ret_type
+		}
+	}
 
 	definer_scope->add_fn(this);
 	auto sc=definer_scope->make_inner_scope(&this->scope,this);
@@ -2738,6 +2768,7 @@ LLVMType Expr::get_type_llvm() const
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	// shunting yard expression parser+dispatch to other contexts
 	ExprBlock *node=new ExprBlock(src.pos); node->call_expr=op;
+	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
 	vector<SrcOp> operators;
 	vector<Expr*> operands;
@@ -2833,6 +2864,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 				if (was_operand) tok=get_infix_operator(tok);
 				else tok=get_prefix_operator(tok);
 
+				verify_all();
 				while (operators.size()>0) {
 					int prev_precedence=precedence(operators.back().op);
 					int prec=precedence(tok);
@@ -2841,6 +2873,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 						break;
 					pop_operator_call(operators,operands);
 				}
+				verify_all();
 				if (tok==AS){
 					Type *t=parse_type(src,0,nullptr);
 					if (!was_operand) error(t,"as must follow operand");
@@ -3562,7 +3595,10 @@ ExprFnDef* parse_fn(TokenStream&src) {
 			parse_typeparams(src,fndef->typeparams);
 		}
 		tok=src.expect(OPEN_PAREN);
-	} else fndef->name=NONE;
+	} else {
+		char tmp[512]; sprintf(tmp,"lambda_fn_%d",src.pos.line);
+		fndef->name=getStringIndex(tmp);
+	}
 	// read function arguments
 	while ((tok=src.peek_tok())!=NONE) {
 		if (tok==ELIPSIS){
@@ -3670,8 +3706,7 @@ const char* g_TestProg=
 //	"fn F[F,O,X,Y](o:O, x:X,y:Y){ o.vtable.F(o,x,y)   };"
 
 	"fn main(argc:int,argv:**char)->int{  \n"
-	"	printf(\"HELLO FROM PET LANGUAGE\n\");\n"
-"	t1:=argc<0 && argc>1;\n"
+	"	t1:=argc<0 && argc>1;\n"
 	"	test_result:=if argc==0 || argc==1 {14} else {13} ;\n"
 	"	xs=:array[int,512];  \n"
 //	"	fp:=foo;\n"
@@ -3695,7 +3730,7 @@ const char* g_TestProg=
 	"   x:=if argc<2{1}else{2};  \n"
 	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\\n\",i,j,x);}else{printf(\"loop exit fine\\n\");}  \n"
 	"	xs1:=xs[1]; xs2:=xs[2];  \n"
-	"	printf(\"Hello From My Language %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
+	"	printf(\"Hello World %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
 	"	0  \n"
 	"}  \n\0";
 const char* g_TestProg3=
@@ -3728,7 +3763,7 @@ const char* g_TestProg2=
 "fn printf(s:str,...)->int;\n"
 "	fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
 "	fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
-"	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0}\n"
+"	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0};\n"
 "	struct FooStruct{x:int,y:int};"
 "	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
 //"	struct Foo{x:int,y:int}"
@@ -3767,6 +3802,7 @@ const char* g_TestProg2=
 "		printf(\"foostruct int val recast %d; foostruct raw value %d %d\n\",*py,fs.y,pfs.y);\n"
 "		fp(2);fp(x);fp(xs[1]);		\n"
 "		take_ptr(fp);\n"
+"		take_ptr(fn(x){printf(\"hello from anon function %d\\n\",x);});\n"
 "		bar(1,2,3);	\n"
 "	,retval}\n"
 
@@ -3810,7 +3846,7 @@ void filename_change_ext(char* dst,const char* src,const char* new_ext){
 // we'd like JSON but the fly in the ointment is : vs = with : used for types.
 // if '=' is used for field initializers we only have one grammar everywhere.
 // could we hack a rule.. "if a block only contains ident:expr,.. it's a struct literal"
-{}     // statement
+{}     // single statement
 { ; ; }  // compound statement
 { , , } // ANON struct literal
 [ , , , ] // 'slice' literal: *T,size. if  types differ, at compile time make a union?
@@ -3884,7 +3920,6 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	TextInput	src(buffer,filename);
 
 	auto node=parse_block(src,0,SEMICOLON,nullptr);
-	g_pRoot=node;
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
 	Visitor v;
 	if (flags & B_AST){
@@ -3972,6 +4007,7 @@ struct Union{
 
 int main(int argc, const char** argv) {
 	
+//	dbprintf("precedences: ->%d *%d +%d &%d \n", precedence(ARROW),precedence(MUL),precedence(ADD),precedence(AND));
 //	compile_source_file("~/hack/test_hack/prog.rs",0xf);
 	int options=0,given_opts=0;
 	for (auto i=1; i<argc; i++) {
@@ -4008,7 +4044,7 @@ int main(int argc, const char** argv) {
 		auto ret0=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_RUN);
 		auto ret1=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		printf("bigger test, all features\n");
-		auto ret2=compile_source(g_TestProg,"g_TestProg","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
+		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_RUN);
 	}
 }
 

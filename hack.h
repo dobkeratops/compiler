@@ -38,6 +38,7 @@ struct SrcPos {
 struct Span {
 	SrcPos start,end;
 };
+extern void verify_all_sub();
 #define verify_all()
 struct Node;
 struct Name;
@@ -47,6 +48,8 @@ extern void error(const Node*,const Node*,const char*,...);
 void error(const Node* n,const Scope* s, const char* str, ... );
 extern void error(const Node*,const char*,...);
 extern void error(const char*,...);
+extern void error_begin(const Node* n, const char* str, ... );
+extern void error_end(const Node* n);
 extern bool is_comparison(Name n);
 int index_of(Name n);
 // todo: seperate Parser.
@@ -102,7 +105,7 @@ enum Token {
 	PTR,REF,NUM_RAW_TYPES=REF,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
 	
 	PRINT,FN,STRUCT,CLASS,TRAIT,VIRTUAL,STATIC,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,THIS,SELF,SUPER,VTABLEOF,CLOSURE,
-	LET,SET,VAR,
+	LET,VAR,
 	CONST,MUT,VOLATILE,
 	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
 	// delimiters
@@ -676,12 +679,13 @@ public:
 	Variable*	create_variable(Node* n, Name name,VarKind k);
 	Variable*	get_or_create_scope_variable(Node* creator,Name name,VarKind k);
 	ExprStructDef*	try_find_struct(const Type* t){return this->find_struct_sub(this,t);}
-	ExprStructDef*	find_struct(const Type* t){
+	ExprStructDef*	find_struct_of(const Expr* srcloc){
+		auto t=srcloc->type();
 		auto sname=t->deref_all();
-		if (!sname->is_struct()) error(t,this,"expected struct, got %s",sname->name_str());
+		if (!sname->is_struct()) error(srcloc,t,"expected struct, got %s",sname->name_str());
 		auto r=try_find_struct(sname);
 		if (!r)
-			error(t,"cant find struct %s", sname->name_str());
+			error(srcloc,"cant find struct %s", sname->name_str());
 		return r;
 	}//original scope because typarams might use it.
 	Scope*			parent_within_fn(){if (!parent) return nullptr; if (parent->owner_fn!=this->owner_fn) return nullptr; return parent;}

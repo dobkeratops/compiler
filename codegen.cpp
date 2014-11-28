@@ -32,7 +32,7 @@ void write_store(FILE* ofp, RegisterName reg, Type* type, RegisterName addr){
 //		fprintf(ofp,"\tstore  %s %%%s, %s* %%%s, align 4\n",get_llvm_type_str(type->name), str(reg),get_llvm_type_str(type->name),str(addr));
 }
 
-struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
+struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
 	// TODO: this should be a tagged-union?
 	// these values aren't persistent so it doesn't matter too much.
 	RegisterName reg;
@@ -61,6 +61,7 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 		this->type=n->type();
 	}
 	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
+//	bool is_fn()const{return reg==0 && val==0 && type->name==FN && val!=0 && val->as_fn_def()!=0;}
 	bool is_struct_elem()const{return elem>=0;}
 	bool is_valid()const{return val!=0||reg!=0;}
 	bool is_literal()const{return dynamic_cast<ExprLiteral*>(val)!=0;}
@@ -129,6 +130,7 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 					fprintf(ofp,"\t%%%s = fadd float 0.0, ",str(reg));  this->write_literal(ofp,lit); fprintf(ofp,"\n");
 				} else if (lit->type()->name==STR){
 					fprintf(ofp,"\t%%%s =  getelementptr inbounds [%d x i8]* @.%s, i32 0, i32 0 \n", str(reg),lit->llvm_strlen, getString(lit->name));
+					ASSERT(lit->llvm_strlen);
 				} else {
 					fprintf(ofp,";\tERROR literal type not handled %s\n",str(lit->name));
 				}
@@ -138,7 +140,7 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 				fprintf(ofp,"\t%%%s = load ", str(reg));
 				// function type..
 				write_type(ofp,this->type,false);
-				fprintf(ofp,"* @%s.ptr\n",str(val->get_mangled_name()));
+				fprintf(ofp,"* @%s.ptr\n",str(fp->get_mangled_name()));
 			}
 			else if (auto v=dynamic_cast<Variable*>(val)){
 //				fprintf(ofp,"\t%%%s = load ", str(reg));
@@ -239,7 +241,9 @@ struct CgValue {	// lazy-acess abstraction for value-or-address. So we can do a.
 			fprintf(ofp,";ERROR %s:%d:\n;",__FILE__,__LINE__);return CgValue();
 		}
 		ASSERT(type );
-		auto sd=type->struct_def?type->struct_def:sc->find_struct(type);
+		auto sd=type->deref_all()->struct_def;
+		if (!sd) {type->dump(-1);error(field_name,"struct not resolved\n");}
+//		auto sd=type->struct_def?type->struct_def:sc->find_struct(type);
 //		if (!sd){
 //			fprintf(ofp,"\t;%s.%s\n",type?getString(type->name):"???",getString(field_name));
 //			type->dump(-1);
@@ -790,9 +794,11 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,int* next_r
 			for (auto arg:e->argls){
 				auto reg=compile_node(ofp,arg,call_fn,sc,next_reg);
 				if (!reg.type) {
-					fprintf(ofp,"\t;ERROR no type???reg %s  %s\n", str(reg.reg), str(reg.addr));
-					arg->dump(0);
+					error_begin(arg,"arg type not resolved in call to %s\n", call_fn->name_str());
+//					fprintf(ofp,"\t;ERROR no type???reg %s  %s\n", str(reg.reg), str(reg.addr));
+					dbprintf("arg type=");arg->dump(-1);newline(0);
 					auto reg=compile_node(ofp,arg,call_fn,sc,next_reg);
+					error_end(arg);
 					ASSERT(reg.type);
 				}
 				auto regval=CgValue(reg.load(ofp,next_reg),reg.type);
@@ -868,10 +874,12 @@ CgValue compile_node(FILE *ofp,Expr *n, ExprFnDef *curr_fn,Scope *sc,int* next_r
 		return CgValue(li);
 	} else if (auto ifn=dynamic_cast<ExprIf*>(n)) {
 		return compile_if(ofp,ifn,curr_fn,sc,next_reg);
-	} else if (auto ifn=dynamic_cast<ExprFor*>(n)) {
-		return compile_for(ofp,ifn,curr_fn,sc,next_reg);
-	} else if (auto ift=dynamic_cast<Type*>(n)) {
-		return CgValue(0,ift,0);
+	} else if (auto nfor=dynamic_cast<ExprFor*>(n)) {
+		return compile_for(ofp,nfor,curr_fn,sc,next_reg);
+	} else if (auto nt=dynamic_cast<Type*>(n)) {
+		return CgValue(0,nt,0);
+	} else if (auto nfp=dynamic_cast<ExprFnDef*>(n)){
+		return CgValue(nfp);
 	} else{
 		fprintf(ofp,"\t;TODO: node not handled %s\n",n->kind_str());
 		return CgValue();
@@ -1083,16 +1091,12 @@ void name_mangle(char* dst, int size, const ExprStructDef* src) {
 // operand
 // lambda expression
 
-
-
 void output_code(FILE* ofp, Scope* scope) {
 	verify_all();
 
 	fprintf(ofp,";from scope %s\n;\n",scope->name());
 	// output all inner items that outer stuff depends on..
-	for (auto sub=scope->child; sub; sub=sub->next) {
-		output_code(ofp,sub);
-	}
+	// literals first, because we setup llvm_strlen. TODO , more solid design pls.
 	for (auto l=scope->literals; l; l=l->next_of_scope) {
 		if (l->type_id==T_CONST_STRING){
 		const char* name=getString(l->name);
@@ -1100,6 +1104,9 @@ void output_code(FILE* ofp, Scope* scope) {
 			l->llvm_strlen=translate_llvm_string_constant(buffer,512, l->as_str())+1;
 			fprintf(ofp,"@.%s = private unnamed_addr constant [%d x i8] c\"%s\\00\"\n", getString(l->name), l->llvm_strlen, buffer);
 		}
+	}
+	for (auto sub=scope->child; sub; sub=sub->next) {
+		output_code(ofp,sub);
 	}
 	for (auto n=scope->named_items;n;n=n->next) {
 		for (auto s=n->structs; s;s=s->next_of_name) {

@@ -1,4 +1,4 @@
-fn lerp(a,b,f)->float{(b-a)*f+a};
+fn lerp(a,b,f)->float{a+(b-a)*f};
 fn foo1(a:*char)->void;
 
 fn printf(s:str,...)->int;
@@ -19,13 +19,17 @@ struct Mesh {
 fn something(f:*Foo){
 	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz)
 }
-fn something_int(f:int){
-	printf("something overloaded for int")
+fn something_int(x:int){
+	printf("something overloaded for int,given %d\n",x);
+}
+fn call_ptr(f:(int)->void){
+	f(5);
 }
 
 fn main(argc:int,argv:**char)->int{
 	x:=0;
-
+	call_ptr(something_int);
+	call_ptr(fn(lambda_arg){printf("hello from lambda %d\n",lambda_arg);});
 	retval:=0;
 	something_int(retval);
 	acc:=retval;

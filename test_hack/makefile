@@ -1,3 +1,3 @@
 debug: prog.rs
 	make hack -C ../
-	../hack prog.rs -r
+	../hack prog.rs -tr
