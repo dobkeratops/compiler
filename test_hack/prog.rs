@@ -29,7 +29,7 @@ fn call_ptr(f:(int)->void){
 fn main(argc:int,argv:**char)->int{
 	x:=0;
 	call_ptr(something_int);
-	call_ptr(fn(lambda_arg){printf("hello from lambda %d\n",lambda_arg);});
+	call_ptr(|lambda_arg|{printf("hello from lambda %d\n",lambda_arg);});
 	retval:=0;
 	something_int(retval);
 	acc:=retval;

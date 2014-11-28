@@ -9,8 +9,9 @@ void name_mangle_append_scope(char* buffer, int size, const Scope* s);
 char* name_mangle_append_name(char* buffer, int size, Name n);
 
 class CgValue;
-class CodeGen {
-	FILE* ofp;
-	RegisterName next_reg;
 
+class CodeGen {
+public:
+	FILE* ofp;
+	int next_reg;
 };

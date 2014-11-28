@@ -1125,9 +1125,12 @@ void ExprFnDef::dump(int ind) const {
 
 Expr* ExprFnDef::get_return_value() const{
 	if (this->body){
-		if (this->body->argls.size()>0){
-			return this->body->argls.back();
+		if (auto b=dynamic_cast<ExprBlock*>(this->body)){
+			if (b->argls.size()>0){
+				return b->argls.back();
+			}
 		}
+		else return this->body;
 	}
 	return 0;
 }
@@ -2683,7 +2686,8 @@ void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
 typedef TextInput TokenStream;
 
 Expr* parse_lisp(TokenStream& src);
-ExprFnDef* parse_fn(TokenStream&src);
+ExprFnDef* parse_fn(TokenStream&src);	// eg fn foo()
+ExprFnDef* parse_closure(TokenStream&src);//eg |x|
 ExprFor* parse_for(TokenStream&src);
 ExprIf* parse_if(TokenStream&src);
 TypeDef* parse_typedef(TokenStream&src);
@@ -2860,9 +2864,14 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		}
 		else{
 			auto tok=src.eat_tok();
+			if (!was_operand && tok==OR){
+				another_operand_so_maybe_flush(was_operand,node,operators,operands);
+				operands.push_back(parse_closure(src));
+			} else
 			if (is_operator(tok)) {
 				if (was_operand) tok=get_infix_operator(tok);
 				else tok=get_prefix_operator(tok);
+
 
 				verify_all();
 				while (operators.size()>0) {
@@ -3581,30 +3590,13 @@ void ExprFor::dump(int d) const {
 // no; crap idea.
 //
 //
-
-ExprFnDef* parse_fn(TokenStream&src) {
-	auto *fndef=new ExprFnDef(src.pos);
-	// read function name or blank
-
-	auto tok=src.eat_tok(); 
-
-	if (tok!=OPEN_PAREN) {
-		ASSERT(is_ident(tok));
-		fndef->name=tok;
-		if (src.eat_if(OPEN_BRACKET)) {
-			parse_typeparams(src,fndef->typeparams);
-		}
-		tok=src.expect(OPEN_PAREN);
-	} else {
-		char tmp[512]; sprintf(tmp,"lambda_fn_%d",src.pos.line);
-		fndef->name=getStringIndex(tmp);
-	}
-	// read function arguments
+void parse_fn_args_ret(ExprFnDef* fndef,TokenStream& src,int close){
+	Name tok;
 	while ((tok=src.peek_tok())!=NONE) {
 		if (tok==ELIPSIS){
 			fndef->variadic=true; src.eat_tok(); src.expect(CLOSE_PAREN); break;
 		}
-		if (tok==CLOSE_PAREN) {src.eat_tok();break;}
+		if (src.eat_if(close)){break;}
 		auto arg=parse_arg(src,CLOSE_PAREN);
 		fndef->args.push_back(arg);
 		src.eat_if(COMMA);
@@ -3613,15 +3605,54 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	if (src.eat_if(ARROW) || src.eat_if(COLON)) {
 		fndef->ret_type = parse_type(src, 0,fndef);
 	}
+}
+void parse_fn_body(ExprFnDef* fndef, TokenStream& src){
+	// read function arguments
 	// implicit "progn" here..
+	auto tok=src.peek_tok();
 	if (src.eat_if(OPEN_BRACE)){
 		fndef->body = parse_block(src, CLOSE_BRACE, SEMICOLON, nullptr);
-	} else {
+	} else if (tok==SEMICOLON || tok==COMMA || tok==CLOSE_BRACE ){
 		fndef->body=nullptr; // Its' just an extern prototype.
 		fndef->c_linkage=true;
+	} else{  // its' a single-expression functoin, eg lambda.
+		fndef->body=parse_expr(src);
 	}
+}
+
+ExprFnDef* parse_fn(TokenStream&src) {
+	auto *fndef=new ExprFnDef(src.pos);
+	// read function name or blank
+
+	auto tok=src.eat_tok();
+	if (tok!=OPEN_PAREN) {
+		ASSERT(is_ident(tok));
+		fndef->name=tok;
+		if (src.eat_if(OPEN_BRACKET)) {
+			parse_typeparams(src,fndef->typeparams);
+		}
+		tok=src.expect(OPEN_PAREN);
+	} else {
+		char tmp[512]; sprintf(tmp,"anon_fn_%d",src.pos.line);
+		fndef->name=getStringIndex(tmp);
+	}
+	parse_fn_args_ret(fndef,src,CLOSE_PAREN);
+	parse_fn_body(fndef,src);
 	return fndef;
 }
+ExprFnDef* parse_closure(TokenStream&src) {// eg |x|x*2
+	// we read | to get here
+	auto *fndef=new ExprFnDef(src.pos);
+	// read function name or blank
+
+	char tmp[512]; sprintf(tmp,"closure_%d",src.pos.line);
+	fndef->name=getStringIndex(tmp);
+
+	parse_fn_args_ret(fndef,src,OR);
+	parse_fn_body(fndef,src);
+	return fndef;
+}
+
 // every file is an implicitly a function aswell taking no args
 // when imported, a module inserts a call to that function.
 // that sets up global stuff for it.
@@ -3766,10 +3797,6 @@ const char* g_TestProg2=
 "	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0};\n"
 "	struct FooStruct{x:int,y:int};"
 "	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
-//"	struct Foo{x:int,y:int}"
-//"fn something(f){\n"
-//"	printf(\"f.x= %d,.y= %d,.z= %d\n\", f.vx, f.vy, f.vz);\n"
-//"}\n"
 "	fn something(f:int){\n"
 "		printf(\"somethng(int)\\n\");\n"
 "	}\n"
@@ -3802,7 +3829,7 @@ const char* g_TestProg2=
 "		printf(\"foostruct int val recast %d; foostruct raw value %d %d\n\",*py,fs.y,pfs.y);\n"
 "		fp(2);fp(x);fp(xs[1]);		\n"
 "		take_ptr(fp);\n"
-"		take_ptr(fn(x){printf(\"hello from anon function %d\\n\",x);});\n"
+"		take_ptr(|x|{printf(\"hello from anon function %d\\n\",x);});\n"
 "		bar(1,2,3);	\n"
 "	,retval}\n"
 

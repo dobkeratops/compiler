@@ -861,7 +861,7 @@ struct  ExprFnDef : ExprDef {
 	vector<ArgDef*> args;
 	bool variadic;
 	bool c_linkage=false;
-	ExprBlock* body=0;
+	Expr* body=0;
 	ExprFnDef(){};
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
 	int		get_name()const {return index(name);}
