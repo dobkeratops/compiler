@@ -3865,7 +3865,7 @@ const char* g_TestProg2=
 "		take_fn(localtest);\n"
 "		localtest(10);\n"
 "		take_fn(fn(x){printf(\"hello from anon function %d\\n\",x);});\n"
-"		take_closure(|x|{printf(\"hello from anon function %d\\n\",x);});\n"
+"		take_closure(|x|{printf(\"hello from closure function %d\\n\",x);});\n"
 "		bar(1,2,3);	\n"
 "	,retval}\n"
 "	struct FooStruct{x:int,y:int};\n"

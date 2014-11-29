@@ -21,6 +21,10 @@ Name next_reg_name(int *next_reg_index){
 	char tmp[64]; sprintf(tmp,"r%d",(*next_reg_index)++);
 	return getStringIndex(tmp);
 }
+Name next_reg(CodeGen& cg){
+	char tmp[64]; sprintf(tmp,"r%d",cg.next_reg++);
+	return getStringIndex(tmp);
+}
 Name next_reg_name(Name prefix_name, int *next_reg_index){
 	char tmp[64]; sprintf(tmp,"r%d%s",(*next_reg_index)++,str(prefix_name));
 	return getStringIndex(tmp);
@@ -28,8 +32,9 @@ Name next_reg_name(Name prefix_name, int *next_reg_index){
 void write_reg(CodeGen& cg, RegisterName reg);
 
 void ins_begin(CodeGen& cg){fprintf(cg.ofp,"\t"); cg.comma=false;}
+void write_undef(CodeGen& cg){fprintf(cg.ofp,"undef");}
 void write_ins_name(CodeGen& cg,const char* txt){fprintf(cg.ofp,"= %s ",txt);}
-void ins_begin_name(CodeGen& cg,const char* txt){ins_begin(cg);fprintf(cg.ofp,"%s ",txt);;}
+void ins_begin_name(CodeGen& cg,const char* txt){ins_begin(cg);fprintf(cg.ofp,"%s ",txt);}
 void ins_end(CodeGen& cg){fprintf(cg.ofp,"\n");}
 void write_txt(CodeGen& cg, const char* str,...){// catch all, just spit out given string
 	char tmp[1024];
@@ -64,14 +69,14 @@ void write_comma(CodeGen& cg){
 	if (cg.comma){fprintf(cg.ofp,",");}
 	cg.comma=true;
 }
-void ins_begin_reg_op(CodeGen& cg, Name reg, const char* op){
+RegisterName  ins_begin_reg_op(CodeGen& cg, RegisterName reg, const char* op){
 	if (!reg) { ins_begin_name(cg,op);}
 	else {
 		ins_begin(cg);
 		write_reg(cg,reg);
 		write_ins_name(cg,op);
 	}
-	
+	return reg;
 }
 void write_i32_lit(CodeGen& cg,int index) {
 	write_comma(cg);
@@ -82,6 +87,17 @@ void write_i32_reg(CodeGen& cg,Name reg) {
 	fprintf(cg.ofp,"i32 ");
 	write_reg(cg,reg);
 }
+RegisterName	write_extractvalue(CodeGen& cg,RegisterName dst,Type* type,RegisterName src,int index){
+	ins_begin_reg_op(cg,dst,"extractvalue");
+	write_comma(cg);
+	write_type(cg,type);
+	write_reg(cg,src);
+	write_comma(cg);
+	write_txt(cg,"%d",index);
+	ins_end(cg);
+	return dst;
+}
+
 void write_store(CodeGen& cg, RegisterName reg, Type* type, RegisterName addr){
 	ins_begin_name(cg,"store");
 	write_type(cg, type,0);
@@ -95,6 +111,9 @@ void write_global(CodeGen& cg, Name n){
 }
 void write_fn_ptr(CodeGen& cg, Name n){
 	write_txt(cg,"@%s.ptr",str(n));
+}
+void write_fn(CodeGen& cg, Name n){
+	write_txt(cg,"@%s",str(n));
 }
 void write_struct_ptr(CodeGen& cg, Name n){
 	pointer_begin(cg);
@@ -230,11 +249,30 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 				// todo: string literal, vector literals, bit formats
 			}
 			else if (auto fp=dynamic_cast<ExprFnDef*>(val)){
-				ins_begin_reg_op(cg,reg,"load");
-				// function type..
-				write_type(cg,this->type,true);
-				write_fn_ptr(cg,fp->get_mangled_name());
-				ins_end(cg);
+				if (fp->is_closure()) {
+					
+					auto r=ins_begin_reg_op(cg,next_reg(cg),"insertvalue");
+					write_comma(cg); write_type(cg, fp->fn_type); write_undef(cg);
+					write_comma(cg);
+					write_function_type(cg,fp->fn_type);
+					write_fn(cg,fp->get_mangled_name());
+					write_comma(cg);
+					write_txt(cg,"0");
+					ins_end(cg);
+					ins_begin_reg_op(cg,reg,"insertvalue");
+					write_comma(cg); write_type(cg, fp->fn_type); write_reg(cg,r);
+					write_comma(cg);
+					write_txt(cg,"i8* null");
+					write_comma(cg);
+					write_txt(cg,"1");
+					ins_end(cg);
+				} else {// raw function
+					ins_begin_reg_op(cg,reg,"load");
+					write_type(cg,this->type,true);
+					write_fn_ptr(cg,fp->get_mangled_name());
+					ins_end(cg);
+				}
+				return reg;
 			}
 			else if (auto v=dynamic_cast<Variable*>(val)){
 //				fprintf(ofp,"\t%%%s = load ", str(reg));
@@ -970,13 +1008,23 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 			
 		} else {
 			//[3.3.1] Indirect Call, Function Pointer
-			auto fptr = e->call_expr->compile(cg, sc);
-			indirect_call=fptr.load(cg);
-			ins_begin_reg_op(cg,dst,"call");
-			write_function_type(cg,e->call_expr->type());
-			write_reg(cg,indirect_call);
-			write_arg_regs(0,0);
-			ins_end(cg);
+			auto fn_obj = e->call_expr->compile(cg, sc);
+			indirect_call=fn_obj.load(cg);
+			if (fn_obj.type->is_closure()){
+				indirect_call=write_extractvalue(cg,next_reg(cg),fn_obj.type,indirect_call,0);
+				ins_begin_reg_op(cg,dst,"call");
+				write_function_type(cg,e->call_expr->type());
+				write_reg(cg,indirect_call);
+				write_arg_regs(0,0);
+				ins_end(cg);
+			} else{
+				// bare function pointer.
+				ins_begin_reg_op(cg,dst,"call");
+				write_function_type(cg,e->call_expr->type());
+				write_reg(cg,indirect_call);
+				write_arg_regs(0,0);
+				ins_end(cg);
+			}
 		}
 			// [3.3.2] Indirect Call, Closure.
 	
