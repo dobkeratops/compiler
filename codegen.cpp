@@ -180,7 +180,8 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	RegisterName load(CodeGen& cg,RegisterName force_regname=0) {
 		auto ofp=cg.ofp;
 		if (elem>=0){
-			if (this->type->is_pointer()) {
+			// todo: why not 'addr' aswell?
+			if (this->type->is_pointer() || (addr &&!reg)) {
 				write_comment(cg,"dot reg=%s addr=%s index=%d",str(reg),str(addr),elem);
 				auto sub=this->dot_sub(cg,elem);
 				return sub.load(cg);
@@ -242,6 +243,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			}
 		}
 		if ((bool)addr) {
+			ASSERT(reg==0);
 			if (force_regname){reg=force_regname;}
 			else if (!reg) reg=next_reg_name(&cg.next_reg);
 			ins_begin_reg_op(cg,reg,"load");
@@ -333,19 +335,9 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		return valreg;
 	}
 	CgValue dot(CodeGen& cg,const Node* field_name,Scope* sc){	//calculates & returns adress
-		auto ofp=cg.ofp;
-		if (!type){
-			write_comment(cg,"ERROR %s:%d:",__FILE__,__LINE__);return CgValue();
-		}
 		ASSERT(type );
 		auto sd=type->deref_all()->struct_def;
 		if (!sd) {type->dump(-1);error(field_name,"struct not resolved\n");}
-//		auto sd=type->struct_def?type->struct_def:sc->find_struct(type);
-//		if (!sd){
-//			fprintf(ofp,"\t;%s.%s\n",type?getString(type->name):"???",getString(field_name));
-//			type->dump(-1);
-//			fprintf(ofp,";ERROR %s:%d:\n;",__FILE__,__LINE__);return CgValue();
-//		}
 		int index=sd->field_index(field_name);
 		auto field=sd->find_field(field_name);
 		return dot_sub(cg,index);
@@ -486,12 +478,16 @@ void write_instruction_sub(CodeGen& cg, Name opname,Type* type,  CgValue dst,CgV
 	src1.write_operand(cg);
 }
 void write_instruction(CodeGen& cg, Name opname,Type* type,  CgValue dst,CgValue src1){
+	src1.load(cg);
 	ins_begin(cg);
 	write_instruction_sub(cg,opname,type,dst,src1);
 	ins_end(cg);
 }
 void write_instruction(CodeGen& cg, Name opname,Type* type,  CgValue dst,CgValue src1,CgValue src2){
 	ASSERT(type!=0);
+	src1.load(cg);
+	src2.load(cg);
+ 
 	ins_begin(cg);
 	write_instruction_sub(cg,opname,type,dst,src1);
 	fprintf(cg.ofp,",");
@@ -590,7 +586,6 @@ CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
 	auto curr_fn=cg.curr_fn;
 	auto ifn=this;
-	auto ofp=cg.ofp;
 	// TODO: Collect phi-nodes for anything modified inside.
 	RegisterName outname=next_reg_name(&cg.next_reg);
 	auto condition=ifn->cond->compile(cg,sc);
@@ -637,7 +632,6 @@ struct LoopPhiVar {
 	RegisterName reg_end;
 };
 void write_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, Name l_end, bool extra) {
-	auto ofp=cg.ofp;
 	for (auto& v: phi_vars) {
 		v.reg_end=v.var->regname;
 		ins_begin_reg_op(cg,v.reg_start,"phi");
@@ -646,8 +640,8 @@ void write_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, 
 		write_phi_reg_label(cg,v.reg_end,l_end);
 		ins_end(cg);
 	}
-	if (extra) for (auto i=phi_vars.size(); i>0;i--)fprintf(ofp,"       ");	// dirty hack to prevent source overun
-	fprintf(ofp,"\n");
+	if (extra) for (auto i=phi_vars.size(); i>0;i--)fprintf(cg.ofp,"       ");	// dirty hack to prevent source overun
+	write_txt(cg,"\n");
 }
 
 CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
@@ -822,14 +816,11 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
 			// Assign-Operators += etc
 			auto dstreg=lhs;
-			rhs.load(cg);
-			lhs.load(cg); // turns it into a value.
 			write_instruction(cg,opname,t?t:rhs.type, dst,lhs,rhs);
 			auto out=dstreg.store_from(cg,dst.reg);
 			return dstreg;
 		}else {
 			// RISClike 3operand dst=src1,src2
-			lhs.load(cg); rhs.load(cg);
 			write_instruction(cg,opname,t,dst,lhs,rhs);
 			dst.type=e->get_type();
 			return dst;
@@ -965,8 +956,8 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 		}
 		
 		args_begin(cg);
-		for (auto i=0; i<l_args.size(); i++){
-			write_type_operand(cg,l_args_reg[i]);
+		for (auto a: l_args){
+			write_type_operand(cg,a);
 		}
 		args_end(cg);
 		ins_end(cg);

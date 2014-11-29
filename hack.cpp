@@ -2698,6 +2698,7 @@ ExprFnDef* parse_closure(TokenStream&src);//eg |x|
 ExprFor* parse_for(TokenStream&src);
 ExprIf* parse_if(TokenStream&src);
 TypeDef* parse_typedef(TokenStream&src);
+Type* parse_type(TokenStream& src, int close,Node* owner);
 ExprStructDef* parse_struct(TokenStream& src);
 ExprStructDef* parse_enum(TokenStream& src);
 ExprMatch* parse_match(TokenStream& src);
@@ -2763,7 +2764,6 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 	}
 	was_operand=true;
 }
-Type* parse_type(TokenStream& src, int close,Node* owner);
 LLVMType Expr::get_type_llvm() const
 {
 	if (!this) return LLVMType{VOID,0};
@@ -2976,7 +2976,13 @@ ExprLiteral* parse_literal(TokenStream& src) {
 	return ln;
 }
 
-
+void parse_ret_val(TokenStream& src, Node* owner, Type* fn_type){
+	if (src.eat_if("->")){
+		fn_type->push_back(parse_type(src,0,owner));// return value
+	} else{
+		fn_type->push_back(new Type(owner,VOID));// return value
+	}
+}
 Type* parse_type(TokenStream& src, int close,Node* owner) {
 	auto tok=src.eat_tok();
 	Type* ret=0;	// read the first, its the form..
@@ -2984,8 +2990,16 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 	if (tok==FN){	// fn(arg0,arg1,...)->ret
 		ret=new Type(FN,src.pos);
 		ret->push_back(parse_type(src,0,owner));// args
-		src.expect("->");
-		ret->push_back(parse_type(src,0,owner));// return value
+		parse_ret_val(src,owner,ret);
+	}
+	else if (tok==OR){ // closure |arg0,arg1,..|->ret
+		ret = new Type(owner,CLOSURE);
+		auto args=new Type(owner,TUPLE); ret->push_back(args);
+		while ((tok=src.eat_tok())!=OR){
+			args->push_back(parse_type(src,0,owner));
+			src.eat_if(COMMA);
+		}
+		parse_ret_val(src,owner,ret);
 	}
 	else if (tok==OPEN_PAREN) {
 		ret=new Type(TUPLE,src.pos);
