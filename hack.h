@@ -410,6 +410,7 @@ struct Type : Expr{
 	bool	is_register()const	{return !is_complex();}
 	bool	is_complex()const;
 	bool	is_struct()const;
+	bool	is_callable()const	{return name==FN||name==CLOSURE;}
 	
 	Name array_size()const{
 		ASSERT(this->sub);
@@ -429,6 +430,7 @@ struct Type : Expr{
 	bool	is_array()const		{return name==ARRAY;}
 	bool	is_template()const	{ return sub!=0;}
 	bool	is_function() const	{ return name==FN;}
+	bool	is_closure() const	{ return name==CLOSURE;}
 	Type*	fn_return() const	{ return sub->next;}
 	Type*	fn_args() const		{ return sub->sub;}
 	void	clear_reg()			{regname=0;};
@@ -834,13 +836,14 @@ struct  ExprFnDef : ExprDef {
 	vector<ArgDef*> args;
 	bool variadic;
 	bool c_linkage=false;
+	bool m_closure=false;
 	Expr* body=0;
 	ExprFnDef(){};
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
 	int		get_name()const {return index(name);}
 	Name	get_mangled_name()const;
 	bool	is_generic() const;
-	bool	is_closure() const			{return capture!=0;}
+	bool	is_closure() const			{return capture!=0 || m_closure;}
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
 	int		min_args()					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}

@@ -65,9 +65,13 @@ void write_comma(CodeGen& cg){
 	cg.comma=true;
 }
 void ins_begin_reg_op(CodeGen& cg, Name reg, const char* op){
-	ins_begin(cg);
-	write_reg(cg,reg);
-	write_ins_name(cg,op);
+	if (!reg) { ins_begin_name(cg,op);}
+	else {
+		ins_begin(cg);
+		write_reg(cg,reg);
+		write_ins_name(cg,op);
+	}
+	
 }
 void write_i32_lit(CodeGen& cg,int index) {
 	write_comma(cg);
@@ -440,6 +444,14 @@ void write_type(CodeGen& cg, const Type* t, bool ref) {
 			}
 			struct_end(cg);
 		}
+	}
+	else if (t->is_closure()){
+		struct_begin(cg);
+		write_comma(cg);
+		write_function_type(cg,t);
+		write_comma(cg);
+		write_txt(cg,"i8*");
+		struct_end(cg);
 	}
 	else if (t->is_function()){
 		//error(t,"TODO,write function type unified ");
@@ -901,24 +913,14 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 	}
 	//[3] FUNCTION CALL
 	else if (e->is_function_call()){
-		auto call_fn=e->get_fn_call();
-		RegisterName indirect_call=0;
-		write_comment(cg,"fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
-
-		if (e->call_expr->is_function_name()) {
-			
-		} else {
-			auto fptr = e->call_expr->compile(cg, sc);
-			indirect_call=fptr.load(cg);
-		}
-
+		// [3.1]evaluate arguments
 		vector<CgValue> l_args;
 		vector<CgValue> l_args_reg;
 		// process function argumetns & load
 		for (auto arg:e->argls){
 			auto reg=arg->compile(cg,sc);
 			if (!reg.type) {
-				error_begin(arg,"arg type not resolved in call to %s\n", call_fn->name_str());
+				error_begin(arg,"arg type not resolved in call\n");
 				dbprintf("arg type=");arg->dump(-1);newline(0);
 				auto reg=arg->compile(cg,sc);
 				error_end(arg);
@@ -936,31 +938,49 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 			i++;
 		}
 
-		auto dst=n->get_reg_new(call_fn?call_fn->name:FN, &cg.next_reg);
-		//auto rt=call_fn->get_return_value();
+		//[3.2] evaluate call object..
+		auto call_fn=e->get_fn_call();
+		RegisterName indirect_call=0;
+		write_comment(cg,"fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
+
 		auto ret_type=e->type();	// semantic analysis should have done this
-		if (e->type()->name!=VOID)
-		{
+		auto dst=(ret_type->name!=VOID)?n->get_reg_new(call_fn?call_fn->name:FN, &cg.next_reg):0;
+		//auto rt=call_fn->get_return_value();
+
+		auto write_arg_regs=[&](Type* rect,RegisterName receiver){
+			args_begin(cg);
+			if(rect && receiver){
+				write_comma(cg);
+				write_type(cg,rect);
+				write_reg(cg,receiver);
+			}
+			for (auto a: l_args){
+				write_type_operand(cg,a);
+			}
+			args_end(cg);
+		};
+
+		if (e->call_expr->is_function_name()) {
+			//[3.3.1] Direct Call
 			ins_begin_reg_op(cg,dst,"call");
-		} else
-			ins_begin_name(cg,"call");
-		
-		if (call_fn)
 			write_function_type(cg, call_fn);// NOTE we need this until we handle elipsis
-		else
-			write_function_type(cg,e->call_expr->type());
-		if (!indirect_call) {
 			write_global(cg,call_fn->get_mangled_name());
+			write_arg_regs(0,0);
+			ins_end(cg);
+			
 		} else {
+			//[3.3.1] Indirect Call, Function Pointer
+			auto fptr = e->call_expr->compile(cg, sc);
+			indirect_call=fptr.load(cg);
+			ins_begin_reg_op(cg,dst,"call");
+			write_function_type(cg,e->call_expr->type());
 			write_reg(cg,indirect_call);
+			write_arg_regs(0,0);
+			ins_end(cg);
 		}
+			// [3.3.2] Indirect Call, Closure.
+	
 		
-		args_begin(cg);
-		for (auto a: l_args){
-			write_type_operand(cg,a);
-		}
-		args_end(cg);
-		ins_end(cg);
 		if (ret_type && ret_type->name!=VOID) {
 			return CgValue(dst,ret_type);
 		} else{

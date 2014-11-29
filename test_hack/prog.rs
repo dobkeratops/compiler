@@ -22,15 +22,14 @@ fn something(f:*Foo){
 fn something_int(x:int){
 	printf("something overloaded for int,given %d\n",x);
 }
-fn call_ptr(f:(int)->void){
+fn call_ptr(f:fn(int)->void){
 	f(5);
 }
 
 
 fn main(argc:int,argv:**char)->int{
 	x:=0;
-	call_ptr(something_int);
-	call_ptr(|lambda_arg|{printf("hello from closure %d\n",lambda_arg);});
+	call_ptr(fn(lambda_arg){printf("hello from closure %d\n",lambda_arg);});
 	retval:=0;
 	something_int(retval);
 	acc:=retval;

@@ -99,7 +99,9 @@ void error_sub(const Node* n, const char* level, const char* txt ){
 	} else{
 		n->dump_if(-1);
 	}
-	if (auto x=n->instanced_by()){ printf("%s:%d:%d: referenced here",g_filename,x->pos.line,x->pos.col);}
+	if (auto x=n->instanced_by()){
+		dbprintf("%p %p\n",n,x);
+		printf("%s:%d:%d: referenced here",g_filename,x->pos.line,x->pos.col);}
 }
 void error_begin(const Node* n, const char* str, ... ){
 	char buffer[1024];
@@ -463,7 +465,7 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 		error_begin(n," type mismatch\n");
 		warning(a->get_origin(),"from here:");
 		a->dump(-1);
-		warning(b->get_origin(),"vs from here:");
+		warning(b->get_origin(),"vs here");
 		b->dump(-1);
 		error_end(n);
 		return ResolvedType(a,ResolvedType::ERROR);
@@ -2357,14 +2359,14 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 	
 	// propogate given arguments eg polymorphic lambda..
 	if (desired){
-		if (desired->name!=FN){
+		if (!desired->is_callable()){
 			error(this,desired,"creating lambda function,but trying to infer non function type\n");
 		}
 		// fn[(args..),ret]
 		if (auto args_ret=desired->sub){
-			dbprintf_lambdas("infering polymorphic lambda types");
+			dbprintf_lambdas("infering polymorphic function types");
 			int i=0;
-			for (auto desired_arg=args_ret->sub; desired_arg; desired_arg=desired_arg->next,i++){
+			for (auto desired_arg=args_ret->sub; desired_arg && i<this->args.size(); desired_arg=desired_arg->next,i++){
 				auto arg=this->args[i];
 				propogate_type_fwd(flags, arg, (const Type*)desired_arg,arg->type_ref() );
 			}
@@ -2417,7 +2419,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 	}
 
 	if (!this->fn_type) {
-		this->fn_type=new Type(this,FN);
+		this->fn_type=new Type(this,this->is_closure()?CLOSURE:FN);
 		auto arglist=new Type(this,TUPLE);
 		this->fn_type->push_back(arglist);
 		for (auto a:this->args) {
@@ -2983,34 +2985,40 @@ void parse_ret_val(TokenStream& src, Node* owner, Type* fn_type){
 		fn_type->push_back(new Type(owner,VOID));// return value
 	}
 }
+Type* parse_tuple(TokenStream& src, Node* owner)
+{
+	auto ret= new Type(TUPLE,src.pos);
+	while (auto sub=parse_type(src, CLOSE_PAREN,owner)){
+		ret->push_back(sub);
+		src.eat_if(COMMA);
+	}
+	return ret;
+}
 Type* parse_type(TokenStream& src, int close,Node* owner) {
 	auto tok=src.eat_tok();
 	Type* ret=0;	// read the first, its the form..
 	if (tok==close) return nullptr;
 	if (tok==FN){	// fn(arg0,arg1,...)->ret
 		ret=new Type(FN,src.pos);
-		ret->push_back(parse_type(src,0,owner));// args
+		src.expect(OPEN_PAREN);
+		ret->push_back(parse_tuple(src,owner));// args
 		parse_ret_val(src,owner,ret);
 	}
 	else if (tok==OR){ // closure |arg0,arg1,..|->ret
 		ret = new Type(owner,CLOSURE);
 		auto args=new Type(owner,TUPLE); ret->push_back(args);
-		while ((tok=src.eat_tok())!=OR){
-			args->push_back(parse_type(src,0,owner));
+		while ((src.peek_tok())!=OR){
+			args->push_back(parse_type(src,OR,owner));
 			src.eat_if(COMMA);
 		}
 		parse_ret_val(src,owner,ret);
 	}
 	else if (tok==OPEN_PAREN) {
-		ret=new Type(TUPLE,src.pos);
-		while (auto sub=parse_type(src, CLOSE_PAREN,owner)){
-			ret->push_back(sub);
-			src.eat_if(COMMA);
-		}
+		ret=parse_tuple(src,owner);
 		if (src.eat_if(ARROW)){
 			// tuple->type  defines a function.
 			auto fn_ret=parse_type(src,0,owner);
-			auto fn_type=new Type(owner,FN);
+			auto fn_type=new Type(owner,CLOSURE);
 			fn_type->push_back(ret);
 			fn_type->push_back(fn_ret);
 			return fn_type;
@@ -3031,7 +3039,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 				}
 			}
 		// postfixes:  eg FOO|BAR|BAZ todo  FOO*BAR*BAZ   FOO&BAR&BAZ
-			if (src.peek_tok()==OR){
+			if (src.peek_tok()==OR && close!=OR){
 				Type* sub=ret; ret=new Type(owner,VARIANT); ret->push_back(sub);
 				while (src.eat_if(OR)){
 					auto sub=parse_type(src,close,owner);
@@ -3671,6 +3679,7 @@ ExprFnDef* parse_closure(TokenStream&src) {// eg |x|x*2
 
 	char tmp[512]; sprintf(tmp,"closure_%d",src.pos.line);
 	fndef->name=getStringIndex(tmp);
+	fndef->m_closure=true;
 
 	parse_fn_args_ret(fndef,src,OR);
 	parse_fn_body(fndef,src);
@@ -3788,7 +3797,7 @@ const char* g_TestProg=
 	"	printf(\"Hello World %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
 	"	0  \n"
 	"}  \n\0";
-const char* g_TestProg3=
+const char* g_TestTyparamInference=
 /* 1*/"   struct Union[A,B]{a:A,b:B, tag:int};\n"
 /* 2*/"	fn setv[A,B](u:&Union[A,B], v:A)->void{\n"
 /* 3*/"		u.a=v; u.tag=0; \n"
@@ -3814,7 +3823,8 @@ const char* g_TestProg2=
 "	fn setv[A,B](u:&Union[A,B], v:B){\n"
 "		u.b=v; u.tag=1; \n"
 "	}\n"
-"	fn take_ptr(f:(int)->void){ f(5);}\n"
+"	fn take_fn(f:fn(int)->void){ f(5);}\n"
+"	fn take_closure(f:(int)->void){ f(5);}\n"
 "fn printf(s:str,...)->int;\n"
 "	fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
 "	fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
@@ -3851,10 +3861,11 @@ const char* g_TestProg2=
 "		foo_bar(&fs);\n"
 "		printf(\"foostruct int val recast %d; foostruct raw value %d %d\n\",*py,fs.y,pfs.y);\n"
 "		fp(2);fp(x);fp(xs[1]);		\n"
-"		take_ptr(fp);\n"
-"		take_ptr(localtest);\n"
+"		take_fn(fp);\n"
+"		take_fn(localtest);\n"
 "		localtest(10);\n"
-"		take_ptr(|x|{printf(\"hello from anon function %d\\n\",x);});\n"
+"		take_fn(fn(x){printf(\"hello from anon function %d\\n\",x);});\n"
+"		take_closure(|x|{printf(\"hello from anon function %d\\n\",x);});\n"
 "		bar(1,2,3);	\n"
 "	,retval}\n"
 "	struct FooStruct{x:int,y:int};\n"
@@ -4059,10 +4070,10 @@ int main(int argc, const char** argv) {
 	if (argc<=1) {
 		printf("no sources given so running inbuilt tests.\n");
 		printf("typeparam test\n");
-		auto ret0=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_RUN);
+		auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test.ll",B_RUN);
 		//auto ret1=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		printf("bigger test, all features\n");
-		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_RUN);
+		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_TYPES|B_RUN);
 	}
 }
 
