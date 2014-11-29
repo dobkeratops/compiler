@@ -81,10 +81,6 @@ void dbprintf(Name& n){
 	dbprintf("%s",str(n));
 }
 void dbprintf(Node* n){n->dump(-1);}
-//template<typename X,typename Y> void dbprintf(X x,Y y){dbprintf(x);dbprintf(y);}
-//template<typename X,typename Y,typename Z> void dbprintf(X x,Y y,Z z){dbprintf(x);dbprintf(y);dbprintf(z);}
-//template<typename X,typename Y,typename Z,typename W> void dbprintf(X x,Y y,Z z,W w){dbprintf(x);dbprintf(y);dbprintf(z);dbprintf(w);}
-// for real compiler errors. todo.. codelocations on nodes
 bool g_error_on_newline=false;
 int g_num_errors=0;
 void error_newline(){
@@ -456,6 +452,9 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 		error(n,"AST node hasn't been setup properly");
 	}
 	ASSERT(a && b);
+	// TODO: variadic args shouldn't get here:
+	if (a->name==ELIPSIS||b->name==ELIPSIS)
+		return ResolvedType(a,ResolvedType::COMPLETE);
 	if (!a->eq(b)){
 		if (!(flags & R_FINAL))
 			return ResolvedType(0,ResolvedType::INCOMPLETE);
@@ -1175,15 +1174,6 @@ ExprFnDef* NamedItems::getByName(Name n){
 	return nullptr;
 }
 
-/*
-void Scope::visit_calls() {
-	for (auto call=this->calls;call;call=call->next_of_scope) {
-		dbprintf("%s --> %s\n",this->name(), getString(call->callee->name));
-	}
-	for (auto sub=this->child; sub; sub=sub->next)
-		sub->visit_calls();
-}
-*/
 void ExprFnDef::dump_signature()const{
 	dbprintf("fn %s(",str(name));
 	int i=0;for (auto a:args) {if(i)dbprintf(",");a->dump(-1);i++;}
@@ -2433,6 +2423,8 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 		for (auto a:this->args) {
 			arglist->push_back(a->type()?((Type*)a->type()->clone()):new Type(this,AUTO));
 		}
+		// TODO - type inference needs to know about elipsis, as 'endless auto'
+		//if (this->variadic){arglist->push_back(new Type(this,ELIPSIS));}
 		this->fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(this,AUTO));
 
 		this->set_type(this->fn_type);

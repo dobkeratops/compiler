@@ -270,7 +270,6 @@ struct ResolvedType{
 	//operator bool()const { return status==COMPLETE && type!=0;}
 };
 
-
 struct Capture {
 	ExprFnDef*		capture_from;
 	ExprFnDef*		capture_by;

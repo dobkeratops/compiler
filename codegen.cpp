@@ -28,21 +28,38 @@ Name next_reg_name(Name prefix_name, int *next_reg_index){
 void write_reg(CodeGen& cg, RegisterName reg);
 
 void ins_begin(CodeGen& cg){fprintf(cg.ofp,"\t"); cg.comma=false;}
-void ins_begin_name(CodeGen& cg,const char* txt){fprintf(cg.ofp,"\t%s ",txt);}
 void write_ins_name(CodeGen& cg,const char* txt){fprintf(cg.ofp,"= %s ",txt);}
+void ins_begin_name(CodeGen& cg,const char* txt){ins_begin(cg);fprintf(cg.ofp,"%s ",txt);;}
 void ins_end(CodeGen& cg){fprintf(cg.ofp,"\n");}
-void struct_begin(CodeGen& cg){
+void write_txt(CodeGen& cg, const char* str,...){// catch all, just spit out given string
+	char tmp[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(tmp, str, arglist );
+	va_end( arglist );
+	fprintf(cg.ofp,"%s",tmp);
+}
+
+void nest_begin(CodeGen& cg, const char* str){
 	ASSERT(cg.depth<32);
 	cg.commas[cg.depth]=cg.comma;
 	cg.depth++;
-	fprintf(cg.ofp,"{");
+	write_txt(cg,str);
+	cg.comma=false;
 }
-void struct_end(CodeGen& cg){
+void nest_end(CodeGen& cg, const char* str){
 	ASSERT(cg.depth);
 	cg.depth--;
 	cg.comma=cg.commas[cg.depth];
-	fprintf(cg.ofp,"}");
+	write_txt(cg,str);
 }
+void args_begin(CodeGen& cg)	{nest_begin(cg,"(");}
+void args_end(CodeGen& cg)		{nest_end(cg,")");}
+void struct_begin(CodeGen& cg)	{nest_begin(cg,"{");}
+void struct_end(CodeGen& cg)	{nest_end(cg,"}");}
+void pointer_begin(CodeGen&cg)	{};
+void pointer_end(CodeGen&cg)	{write_txt(cg,"*");};
+
 void write_comma(CodeGen& cg){
 	if (cg.comma){fprintf(cg.ofp,",");}
 	cg.comma=true;
@@ -70,21 +87,15 @@ void write_store(CodeGen& cg, RegisterName reg, Type* type, RegisterName addr){
 	ins_end(cg);
 }
 void write_global(CodeGen& cg, Name n){
-	fprintf(cg.ofp,"@%s ",str(n));
+	write_txt(cg,"@%s ",str(n));
 }
 void write_fn_ptr(CodeGen& cg, Name n){
-	fprintf(cg.ofp,"@%s.ptr",str(n));
+	write_txt(cg,"@%s.ptr",str(n));
 }
 void write_struct_ptr(CodeGen& cg, Name n){
-	fprintf(cg.ofp,"%%%s*",str(n));
-}
-void write_txt(CodeGen& cg, const char* str,...){// catch all, just spit out given string
-	char tmp[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(tmp, str, arglist );
-	va_end( arglist );
-	fprintf(cg.ofp,"%s",tmp);
+	pointer_begin(cg);
+	write_txt(cg,"%%%s",str(n));
+	pointer_end(cg);
 }
 void write_comment(CodeGen& cg, const char* str,...){// catch all, just spit out given string
 	char tmp[1024];
@@ -94,6 +105,7 @@ void write_comment(CodeGen& cg, const char* str,...){// catch all, just spit out
 	va_end( arglist );
 	fprintf(cg.ofp,"\t;%s\n",tmp);
 }
+void write_type_operand(CodeGen& cg, const CgValue& src);
 
 struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
 	// TODO: this should be a tagged-union?
@@ -200,8 +212,9 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 					fprintf(cg.ofp,"float 0.0, ");  this->write_literal(cg,lit);
 				} else if (lit->type()->name==STR){
 					write_ins_name(cg,"getelementptr inbounds");
-					fprintf(cg.ofp,"[%d x i8]* @%s",lit->llvm_strlen, getString(lit->name));
+					write_txt(cg,"[%d x i8]* @%s",lit->llvm_strlen, getString(lit->name));
 					write_comma(cg);
+
 					write_i32_lit(cg,0);
 					write_i32_lit(cg,0);
 					ASSERT(lit->llvm_strlen);
@@ -240,7 +253,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		ASSERT(reg);
 		return reg;
 	}
-	void write_literal(CodeGen& cg,ExprLiteral* lit){
+	void write_literal(CodeGen& cg,const ExprLiteral* lit)const{
 		if (cg.comma){fprintf(cg.ofp,",");} cg.comma=true;
 		auto ofp=cg.ofp;
 		switch (lit->type_id) {
@@ -262,13 +275,19 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 				break;
 			}
 	}
-	void write_operand(CodeGen& cg){
+	void write_operand(CodeGen& cg)const{
 		auto ofp=cg.ofp;
 		if (reg!=0){
 			write_reg(cg,reg);
 			return;
-		} else if (val){
+		}
+		else if (addr!=0){
+			write_reg(cg,addr);
+			return;
+		}
+		else if (val){
 			if (auto lit=dynamic_cast<ExprLiteral*>(val)) {
+				ASSERT(addr==0 && "check case above, incorrect assumptions")
 				write_literal(cg,lit);
 			}
 			return;
@@ -299,14 +318,10 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			ins_begin_reg_op(cg,newreg,"insertelement");
 			write_type_reg(cg,this->type,false,reg); write_comma(cg);
 			auto elem_t=this->type->get_elem(elem);
-			write_type(cg,elem_t);fprintf(ofp," ");
-			write_reg(cg,valreg);
+			write_type_reg(cg,elem_t,false,valreg);
 			write_i32_lit(cg, this->elem);
-//			fprintf(ofp,", i32 %d", this->elem);
 			ins_end(cg);
 			this->reg=newreg;
-			// elem remains - this value has been mutated.
-			// TODO, i think this would be much more elegant to return a new CgValue.
 			return newreg;
 		}
 		else if (addr && type) {
@@ -336,25 +351,18 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		return dot_sub(cg,index);
 	}
 	CgValue dot_sub(CodeGen& cg, int field_index){
-		auto ofp=cg.ofp;
-		if ((bool)reg && !addr && !(this->type->is_pointer())){			// lazy ref to field index,turn into extract/insert for load/store
+		if ((bool)reg && !addr && !(this->type->is_pointer())){
+			// lazy ref to inreg field index,
+			// 'load'/'store' will do 'insert'/'extract'
 			write_comment(cg,"dot reg=%s index=%d",str(reg),field_index);
 			return CgValue(reg,type,0,field_index);
 		}
 		else {
-			auto basereg=(bool)reg?reg:addr;
-			ASSERT(basereg);			// TODO: detail: if it's addr, extra or lesser *?
-			auto areg=next_reg_name(&cg.next_reg);
-			auto ptr_t=type;if (ptr_t->name==PTR) ptr_t=ptr_t->sub;
-			auto sd=ptr_t->struct_def;
+			auto sd=this->type->deref_all()->struct_def;
 			auto field=sd->fields[field_index];
-			write_comment(cg,"dot reg=%s addr=%s",str(reg),str(addr));
-			write_comment(cg,"%s.%s :%s",str(type->name),str(field->name),str(field->type()->name));
+			auto areg=next_reg_name(&cg.next_reg);
 			ins_begin_reg_op(cg,areg, "getelementptr inbounds");
-			write_struct_ptr(cg,sd->get_mangled_name());
-			write_reg(cg,basereg);
-			write_comma(cg);
-			//cg.comma=true;
+			write_type_operand(cg, *this);
 			write_i32_lit(cg,0);
 			write_i32_lit(cg,field_index);
 			ins_end(cg);
@@ -393,16 +401,17 @@ void write_type(CodeGen& cg, CgValue& lv) {
 }
 void write_phi_reg_label(CodeGen& cg, Name reg, Name label){
 	write_comma(cg);
-	fprintf(cg.ofp,"[");
+	write_txt(cg,"[");
 	write_reg(cg,reg);
-	fprintf(cg.ofp,",");
+	write_txt(cg,",");
 	write_reg(cg,label);
-	fprintf(cg.ofp,"]");
+	write_txt(cg,"]");
 }
 
 void write_type(CodeGen& cg, const Type* t, bool ref) {
 	auto ofp=cg.ofp;
 	if (!t) { fprintf(ofp,"<type_expected>");return;}
+	if (ref) pointer_begin(cg);
 	if (t->is_pointer()){
 //		dbprintf("THIS IS SUSPECT, REF ISn'T NEEDED TWICE");
 		write_type(cg,t->sub,false); fprintf(ofp,"*");
@@ -410,6 +419,9 @@ void write_type(CodeGen& cg, const Type* t, bool ref) {
 		fprintf(ofp,"[ %s x ",str(t->array_size())); //sub->next->name));
 		write_type(cg,t->sub,0); // TODO: assert its a numeric constant
 		fprintf(ofp,"]"/*%s,ref?"*":""*/);
+	}
+	else if (t->name==ELIPSIS){
+		write_txt(cg,"...");
 	}
 	else if (t->name==TUPLE) {
 		struct_begin(cg);
@@ -448,13 +460,17 @@ void write_type(CodeGen& cg, const Type* t, bool ref) {
 		else
 			fprintf(ofp,"%s",t?get_llvm_type_str(t->name):"???");//,t.is_pointer?"*":"");
 	}
-	if (ref)
-		fprintf(ofp,"*");
+	if (ref) pointer_end(cg);
 }
 void write_type_reg(CodeGen& cg, const Type* t,bool ref, Name reg){
 	write_comma(cg);
 	write_type(cg,t,ref);
 	write_reg(cg,reg);
+}
+void write_type_operand(CodeGen& cg, const CgValue& src){
+	write_comma(cg);
+	write_type(cg,src.type,(src.reg==0&&src.addr));
+	src.write_operand(cg);
 }
 
 void write_instruction_sub(CodeGen& cg, Name opname,Type* type,  CgValue dst,CgValue src1){
@@ -571,6 +587,7 @@ void emit_branch(CodeGen& cg, CgValue cond, Name label_then, Name label_else){
 }
 
 CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
+	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
 	auto curr_fn=cg.curr_fn;
 	auto ifn=this;
 	auto ofp=cg.ofp;
@@ -732,8 +749,7 @@ CgValue write_cast(CodeGen& cg,CgValue dst, CgValue&lhsv, Expr* rhse){
 		ins="fptrunc";
 	}
 	ins_begin_reg_op(cg, dst.reg, ins);
-	write_type(cg,lhsv.type,0);
-	write_reg(cg,lhsv.reg);
+	write_type_reg(cg,lhsv.type,0,lhsv.reg);
 	fprintf(ofp," to ");
 	write_type(cg,rhst,0);
 	ins_end(cg);
@@ -805,8 +821,8 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		}
 		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
 			// Assign-Operators += etc
-			rhs.load(cg);
 			auto dstreg=lhs;
+			rhs.load(cg);
 			lhs.load(cg); // turns it into a value.
 			write_instruction(cg,opname,t?t:rhs.type, dst,lhs,rhs);
 			auto out=dstreg.store_from(cg,dst.reg);
@@ -831,7 +847,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			return src.deref_op(cg,n->type());
 		}
 		else {
-			if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){printf(";TODO: logic for modifications to memory");}}
+			if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){dbprintf(";TODO: logic for modifications to memory");}}
 			// todo: handle read/modify-writeness.
 			// postincrement/preincrement etc go here..
 			auto dst=CgValue(n->get_reg(opname,&cg.next_reg,false), n->get_type());
@@ -882,16 +898,14 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 		auto array_type=expr.type;
 		auto inner_type=array_type->sub;
 		auto dst=ar->get_reg(ARRAY,&cg.next_reg,false);
-		expr.load(cg);
 		if (!n->regname){n->regname=expr.reg;}
 		
+		expr.load(cg);
 		index.load(cg,0);
 		ins_begin_reg_op(cg,dst,"getelementptr inbounds");
-		write_type(cg,array_type,true);//!expr.reg);
-		write_reg(cg,expr.reg);
-		fprintf(cg.ofp,",i32 0, i32 ");//%%%d\n",getString(expr.reg),
-		index.write_operand(cg);
-		ins_end(cg);
+		write_type_reg(cg,array_type,true,expr.reg);//!expr.reg);
+		write_i32_lit(cg,0);
+		write_type_operand(cg,index);
 		return CgValue(0,inner_type,dst);
 	}
 	//[3] FUNCTION CALL
@@ -941,7 +955,7 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 			ins_begin_name(cg,"call");
 		
 		if (call_fn)
-			write_function_type(cg, call_fn);
+			write_function_type(cg, call_fn);// NOTE we need this until we handle elipsis
 		else
 			write_function_type(cg,e->call_expr->type());
 		if (!indirect_call) {
@@ -950,14 +964,11 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 			write_reg(cg,indirect_call);
 		}
 		
-		fprintf(cg.ofp,"(");
+		args_begin(cg);
 		for (auto i=0; i<l_args.size(); i++){
-			if (i) {fprintf(cg.ofp,",");}
-			auto reg=l_args_reg[i];
-			write_type(cg,reg);//reg.is_addr());
-			reg.write_operand(cg);
+			write_type_operand(cg,l_args_reg[i]);
 		}
-		fprintf(cg.ofp,")");
+		args_end(cg);
 		ins_end(cg);
 		if (ret_type && ret_type->name!=VOID) {
 			return CgValue(dst,ret_type);
@@ -967,7 +978,6 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 	}
 	return CgValue();
 }
-
 CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc){
 	auto n=this;
 	auto var=sc->find_variable_rec(n->name);
@@ -1000,14 +1010,15 @@ void write_function_signature(CodeGen& cg,ExprFnDef* fn_node, EmitFnMode mode){
 	auto scope=fn_node->scope;
 	fn_node->clear_reg();
 	auto rtype=fn_node->return_type();
-	fprintf(ofp,mode==EmitDefinition?"define ":mode==EmitDeclaration?"declare ":" ");
+	write_txt(cg,mode==EmitDefinition?"define ":mode==EmitDeclaration?"declare ":" ");
+	if (mode==EmitType)pointer_begin(cg);
 	write_type(cg,rtype,false);
 	if (mode!=EmitType)
 		write_global(cg,fn_node->get_mangled_name());
-	fprintf(ofp,"(");
+	args_begin(cg);
 	int inter=0;
 	for (auto a:fn_node->args){
-		if (inter++){fprintf(ofp,",");};
+		write_comma(cg);
 		write_type(cg,a->type(),false);//was a->is_complex. confusion here over pass by ref/val. we think fn sigs should be 1:1. but raw struct type should  be pass by val? will we have to copy struct val?
 		if (mode==EmitDefinition){
 			auto var=scope->get_or_create_scope_variable(a,a->name, VkArg);
@@ -1019,24 +1030,24 @@ void write_function_signature(CodeGen& cg,ExprFnDef* fn_node, EmitFnMode mode){
 	if (fn_node->variadic) {
 		if (fn_node->args.size())fprintf(cg.ofp,",");fprintf(cg.ofp,"...");
 	}
-	fprintf(cg.ofp,")");
-	if (mode==EmitType)fprintf(cg.ofp,"*");
-	else fprintf(cg.ofp,"\n");
+	args_end(cg);
+	if (mode==EmitType)pointer_end(cg);
+	else write_txt(cg,"\n");
 }
 void write_function_type(CodeGen& cg, const Type* t) {
 	auto ofp=cg.ofp;
 	auto argtuple=t->sub;
 	ASSERT(argtuple);
 	auto retn=argtuple->next;
+	pointer_begin(cg);
 	write_type(cg,retn,0);
-	fprintf(ofp,"(");
+	args_begin(cg);
 	for (auto arg=argtuple->sub; arg;arg=arg->next){
+		write_comma(cg);
 		write_type(cg,arg);
-		if (arg->next)fprintf(ofp,",");
 	}
-	fprintf(ofp,")");
-	fprintf(ofp,"*");
-	
+	args_end(cg);
+	pointer_end(cg);
 }
 void write_function_type(CodeGen& cg,ExprFnDef* fn_node){
 	write_function_signature(cg,fn_node,EmitType);
@@ -1093,8 +1104,9 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 	if (ret.is_valid() && !ret.type->is_void()) {
 		ret.load(cg);
 		ins_begin_name(cg,"ret");
-		write_type(cg,ret);//rtn->get_type(),ret.is_addr());
-		ret.write_operand(cg);
+		//write_type(cg,ret);//rtn->get_type(),ret.is_addr());
+		//ret.write_operand(cg);
+		write_type_operand(cg,ret);
 		ins_end(cg);
 	} else {
 		ins_begin_name(cg,"ret");
