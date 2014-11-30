@@ -6,6 +6,7 @@
 #include <set>
 #include <string.h>
 #include <functional>
+char * gets(char*);
 #include <cstdio>
 
 #ifdef DEBUG
