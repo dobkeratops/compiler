@@ -5,6 +5,7 @@
 #include <map>
 #include <set>
 #include <string.h>
+#include <functional>
 
 #ifdef DEBUG
 #define CRASH {*(volatile long*)0=0;exit(0);}
