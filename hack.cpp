@@ -709,22 +709,21 @@ bool Node::is_ident()const {
 void ExprBlock::dump(int depth) const {
 	if (!this) return;
 	newline(depth);
+	auto b=(this->bracket_type==OPEN_PAREN)?"(\0)\0":"{\0}\0";
 	if (this->call_expr){
-		dbprintf(this->is_subscript()?"subscript: ":this->is_struct_initializer()?"struct_init":"call: ");
-		this->get_type()->dump_if(-1);
-		dbprintf(" (");
+		dbprintf(this->is_subscript()?"subscript: ":this->is_struct_initializer()?"struct_init":"call ");
+		this->call_expr->dump(-100);
 //
-		if (auto f=this->get_fn_call())
-			dbprintf("%s",f->name_str());
-		this->call_expr->dump(depth+1);
-		if (this->get_type()) {dbprintf(":");this->get_type()->dump(-1);};
 	} else{
 		dbprintf(this->is_array_initializer()?"array_init ":this->is_tuple()?"tuple ":"");
 	}
+	dbprintf(b+0);
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
-	newline(depth);if (this->call_expr)dbprintf(")");
+	newline(depth);dbprintf(b+2);
+	if (this->get_type()){dbprintf(":");this->get_type()->dump_if(-1);}
+
 }
 
 void ExprOp::dump(int depth) const {
@@ -974,8 +973,6 @@ Type::Type(Name outer_name,ExprStructDef* sd)
 void ExprLiteral::dump(int depth) const{
 	if (!this) return;
 	newline(depth);
-	dbprintf("literal ");
-	if (this->name!=0){dbprintf("%s=",str(this->name));}
 	if (type_id==T_VOID){dbprintf("void");}
 	if (type_id==T_INT){dbprintf("%d",u.val_int);}
 	if (type_id==T_FLOAT){dbprintf("%.7f",u.val_float);}
@@ -1131,13 +1128,12 @@ void ExprFnDef::dump(int ind) const {
 	dbprintf(")");
 	if (this->ret_type) {dbprintf("->");this->ret_type->dump(-1);};
 	if (ind && this->fn_type) {
-		newline(ind);dbprintf(":");this->fn_type->dump(-1);newline(ind);
+		newline(ind);dbprintf(":");this->fn_type->dump(-1);
 	}
-	dbprintf(" {");
 	if (this->body) {
 		this->body->dump(ind);
 	}
-	newline(ind);dbprintf("}\n");
+	newline(ind);
 	if (auto p=this->instances){
 		dbprintf(";//instantiations:");
 		for (;p;p=p->next_instance){
@@ -4153,11 +4149,10 @@ int main(int argc, const char** argv) {
 	if (argc<=1) {
 		printf("no sources given so running inbuilt tests.\n");
 		printf("typeparam test\n");
-		auto ret0=compile_source(g_TestMemberFn,"g_TestMemberFn","test.ll",B_TYPES|B_RUN);
-//		auto ret1=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test.ll",B_RUN);
-		//auto ret1=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
+		auto ret1=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test.ll",B_RUN);
 		printf("bigger test, all features\n");
-//		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_TYPES|B_RUN);
+		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_TYPES|B_RUN);
+		auto ret0=compile_source(g_TestMemberFn,"g_TestMemberFn","test.ll",B_TYPES|B_RUN);
 	}
 }
 
