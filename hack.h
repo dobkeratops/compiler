@@ -1,4 +1,5 @@
 #pragma once
+char * gets(char*);
 #include <stdio.h>
 #include <iostream>
 #include <vector>
@@ -6,7 +7,6 @@
 #include <set>
 #include <string.h>
 #include <functional>
-char * gets(char*);
 #include <cstdio>
 
 #ifdef DEBUG
