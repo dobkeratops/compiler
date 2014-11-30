@@ -249,7 +249,6 @@ inline const char* str(const Name& n){return getString(n);}
 inline const char* str(int i){return g_Names.index_to_name[i].c_str();}
 void match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite);
 
-
 struct ResolvedType{
 	// TODO: This is a misfeature;
 	// return value from Resolve should just be status
@@ -572,7 +571,6 @@ struct ArgDef :ExprDef{
 	virtual const char* kind_str()const;
 	~ArgDef(){}
 	Node*	clone() const;
-	void	render_object();
 	Name	as_name()const				{return this->name;}
 	size_t	size()const					{return this->type()?this->type()->size():0;}
 	int		alignment() const			{ return 4;}//todo, eval templates/other structs, consider pointers, ..

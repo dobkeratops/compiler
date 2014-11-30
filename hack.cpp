@@ -1424,7 +1424,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	if (f->type_parameter_index(f->name)<0)
 		if (f->name!=name && name!=PLACEHOLDER)
 			return ;
-	if (!f->is_enough_args((int)args.size()) || f->too_many_args(args.size())){
+	if (!f->is_enough_args((int)args.size()) || f->too_many_args((int)args.size())){
 		if (0==(this->flags&R_FINAL)) return;
 	}
 	// TODO: may need to continually update the function match, eg during resolving, as more types are found, more specific peices may appear?
@@ -1448,7 +1448,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	if (name==PLACEHOLDER){
 //		score-=1000;
 	}
-	else if (!f->is_enough_args((int)args.size()) || f->too_many_args(args.size())){
+	else if (!f->is_enough_args((int)args.size()) || f->too_many_args((int)args.size())){
 		score-=1000;
 		insert_candidate(f,score);
 		return;
@@ -2248,7 +2248,7 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 		return ResolvedType();
 		// generic function, and we have some types to throw in...
 		// if its' a generic function, we have to instantiate it here.
-		
+/*
 		if (!block->scope) {
 //			ASSERT(0 && "this is bs");
 //			auto sc=new Scope;
@@ -2276,10 +2276,11 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 			}
 			// and stuff a default expression in for any not called..
 		}
-		
+ 
 		auto ret=call_target->resolve_call(fsc,desired,flags);
 		verify_all();
 		return propogate_type(flags,block, ret);
+ */
 	}
 	else  {
 		if (flags &1) error(block,"can't resolve call\n");
@@ -4034,6 +4035,27 @@ struct Union{
 // auto x=u.map([](int x)->int{return 0;}, [](float x)->int{return 1;});
 // printf("%d x\n",x);
 
+struct Option{
+	char name;int clear;int set; const char* help;
+};
+Option g_Options[]={
+	{'a',0,B_AST,"show AST"},
+	{'t',0,B_TYPES,"dump AST annotated with types"},
+	{'d',0,B_DEFS,"dump definitions"},
+	{'g',0,B_GENERICS,"dump generic type info"},
+	{'l',0,B_LLVM,"emit LLVM source"},
+	{'r',0,B_RUN|B_EXECUTABLE,"build & run"},
+	{'e',0,B_EXECUTABLE,"compile executable"},
+	{'v',0,B_VERBOSE,"verbose mode"},
+	{'h',0,0,"help"},
+	{0,0,0,0}
+};
+void dump_help(){
+	for (auto opt=g_Options;opt->name;opt++){
+		printf("%c - %s\n",opt->name,opt->help);
+	}
+}
+
 int main(int argc, const char** argv) {
 	
 //	dbprintf("precedences: ->%d *%d +%d &%d \n", precedence(ARROW),precedence(MUL),precedence(ADD),precedence(AND));
@@ -4042,17 +4064,11 @@ int main(int argc, const char** argv) {
 	for (auto i=1; i<argc; i++) {
 		const char* a=argv[i];
 		if (a[0]=='-'){
-			for (int j=1; a[j];j++){
-				if (a[j]=='a') options|=B_AST;
-				if (a[j]=='t') options|=B_TYPES;
-				if (a[j]=='d') options|=B_DEFS;
-				if (a[j]=='g') options|=B_GENERICS;
-				if (a[j]=='l') options|=B_LLVM;
-				if (a[j]=='r') options|=B_RUN|B_EXECUTABLE;
-				if (a[j]=='e') options|=B_EXECUTABLE;
-				if (a[j]=='v') options|=B_VERBOSE;
-				if (a[j]=='E') {printf("%s",g_TestProg);}
-
+			for (auto j=1; a[j];j++){
+				if (a[j]=='h') dump_help();
+				for (auto opt=g_Options;opt->name;opt++){
+					if (opt->name==a[j]) {options&=~opt->clear;options|=opt->set;}
+				}
 			}
 		}
 	}
