@@ -1298,9 +1298,6 @@ void output_code(FILE* ofp, Scope* scope) {
 			cg.emit_txt("= private unnamed_addr constant [%d x i8] c\"%s\\00\"\n", l->llvm_strlen, buffer);
 		}
 	}
-	for (auto sub=scope->child; sub; sub=sub->next) {
-		output_code(cg.ofp,sub);
-	}
 	for (auto n=scope->named_items;n;n=n->next) {
 		for (auto s=n->structs; s;s=s->next_of_name) {
 			s->compile(cg, scope);
@@ -1310,6 +1307,10 @@ void output_code(FILE* ofp, Scope* scope) {
 		for(auto f=n->fn_defs; f; f=f->next_of_name){
 			f->compile(cg,scope);
 		}
+	}
+	// compile child items last, as they depend on me.
+	for (auto sub=scope->child; sub; sub=sub->next) {
+		output_code(cg.ofp,sub);
 	}
 }
 

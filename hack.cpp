@@ -1736,12 +1736,11 @@ void Scope::add_fn(ExprFnDef* fnd){
 	ni->fn_defs=fnd;
 }
 void Scope::add_struct(ExprStructDef* sd){
-	dbprintf("adding struct %p %s ins of %p to %s\n",sd,sd->name_str(),sd->instance_of,this->name());
+	dbprintf_instancing("adding struct %p %s ins of %p to %s\n",sd,sd->name_str(),sd->instance_of,this->name());
 	if (sd->name_ptr)
 		return;
 	if (sd->instance_of){
-		if (sd->instance_of->name_ptr)
-			return; // if the master is linked - dont need the instances.
+		return add_struct(sd->instance_of);
 	}
 	auto ni=get_named_items_local(sd->name);
 	sd->name_ptr=ni;
@@ -4155,10 +4154,10 @@ int main(int argc, const char** argv) {
 		printf("no sources given so running inbuilt tests.\n");
 		printf("typeparam test\n");
 		auto ret0=compile_source(g_TestMemberFn,"g_TestMemberFn","test.ll",B_TYPES|B_RUN);
-		auto ret1=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test.ll",B_RUN);
+//		auto ret1=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test.ll",B_RUN);
 		//auto ret1=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		printf("bigger test, all features\n");
-		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_TYPES|B_RUN);
+//		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_TYPES|B_RUN);
 	}
 }
 
