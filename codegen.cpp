@@ -206,7 +206,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			// todo: why not 'addr' aswell?
 			if (this->type->is_pointer() || (addr &&!reg)) {
 				write_comment(cg,"dot reg=%s addr=%s index=%d",str(reg),str(addr),elem);
-				auto sub=this->dot_sub(cg,elem);
+				auto sub=this->get_elem_index(cg,elem);
 				return sub.load(cg);
 			} else{
 				// elem acess
@@ -250,7 +250,10 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			}
 			else if (auto fp=dynamic_cast<ExprFnDef*>(val)){
 				if (fp->is_closure()) {
-					
+					// Build a pair. we would also build the Capture Object here.
+					// TODO: we're blocked from making a nice' write_make_pair()' wrapper here
+					// because: fp->fn_type is interpretted as {ptr,env}, but we must manually
+					// tell it to build the first & second types.
 					auto r=ins_begin_reg_op(cg,next_reg(cg),"insertvalue");
 					write_comma(cg); write_type(cg, fp->fn_type); write_undef(cg);
 					write_comma(cg);
@@ -376,15 +379,15 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		}
 		return valreg;
 	}
-	CgValue dot(CodeGen& cg,const Node* field_name,Scope* sc){	//calculates & returns adress
+	CgValue get_elem(CodeGen& cg,const Node* field_name,Scope* sc){	//calculates & returns adress
 		ASSERT(type );
 		auto sd=type->deref_all()->struct_def;
 		if (!sd) {type->dump(-1);error(field_name,"struct not resolved\n");}
 		int index=sd->field_index(field_name);
 		auto field=sd->find_field(field_name);
-		return dot_sub(cg,index);
+		return get_elem_index(cg,index);
 	}
-	CgValue dot_sub(CodeGen& cg, int field_index){
+	CgValue get_elem_index(CodeGen& cg, int field_index){
 		if ((bool)reg && !addr && !(this->type->is_pointer())){
 			// lazy ref to inreg field index,
 			// 'load'/'store' will do 'insert'/'extract'
@@ -814,7 +817,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	// 3-operand; assign-op; assign-op; mem-assign-op;
 	if (opname==DOT || opname==ARROW){
 		auto lhs=e->lhs->compile(cg,sc);
-		return lhs.dot(cg,e->rhs,sc);
+		return lhs.get_elem(cg,e->rhs,sc);
 	}
 	else if (e->lhs && e->rhs){
 		auto lhs=e->lhs->compile(cg,sc);
@@ -923,7 +926,7 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 		// can we trust llvm to cache the small cases in reg..
 		for (int i=0; i<e->argls.size();i++) {
 			auto rvalue=si.value[i]->compile(cg,sc);
-			auto dst = struct_val.dot(cg,si.field_refs[i],sc);
+			auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);
 			auto srcreg = rvalue.load(cg,0);
 			dst.store_from(cg,srcreg);
 			if (dst.type==struct_val.type)
