@@ -1,4 +1,5 @@
 #include "repl.h"
+#include <cstdio>
 void repl() {
 
 	Scope	global(nullptr);
