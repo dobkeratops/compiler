@@ -3,6 +3,7 @@
 // TODO: properly abstract llvm instruction generation to move to llvm api.
 inline void dbprintf_mangle(const char*,...){}
 
+
 void CodeGen::emit_struct_name(RegisterName dst ){emit_reg(dst);}
 Name next_reg_name(int *next_reg_index){
 	char tmp[64]; sprintf(tmp,"r%d",(*next_reg_index)++);
@@ -18,11 +19,11 @@ Name next_reg_name(Name prefix_name, int *next_reg_index){
 }
 void emit_reg(RegisterName reg);
 
-void CodeGen::emit_ins_begin_sub(){fprintf(ofp,"\t"); comma=false;}
-void CodeGen::emit_undef(){fprintf(ofp,"undef");}
-void CodeGen::emit_ins_name(const char* txt){fprintf(ofp,"= %s ",txt);}
-void CodeGen::emit_ins_begin_name(const char* txt){emit_ins_begin_sub();fprintf(ofp,"%s ",txt);}
-void CodeGen::emit_ins_end(){fprintf(ofp,"\n");}
+void CodeGen::emit_ins_begin_sub(){emit_txt("\t"); comma=false;}
+void CodeGen::emit_undef(){emit_txt("undef");}
+void CodeGen::emit_ins_name(const char* txt){emit_txt("= %s ",txt);}
+void CodeGen::emit_ins_begin_name(const char* txt){emit_ins_begin_sub();emit_txt("%s ",txt);}
+void CodeGen::emit_ins_end(){emit_txt("\n");}
 void CodeGen::emit_txt(const char* str,...){// catch all, just spit out given string
 	char tmp[1024];
 	va_list arglist;
@@ -54,7 +55,7 @@ void CodeGen::emit_pointer_begin()	{emit_nest_begin("");};
 void CodeGen::emit_pointer_end()	{emit_nest_end("*");};
 
 void CodeGen::emit_comma(){
-	if (this->comma==1){fprintf(this->ofp,",");}
+	if (this->comma==1){emit_txt(",");}
 	this->comma=1;
 }
 void CodeGen::emit_separator(const char* txt){
@@ -72,11 +73,11 @@ RegisterName  CodeGen::emit_ins_begin(RegisterName reg, const char* op){
 }
 void CodeGen::emit_i32_lit(int index) {
 	emit_comma();
-	fprintf(ofp,"i32 %d",index);
+	emit_txt("i32 %d",index);
 }
 void CodeGen::emit_i32_reg(Name reg) {
 	emit_comma();
-	fprintf(ofp,"i32 ");
+	emit_txt("i32 ");
 	emit_reg(reg);
 }
 RegisterName	CodeGen::emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index){
@@ -93,8 +94,9 @@ void CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
 	emit_ins_begin_name("store");
 	emit_type(type,0);
 	emit_reg(reg);
-	emit_type(type,1);//fprintf(ofp,"* ");
-	emit_reg(addr); fprintf(ofp,", align 4");
+	emit_type(type,1);
+	emit_reg(addr);
+	emit_txt(", align 4");
 	emit_ins_end();
 }
 void CodeGen::emit_global(Name n){
