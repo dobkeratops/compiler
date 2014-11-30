@@ -51,6 +51,12 @@ extern void error(const char*,...);
 extern void error_begin(const Node* n, const char* str, ... );
 extern void error_end(const Node* n);
 extern bool is_comparison(Name n);
+extern Name getStringIndex(const char* str,const char* end) ;
+extern const char* getString(const Name&);
+extern bool is_operator(Name tok);
+extern bool is_ident(Name tok);
+extern bool is_type(Name tok);
+
 bool is_number(Name n);
 
 int index_of(Name n);
