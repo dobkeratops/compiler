@@ -1,5 +1,5 @@
 #pragma once
-char * gets(char*);
+extern "C" char* gets(char*);
 #include <stdio.h>
 #include <iostream>
 #include <vector>
