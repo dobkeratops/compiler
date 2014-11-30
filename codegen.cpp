@@ -323,7 +323,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			fprintf(ofp," <?CgV?> ");
 			this->type->dump_if(0);
 			ASSERT(this->type);
-			ASSERT(0 && "missing register type");
+			ASSERT(0 && "missing register, value wasn't found in resolving");
 		}
 	}
 	RegisterName store(CodeGen& cg,Name srcreg=0){// for read-modify-write

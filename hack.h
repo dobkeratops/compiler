@@ -341,6 +341,9 @@ public:
 	virtual ExprIdent* as_ident() {return nullptr;}
 	virtual ExprFnDef* as_fn_def() {return nullptr;}
 	virtual ExprBlock* as_block() {return nullptr;}
+	virtual ArgDef* as_arg_def() {return nullptr;}
+	virtual Variable* as_variable() {return nullptr;}
+	ArgDef*			as_field() {return this->as_arg_def();}
 	virtual void verify() {};
 };
 
@@ -406,6 +409,7 @@ struct Type : Expr{
 		auto tc=new Type(origin,c); auto tb=new Type(origin,b); tb->push_back(tc); push_back(tb);
 	}
 	Type(ExprStructDef* sd);
+	Type(Name outer, ExprStructDef* inner);
 	Type(Node* origin,Name i);
 	Type(Name i,SrcPos sp);
 	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
@@ -419,6 +423,31 @@ struct Type : Expr{
 	bool	is_complex()const;
 	bool	is_struct()const;
 	bool	is_callable()const	{return name==FN||name==CLOSURE;}
+	struct FnInfo{ Type* args; Type* ret;Type* receiver;};
+	FnInfo	get_fn_info(){
+		if (!is_callable()) return FnInfo{nullptr,nullptr,nullptr};
+		auto a=this->sub; auto ret=a->next; auto recv=ret?ret->next:nullptr;
+		return FnInfo{a,ret,recv};
+	}
+	Type* get_receiver(){
+		if (this->sub)
+			if (this->sub->next)
+				if (this->sub->next->next)
+					return this->sub->next->next;
+		return nullptr;
+	}
+	// we have a stupid OO receiver because we want C++ compatability;
+	// we can use it for lambda too. We will have extention methods.
+	void	set_fn_details(Type* args,Type* ret,Type* receiver){
+		ASSERT(this->is_callable());
+		ASSERT(this->sub==0);
+		this->push_back(args);
+		this->push_back(ret);
+		if (receiver) {
+			ASSERT(args&&ret);
+			this->push_back(receiver);
+		}
+	}
 	
 	Name array_size()const{
 		ASSERT(this->sub);
@@ -537,6 +566,7 @@ struct ExprFlow:Expr{	// control flow statements
 
 struct ExprDef :Expr{	// any that is a definition
 	Node*	refs;
+	virtual ExprStructDef* member_of()const{return nullptr;}
 };
 
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
@@ -567,15 +597,19 @@ struct ExprLiteral : ExprDef {
 	void translate_typeparams(const TypeParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc);
 };
-
 struct ArgDef :ExprDef{
+	Scope*	owner=0;
+	void set_owner(Scope* s){
+		ASSERT(owner==0 ||owner==s);
+		this->owner=s;}
+	ExprStructDef* member_of();
 	uint32_t	size_of,offset;
 	//Type* type=0;
 	Expr*		default_expr=0;
 	//Type* get_type()const {return type;}
 	//void set_type(Type* t){verify(t);type=t;}
 	//Type*& type_ref(){return type;}
-	ArgDef(SrcPos p,Name n, Type* t=nullptr,Expr* d=nullptr){pos=p; name=n;set_type(t);default_expr=d;}
+	ArgDef(SrcPos p,Name n, Type* t=nullptr,Expr* d=nullptr){pos=p; name=n;set_type(t);default_expr=d; owner=0;}
 	void dump(int depth) const;
 	virtual const char* kind_str()const;
 	~ArgDef(){}
@@ -654,6 +688,7 @@ private:
 public:
 	Scope(Scope* p){ASSERT(p==0);named_items=0; owner_fn=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
 	void visit_calls();
+	ExprStructDef*	get_receiver();
 	Variable*	try_capture_var(Name ident);	//sets up the capture block ptr.
 	Variable*	find_fn_variable(Name ident,ExprFnDef* f);
 	Variable*	get_fn_variable(Name name,ExprFnDef* f);
@@ -773,6 +808,7 @@ struct ExprStructDef: ExprDef {
 	NamedItems* name_ptr=0;
 //	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} error(this,"no field %s",str(name));return nullptr;}
 	ArgDef* find_field(const Node* rhs)const;
+	ArgDef* try_find_field(const Name n)const;
 	int field_index(const Node* rhs){
 		auto name=rhs->as_name();
 		for (auto i=0; i<fields.size(); i++){
@@ -831,6 +867,7 @@ struct  ExprFnDef : ExprDef {
 	NamedItems*	name_ptr=0;
 	Scope*		scope=0;
 	Capture*	capture=0;			// for closures- hidden param,environment struct passed in
+	ExprStructDef* receiver=0;
 	
 	Type* ret_type=0;
 	Type* fn_type=0;				// eg (args)->return
@@ -861,6 +898,7 @@ struct  ExprFnDef : ExprDef {
 	virtual ExprFnDef* as_fn_def() {return this;}
 	Node*			instanced_by()const{if (this->instance_of){return this->refs;}else return nullptr;}
 	void			dump(int ind) const;
+	ResolvedType	resolve_function(Scope* definer,ExprStructDef* receiver, const Type* desired, int flags);
 	ResolvedType	resolve(Scope* scope,const Type* desired,int flags);
 	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);
 	Capture*		get_or_create_capture();

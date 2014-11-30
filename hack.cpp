@@ -659,11 +659,18 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 			return propogate_type_fwd(flags,this, desired,this->type_ref());
 		}
 	} else
-	if (auto v=scope->find_variable_rec(this->name)){
+	if (auto v=scope->find_variable_rec(this->name)){ // look for scope variable..
 		v->on_stack=flags&R_PUT_ON_STACK;
 		this->set_def(v);
 		return propogate_type(flags,this, this->type_ref(),v->type_ref());
-	} else
+	}
+	if (auto sd=scope->get_receiver()) {
+		if (auto fi=sd->try_find_field(this->name)){
+			this->set_def(fi);
+		// anonymous struct fields are possible in local anon structs..
+			return propogate_type(flags,this, this->type_ref(),fi->type_ref());
+		}
+	}
 	if (auto f=scope->find_unique_fn_named(this,flags)){ // todo: filter using function type, because we'd be storing it as a callback frequently..
 		// TODO; loose end :( in case where arguments are known, this overrides the match
 		//we eitehr need to pass in arguemnt informatino here *aswell*, or seperaete out the callsite case properly.
@@ -956,6 +963,11 @@ void Type::dump(int depth)const{
 Type::Type(ExprStructDef* sd)
 {	struct_def=sd; name=sd->name; sub=0; next=0;
 	marker=123456;
+}
+Type::Type(Name outer_name,ExprStructDef* sd)
+{
+	name=outer_name;
+	push_back(new Type(sd));
 }
 
 
@@ -2357,6 +2369,13 @@ ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 //inner-function: 'definer_scope' has capture_from set - just take it.
 ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int flags) {
 	verify_all();
+	if (auto sd=dynamic_cast<ExprStructDef*>(definer_scope->owner_fn)){
+		return resolve_function(definer_scope,sd,desired,flags);
+	}
+	else return resolve_function(definer_scope,nullptr,desired,flags);
+}
+ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* recv,const Type* desired,int flags) {
+	verify_all();
 	
 	// propogate given arguments eg polymorphic lambda..
 	if (desired){
@@ -2379,6 +2398,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 
 	definer_scope->add_fn(this);
 	auto sc=definer_scope->make_inner_scope(&this->scope,this);
+	this->receiver=recv;
 	if (definer_scope->capture_from){
 		sc->capture_from=definer_scope->capture_from; // this is an 'inner function' (lambda, or local)
 	}
@@ -2405,6 +2425,13 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 				dbprintf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
 			}
 		}
+		auto th=sc->find_scope_variable(THIS);
+		if (!th && fn_type){
+			if (this->receiver){
+				th=sc->create_variable(receiver,THIS,VkArg);
+				th->set_type(fn_type->get_receiver());
+			}
+		}
 		Type* desired_ret;
 		if (desired)
 			desired_ret=desired->fn_return();
@@ -2422,14 +2449,14 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 	if (!this->fn_type) {
 		this->fn_type=new Type(this,this->is_closure()?CLOSURE:FN);
 		auto arglist=new Type(this,TUPLE);
-		this->fn_type->push_back(arglist);
 		for (auto a:this->args) {
 			arglist->push_back(a->type()?((Type*)a->type()->clone()):new Type(this,AUTO));
 		}
 		// TODO - type inference needs to know about elipsis, as 'endless auto'
 		//if (this->variadic){arglist->push_back(new Type(this,ELIPSIS));}
-		this->fn_type->push_back(this->ret_type?(Type*)(this->ret_type->clone()):new Type(this,AUTO));
-
+		auto ret_t=this->ret_type?(Type*)(this->ret_type->clone()):new Type(this,AUTO);
+		auto recv=receiver?new Type(PTR,receiver):nullptr;
+		this->fn_type->set_fn_details(arglist,ret_t,recv);
 		this->set_type(this->fn_type);
 	}
 	if (!this->is_generic()){
@@ -2936,6 +2963,9 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	return node;
 }
 
+void gather_vtable(ExprStructDef* d) {
+}
+
 void
 ExprBlock::create_anon_struct_initializer(){
 	// concatenate given names & argcount as the identifer
@@ -3217,9 +3247,13 @@ void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 }
 
 ArgDef*	ExprStructDef::find_field(const Node* rhs)const{
-	auto name=rhs->as_name();
+	auto fi= this->try_find_field(rhs->as_name());
+	if (!fi)
+		error(rhs,this,"no field %s in ",str(name),str(this->name));
+	return fi;
+}
+ArgDef* ExprStructDef::try_find_field(const Name name)const{
 	for (auto a:fields){if (a->name==name) return a;}
-	error(rhs,this,"no field %s in ",str(name),str(this->name));
 	return nullptr;
 }
 
@@ -3230,6 +3264,10 @@ void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)
 	for (auto s:structs)s->translate_typeparams(tpx);
 	if (tpx.typeparams_all_set())
 		this->typeparams.resize(0);
+}
+ExprStructDef* ArgDef::member_of()	{ // todo, implement for 'Variable' aswell, unify capture & member-object.
+	if (owner) return owner->get_receiver();
+	return nullptr;
 }
 
 void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
@@ -3387,6 +3425,7 @@ void ExprStructDef::roll_vtable() {
 	// todo - it should be namespaced..
 	char vtn[512];sprintf(vtn,"%s__vtable",str(this->name));
 	this->vtable=new ExprStructDef(this->pos,getStringIndex(vtn));
+	this->vtable->scope=this->scope;
 
 	// todo: we will create a global for the vtable
 	// we want to be able to emulate rust trait-objects
@@ -3430,7 +3469,12 @@ void ExprStructDef::dump(int depth) const{
 ExprStructDef* Scope::find_struct(const Node* node) {
 	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){return sd;} return find_struct_named(node);
 }
-
+ExprStructDef* Scope::get_receiver() {
+	if (auto o=this->owner_fn)
+		if (auto f=o->as_fn_def())
+			return f->receiver;
+	return nullptr;
+}
 
 bool ExprStructDef::is_generic()const{
 	if (typeparams.size())
@@ -3447,9 +3491,15 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 
 	if (!this->is_generic()){
 		auto sc=definer_scope->make_inner_scope(&this->scope,this);
-		for (auto m:fields){ m->resolve(sc,nullptr,flags);}
-		for (auto s:structs){ s->resolve(sc,nullptr,flags);}
-		for (auto f:functions){ f->resolve(sc,nullptr,flags);}
+		for (auto m:fields){
+			m->resolve(sc,nullptr,flags);
+		}
+		for (auto s:structs){
+			s->resolve(sc,nullptr,flags);
+		}
+		for (auto f:functions){
+			f->resolve(sc,nullptr,flags);
+		}
 
 		if (this->inherits_type && !this->inherits){
 			this->inherits_type->resolve(definer_scope,desired,flags);
@@ -3459,6 +3509,9 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 			roll_vtable();
 		}
 		if (this->vtable) this->vtable->resolve(definer_scope,desired,flags);
+	} else{
+		for (auto ins=this->instances; ins; ins=ins->next_instance)
+			ins->resolve(definer_scope,nullptr, flags);
 	}
 
 	return propogate_type_fwd(flags,this, desired);
@@ -3690,6 +3743,16 @@ ExprFnDef* parse_closure(TokenStream&src) {// eg |x|x*2
 // every file is an implicitly a function aswell taking no args
 // when imported, a module inserts a call to that function.
 // that sets up global stuff for it.
+const char* g_TestMemberFn=
+/*1*/"fn printf(s:str,...)->int;  \n"
+/*2*/"struct Foo{	\n"
+/*3*/"	q:int,		\n"
+/*4*/"	fn method(){	\n"
+/*5*/"		printf(\"method says q=%d this=%p\\n\",q,this);	\n"
+/*6*/"}			\n"
+/*7*/"fn main(){	"
+/*8*/"	printf(\"member function test..\\n\");	"
+/*9*/"}	";
 
 const char* g_TestProg=
 /*
@@ -4086,7 +4149,8 @@ int main(int argc, const char** argv) {
 	if (argc<=1) {
 		printf("no sources given so running inbuilt tests.\n");
 		printf("typeparam test\n");
-		auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test.ll",B_RUN);
+		auto ret0=compile_source(g_TestMemberFn,"g_TestMemberFn","test.ll",B_TYPES|B_RUN);
+		auto ret1=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test.ll",B_RUN);
 		//auto ret1=compile_source(g_TestProg3,"g_TestProg3","test.ll",B_AST|B_TYPES|B_LLVM|B_EXECUTABLE|B_RUN);
 		printf("bigger test, all features\n");
 		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_TYPES|B_RUN);
