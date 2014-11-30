@@ -1,6 +1,7 @@
 #include "repl.h"
+char * gets(char*);
 #include <cstdio>
-void repl() {
+void repl() {	
 
 	Scope	global(nullptr);
 	while (1) {
