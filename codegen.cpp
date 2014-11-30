@@ -539,13 +539,14 @@ void dump_locals(Scope* s){
 CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 	auto st=this;
 	if (st->is_generic()) {	// emit generic struct instances
-		cg.emit_comment("instances of %s",str(st->name));
+		cg.emit_comment("instances of %s in %s %p",str(st->name), sc->name(),st);
 		int i=0;
 		for (auto ins=st->instances; ins; ins=ins->next_instance,i++){
-			cg.emit_comment("instance %d:",i);
+			cg.emit_comment("instance %d: %s %s in %s %p",i,str(st->name),str(ins->name) ,sc->name(),ins);
 			ins->compile(cg, sc);
 		}
 	} else {
+		cg.emit_comment("instance %s of %s in %s %p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st);
 		cg.emit_struct_name(st->get_mangled_name());
 		cg.emit_ins_name("type");
 		cg.emit_struct_begin();
@@ -1026,6 +1027,13 @@ CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc){
 	auto n=this;
 	auto var=sc->find_variable_rec(n->name);
 	if (!var){
+		if (auto fi=n->def->as_field()){
+			// emit Load instruction
+			auto thisv=sc->find_variable_rec(THIS);
+			sc->dump(0);
+			ASSERT(thisv&&"attempting to find field in non method,?");
+			return CgValue(thisv).get_elem(cg, this, sc);
+		} else
 		if (n->def) {
 			return CgValue(n->def);
 		}
@@ -1061,6 +1069,14 @@ void CodeGen::emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode){
 		cg.emit_global(fn_node->get_mangled_name());
 	cg.emit_args_begin();
 	int inter=0;
+	if(auto r=fn_node->fn_type->get_receiver()){
+		cg.emit_type(r,false);
+		if (mode==EmitDefinition){
+			auto var=scope->get_or_create_scope_variable(r,THIS, VkArg);
+			var->get_reg(THIS, &cg.m_next_reg, false);
+			cg.emit_reg(var->regname);
+		}
+	}
 	for (auto a:fn_node->args){
 		cg.emit_type(a->type(),false);//was a->is_complex. confusion here over pass by ref/val. we think fn sigs should be 1:1. but raw struct type should  be pass by val? will we have to copy struct val?
 		if (mode==EmitDefinition){
@@ -1089,6 +1105,9 @@ void CodeGen::emit_function_type(const Type* t) {
 	cg.emit_pointer_begin();
 	cg.emit_type(retn,0);
 	cg.emit_args_begin();
+	if (auto rt=t->get_receiver()){
+		cg.emit_type(rt);
+	}
 	for (auto arg=argtuple->sub; arg;arg=arg->next){
 		cg.emit_type(arg);
 	}

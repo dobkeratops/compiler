@@ -1736,8 +1736,13 @@ void Scope::add_fn(ExprFnDef* fnd){
 	ni->fn_defs=fnd;
 }
 void Scope::add_struct(ExprStructDef* sd){
-	dbprintf_instancing("adding struct %s to %s\n",sd->name_str(),this->name());
-	if (sd->name_ptr) return;
+	dbprintf("adding struct %p %s ins of %p to %s\n",sd,sd->name_str(),sd->instance_of,this->name());
+	if (sd->name_ptr)
+		return;
+	if (sd->instance_of){
+		if (sd->instance_of->name_ptr)
+			return; // if the master is linked - dont need the instances.
+	}
 	auto ni=get_named_items_local(sd->name);
 	sd->name_ptr=ni;
 	sd->next_of_name=ni->structs;

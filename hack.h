@@ -429,7 +429,7 @@ struct Type : Expr{
 		auto a=this->sub; auto ret=a->next; auto recv=ret?ret->next:nullptr;
 		return FnInfo{a,ret,recv};
 	}
-	Type* get_receiver(){
+	Type* get_receiver()const {
 		if (this->sub)
 			if (this->sub->next)
 				if (this->sub->next->next)
@@ -619,6 +619,7 @@ struct ArgDef :ExprDef{
 	int		alignment() const			{ return 4;}//todo, eval templates/other structs, consider pointers, ..
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	ResolvedType	resolve(Scope* sc, const Type* desired, int flags) override;
+	ArgDef*	as_arg_def()		{return this;}
 };
 
 struct NamedItems {		// everything defined under a name
