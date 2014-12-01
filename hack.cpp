@@ -21,6 +21,7 @@ struct VTablePtrs {
 }
 g_vtable_ptrs;
 Node* g_pRoot;
+bool g_verbose=true;
 void lazy_cache_vtable_ptrs(){
 	if (g_vtable_ptrs.expr_op)
 		return;
@@ -696,8 +697,12 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	}
 	else if (!scope->find_named_items_rec(this->name)){
 		// didn't find it yet, can't do anything
-		if (flags & R_FINAL)
+		if (flags & R_FINAL){
+//			if (g_verbose){
+//				g_pRoot->as_block()->scope->dump(0);
+//			}
 			error(this,scope,"\'%s\' undeclared",str(this->name));
+		}
 		return ResolvedType();
 	}
 	return ResolvedType();
@@ -1626,6 +1631,20 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 
 	Scope* prev=nullptr;
 	vector<pair<ExprFnDef*,int>> candidates;
+
+	Scope* rec_scope=nullptr;
+	if (args.size()>0){
+		if (auto rt=args[0]->type()){
+			auto rec_t=rt->deref_all();
+			if (rec_t->struct_def){
+				rec_scope=rec_t->struct_def->scope;
+				if (rec_scope){
+					ff.find_fn_from_scopes(rec_scope,nullptr);
+				}
+			}
+		}
+	}
+
 	for (auto src=this; src; prev=src,src=src->parent) {// go back thru scopes first;
 		ff.find_fn_from_scopes(src,prev);
 	}
@@ -2060,7 +2079,10 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
 	verify_all();
 	if (this->type()) this->type()->resolve(sc,nullptr,flags);
-	if (this->call_expr) this->call_expr->resolve(sc,nullptr,flags);
+
+	/// loose end? if this is a method-call, we dont resolve the symbol here,
+	/// in other contexts we do
+	if (this->call_expr &&!receiver) this->call_expr->resolve(sc,nullptr,flags);
 	::verify(this->get_type());
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->get_type()) this->set_type(new Type(this,VOID));
@@ -2127,8 +2149,17 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 		}else {
 			indirect_call=true;
 		}
-		auto fn_type_r=this->call_expr->resolve(sc,nullptr,flags);
-		auto fn_type=indirect_call?nullptr:fn_type_r.type;
+		Type* fn_type=nullptr;
+		if (receiver || indirect_call) {
+		}
+		else{
+			// an ident can't be just resolved like this
+			fn_type=this->call_expr->resolve(sc,nullptr,flags).type;
+//			fn_type_r=this->call_expr->resolve(sc,nullptr,flags);
+//		} else {
+//			fn_type_r=this->
+		}
+//		auto fn_type=indirect_call?nullptr:fn_type_r.type;
 		
 		int arg_index=0;
 		if (fn_type) {
@@ -3807,19 +3838,21 @@ const char* g_TestMemberFn=
 /*3*/  "	q:int,												\n"
 /*4*/  "	fn method()->float{										\n"
 /*5*/  "		printf(\"Foo method says q=%d this=%p\\n\",q,this);2.0	\n"
-/*6*/  "}														\n"
-/*2*/  "struct Bar{												\n"
-/*3*/  "	w:int,												\n"
-/*4*/  "	fn method()->float{										\n"
-/*5*/  "		printf(\"Bar method says q=%d this=%p\\n\",w,this);2.0	\n"
-/*6*/  "}														\n"
-/*7*/ 	"fn main(){												\n"
-/*8*/	"	x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;\n"
-/*9*/  	"	printf(\"member function test.. %d\\n\",x.q);				\n"
-/*10*/	"	px.method();	\n"
-/*10*/	"	py.method();	\n"
-/*11*/	"		\n"
-/*12*/  "}														\n";
+/*6*/  "	}													\n"
+/*7*/  "}														\n"
+/*8*/  "struct Bar{												\n"
+/*9*/  "	w:int,												\n"
+/*10*/ "	fn method()->float{										\n"
+/*11*/ "		printf(\"Bar method says q=%d this=%p\\n\",w,this);2.0	\n"
+/*12*/ "	}													\n"
+/*13*/ "}														\n"
+/*14*/ "fn main(){												\n"
+/*15*/ "	x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;\n"
+/*16*/ "	printf(\"member function test.. %d\\n\",x.q);				\n"
+/*17*/	"	px.method();	\n"
+/*18*/	"	py.method();	\n"
+/*19*/	"		\n"
+/*20*/  "}														\n";
 
 const char* g_TestBasicSyntax=
 /* 1*/ "*++x=*--y e+r:int foo(e,r);\n"
@@ -3949,6 +3982,7 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	TextInput	src(buffer,filename);
 
 	auto node=parse_block(src,0,SEMICOLON,nullptr);
+	g_pRoot=node;
 	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
 	if (flags & B_AST){
 		node->dump(0);
@@ -4059,7 +4093,7 @@ void run_tests(){
 	auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test0.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestFlow,"g_TestFlow","test1.ll",B_TYPES|B_RUN);
 	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);
-	auto ret3=compile_source(g_TestMemberFn,"g_TestMemberFn","test3.ll",B_TYPES|B_RUN);
+	auto ret3=compile_source(g_TestMemberFn,"g_TestMemberFn","test3.ll",B_DEFS| B_TYPES|B_RUN);
 }
 
 int main(int argc, const char** argv) {
