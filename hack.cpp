@@ -1993,7 +1993,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				auto method_name=call->call_expr->name;
 				// really we want to desugar this, a.foo(b) is just foo(a,b)
 				// but we respect the shape of the AST?
-				dbprintf("method call: %s\n",str(method_name));
+//				dbprintf("method call: %s\n",str(method_name));
 				call->resolve_sub(sc, desired, flags, lhs);
 				return propogate_type(flags,this,call->type(),this->type_ref());
 			} else {
@@ -3843,15 +3843,17 @@ const char* g_TestMemberFn=
 /*8*/  "struct Bar{												\n"
 /*9*/  "	w:int,												\n"
 /*10*/ "	fn method()->float{										\n"
-/*11*/ "		printf(\"Bar method says q=%d this=%p\\n\",w,this);2.0	\n"
+/*11*/ "		printf(\"Bar method says w=%d this=%p\\n\",w,this);2.0	\n"
 /*12*/ "	}													\n"
 /*13*/ "}														\n"
+/*14*/ "fn func1(f:*Foo){printf(\" func1 says q=%d f=%p\\n\",f.q,f);}	\n"
 /*14*/ "fn main(){												\n"
 /*15*/ "	x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;\n"
 /*16*/ "	printf(\"member function test.. %d\\n\",x.q);				\n"
-/*17*/	"	px.method();	\n"
-/*18*/	"	py.method();	\n"
-/*19*/	"		\n"
+/*17*/	"	px.func1();	\n"
+/*18*/	"	px.method();	\n"
+/*19*/	"	py.method();	\n"
+/*20*/	"		\n"
 /*20*/  "}														\n";
 
 const char* g_TestBasicSyntax=
