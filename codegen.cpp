@@ -784,6 +784,99 @@ CgValue CodeGen::emit_cast(CgValue dst, CgValue&lhs_val, Expr* rhs_type_expr){
 	return dst;
 }
 
+CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* e){
+	// [3.1]evaluate arguments
+	vector<CgValue> l_args;
+	vector<CgValue> l_args_reg;
+	
+	// process function argumetns & load
+	if (receiver){
+		auto recr=receiver->compile(cg,sc);
+		l_args_reg.push_back(CgValue(recr.load(cg),recr.type));
+	}
+	for (auto arg:e->argls){
+		auto reg=arg->compile(cg,sc);
+		if (!reg.type) {
+			error_begin(arg,"arg type not resolved in call\n");
+			dbprintf("arg type=");arg->dump(-1);newline(0);
+			auto reg=arg->compile(cg,sc);
+			error_end(arg);
+			ASSERT(reg.type);
+		}
+		auto regval=CgValue(reg.load(cg),reg.type);
+		l_args_reg.push_back(regval);
+	}
+	int i=0;
+	for (auto reg:l_args_reg){
+		if (reg.addr && !reg.reg) {
+			reg.load(cg);
+		}
+		l_args.push_back(reg);
+		i++;
+	}
+	
+	//[3.2] evaluate call object..
+	auto call_fn=e->get_fn_call();
+	RegisterName indirect_call=0;
+	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
+	
+	auto ret_type=e->type();	// semantic analysis should have done this
+	auto dst=(ret_type->name!=VOID)?e->get_reg_new(call_fn?call_fn->name:FN, &cg.m_next_reg):0;
+	//auto rt=call_fn->get_return_value();
+	
+	auto emit_arg_list=[&](Type* rect,RegisterName receiver){
+		cg.emit_args_begin();
+		if(rect && receiver){
+			cg.emit_type(rect);
+			cg.emit_reg(receiver);
+		}
+		for (auto a: l_args){
+			cg.emit_type_operand(a);
+		}
+		cg.emit_args_end();
+	};
+	
+	//[3.3] make the call..
+	if (e->call_expr->is_function_name()) {
+		//[3.3.1] Direct Call
+		cg.emit_ins_begin(dst,"call");
+		cg.emit_function_type(call_fn);// NOTE we need this until we handle elipsis
+		cg.emit_global(call_fn->get_mangled_name());
+		emit_arg_list(0,0);
+		cg.emit_ins_end();
+		
+	} else {
+		//[3.3.2] Indirect Call... Function Pointer
+		auto fn_obj = e->call_expr->compile(cg, sc);
+		indirect_call=fn_obj.load(cg);
+		if (fn_obj.type->is_closure()){
+			//[.1] ..call Closure (function,environment*)
+			indirect_call=cg.emit_extractvalue(cg.next_reg(),fn_obj.type,indirect_call,0);
+			cg.emit_ins_begin(dst,"call");
+			cg.emit_function_type(e->call_expr->type());
+			cg.emit_reg(indirect_call);
+			emit_arg_list(0,0);
+			cg.emit_ins_end();
+		} else{
+			//[.2] ..Raw Function Pointer
+			cg.emit_ins_begin(dst,"call");
+			cg.emit_function_type(e->call_expr->type());
+			cg.emit_reg(indirect_call);
+			emit_arg_list(0,0);
+			cg.emit_ins_end();
+		}
+	}
+	// [3.3.2] Indirect Call, Closure.
+	
+	
+	if (ret_type && ret_type->name!=VOID) {
+		return CgValue(dst,ret_type);
+	} else{
+		return CgValue();
+	}
+}
+
+
 CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	auto n=this;
 	auto e=this;
@@ -797,8 +890,14 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	// generalize by lvalue being in register or memory.
 	// 3-operand; assign-op; assign-op; mem-assign-op;
 	if (opname==DOT || opname==ARROW){
-		auto lhs=e->lhs->compile(cg,sc);
-		return lhs.get_elem(cg,e->rhs,sc);
+		if (rhs->as_ident()) {
+			auto lhsv=e->lhs->compile(cg,sc);
+			return lhsv.get_elem(cg,e->rhs,sc);
+		}
+		else{
+			// compile method call
+			return compile_function_call(cg,sc,e->lhs,e->rhs->as_block());
+		}
 	}
 	else if (e->lhs && e->rhs){
 		auto lhs=e->lhs->compile(cg,sc);
@@ -886,7 +985,6 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		return CgValue();
 }
 
-
 CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 	auto n=this;
 	auto e=this; auto curr_fn=cg.curr_fn;
@@ -905,7 +1003,9 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 		auto struct_val= cg.emit_alloca_type(e, e->type());
 		e->regname=struct_val.reg; // YUK todo - reallyw wanted reg copy
 		// can we trust llvm to cache the small cases in reg..
-		for (int i=0; i<e->argls.size();i++) {
+		if (e->argls.size()!=si.value.size())
+			dbprintf("warning StructInitializer vs argls mismatch, %d,%d\n",e->argls.size(),si.value.size());
+		for (int i=0; i<e->argls.size() && i<si.value.size();i++) {
 			auto rvalue=si.value[i]->compile(cg,sc);
 			auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);
 			auto srcreg = rvalue.load(cg,0);
@@ -935,90 +1035,7 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 	}
 	//[3] FUNCTION CALL
 	else if (e->is_function_call()){
-		// [3.1]evaluate arguments
-		vector<CgValue> l_args;
-		vector<CgValue> l_args_reg;
-		// process function argumetns & load
-		for (auto arg:e->argls){
-			auto reg=arg->compile(cg,sc);
-			if (!reg.type) {
-				error_begin(arg,"arg type not resolved in call\n");
-				dbprintf("arg type=");arg->dump(-1);newline(0);
-				auto reg=arg->compile(cg,sc);
-				error_end(arg);
-				ASSERT(reg.type);
-			}
-			auto regval=CgValue(reg.load(cg),reg.type);
-			l_args_reg.push_back(regval);
-		}
-		int i=0;
-		for (auto reg:l_args_reg){
-			if (reg.addr && !reg.reg) {
-				reg.load(cg);
-			}
-			l_args.push_back(reg);
-			i++;
-		}
-
-		//[3.2] evaluate call object..
-		auto call_fn=e->get_fn_call();
-		RegisterName indirect_call=0;
-		cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
-
-		auto ret_type=e->type();	// semantic analysis should have done this
-		auto dst=(ret_type->name!=VOID)?n->get_reg_new(call_fn?call_fn->name:FN, &cg.m_next_reg):0;
-		//auto rt=call_fn->get_return_value();
-
-		auto emit_arg_list=[&](Type* rect,RegisterName receiver){
-			cg.emit_args_begin();
-			if(rect && receiver){
-				cg.emit_type(rect);
-				cg.emit_reg(receiver);
-			}
-			for (auto a: l_args){
-				cg.emit_type_operand(a);
-			}
-			cg.emit_args_end();
-		};
-
-		//[3.3] make the call..
-		if (e->call_expr->is_function_name()) {
-			//[3.3.1] Direct Call
-			cg.emit_ins_begin(dst,"call");
-			cg.emit_function_type(call_fn);// NOTE we need this until we handle elipsis
-			cg.emit_global(call_fn->get_mangled_name());
-			emit_arg_list(0,0);
-			cg.emit_ins_end();
-			
-		} else {
-			//[3.3.2] Indirect Call... Function Pointer
-			auto fn_obj = e->call_expr->compile(cg, sc);
-			indirect_call=fn_obj.load(cg);
-			if (fn_obj.type->is_closure()){
-				//[.1] ..call Closure (function,environment*)
-				indirect_call=cg.emit_extractvalue(cg.next_reg(),fn_obj.type,indirect_call,0);
-				cg.emit_ins_begin(dst,"call");
-				cg.emit_function_type(e->call_expr->type());
-				cg.emit_reg(indirect_call);
-				emit_arg_list(0,0);
-				cg.emit_ins_end();
-			} else{
-				//[.2] ..Raw Function Pointer
-				cg.emit_ins_begin(dst,"call");
-				cg.emit_function_type(e->call_expr->type());
-				cg.emit_reg(indirect_call);
-				emit_arg_list(0,0);
-				cg.emit_ins_end();
-			}
-		}
-			// [3.3.2] Indirect Call, Closure.
-	
-		
-		if (ret_type && ret_type->name!=VOID) {
-			return CgValue(dst,ret_type);
-		} else{
-			return CgValue();
-		}
+		return compile_function_call(cg,sc,nullptr,e);
 	}
 	return CgValue();
 }

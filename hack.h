@@ -524,7 +524,7 @@ struct ExprBlock :public ExprScopeBlock{
 	ExprBlock(const SrcPos& p);
 	bool	is_compound_expression()const	{return !call_expr && !index(name);}
 	bool	is_tuple()const					{return this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
-	bool	is_struct_initializer()const	{return this->bracket_type==OPEN_BRACE && this->delimiter==COMMA;}
+	bool	is_struct_initializer()const	{return this->bracket_type==OPEN_BRACE && (this->delimiter==COMMA||this->delimiter==0);}
 	bool	is_match() const				{return false;}
 	bool	is_function_call()const			{return (this->call_expr!=0) && this->bracket_type==OPEN_PAREN && (this->delimiter==COMMA||this->delimiter==0);}
 	bool	is_anon_struct()const			{return this->is_struct_initializer() && !this->call_expr;}
@@ -546,6 +546,7 @@ struct ExprBlock :public ExprScopeBlock{
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	virtual void	find_vars_written(Scope* s,set<Variable*>& vars )const;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
+	ResolvedType	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
 };
 struct ExprMatch : ExprBlock {
 	// todo..
@@ -566,6 +567,7 @@ struct ExprFlow:Expr{	// control flow statements
 
 struct ExprDef :Expr{	// any that is a definition
 	Node*	refs;
+	void	remove_ref(Node* ref);
 	virtual ExprStructDef* member_of()const{return nullptr;}
 };
 
@@ -738,7 +740,7 @@ public:
 	};
 };
 
-ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
+ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block,Scope* scope,const Type* desired);
 struct ExprIf :  ExprFlow {
 	Scope*	scope=0;
 	Expr*	cond=0;

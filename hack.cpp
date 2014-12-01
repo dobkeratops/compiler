@@ -164,7 +164,7 @@ void error(const Node* n,const Node* n2, const char* str, ... ){
 	error_end(n);
 }
 
-ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
+ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
 
 void print_tok(Name n){dbprintf("%s ",getString(n));};
 
@@ -472,13 +472,29 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 	}
 	return ResolvedType(a,ResolvedType::COMPLETE);
 }
+
+void	ExprDef::remove_ref(Node* ref){
+	Node** pp=&refs;
+	Node* p;
+	for (p=*pp; p; pp=&p->next_of_def, p=*pp) {
+		if (p==ref) *pp=p->next_of_def;
+	}
+}
+
+
 void Node::set_def(ExprDef *d){
 	if (!def) {
 		this->next_of_def=d->refs; d->refs=this;
 		def=d;
 	}
-	else
-		ASSERT(d==this->def);
+	else {
+		if (d!=this->def){
+			dbprintf("WARNING!!-was %d %s now %d %s",def->pos.line,def->name_str(), d->pos.line,d->name_str());
+//			ASSERT(d==this->def);
+		}
+		def->remove_ref(this);
+		def=d;
+	}
 }
 
 ExprStructDef* Node::as_struct_def()const{ error(this,"expect struct def"); return nullptr;};
@@ -1945,15 +1961,25 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			t=t->deref_all();
 			// now we have the elem..
 			verify_expr_op(this);
-			verify_expr_ident(rhs);
-			ASSERT(rhs->as_ident());
-			if (auto st=sc->find_struct_of(lhs)){
-				if (auto f=st->find_field(rhs)){
-					ret=f->type();
-					return propogate_type(flags,this, ret,this->type_ref());
+//			verify_expr_ident(rhs);
+//			ASSERT(rhs->as_ident());
+			if (auto field_name=rhs->as_ident()){
+				if (auto st=sc->find_struct_of(lhs)){
+					if (auto f=st->find_field(rhs)){
+						ret=f->type();
+						return propogate_type(flags,this, ret,this->type_ref());
+					}
 				}
+			} else if (auto call=rhs->as_block()){
+				auto method_name=call->call_expr->name;
+				// really we want to desugar this, a.foo(b) is just foo(a,b)
+				// but we respect the shape of the AST?
+				dbprintf("method call: %s\n",str(method_name));
+				call->resolve_sub(sc, desired, flags, lhs);
+				return propogate_type(flags,this,call->type(),this->type_ref());
 			} else {
 				if (flags & R_FINAL){
+					error(this,"dot operator not call or field acess", t->name_str());
 					error(this,"cant find struct %s", t->name_str());
 				}
 			}
@@ -2028,8 +2054,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		return propogate_type_fwd(flags,this, desired, type_ref());
 	}
 }
-
 ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
+	return this->resolve_sub(sc,desired,flags,nullptr);
+}
+ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
 	verify_all();
 	if (this->type()) this->type()->resolve(sc,nullptr,flags);
 	if (this->call_expr) this->call_expr->resolve(sc,nullptr,flags);
@@ -2127,10 +2155,14 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 				argls[i]->resolve(sc,nullptr ,flags);
 			}
 			if (this->call_expr->is_ident() && 0==dynamic_cast<Variable*>(this->call_expr->def)){
-				return resolve_make_fn_call(this, sc,desired,flags);
+				return resolve_make_fn_call(receiver,this, sc,desired,flags);
 			}
 		} else if (auto fnc=this->get_fn_call()){ // static call
-			for (auto i=0; i<argls.size(); i++)  {
+			int ofs=(receiver)?1:0;
+			if (receiver)
+				receiver->resolve(sc,fnc->args[0]->type(),flags);
+			for (auto srci=0; srci<argls.size(); srci++)  {
+				int i=srci+ofs;
 				auto fnarg=i<fnc->args.size()?fnc->args[i]:nullptr;
 				argls[i]->resolve(sc,fnarg?fnarg->type():nullptr ,flags);
 			}
@@ -2150,6 +2182,9 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 
 	auto sd=sc->find_struct(si->call_expr);
 	if (!sd){
+		if (flags&R_FINAL){
+			error(si->call_expr,"can't find struct %s",si->call_expr->name_str());
+		}
 		return ResolvedType();
 	}
 	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
@@ -2162,7 +2197,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 	// assignment forms are expected eg MyStruct{x=...,y=...,z=...} .. or can we have MyStruct{expr0,expr1..} equally?
 	//int next_field_index=0;
 	// todo:infer generic typeparams - adapt code for functioncall. we have struct fields & struct type-params & given expressions.
-	int next_field_index=0;
+	int named_field_index=-1;
 	// todo encapsulate StructInitializer to reuse logic for codegen
 	field_indices.reserve(si->argls.size());
 	int field_index=0;
@@ -2177,11 +2212,13 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			propogate_type(flags,op,op->lhs->type_ref(),op->rhs->type_ref());
 			//				propogate_type(flags,op,op->rhs->type_ref());
 			op->lhs->def=field;
-			next_field_index=sd->field_index(op->lhs);
+			named_field_index=sd->field_index(op->lhs);
 			this->value.push_back(op->rhs);
 			t=op->rhs->type();
-		}else if (next_field_index>=0){
-			if (field_index>=sd->fields.size()){error(a,sd,"too many fields");}
+		}else if (named_field_index==-1){
+			if (field_index>=sd->fields.size()){
+				error(a,sd,"too many fields");
+			}
 			field=sd->fields[field_index++];
 			this->value.push_back(a);
 			a->resolve(sc,field->type(),flags); // todo, need generics!
@@ -2204,13 +2241,16 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 }
 
 
-ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) {
+ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) {
 	verify_all();
 
 	int num_resolved_args=0;
 	for (int i=0; i<block->argls.size(); i++) {
-		block->argls[i]->resolve(scope,desired,flags);
+		block->argls[i]->resolve(scope,nullptr,flags);
 		if (block->argls[i]->type()) num_resolved_args++;
+	}
+	if (receiver){
+		receiver->resolve(scope,nullptr,flags); if (receiver->type()) num_resolved_args++;
 	}
 	
 	if (block->get_fn_call() && num_resolved_args==block->argls.size())
@@ -2233,7 +2273,11 @@ ResolvedType resolve_make_fn_call(ExprBlock* block/*caller*/,Scope* scope,const 
 	}
 	verify_all();
 
-	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_name(), block,block->argls, desired,flags);
+	vector<Expr*> args_with_receiver;
+	if (receiver) args_with_receiver.push_back(receiver);
+	args_with_receiver.insert(args_with_receiver.end(),block->argls.begin(),block->argls.end());
+
+	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_name(),block,args_with_receiver, desired,flags);
 	auto fnc=call_target;
 	if (!call_target){
 		return ResolvedType();
@@ -3761,12 +3805,21 @@ const char* g_TestMemberFn=
 /*1*/  "fn printf(s:str,...)->int;  							\n"
 /*2*/  "struct Foo{												\n"
 /*3*/  "	q:int,												\n"
-/*4*/  "	fn method(){										\n"
-/*5*/  "		printf(\"method says q=%d this=%p\\n\",q,this);	\n"
+/*4*/  "	fn method()->float{										\n"
+/*5*/  "		printf(\"Foo method says q=%d this=%p\\n\",q,this);2.0	\n"
 /*6*/  "}														\n"
-/*7*/  "fn main(){												\n"
-/*8*/  "	printf(\"member function test..\\n\");				\n"
-/*9*/  "}														\n";
+/*2*/  "struct Bar{												\n"
+/*3*/  "	w:int,												\n"
+/*4*/  "	fn method()->float{										\n"
+/*5*/  "		printf(\"Bar method says q=%d this=%p\\n\",w,this);2.0	\n"
+/*6*/  "}														\n"
+/*7*/ 	"fn main(){												\n"
+/*8*/	"	x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;\n"
+/*9*/  	"	printf(\"member function test.. %d\\n\",x.q);				\n"
+/*10*/	"	px.method();	\n"
+/*10*/	"	py.method();	\n"
+/*11*/	"		\n"
+/*12*/  "}														\n";
 
 const char* g_TestBasicSyntax=
 /* 1*/ "*++x=*--y e+r:int foo(e,r);\n"
@@ -3826,8 +3879,8 @@ const char* g_TestProg2=
 /* 6*/ "fn setv[A,B](u:&Union[A,B], v:B){\n"
 /* 7*/ "	u.b=v; u.tag=1; \n"
 /* 8*/ "}\n"
-/* 9*/ "fn take_fn(f:fn(int)->void){ f(5);}\n"
-/*10*/ "fn take_closure(f:(int)->void){ f(5);}\n"
+/* 9*/ "fn take_fn(pfunc:fn(int)->void){ pfunc(5);}\n"
+/*10*/ "fn take_closure(pfunc:(int)->void){ pfunc(5);}\n"
 /*11*/ "fn printf(s:str,...)->int;\n"
 /*12*/ "fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
 /*13*/ "fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
