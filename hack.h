@@ -429,23 +429,23 @@ struct Type : Expr{
 		auto a=this->sub; auto ret=a->next; auto recv=ret?ret->next:nullptr;
 		return FnInfo{a,ret,recv};
 	}
-	Type* get_receiver()const {
+	ExprStructDef* get_receiver()const {
 		if (this->sub)
 			if (this->sub->next)
 				if (this->sub->next->next)
-					return this->sub->next->next;
+					return this->sub->next->next->struct_def;
 		return nullptr;
 	}
 	// we have a stupid OO receiver because we want C++ compatability;
 	// we can use it for lambda too. We will have extention methods.
-	void	set_fn_details(Type* args,Type* ret,Type* receiver){
+	void	set_fn_details(Type* args,Type* ret,ExprStructDef* rcv){
 		ASSERT(this->is_callable());
 		ASSERT(this->sub==0);
 		this->push_back(args);
 		this->push_back(ret);
-		if (receiver) {
+		if (rcv) {
 			ASSERT(args&&ret);
-			this->push_back(receiver);
+			this->push_back(new Type(rcv));
 		}
 	}
 	

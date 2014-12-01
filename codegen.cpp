@@ -1068,14 +1068,6 @@ void CodeGen::emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode){
 		cg.emit_global(fn_node->get_mangled_name());
 	cg.emit_args_begin();
 	int inter=0;
-	if(auto r=fn_node->fn_type->get_receiver()){
-		cg.emit_type(r,false);
-		if (mode==EmitDefinition){
-			auto var=scope->get_or_create_scope_variable(r,THIS, VkArg);
-			var->get_reg(THIS, &cg.m_next_reg, false);
-			cg.emit_reg(var->regname);
-		}
-	}
 	for (auto a:fn_node->args){
 		cg.emit_type(a->type(),false);//was a->is_complex. confusion here over pass by ref/val. we think fn sigs should be 1:1. but raw struct type should  be pass by val? will we have to copy struct val?
 		if (mode==EmitDefinition){
@@ -1104,9 +1096,6 @@ void CodeGen::emit_function_type(const Type* t) {
 	cg.emit_pointer_begin();
 	cg.emit_type(retn,0);
 	cg.emit_args_begin();
-	if (auto rt=t->get_receiver()){
-		cg.emit_type(rt);
-	}
 	for (auto arg=argtuple->sub; arg;arg=arg->next){
 		cg.emit_type(arg);
 	}

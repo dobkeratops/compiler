@@ -2439,13 +2439,6 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 				dbprintf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
 			}
 		}
-		auto th=sc->find_scope_variable(THIS);
-		if (!th && fn_type){
-			if (this->get_receiver()){
-				th=sc->create_variable(recs,THIS,VkArg);
-				th->set_type(fn_type->get_receiver());
-			}
-		}
 		Type* desired_ret;
 		if (desired)
 			desired_ret=desired->fn_return();
@@ -2463,15 +2456,15 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 	if (!this->fn_type) {
 		this->fn_type=new Type(this,this->is_closure()?CLOSURE:FN);
 		auto arglist=new Type(this,TUPLE);
+//		if (recs){arglist->push_back(new Type(PTR,recs));}
 		for (auto a:this->args) {
 			arglist->push_back(a->type()?((Type*)a->type()->clone()):new Type(this,AUTO));
 		}
 		// TODO - type inference needs to know about elipsis, as 'endless auto'
 		//if (this->variadic){arglist->push_back(new Type(this,ELIPSIS));}
 		auto ret_t=this->ret_type?(Type*)(this->ret_type->clone()):new Type(this,AUTO);
-		auto rect=recs?new Type(PTR,recs):nullptr;
 		
-		this->fn_type->set_fn_details(arglist,ret_t,rect);
+		this->fn_type->set_fn_details(arglist,ret_t,recs);
 		this->set_type(this->fn_type);
 	}
 	if (!this->is_generic()){
@@ -2514,6 +2507,7 @@ struct TextInput {
 	char watch_tok[64][12];
 #endif
 	bool error_newline;
+	int indent,depth;
 	void error(const char* str,...){
 		if(!error_newline){printf("\n");}
 		printf("%s:%d:",filename,pos.line);
@@ -2567,8 +2561,10 @@ struct TextInput {
 			tok_end++; // step past last quote.
 	}
 	void skip_whitespace(){
+		bool newline=false;
 		while (isWhitespace(*tok_end)&&*tok_end) {
-			if (*tok_end=='\n') {pos.line++;line_start=tok_end; typaram_depth=0;}
+			if (*tok_end=='\n') {pos.line++;line_start=tok_end; typaram_depth=0;indent=0;newline=true;}
+			if (newline)indent++;
 			pos.col=tok_end-line_start;
 			tok_end++;
 		}
@@ -2655,6 +2651,8 @@ struct TextInput {
 		for (const char* c=tok_start; c!=tok_end;c++) {}
 		auto r=curr_tok;
 		advance_tok();
+		if (r==OPEN_BRACE || r==OPEN_BRACKET || r==OPEN_PAREN) depth++;
+		if (r==CLOSE_BRACE || r==CLOSE_BRACKET || r==CLOSE_PAREN) depth--;
 		return r;
 	}
 	bool eat_if(Name i) {
@@ -2731,7 +2729,8 @@ struct TextInput {
 
 	Name peek_tok(){return curr_tok;}
 	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
-	Name expect(Name t){ decltype(t) x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s\n",str(t), str(x));exit(0);} return x;}
+	Name expect(Name t, const char* err=""){ decltype(t) x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s;%s\n",str(t), str(x),err);exit(0);} return x;}
+	Name expect(Name a,Name b, const char* err=""){ auto x=eat_tok();if (!(a==x || b==x)) {error(0,"expected %s or %s found %s;%s\n",str(a),str(b), str(x),err);exit(0);} return x;}
 };
 
 void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
@@ -2739,7 +2738,7 @@ typedef TextInput TokenStream;
 
 // todo: plugin arch? Node::parse(), dispatch on registered keywords?
 Expr* parse_lisp(TokenStream& src);
-ExprFnDef* parse_fn(TokenStream&src);	// eg fn foo()
+ExprFnDef* parse_fn(TokenStream&src,ExprStructDef* owner);	// eg fn foo()
 ExprFnDef* parse_closure(TokenStream&src);//eg |x|
 ExprFor* parse_for(TokenStream&src);
 ExprIf* parse_if(TokenStream&src);
@@ -2866,7 +2865,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		}
 		else if (src.eat_if(FN)) {
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
-			auto local_fn=parse_fn(src);
+			auto local_fn=parse_fn(src,nullptr);
 			operands.push_back(local_fn);
 		}
 		else if (src.eat_if(FOR)){
@@ -3047,7 +3046,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 	if (tok==close) return nullptr;
 	if (tok==FN){	// fn(arg0,arg1,...)->ret
 		ret=new Type(FN,src.pos);
-		src.expect(OPEN_PAREN);
+		src.expect(OPEN_PAREN,"eg fn() fn name()");
 		ret->push_back(parse_tuple(src,owner));// args
 		parse_ret_val(src,owner,ret);
 	}
@@ -3148,7 +3147,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name){
 		if (src.eat_if(STRUCT)) {
 			sd->structs.push_back(parse_struct(src));
 		} else if (src.eat_if(FN)){
-			sd->functions.push_back(parse_fn(src));
+			sd->functions.push_back(parse_fn(src,sd));
 		} else {
 			auto arg=parse_arg(src,CLOSE_PAREN);
 			sd->fields.push_back(arg);
@@ -3203,8 +3202,6 @@ ExprStructDef* parse_enum(TokenStream& src) {
 	}
 	return ed;
 }
-
-
 
 void ExprIf::translate_typeparams(const TypeParamXlat& tpx){
 	this->cond->translate_typeparams(tpx);
@@ -3456,10 +3453,10 @@ void ExprStructDef::roll_vtable() {
 				f->name,
 				f->fn_type,//todo:  insertion of 'this'
 				new ExprIdent(this->pos, f->name)
-				));
+			)
+		);
 	}
 }
-
 
 void ExprStructDef::dump(int depth) const{
 	newline(depth);
@@ -3475,9 +3472,9 @@ void ExprStructDef::dump(int depth) const{
 	dbprintf("]");
 	if (this->inherits) {dbprintf(" : %s", str(inherits->name));}
 	dbprintf("{");
-	for (auto m:this->literals){m->dump(depth+1);}
-	for (auto m:this->fields){m->dump(depth+1);}
-	for (auto s:this->structs){s->dump(depth+1);}
+	for (auto m:this->literals)	{m->dump(depth+1);}
+	for (auto m:this->fields)	{m->dump(depth+1);}
+	for (auto s:this->structs)	{s->dump(depth+1);}
 	for (auto f:this->functions){f->dump(depth+1);}
 	newline(depth);dbprintf("}");
 }
@@ -3539,12 +3536,12 @@ ExprFor* parse_for(TokenStream& src){
 	if (src.eat_if(IN)){
 		p->pattern=first;
 		p->init=parse_block(src, OPEN_BRACE, 0, 0);
-		src.expect(OPEN_BRACE);
+		src.expect(OPEN_BRACE,"eg for x..in..{}");
 	} else {//if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
 		p->pattern=0;
 		p->init=first;
 		p->cond=parse_expr(src);
-		src.expect(SEMICOLON);
+		src.expect(SEMICOLON,"eg for init;cond;inc{..}");
 		p->incr=parse_block(src,OPEN_BRACE,COMMA,0);
 	}
  //else {
@@ -3552,7 +3549,7 @@ ExprFor* parse_for(TokenStream& src){
 //	}
 	p->body=parse_block(src, CLOSE_BRACE, SEMICOLON, nullptr);
 	if (src.eat_if(ELSE)){
-		src.expect(OPEN_BRACE);
+		src.expect(OPEN_BRACE,"after else");
 		p->else_block=parse_block(src,CLOSE_BRACE, SEMICOLON, nullptr);
 	}
 	return p;
@@ -3610,7 +3607,7 @@ void ExprIf::dump(int depth) const {
 	newline(depth);dbprintf("{\n");
 	body->dump(depth+1);
 	if (else_block)	{
-		indent(depth);dbprintf("} else{\n");
+		indent(depth);dbprintf("}else{\n");
 		else_block->dump(depth+1);
 	}
 	newline(depth);dbprintf("}\n");
@@ -3720,7 +3717,7 @@ void parse_fn_body(ExprFnDef* fndef, TokenStream& src){
 	}
 }
 
-ExprFnDef* parse_fn(TokenStream&src) {
+ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner) {
 	auto *fndef=new ExprFnDef(src.pos);
 	// read function name or blank
 
@@ -3735,6 +3732,9 @@ ExprFnDef* parse_fn(TokenStream&src) {
 	} else {
 		char tmp[512]; sprintf(tmp,"anon_fn_%d",src.pos.line);
 		fndef->name=getStringIndex(tmp);
+	}
+	if (owner){
+		fndef->args.push_back(new ArgDef(src.pos,THIS,new Type(PTR,owner)));
 	}
 	parse_fn_args_ret(fndef,src,CLOSE_PAREN);
 	parse_fn_body(fndef,src);

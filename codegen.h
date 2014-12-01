@@ -29,6 +29,8 @@ public:
 	vector<Node*> compile_later;
 	ExprFnDef*	curr_fn;	// The current function being compiled - no nesting allowed. (defer with 'compile_later')
 	Name next_reg();
+	/// TODO: wrapper functions for every instruction codegen needs
+	/// so single calls to codegen can emit different back ends (LLVM, C, ..)
 	void emit_struct_name(RegisterName dst );
 	void emit_reg(RegisterName dst );
 	void emit_ins_end();
