@@ -244,7 +244,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 					cg.emit_txt("0");
 					cg.emit_ins_end();
 					cg.emit_ins_begin(reg,"insertvalue");
-					cg.emit_type(fp->fn_type); cg.emit_reg(r);
+					cg.emit_type_reg(fp->fn_type,false,r);
 					cg.emit_comma();
 					cg.emit_txt("i8* null");
 					cg.emit_comma();
@@ -426,7 +426,7 @@ void CodeGen::emit_phi_reg_label(Name reg, Name label){
 	emit_txt("]");
 }
 
-void CodeGen::emit_type(const Type* t, bool ref) {
+void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method.
 	emit_comma(); // type always starts new operand
 	if (!t) { fprintf(ofp,"<type_expected>");return;}
 	if (ref) emit_pointer_begin();
@@ -568,7 +568,7 @@ CgValue CodeGen::emit_alloca_type(Expr* holder, Type* t) {
 	return CgValue(0,t, r);
 }
 
-void emit_local_vars(CodeGen& cg,Expr* n, ExprFnDef* fn, Scope* sc) {
+void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 	auto ofp=cg.ofp;
 	for (auto v=sc->vars; v;v=v->next_of_scope){
 		if (v->kind!=Local) continue;
@@ -747,12 +747,11 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	return CgValue();
 }
 
-CgValue CodeGen::emit_cast(CgValue dst, CgValue&lhsv, Expr* rhse){
+CgValue CodeGen::emit_cast(CgValue dst, CgValue&lhs_val, Expr* rhs_type_expr){
 	
-	// todo rename 'src', 'dst' to avoid blah as blah confusion vs C cast (type)(expr)
-	lhsv.load(*this);
-	auto lhst=lhsv.type;
-	auto rhst=rhse->type();
+	lhs_val.load(*this);
+	auto lhst=lhs_val.type;
+	auto rhst=rhs_type_expr->type();
 	const char* ins="nop";
 
 	if (lhst->is_int() && rhst->is_float()){
@@ -778,7 +777,7 @@ CgValue CodeGen::emit_cast(CgValue dst, CgValue&lhsv, Expr* rhse){
 		ins="fptrunc";
 	}
 	emit_ins_begin(dst.reg, ins);
-	emit_type_reg(lhsv.type,0,lhsv.reg);
+	emit_type_reg(lhs_val.type,0,lhs_val.reg);
 	emit_separator(" to ");
 	emit_type(rhst,0);
 	emit_ins_end();

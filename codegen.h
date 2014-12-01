@@ -11,6 +11,7 @@ char* name_mangle_append_name(char* buffer, int size, Name n);
 class CgValue;
 struct ExprFnDef;
 enum EmitFnMode {EmitDefinition,EmitDeclaration,EmitType};
+struct Type; struct ExprFnDef;
 
 class CodeGen {
 public:
@@ -33,17 +34,17 @@ public:
 	void emit_ins_end();
 	void emit_txt(const char* str,...);
 	void emit_type(CgValue& lv );
-	void emit_type(const Type* t, bool is_ref=false);
+	void emit_type(const Type* t, bool is_ref=false); // these would prefer to be extentions, dont want 'CodeGen' dependant on the AST.
 	void emit_type_reg(const Type* t,bool ref, Name reg);
 	void emit_function_type(ExprFnDef* fn_node);
 	void emit_function_type(const Type* t);
 	void emit_global(Name n);
-	CgValue emit_alloca_type(Expr* holder, Type* t);
 	void emit_ins_begin_sub();
 	void emit_undef();
+	CgValue emit_alloca_type(Expr* holder, Type* t);
+	RegisterName  emit_ins_begin(RegisterName reg, const char* op);
 	void emit_ins_name(const char* txt);
 	void emit_ins_begin_name(const char* txt);
-	RegisterName  emit_ins_begin(RegisterName reg, const char* op);
 	void emit_comma();
 	void emit_nest_begin(const char* str);
 	void emit_nest_end(const char* str);

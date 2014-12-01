@@ -736,8 +736,8 @@ public:
 		}
 		return *pp_scope;
 	};
-
 };
+
 ResolvedType resolve_make_fn_call(ExprBlock* block,Scope* scope,const Type* desired);
 struct ExprIf :  ExprFlow {
 	Scope*	scope=0;
@@ -793,7 +793,7 @@ struct ExprStructDef: ExprDef {
 	Name mangled_name=0;
 	bool is_enum_=false;
 	bool is_enum() { return is_enum_;}
-	vector<TypeParam>	typeparams;
+	vector<TypeParam>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	vector<Type*>		instanced_types;
 	vector<ArgDef*>			fields;
 	vector<ExprLiteral*>	literals;
@@ -868,7 +868,7 @@ struct  ExprFnDef : ExprDef {
 	NamedItems*	name_ptr=0;
 	Scope*		scope=0;
 	Capture*	capture=0;			// for closures- hidden param,environment struct passed in
-	ExprStructDef* receiver=0;
+	ExprStructDef* m_receiver=0;
 	
 	Type* ret_type=0;
 	Type* fn_type=0;				// eg (args)->return
@@ -882,9 +882,16 @@ struct  ExprFnDef : ExprDef {
 	bool variadic;
 	bool c_linkage=false;
 	bool m_closure=false;
+	// num_receivers =number of prefix 'arguments'
+	// eg a::foo(b,c)  has 3 args, 1 receiver.   foo(a,b,c) has 3 args, 0 receiver.
+	// its possible closures can desugar as methods?
+	// makes UFCS easier; in matcher, simply prioritize candidates with correct count
+	int num_receivers=0;
 	Expr* body=0;
 	ExprFnDef(){};
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
+	void			set_receiver(ExprStructDef* sd); // not sure if it'll be arbitrary type
+	ExprStructDef*	get_receiver();
 	int		get_name()const {return index(name);}
 	Name	get_mangled_name()const;
 	bool	is_generic() const;

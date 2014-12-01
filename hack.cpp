@@ -732,13 +732,11 @@ void ExprOp::dump(int depth) const {
 	auto id=this->name;
 	if (lhs) {lhs->dump(depth+1);}
 	
-	newline(depth);if (is_prefix(id))dbprintf("prefix");
-	else if (lhs && rhs)dbprintf("infix");
-	else dbprintf("postfix");print_tok(id);
+	newline(depth);print_tok(id);
 
-	if (get_type()) {dbprintf(":");get_type()->dump(-1);};
 	if (rhs) {rhs->dump(depth+1);}
 	newline(depth);dbprintf(")");
+	if (get_type()) {dbprintf(":");get_type()->dump(-1);};
 }
 
 ExprBlock::ExprBlock(const SrcPos& s){ pos=s;}
@@ -1097,7 +1095,7 @@ void TypeParam::dump(int depth) const {
 const char* ArgDef::kind_str()const{return"arg_def";}
 
 // the operators should all just be functioncalls, really.
-// return type of function definition is of course a functoin object.
+// return type of function definition is of course a function object.
 // if we make these things inline, we create Lambdas
 // todo: receivers.
 
@@ -1116,6 +1114,20 @@ bool ExprBlock::is_undefined() const{
 	for (auto x:argls){if (x->is_undefined()) return true;}
 	return false;
 }
+
+void ExprFnDef::set_receiver(ExprStructDef* r){
+	///TODO: ambiguity between special receiver and '1st parameter'.
+	/// we started coding a 'special receiver'
+	/// however UFCS means a generalized '1st parameter' makes more sense,
+	/// and it's less intrusive to retrofit.
+	/// we might also try 'multiple receivers' for nested classes?
+	/// eg struct Scene { struct Model{  methods of model get Scene*, Model*... }}
+	/// .. and we want to implement lambdas as sugar for callable objects much like c++/rust trait reform
+	this->m_receiver=r;
+}
+
+
+
 
 void ExprFnDef::dump(int ind) const {
 	if (!this) return;
@@ -1141,7 +1153,9 @@ void ExprFnDef::dump(int ind) const {
 		}
 	}
 }
-
+ExprStructDef*	ExprFnDef::get_receiver(){ // TODO: switch to 1st-argument.
+	return m_receiver;
+}
 Expr* ExprFnDef::get_return_value() const{
 	if (this->body){
 		if (auto b=dynamic_cast<ExprBlock*>(this->body)){
@@ -1377,13 +1391,13 @@ void match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBloc
 struct FindFunction {
 	struct Candidate{ExprFnDef* f; int score;};
 	vector<Candidate> candidates;
-	Name	name;
-	const Expr* callsite;
+	Name			name;
+	const Expr* 	callsite;
+	int 			flags;
+	bool 			verbose=false;
+	int				max_candidates=5;
 	const vector<Expr*>& args;
-	const Type* ret_type;
-	int flags;
-	bool verbose=false;
-	int	max_candidates=5;
+	const Type* 	ret_type;
 	FindFunction(Name n, const vector<Expr*>& a, const Type* r,int f):name(n),args(a),ret_type(r),flags(f){}
 
 	void consider_candidate(ExprFnDef* f);
@@ -1791,11 +1805,11 @@ Variable* Scope::get_or_create_variable(Name name,VarKind k){
 	return this->create_variable(name,k);
 }
  */
-Variable* Scope::create_variable(Node* n, Name name,VarKind k){
+Variable* Scope::create_variable(Node* ast_pos, Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	if (exv) return exv;
 	ASSERT(exv==0);
-	auto v=new Variable(n->pos,name,k); v->next_of_scope=this->vars; this->vars=v;
+	auto v=new Variable(ast_pos->pos,name,k); v->next_of_scope=this->vars; this->vars=v;
 	v->name=name;v->owner=this;
 	return v;
 }
@@ -2374,7 +2388,7 @@ ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int fl
 	}
 	else return resolve_function(definer_scope,nullptr,desired,flags);
 }
-ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* recv,const Type* desired,int flags) {
+ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* recs,const Type* desired,int flags) {
 	verify_all();
 	
 	// propogate given arguments eg polymorphic lambda..
@@ -2398,7 +2412,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 
 	definer_scope->add_fn(this);
 	auto sc=definer_scope->make_inner_scope(&this->scope,this);
-	this->receiver=recv;
+	this->set_receiver(recs);
 	if (definer_scope->capture_from){
 		sc->capture_from=definer_scope->capture_from; // this is an 'inner function' (lambda, or local)
 	}
@@ -2427,8 +2441,8 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		}
 		auto th=sc->find_scope_variable(THIS);
 		if (!th && fn_type){
-			if (this->receiver){
-				th=sc->create_variable(receiver,THIS,VkArg);
+			if (this->get_receiver()){
+				th=sc->create_variable(recs,THIS,VkArg);
 				th->set_type(fn_type->get_receiver());
 			}
 		}
@@ -2455,8 +2469,9 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		// TODO - type inference needs to know about elipsis, as 'endless auto'
 		//if (this->variadic){arglist->push_back(new Type(this,ELIPSIS));}
 		auto ret_t=this->ret_type?(Type*)(this->ret_type->clone()):new Type(this,AUTO);
-		auto recv=receiver?new Type(PTR,receiver):nullptr;
-		this->fn_type->set_fn_details(arglist,ret_t,recv);
+		auto rect=recs?new Type(PTR,recs):nullptr;
+		
+		this->fn_type->set_fn_details(arglist,ret_t,rect);
 		this->set_type(this->fn_type);
 	}
 	if (!this->is_generic()){
@@ -2722,6 +2737,7 @@ struct TextInput {
 void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
 typedef TextInput TokenStream;
 
+// todo: plugin arch? Node::parse(), dispatch on registered keywords?
 Expr* parse_lisp(TokenStream& src);
 ExprFnDef* parse_fn(TokenStream&src);	// eg fn foo()
 ExprFnDef* parse_closure(TokenStream&src);//eg |x|
@@ -3472,7 +3488,7 @@ ExprStructDef* Scope::find_struct(const Node* node) {
 ExprStructDef* Scope::get_receiver() {
 	if (auto o=this->owner_fn)
 		if (auto f=o->as_fn_def())
-			return f->receiver;
+			return f->get_receiver();
 	return nullptr;
 }
 
@@ -3641,8 +3657,6 @@ ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	}
 }
 
-
-
 void ExprFor::dump(int d) const {
 	newline(d);dbprintf("for ");
 	if (this->is_c_for()) {
@@ -3744,219 +3758,123 @@ ExprFnDef* parse_closure(TokenStream&src) {// eg |x|x*2
 // when imported, a module inserts a call to that function.
 // that sets up global stuff for it.
 const char* g_TestMemberFn=
-/*1*/"fn printf(s:str,...)->int;  \n"
-/*2*/"struct Foo{	\n"
-/*3*/"	q:int,		\n"
-/*4*/"	fn method(){	\n"
-/*5*/"		printf(\"method says q=%d this=%p\\n\",q,this);	\n"
-/*6*/"}			\n"
-/*7*/"fn main(){	"
-/*8*/"	printf(\"member function test..\\n\");	"
-/*9*/"}	";
+/*1*/  "fn printf(s:str,...)->int;  							\n"
+/*2*/  "struct Foo{												\n"
+/*3*/  "	q:int,												\n"
+/*4*/  "	fn method(){										\n"
+/*5*/  "		printf(\"method says q=%d this=%p\\n\",q,this);	\n"
+/*6*/  "}														\n"
+/*7*/  "fn main(){												\n"
+/*8*/  "	printf(\"member function test..\\n\");				\n"
+/*9*/  "}														\n";
 
-const char* g_TestProg=
-/*
-	"*++x=*--y e+r:int foo(e,r);"
-	"self.pos+self.vel*dt;"
-	"future.pos=self.pos+self.vel*dt;"
-	"x=y=z=3; x+y+z=0;"	
-	"p=&self.pos;"
-	"*d++=s;"
-	"q=(++10+*p);"
-	"fn do_they_float(){set(tfl, 1.0); do_they_int();};"
-	"fn min(a,b){if(a<b,a,b)}"
-	"fn max(a,b){if(a>b,a,b)}"
-	"fn clamp(a,b,f){ min(b,max(a,f)) }"
-	"fn lerp(a:float,b:float,f:float){(b-a)*f+a}"
-	"fn mad(a:float,b:float,f:float){a+b*f}"
-	"fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}"
-*/
-//	"x=y; y=z; z=0.0;"
+const char* g_TestBasicSyntax=
+/* 1*/ "*++x=*--y e+r:int foo(e,r);\n"
+/* 2*/ "self.pos+self.vel*dt;\n"
+/* 3*/ "future.pos=self.pos+self.vel*dt;\n"
+/* 4*/ "x=y=z=3; x+y+z=0;\n"
+/* 5*/ "p=&self.pos;\n"
+/* 6*/ "*d++=s;\n"
+/* 7*/ "q=(++10+*p);\n"
+/* 8*/ "fn do_they_float(){set(tfl, 1.0); do_they_int();};\n"
+/* 9*/ "fn min(a,b){if(a<b,a,b)}\n"
+/*10*/ "fn max(a,b){if(a>b,a,b)}\n"
+/*11*/ "fn clamp(a,b,f){ min(b,max(a,f)) }\n"
+/*12*/ "fn lerp(a:float,b:float,f:float){(b-a)*f+a}\n"
+/*13*/ "fn mad(a:float,b:float,f:float){a+b*f}\n"
+/*14*/ "fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}\n"
+;
 
-/*
-	"future.pos=self.pos+self.vel*dt;"
-	"fn add(a,b){a+b};"
-	"fn what(a:int,b:int)->int{x=a+b;other(a,b);x-=b;x+b};"
-	"fn other(a:int,b:int)->int{a+b};"
-	"fn foo(x:tuple[int,int])->int{_};"
-	"fn foo(x:float)->float{_};"
-	"fn do_what[X=int](x:X,y:X)->X{_};"
-    "struct VecInt{data:*i32,num:i32,cap:i32};"
-	"fn render(m:Mesh){}"
-	"x=1.0; y=2.0; z=3.0; w=0.5;"
-	"foo=lerp(x,add(y,z),w);"
-	"struct Mesh[VERTEX,INDEX]{ vertices:VERTEX;triangles:INDEX[3]};"
-	"lambda = fn(x){ print(\"foo_bar_baz\");};"
-	"i=20;"
-	"fn Mesh()->Mesh{_}"
-	"mesh = Mesh();"
-	"i=10; j=20.0; k=j+i;"
-	"fn itof(i:int)->float{_}"
-	"fn make()->tuple[int,int]{_}"
-	"obj=make();"
-	"i=lerp(p,q,r);"
-	"render(mesh);"
-	"my_str=\"foobar\";"
-	"f1=foo(obj);"
-	"f2=foo(y);"
- 	"if i<10 {printf(1)} else {printf(2)}"
-	"for i in foo {print(loop stuff);} else {printf(); madd(1,2,3);}"
-	"for x=0; x<10; x++ { printf(x); }"
-	"if i<10 {printf(1)} else {printf(2)}"
-	"lerp(1,2,0);"
-
-	"fn lerp(a:int,b:int,f:int)->int{(b-a)*f+a};"
-	"fn lerp(a,b,f){(b-a)*f+a};"
-
-	"fn printf(a:int,b:int,c:int,d:int){}"
-	"fn printf(a:int,b:float,c:int,d:float){}"
-	"struct Vec3{x:float,y:float,z:float};"
-	"struct Mat3{ax:Vec3,ay:Vec3,az:Vec3};"
-
-	"fn foobar(a:int,b:int)->float{"
-"	m:=Mat3;v:=Vec3; vz:=m.ay.z; vw:=m.az.y; vz+=vw; q:=v.x; v.x=q;m.az.x=q;"
-	"	printf(1,vz,3,vw);"
-	"vz"
-	"}"
-*/
-"fn lerp(a,b,f)->float{(b-a)*f+a};\n"
-	"fn lerp[T,F](a:T,b:T,f:F){(b-a)*f+a};  \n"
-	"fn foo(a:int)->int{printf(\"foo_int\n\");0};  \n"
-	"fn bar(a:int)->int{printf(\"bar_int\n\");0};  \n"
-	"fn printf(s:str,...)->int;  \n"
-	"fn push_back[T](t:*Vec[T],v:T)->int{  \n"
-	"	a:=t.num;   \n"
-	"	printf(\"push_back %d\n\", a);0  \n"
-	"}  \n"
-	"struct Vec[T]{data:*T, num:int};   \n"
-	"struct Vec3[X=vx,Y=vy,Z=vz]{X:float,Y:float,Z:float};   \n"
-	"struct Vec4{vx:float,vy:float,vz:float,vw:float};   \n"
-//	"fn F[F,O,X,Y](o:O, x:X,y:Y){ o.vtable.F(o,x,y)   };"
-
-	"fn main(argc:int,argv:**char)->int{  \n"
-	"	t1:=argc<0 && argc>1;\n"
-	"	test_result:=if argc==0 || argc==1 {14} else {13} ;\n"
-	"	xs=:array[int,512];  \n"
-//	"	fp:=foo;\n"
-	"	p2:=&xs[1];  \n"
-	"	fs=:array[float,64];  \n"
-	"	ys=:Vec[int];  \n"
-	"	ys.data=&xs[3];  \n"
-	"	ys.num=10;   \n"
-	"	yp:=ys.data;  \n"
-	"	mv4:=Vec4{vx=1.0,vy=2.0,vz=0.5,vw=1.0};\n"
-	"	mv5:={key=0,value=10};\n"
-	"	push_back(&ys,2);  \n"
-//	"	f:=fn local_fn(a:float,b:int)->int{printf(\"hello lambda\\n\");b};  \n"
-//	"	r:=f(0.1,2);  \n"
-	"	my_vec=:Vec3[vecx];  my_vec.vecx=10.0;my_vec.vy=5.0;  \n"
-	"	q:=&xs[1];  p1:=&xs[1];  p1val:=*p1; \n"
-	"	xs[1]=20;  xs[2]+=400;  xs[3]=500;  \n"
-	"   z:=5;  foo(z);  \n"
-	"   y:=xs[1]+z+xs[2];  \n"
-	"	f0:=lerp(10.0,20.0,0.5);\n"
-	"   x:=if argc<2{1}else{2};  \n"
-	"	for i:=0,j:=0; i<8; i+=1,j+=10 {x+=i; printf(\"i,j=%d,%d,x=%d\\n\",i,j,x);}else{printf(\"loop exit fine\\n\");}  \n"
-	"	xs1:=xs[1]; xs2:=xs[2];  \n"
-	"	printf(\"Hello World %.3f %d %d %d %d \\n\", lerp(10.0,20.0,0.5) xs1,xs[3], *(ys.data),test_result); \n"
-	"	0  \n"
-	"}  \n\0";
+const char* g_TestFlow=
+"fn printf(s:str,...)->int;				\n"
+"fn main(argc:int, argv:**char)->int{	\n"
+"	i:=5;								\n"
+"	for i:=0,j:=0; i<10; i+=1,j+=7 {	\n"
+"		printf(\"for loop i=%d j=%d\\n\",i,j);	\n"
+"	}									\n"
+"	else{								\n"
+"		printf(\"loop complete i=%d\\n\",i);\n"
+"	}									\n"
+"	printf(\"outer scope i=%d\\n\",i);	\n"
+"	0									\n"
+"}\n"
+;
 const char* g_TestTyparamInference=
-/* 1*/"   struct Union[A,B]{a:A,b:B, tag:int};\n"
-/* 2*/"	fn setv[A,B](u:&Union[A,B], v:A)->void{\n"
-/* 3*/"		u.a=v; u.tag=0; \n"
-/* 4*/"	}\n"
-/* 5*/"	fn setv[A,B](u:&Union[A,B], v:B)->void{\n"
-/* 6*/"		u.b=v; u.tag=1; \n"
-/* 7*/"	}\n"
-/* 8*/"	fn main(argc:int, argv:**char)->int{	\n"
-/* 9*/"		u=:Union[int,float];\n"
-/*10*/"		setv(&u,10)	;\n"
-/*11*/" printf(\"u.tag=%d\\n\",u.tag);\n"
-/*12*/"		setv(&u,10.0)	;\n"
-/*13*/" printf(\"u.tag=%d\\n\",u.tag);\n"
-/*14*/"	0}\n"
-/*15*/"fn printf(s:str,...)->int;\n"
+/* 1*/ "struct Union[A,B]{a:A,b:B, tag:int};		\n"
+/* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{	\n"
+/* 3*/ "	u.a=v; u.tag=0; 						\n"
+/* 4*/ "}										\n"
+/* 5*/ "fn setv[A,B](u:&Union[A,B], v:B)->void{	\n"
+/* 6*/ "	u.b=v; u.tag=1; 						\n"
+/* 7*/ "}										\n"
+/* 8*/ "fn main(argc:int, argv:**char)->int{		\n"
+/* 9*/ "	u=:Union[int,float];					\n"
+/*10*/ "	setv(&u,10)	;							\n"
+/*11*/ "	printf(\"u.tag=%d\\n\",u.tag);			\n"
+/*12*/ "	setv(&u,10.0)	;						\n"
+/*13*/ " printf(\"u.tag=%d\\n\",u.tag);			\n"
+/*14*/ "	0}										\n"
+/*15*/ "fn printf(s:str,...)->int;				\n"
 ;
 const char* g_TestProg2=
-"	enum FooBar{  Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
-"   struct Union[A,B]{a:A,b:B, tag:int};\n"
-"	fn setv[A,B](u:&Union[A,B], v:A){\n"
-"		u.a=v; u.tag=0; \n"
-"	}\n"
-"	fn setv[A,B](u:&Union[A,B], v:B){\n"
-"		u.b=v; u.tag=1; \n"
-"	}\n"
-"	fn take_fn(f:fn(int)->void){ f(5);}\n"
-"	fn take_closure(f:(int)->void){ f(5);}\n"
-"fn printf(s:str,...)->int;\n"
-"	fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
-"	fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
-"	fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0};\n"
-"	fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
-"	fn something(f:int){\n"
-"		printf(\"somethng(int)\\n\");\n"
-"	}\n"
-"	fn something(f:float){\n"
-"		printf(\"somethng(int)\\n\");\n"
-"	}\n"
-"	fn main(argc:int, argv:**char)->int{	\n"
-"		xs=:array[int,512];\n"
-"		q:=xs[1]; p1:=&xs[1];\n"
-"		*p1=42;\n"
-"		u=:Union[int,float];\n"
-"		setv(&u,10)	;\n"
-"		printf(\"u.tag=%d\\n\",u.tag);\n"
-"		setv(&u,10.0)	;\n"
-"		printf(\"u.tag=%d\\n\",u.tag);\n"
-"		retval:=0;\n"
-"		x:= {a:=10;b:=20; a+b};	\n"
-"		x+=10;\n"
-"		fp:=foo;		\n"
-"	xs=:array[int,512];  \n"
-"	p2:=&xs[1];  \n"
-"xs[1]+=3;\n"
-"		fs:=FooStruct{0xff,0x7f};		\n"
-"		something(1);\n"
-"		pfs:=&fs;\n"
-"		foo_struct(&fs);		\n"
-"	fn localtest(i:int)->void{printf(\"hello from local fn %d\\n\",i);}; \n"
-"		py:=pfs as *int;\n"
-"		foo_bar(&fs);\n"
-"		printf(\"foostruct int val recast %d; foostruct raw value %d %d\n\",*py,fs.y,pfs.y);\n"
-"		fp(2);fp(x);fp(xs[1]);		\n"
-"		take_fn(fp);\n"
-"		take_fn(localtest);\n"
-"		localtest(10);\n"
-"		take_fn(fn(x){printf(\"hello from anon function %d\\n\",x);});\n"
-"		take_closure(|x|{printf(\"hello from closure function %d\\n\",x);});\n"
-"		bar(1,2,3);	\n"
-"	,retval}\n"
-"	struct FooStruct{x:int,y:int};\n"
 
-
-/*
-	"struct Foo{x:int,y:int, struct Bar{x:float}, fn method(i:int)->int{printf(\"hello from method %d\n\",i);0};};"
-	"fn printf(s:str,...)->int;"
-	"fn main(argc:int, argv:**char)->int{"
-	"	fn local_function(i:int)->int{ printf(\"hello from local function\n\"); method(i); 0;};"
-	"	method(1);"
-	"	local_function(3);"
-	"	0"
-	"}"
- */
+/* 1*/ "enum FooBar{Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
+/* 2*/ "struct Union[A,B]{a:A,b:B, tag:int};\n"
+/* 3*/ "fn setv[A,B](u:&Union[A,B], v:A){\n"
+/* 4*/ "	u.a=v; u.tag=0; \n"
+/* 5*/ "}\n"/* 1*/
+/* 6*/ "fn setv[A,B](u:&Union[A,B], v:B){\n"
+/* 7*/ "	u.b=v; u.tag=1; \n"
+/* 8*/ "}\n"
+/* 9*/ "fn take_fn(f:fn(int)->void){ f(5);}\n"
+/*10*/ "fn take_closure(f:(int)->void){ f(5);}\n"
+/*11*/ "fn printf(s:str,...)->int;\n"
+/*12*/ "fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
+/*13*/ "fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
+/*14*/ "fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0};\n"
+/*15*/ "fn foo_struct(p:*FooStruct)->int{ printf(\"foostruct ptr has %d %d\\n\",p.x,p.y);0}"
+/*16*/ "fn something(f:int){\n"
+/*17*/ "	printf(\"somethng(int)\\n\");\n"
+/*18*/ "}\n"
+/*19*/ "fn something(f:float){\n"
+/*20*/ "	printf(\"somethng(int)\\n\");\n"
+/*21*/ "}\n"
+/*22*/ "fn main(argc:int, argv:**char)->int{	\n"
+/*23*/ "	xs=:array[int,512];					\n"
+/*24*/ "	q:=xs[1]; p1:=&xs[1];				\n"
+/*25*/ "	*p1=42;								\n"
+/*26*/ "	u=:Union[int,float];				\n"
+/*27*/ "	setv(&u,10)	;						\n"
+/*28*/ "	printf(\"u.tag=%d\\n\",u.tag);		\n"
+/*29*/ "	setv(&u,10.0)	;					\n"
+/*30*/ "	printf(\"u.tag=%d\\n\",u.tag);		\n"
+/*31*/ "	retval:=0;							\n"
+/*32*/ "	x:= {a:=10;b:=20; a+b};				\n"
+/*33*/ "	x+=10;								\n"
+/*34*/ "	fp:=foo;							\n"
+/*35*/ "	xs=:array[int,512];  				\n"
+/*36*/ "	p2:=&xs[1];  						\n"
+/*37*/ "	xs[1]+=3;							\n"
+/*38*/ "	fs:=FooStruct{0xff,0x7f};			\n"
+/*39*/ "	something(1);						\n"
+/*40*/ "	pfs:=&fs;							\n"
+/*41*/ "	foo_struct(&fs);					\n"
+/*42*/ "	fn localtest(i:int)->void{			\n"
+/*43*/ "		printf(\"hello from local fn %d\\n\",i);	\n"
+/*44*/ "	}; 									\n"
+/*43*/ "	py:=pfs as *int;					\n"
+/*44*/ "	foo_bar(&fs);						\n"
+/*45*/ "	printf(\"foostruct int val recast %d; foostruct raw value %d %d\n\",*py,fs.y,pfs.y);							\n"
+/*46*/ "	fp(2);fp(x);fp(xs[1]);				\n"
+/*47*/ "	take_fn(fp);						\n"
+/*48*/ "	take_fn(localtest);					\n"
+/*49*/ "	localtest(10);						\n"
+/*50*/ "	take_fn(fn(x){printf(\"hello from anon function %d\\n\",x);});		\n"
+/*51*/ "	take_closure(|x|{printf(\"hello from closure function %d\\n\",x);});\n"
+/*52*/ "	bar(1,2,3);							\n"
+/*53*/ "	retval}								\n"
+/*54*/ "	struct FooStruct{x:int,y:int};		\n"
 ;
-/*
-"set(glob_x, 10.0);"
-"fn they_int(){set(tfx, 1); tfx};"
-"fn generic_fn(x y){y};"
-"fn generic_fn(x y:float){y};"
-	"fn generic_fn(x y:int){y};"
-	"fn generic_fn(x:float y:float){ y};"
-	"set(glob_y ,1);"
-	"set(glob_p, generic_fn(0.0, 1.3));"
-	"set(glob_q, generic_fn(0.0, 1));"
-*/
 
 void filename_change_ext(char* dst,const char* src,const char* new_ext){
 	strcpy(dst,src);
@@ -3969,44 +3887,7 @@ void filename_change_ext(char* dst,const char* src,const char* new_ext){
 	if (!strlen(new_ext)) { s[0]=0;}
 	else strcpy(s+1,new_ext);
 }
-/*
-// TODO literal format,
-// we'd like JSON but the fly in the ointment is : vs = with : used for types.
-// if '=' is used for field initializers we only have one grammar everywhere.
-// could we hack a rule.. "if a block only contains ident:expr,.. it's a struct literal"
-{}     // single statement
-{ ; ; }  // compound statement
-{ , , } // ANON struct literal
-[ , , , ] // 'slice' literal: *T,size. if  types differ, at compile time make a union?
-(, , ) // tuple literal  assignments in brackets
- 		// tuple should auto coerce to 'array(T,N)' if its (T,T,T..)
-//
 
-foo:={
-	foo:[1,2,3],
- 	bar:"bar node",
- 	baz:{
- 		foo:10.0,
- 		bar:20.0,
- 	}
- 	yada:other
-}
- 
-other:={
-
-}
-
-should roll an appropriate anonymous struct;
-should reduce types on parsing them - if it finds ones with same fields
-should be able to code assetless
-
-
- 	for x in struct{  // that gets the record fields - its compile time
-// only if you overload begin/end do you get iteration
- 		.ident // gives a string of the field.
- 		.typedef // gives its' type.
- 	}
-*/
 enum COMPILE_FLAGS {
 	B_AST=0x0001,B_DEFS=0x0002,B_GENERICS=0x0004, B_TYPES=0x0008,B_LLVM=0x0010,B_EXECUTABLE=0x0020,B_RUN=0x0040,B_VERBOSE=0x0080
 };
@@ -4119,6 +4000,15 @@ void dump_help(){
 	}
 }
 
+void run_tests(){
+	printf("no sources given so running inbuilt tests.\n");
+	printf("typeparam test\n");
+	auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test0.ll",B_TYPES|B_RUN);
+	auto ret1=compile_source(g_TestFlow,"g_TestFlow","test1.ll",B_TYPES|B_RUN);
+	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);
+	auto ret3=compile_source(g_TestMemberFn,"g_TestMemberFn","test3.ll",B_TYPES|B_RUN);
+}
+
 int main(int argc, const char** argv) {
 	
 //	dbprintf("precedences: ->%d *%d +%d &%d \n", precedence(ARROW),precedence(MUL),precedence(ADD),precedence(AND));
@@ -4147,12 +4037,7 @@ int main(int argc, const char** argv) {
 		}
 	}
 	if (argc<=1) {
-		printf("no sources given so running inbuilt tests.\n");
-		printf("typeparam test\n");
-		auto ret1=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test.ll",B_RUN);
-		printf("bigger test, all features\n");
-		auto ret2=compile_source(g_TestProg2,"g_TestProg","test.ll",B_TYPES|B_RUN);
-		auto ret0=compile_source(g_TestMemberFn,"g_TestMemberFn","test.ll",B_TYPES|B_RUN);
+		run_tests();
 	}
 }
 
