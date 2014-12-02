@@ -101,9 +101,12 @@ void error_sub(const Node* n, const char* level, const char* txt ){
 	} else{
 		n->dump_if(-1);
 	}
-	if (auto x=n->instanced_by()){
-		dbprintf("%p %p\n",n,x);
-		printf("%s:%d:%d: referenced here",g_filename,x->pos.line,x->pos.col);}
+	if (n){
+		if (auto x=n->instanced_by()){
+			dbprintf("%p %p\n",n,x);
+			printf("%s:%d:%d: referenced here",g_filename,x->pos.line,x->pos.col);
+		}
+	}
 }
 void error_begin(const Node* n, const char* str, ... ){
 	char buffer[1024];
@@ -221,7 +224,7 @@ const char* g_token_str[]={
 	"->",".","?.","=>","<-","::","<->",			//arrows,accessors
 	"|>","<|","<.>","<$>","<:",":>",			// some operators we might nick from other langs
 
-	":","as",
+	":","as","new","delete",
 	"+","-","*","/",					//arithmetic
 	"&","|","^","%","<<",">>","?:","?>","?<",					//bitwise
 	"<",">","<=",">=","==","!=",		//compares
@@ -254,7 +257,7 @@ int g_tok_info[]={
 	0,0, //<[Type]>
 	READ|10,READ|2,READ|2,READ|10,READ|10,READ|13,WRITE|10,	   // dots, arrows
 	READ|17,READ|17,READ|17,READ|5,READ|17,READ|17,	// unusual stuff
-	READ|9,READ|9,
+	READ|9,READ|9, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3,
 	READ|6,READ|6,READ|5,READ|5,		//arithmetic
 	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,READ|9,READ|9,READ|9,	//bitwise
 	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,	// COMPARES
@@ -840,7 +843,6 @@ const char* Node::get_name_str() const{
 const char* Type::kind_str()const{return"type";}
 Type::Type(Name i,SrcPos sp){
 	pos=sp;
-	marker=1234;
 	struct_def=0;
 	sub=0;
 	next=0;
@@ -848,7 +850,6 @@ Type::Type(Name i,SrcPos sp){
 }
 Type::Type(Node* origin,Name i){
 	this->set_origin(origin);
-	marker=1234;
 	struct_def=0;
 	sub=0;
 	next=0;
@@ -987,7 +988,6 @@ void Type::dump(int depth)const{
 }
 Type::Type(ExprStructDef* sd)
 {	struct_def=sd; name=sd->name; sub=0; next=0;
-	marker=123456;
 }
 Type::Type(Name outer_name,ExprStructDef* sd)
 {
@@ -2037,13 +2037,12 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 		auto ret=rhs->resolve(sc,dt,flags|R_PUT_ON_STACK);
 		if (!this->get_type() && ret.type){
-			auto ptr_type=new Type(this,PTR); ptr_type->sub=(Type*)ret.type->clone();
+			auto ptr_type=new Type(this,PTR,(Type*)ret.type->clone());
 			this->set_type(ptr_type);
 			return propogate_type_fwd(flags,this, desired,ptr_type);
 		}
 		return ret;
 	}
-	
 	else if (op_ident==DEREF){ //result=*rhs
 		// todo: we can assert give type is one less pointer, if given
 		auto ret=rhs->resolve(sc,0,flags);
@@ -2067,6 +2066,24 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			return propogate_type_fwd(flags,this, desired, this->type_ref());
 		}
 		else return ResolvedType();
+	}
+	else if (op_ident==NEW ){
+		// new struct initializer ->  malloc(sizeof(struct)); codegen struct initializer 'inplace'; ret is ptr[S]
+		// can we generalize this:
+		//  ident{expr,..} actually means run the init expr in there, like 'with'
+		rhs->resolve(sc, desired?desired->sub:nullptr, flags);
+		
+		/// todo: generalize inference with wrapper , eg A vs X[B]. use for *t, &t, new t, t[i]
+		if (desired && !get_type()){
+			this->set_type(desired);
+		}
+		if (!desired && !get_type() && rhs->get_type()) {
+			this->set_type( new Type(this,PTR,(Type*)rhs->get_type()->clone()) );
+		}
+		if (get_type())
+			propogate_type(flags, (Node*)this, this->get_type()->sub, rhs->type_ref());
+
+		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
 	else if (is_condition(op_ident)){
 		auto lhst=lhs->resolve(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
@@ -3877,14 +3894,24 @@ const char* g_TestMemberFn=
 /*20*/	"		\n"
 /*20*/  "}														\n";
 const char* g_TestClosure=
-/*1*/  "fn printf(s:str,...)->int;  							\n"
-/*10*/ "fn take_closure(pfunc:(int)->void){ pfunc(5);}\n"
+/*1*/ 	"fn printf(s:str,...)->int;  							\n"
+/*10*/	"fn take_closure(pfunc:(int)->void){ pfunc(5);}\n"
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	y:=11;z:=12			\n"
 /*51*/	"	take_closure(|x|{printf(\"closure x=%d captured y=%d z=%d\\n\",x,y,z);});\n"
 /*17*/	"	0\n"
 /*20*/  "}														\n";
 ;
+const char* g_TestAlloc=
+/*1*/ 	"fn printf(s:str,...)->int;  							\n"
+/* */	"struct Foo{x:int,y:int};					\n"
+/*  */	"fn main(argc:int, argv:**char)->int{		\n"
+/*  */	"	pfoo:= new Foo{4,5};			\n"
+/*  */	"	printf(\"new foo %p x,y=%d,%d\\n\",pfoo,pfoo.x,pfoo.y);			\n"
+/*17*/	"	0\n"
+/*20*/  "}														\n";
+;
+
 const char* g_TestBasicSyntax=
 /* 1*/ "*++x=*--y e+r:int foo(e,r);\n"
 /* 2*/ "self.pos+self.vel*dt;\n"
@@ -4121,6 +4148,7 @@ void dump_help(){
 void run_tests(){
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret5=compile_source(g_TestAlloc,"g_TestAlloc","test5.ll",B_TYPES|B_RUN);
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test0.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestFlow,"g_TestFlow","test1.ll",B_TYPES|B_RUN);

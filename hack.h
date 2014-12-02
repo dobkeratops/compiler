@@ -128,7 +128,7 @@ enum Token {
 	ARROW,DOT,MAYBE_DOT,FAT_ARROW,REV_ARROW,DOUBLE_COLON,SWAP,
 	// unusual
 	PIPE,BACKWARD_PIPE,COMPOSE,FMAP,SUBTYPE,SUPERTYPE,
-	COLON,AS,
+	COLON,AS,NEW,DELETE,
 	ADD,SUB,MUL,DIV,
 	AND,OR,XOR,MOD,SHL,SHR,OR_ELSE,MAX,MIN,
 	LT,GT,LE,GE,EQ,NE,
@@ -398,7 +398,6 @@ struct Capture : Expr{
 };
 
 struct Type : Expr{
-	int marker;
 	vector<TypeParam> typeparams;
 	ExprStructDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
@@ -408,16 +407,16 @@ struct Type : Expr{
 	Node* get_origin()const {return m_origin;}
 	void push_back(Type* t);
 	virtual const char* kind_str()const;
-	Type(Node* origin,Name a,Name b): Type(origin,a)	{push_back(new Type(origin,b)); marker=1000;}
-	Type(Node* origin,Name a,Name b,Name c): Type(origin,a){
-		marker=2000;
-		auto tc=new Type(origin,c); auto tb=new Type(origin,b); tb->push_back(tc); push_back(tb);
-	}
+	Type(Node* origin, Name outer, Type* inner):Type(origin,outer){ push_back(inner);}
+	Type(Node* origin,Name a,Name b): Type(origin,a, new Type(origin,b)){}
+	Type(Node* origin,Name a,Name b,Name c): Type(origin,a,new Type(origin,b,c)){}
+//		auto tc=new Type(origin,c); auto tb=new Type(origin,b); tb->push_back(tc); push_back(tb);
+//	}
 	Type(ExprStructDef* sd);
 	Type(Name outer, ExprStructDef* inner);
 	Type(Node* origin,Name i);
 	Type(Name i,SrcPos sp);
-	Type() { marker=1234;name=0;sub=0;next=0; struct_def=0;}
+	Type() { name=0;sub=0;next=0; struct_def=0;}
 	size_t	alignment() const;
 	size_t	size() const;
 	int	raw_type_flags()const	{int i=index(name)-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
@@ -547,6 +546,7 @@ struct ExprBlock :public ExprScopeBlock{
 	virtual Scope*	get_scope()				{return this->scope;}
 	void 			verify();
 	CgValue 		compile(CodeGen& cg, Scope* sc);
+	CgValue 		compile_sub(CodeGen& cg, Scope* sc,RegisterName dst);
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	virtual void	find_vars_written(Scope* s,set<Variable*>& vars )const;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);

@@ -1,7 +1,7 @@
 #pragma once
 #include "hack.h"
 
-void output_code(FILE* outfile, Scope* scope);
+void output_code(FILE* outfile, Scope* scope,int depth=0);
 void name_mangle(char* buffer, int size, const ExprFnDef* f);
 void name_mangle(char* buffer, int size, const ExprStructDef* f);
 void name_mangle(char* buffer, int size, const Type* f);
@@ -18,6 +18,7 @@ void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp);
 class CodeGen {
 public:
 	FILE* ofp;
+	bool prelude_done=false;
 	int m_next_reg;
 	CodeGen(FILE* _ofp, int nr){
 		ofp=_ofp; m_next_reg=nr;
@@ -26,6 +27,7 @@ public:
 		curr_fn=0;
 	}
 	Type* m_i8ptr=0;
+	Type* m_ptr=0;
 	char comma;
 	int depth;
 	bool commas[32];
@@ -34,6 +36,8 @@ public:
 	Name next_reg();
 	/// TODO: wrapper functions for every instruction codegen needs
 	/// so single calls to codegen can emit different back ends (LLVM, C, ..)
+	Type* ptr_to(Type* other);
+	void emit_prelude();
 	void emit_struct_name(RegisterName dst );
 	void emit_reg(RegisterName dst );
 	void emit_ins_end();
@@ -90,4 +94,7 @@ public:
 	CgValue emit_extract(CgValue src, int index);
 	CgValue emit_insert(CgValue src, int index);
 	CgValue emit_getelementptr(RegisterName ptr,Type* struct_t,int index, Type* elem_t);
+	CgValue emit_malloc( Type* t,size_t count);
+	CgValue emit_malloc_array( Type* t,CgValue count);
+	void emit_free(CgValue ptr,  Type* t,size_t count);
 };

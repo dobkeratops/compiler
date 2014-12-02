@@ -31,6 +31,7 @@ void CodeGen::emit_txt(const char* str,...){// catch all, just spit out given st
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
 	fprintf(ofp,"%s",tmp);
+	printf("%s",tmp);
 }
 
 void CodeGen::emit_nest_begin(const char* str){
@@ -119,7 +120,19 @@ void CodeGen::emit_comment(const char* str,...){// catch all, just spit out give
 	va_start( arglist, str );
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
-	fprintf(ofp,"\t;%s\n",tmp);
+	emit_txt("\t;%s\n",tmp);
+}
+void CodeGen::emit_prelude(){
+	if (prelude_done)
+		return;
+	prelude_done=true;
+	/// TODO - check if we can acess user-passed size versions easily, eg free(ptr,size), ..its superior
+	emit_txt(";hard coded prelude\n");
+	emit_txt("declare i8* @malloc(i32)\n");
+	emit_txt("declare i8* @free(i8*)\n");
+	emit_txt("declare i8* @realloc(i32,i8*,i32)\n");
+//	emit_txt("declare i32 @printf(i8*,...)\n");// it doesn't like us redefining.
+	emit_txt(";\n");
 }
 
 
@@ -216,7 +229,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 				} else if(lit->type()->name==FLOAT){
 					// todo, i guess we're goint to have t make a global constants table
 					cg.emit_ins_begin(reg,"fadd");
-					fprintf(cg.ofp,"float 0.0, ");  this->emit_literal(cg,lit);
+					cg.emit_txt("float 0.0, ");  this->emit_literal(cg,lit);
 				} else if (lit->type()->name==STR){
 					cg.emit_ins_begin(reg,"getelementptr inbounds");
 					cg.emit_comma();
@@ -255,6 +268,8 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 						cg.emit_comma();
 						cg.emit_txt("1");
 						cg.emit_ins_end();
+					} else {
+						reg=r;
 					}
 				} else {// raw function
 					cg.emit_ins_begin(reg,"load");
@@ -265,10 +280,10 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 				return reg;
 			}
 			else if (auto v=dynamic_cast<Variable*>(val)){
-//				fprintf(ofp,"\t%%%s = load ", str(reg));
+//				cg.emit_txt("\t%%%s = load ", str(reg));
 				// function type..
 //				emit_type(ofp,this->type,false);
-//				fprintf(ofp,"* %%%s\n",str(val->regname));
+//				cg.emit_txt("* %%%s\n",str(val->regname));
 				if (v->reg_is_addr){reg=addr=v->regname;}else{reg=v->regname;}
 //				ret=v->regname;
 				return reg;
@@ -288,24 +303,24 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		return reg;
 	}
 	void emit_literal(CodeGen& cg,const ExprLiteral* lit)const{
-		if (cg.comma){fprintf(cg.ofp,",");} cg.comma=true;
+		if (cg.comma){cg.emit_txt(",");} cg.comma=true;
 		auto ofp=cg.ofp;
 		switch (lit->type_id) {
 			case T_INT:
-				fprintf(ofp," %d ",lit->u.val_int);
+				cg.emit_txt(" %d ",lit->u.val_int);
 				break;
 			case T_UINT:
-				fprintf(ofp," %u ",lit->u.val_uint);
+				cg.emit_txt(" %u ",lit->u.val_uint);
 				break;
 			case T_FLOAT:
-				fprintf(ofp," %f ",lit->u.val_float);
+				cg.emit_txt(" %f ",lit->u.val_float);
 				break;
 				//					getelementptr inbounds ([21 x i8]* @.str3, i32 0, i32 0)
 			case T_CONST_STRING:
-				fprintf(ofp," getelementptr inbounds([%d x i8]* @%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
+				cg.emit_txt(" getelementptr inbounds([%d x i8]* @%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
 				break;
 			default:
-				fprintf(ofp," @TODO_LITERAL_FORMAT %s", getString(lit->name));
+				cg.emit_txt(" @TODO_LITERAL_FORMAT %s", getString(lit->name));
 				break;
 			}
 	}
@@ -326,7 +341,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			}
 			return;
 		} else {
-			fprintf(ofp," <?CgV?> ");
+			cg.emit_txt(" <?CgV?> ");
 			this->type->dump_if(0);
 			ASSERT(this->type);
 			ASSERT(0 && "missing register, value wasn't found in resolving");
@@ -430,7 +445,7 @@ Name reg_of(Node* n, ExprFnDef* owner) {
 	return getStringIndex(tmp,0);
 }
 void CodeGen::emit_reg(RegisterName dst ) {
-	fprintf(ofp,"%%%s ",str(dst));
+	emit_txt("%%%s ",str(dst));
 }
 Scope* g_Sc;
 
@@ -448,7 +463,7 @@ void CodeGen::emit_phi_reg_label(Name reg, Name label){
 
 void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method.
 	emit_comma(); // type always starts new operand
-	if (!t) { fprintf(ofp,"<type_expected>");return;}
+	if (!t) { emit_txt("<type_expected>");return;}
 	if (ref) emit_pointer_begin();
 	if (t->is_pointer()){
 //		dbprintf("THIS IS SUSPECT, REF ISn'T NEEDED TWICE");
@@ -457,7 +472,7 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 		emit_pointer_end();
 	}else if (t->is_array()) {
 		emit_nest_begin("[");
-		fprintf(ofp,"%s x ",str(t->array_size())); //sub->next->name));
+		emit_txt("%s x ",str(t->array_size())); //sub->next->name));
 		emit_type(t->sub,0); // TODO: assert its a numeric constant
 		emit_nest_end("]");
 	}
@@ -504,13 +519,36 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 	}
 	else {
 		if (t->is_complex()) {
-			fprintf(ofp,"%%%s", str(t->name));
+			emit_txt("%%%s", str(t->name));
 		}
 		else
-			fprintf(ofp,"%s",t?get_llvm_type_str(t->name):"???");//,t.is_pointer?"*":"");
+			emit_txt("%s",t?get_llvm_type_str(t->name):"???");//,t.is_pointer?"*":"");
 	}
 	if (ref) emit_pointer_end();
 }
+Type* CodeGen::ptr_to(Type* other) {
+	// TODO- RAII this!! -or make duplicates in a hash table.
+	if (!m_ptr) { m_ptr=new Type(nullptr,PTR);}
+	m_ptr->sub=other;
+	return m_ptr;
+}
+void CodeGen::emit_free(CgValue ptr, Type* t,size_t count){
+	/// TODO .. just memleak now..
+}
+
+CgValue CodeGen::emit_malloc(Type* t,size_t count){
+	ASSERT(t->name==PTR &&"pass a pointer type in, it allocs *T.necasery to avoid allocating a ptr[T]");
+	auto r1=next_reg();
+	auto r2=next_reg();
+	emit_ins_begin(r1,"call i8* @malloc");
+	emit_args_begin();
+	emit_i32_lit(t->sub->size()*count);
+	emit_args_end();
+	emit_ins_end();
+	emit_cast_reg(r2,r1, i8ptr(), t);
+	return CgValue(r2,t);
+}
+
 void CodeGen::emit_type_reg(const Type* t,bool ref, Name reg){
 	emit_type(t,ref);
 	emit_reg(reg);
@@ -545,7 +583,7 @@ void CodeGen::emit_instruction(Name opname,Type* type,  CgValue dst,CgValue src1
  
 	emit_ins_begin_sub();
 	emit_instruction_sub(opname,type,dst,src1);
-	fprintf(ofp,",");
+	emit_comma();
 	src2.emit_operand(*this);
 	emit_ins_end();
 }
@@ -585,14 +623,14 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 CgValue CodeGen::emit_alloca_type(Expr* holder, Type* t) {
 	RegisterName r= holder?holder->get_reg(t->name, &m_next_reg, false):next_reg();
 	emit_ins_begin(r,"alloca"); emit_type(t,false);
-	fprintf(ofp,", align %zu", t->alignment());
+	emit_txt(", align %zu", t->alignment());
 	emit_ins_end();
 	return CgValue(0,t, r);
 }
 CgValue CodeGen::emit_alloca_typename(RegisterName var, RegisterName typname) {
 //	RegisterName r= holder?holder->get_reg(t->name, &m_next_reg, false):next_reg();
 //	emit_ins_begin(r,"alloca"); emit_reg(typname);
-//	fprintf(ofp,", align 16");
+//	cg.emit_txt(ofp,", align 16");
 //	emit_ins_end();
 //	return CgValue(0,t, r);
 	ASSERT(0);
@@ -617,13 +655,13 @@ void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 		auto r= v->get_reg(v->name, &cg.m_next_reg, true);
 		if (vt->is_struct()) {
 			// alloc_struct
-//			fprintf(ofp,"\t"); emit_reg(ofp,r); fprintf(ofp," = alloca %%%s , align %d\n",getString(vt->name),vt->struct_def->alignment());
+//			cg.emit_txt(ofp,"\t"); emit_reg(ofp,r); cg.emit_txt(" = alloca %%%s , align %d\n",getString(vt->name),vt->struct_def->alignment());
 			cg.emit_alloca_type(v, vt);
 			v->reg_is_addr=true;
 		} else if (vt->is_array()){
 			auto t=vt->sub;
 			if (!t || !t->next){error(v,"array type needs 2 args");}
-			fprintf(cg.ofp,"\t"); cg.emit_reg(r); fprintf(cg.ofp," = alloca [%s x %s] , align %zu\n",str(t->next->name),get_llvm_type_str(t->name),vt->alignment());
+			cg.emit_txt("\t"); cg.emit_reg(r); cg.emit_txt(" = alloca [%s x %s] , align %zu\n",str(t->next->name),get_llvm_type_str(t->name),vt->alignment());
 			v->reg_is_addr=true;
 		} else	if (vt->is_pointer() || vt->is_function()){
 			continue;
@@ -638,17 +676,17 @@ Name gen_label(const char* s, int index){
 	char tmp[256];sprintf(tmp,"%s%d",s,index); return getStringIndex(tmp);
 }
 void CodeGen::emit_label(Name l){
-	fprintf(ofp,"%s:\n",str(l));
+	emit_txt("%s:\n",str(l));
 }
 void CodeGen::emit_branch( Name l){
 	emit_ins_begin_name("br");
-	fprintf(ofp,"label %%%s",str(l));
+	emit_txt("label %%%s",str(l));
 	emit_ins_end();
 }
 void CodeGen::emit_branch(CgValue cond, Name label_then, Name label_else){
 	cond.load(*this);
 	emit_ins_begin_name("br");
-	fprintf(ofp,"i1 %%%s, label %%%s, label %%%s",str(cond.reg), str(label_then), str(label_else));
+	emit_txt("i1 %%%s, label %%%s, label %%%s",str(cond.reg), str(label_then), str(label_else));
 	emit_ins_end();
 }
 
@@ -712,7 +750,7 @@ void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, N
 		cg.emit_phi_reg_label(v.reg_end,l_end);
 		cg.emit_ins_end();
 	}
-	if (extra) for (auto i=phi_vars.size(); i>0;i--)fprintf(cg.ofp,"       ");	// dirty hack to prevent source overun
+	if (extra) for (auto i=phi_vars.size(); i>0;i--)cg.emit_txt("       ");	// dirty hack to prevent source overun
 	cg.emit_txt("\n");
 }
 
@@ -1015,8 +1053,8 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			return dst;
 		}
 	} else if (!e->lhs && e->rhs){ // prefix operator
-		auto src=e->rhs->compile(cg,sc);
 		if (opname==ADDR){
+			auto src=e->rhs->compile(cg,sc);
 			if (!src.type || !n->type()) {
 				n->dump(-1);
 				error(n,"something wrong\n");
@@ -1024,9 +1062,21 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			return src.addr_op(cg,n->type());
 		}
 		else if (opname==DEREF){
+			auto src=e->rhs->compile(cg,sc);
 			return src.deref_op(cg,n->type());
 		}
+		else if (opname==NEW){
+			if (auto b=rhs->as_block()){
+				if (b->is_struct_initializer()){
+					auto reg=cg.emit_malloc(this->type(),1);
+					return b->compile_sub(cg,sc,reg.reg);
+				}
+			}
+			error(e,"TODO:new only works for  new StructName{....} \n");
+			return CgValue();
+		}
 		else {
+			auto src=e->rhs->compile(cg,sc);
 			if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){dbprintf(";TODO: logic for modifications to memory");}}
 			// todo: handle read/modify-writeness.
 			// postincrement/preincrement etc go here..
@@ -1040,8 +1090,11 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	} else
 		return CgValue();
 }
-
 CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
+	return compile_sub(cg,sc,0);
+}
+
+CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 	auto n=this;
 	auto e=this; auto curr_fn=cg.curr_fn;
 	// [1] compound expression - last expression is the return .
@@ -1056,7 +1109,8 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 	}
 	else if (e->is_struct_initializer()){
 		StructInitializer si(sc,e); si.map_fields();
-		auto struct_val= cg.emit_alloca_type(e, e->type());
+		e->type()->dump(0);newline(0);
+		auto struct_val= force_dst?CgValue(0,e->type(),force_dst):cg.emit_alloca_type(e, e->type());
 		e->regname=struct_val.reg; // YUK todo - reallyw wanted reg copy
 		// can we trust llvm to cache the small cases in reg..
 		if (e->argls.size()!=si.value.size())
@@ -1069,6 +1123,7 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
 			if (dst.type==struct_val.type)
 				struct_val=dst; // mutate by insertion
 		}
+		if (force_dst) { struct_val.reg=force_dst; struct_val.addr=0;}
 		return struct_val;
 	}
 	// [2] Operator
@@ -1210,14 +1265,14 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 
 	if (!fn_node){return CgValue();}
 	if (fn_node->is_undefined()) {
-		fprintf(ofp,";fn %s prot\n",getString(fn_node->name));
+		cg.emit_comment("fn %s prot",getString(fn_node->name));
 		cg.emit_function_signature(fn_node,EmitDeclaration);
 		return CgValue();
 	}
 	if (fn_node->is_generic()) {
-		fprintf(ofp,";fn %s generic:-\n",getString(fn_node->get_mangled_name()));
+		cg.emit_comment("fn %s generic:-",getString(fn_node->get_mangled_name()));
 		for (auto f=fn_node->instances; f;f=f->next_instance){
-			fprintf(ofp,";fn %s generic instance\n",getString(fn_node->get_mangled_name()));
+			cg.emit_comment("fn %s generic instance",getString(fn_node->get_mangled_name()));
 			f->compile(cg,outer_scope);
 		}
 		return CgValue();
@@ -1250,7 +1305,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 	auto scope=fn_node->scope;
 	
 	cg.emit_function_signature(fn_node,EmitDefinition);
- 	fprintf(ofp,"{\n");
+ 	cg.emit_txt("{\n");
 	if (fn_node->instance_of!=nullptr){
 		cg.emit_comment("compiling generic fn body");
 	}
@@ -1278,7 +1333,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 		cg.emit_txt("void");
 		cg.emit_ins_end();
 	}
-	fprintf(ofp,"}\n");
+	cg.emit_txt("}\n");
 	cg.curr_fn=0;
 	return CgValue(fn_node);
 }
@@ -1380,9 +1435,11 @@ void name_mangle(char* dst, int size, const ExprStructDef* src) {
 	}
 }
 
-void output_code(FILE* ofp, Scope* scope) {
+void output_code(FILE* ofp, Scope* scope, int depth) {
 	verify_all();
 	auto cg=CodeGen(ofp,0);
+	if (!depth)
+		cg.emit_prelude();
 
 	cg.emit_comment("from scope %s\n;",scope->name());
 	// output all inner items that outer stuff depends on..
@@ -1408,7 +1465,7 @@ void output_code(FILE* ofp, Scope* scope) {
 	}
 	// compile child items last, as they depend on me.
 	for (auto sub=scope->child; sub; sub=sub->next) {
-		output_code(cg.ofp,sub);
+		output_code(cg.ofp,sub,depth+1);
 	}
 }
 
