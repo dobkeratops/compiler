@@ -929,6 +929,12 @@ int Type::num_pointers() const {
 		return 1+this->sub->is_pointer();
 	else return 0;
 }
+int Type::num_pointers_and_arrays() const {
+	if (!this) return 0;
+	if (this->name==PTR || this->name==REF|| this->name==ARRAY)
+		return 1+this->sub->is_pointer();
+	else return 0;
+}
 size_t Type::alignment() const{
 	if (this->raw_type_flags()){
 		return this->size();
@@ -3916,6 +3922,7 @@ const char* g_TestAlloc=
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	pfoo:= new Foo{4,5};			\n"
 /*  */	"	pfoos:= new Foo[10];			\n"
+/*  */	"	pfoos[1].x=10;					\n"
 /*  */	"	printf(\"new foo %p x,y=%d,%d array alloc=%p\\n\",pfoo,pfoo.x,pfoo.y,pfoos);			\n"
 /*17*/	"	0\n"
 /*20*/  "}														\n";

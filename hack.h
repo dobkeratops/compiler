@@ -463,6 +463,7 @@ struct Type : Expr{
 	const Type*	get_elem(int index) const;
 	Type*		get_elem(int index);
 	int			num_pointers()const;
+	int			num_pointers_and_arrays()const;
 	ExprStructDef*	get_struct() const; // strip away all pointers.
 	bool			eq(const Type* other) const;
 	void			dump_sub()const;

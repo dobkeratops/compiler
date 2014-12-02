@@ -31,7 +31,7 @@ void CodeGen::emit_txt(const char* str,...){// catch all, just spit out given st
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
 	fprintf(ofp,"%s",tmp);
-	printf("%s",tmp);
+//	printf("%s",tmp);
 }
 
 void CodeGen::emit_nest_begin(const char* str){
@@ -1101,7 +1101,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 					if (b->argls.size()==1){
 						auto num=b->argls[0]->compile(cg,sc);
 						auto reg=cg.emit_malloc_array(this->type(),num);
-						return reg;//CgValue(reg,this->type());
+						return CgValue(reg.reg,this->type(),0);
 					}
 					else{
 						// empty dynamic array ctr
@@ -1175,9 +1175,12 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		expr.load(cg);
 		index.load(cg);
 		cg.emit_ins_begin(dst,"getelementptr inbounds");
-		cg.emit_type_reg(array_type,true,expr.reg);//!expr.reg);
-		cg.emit_i32_lit(0);
+		cg.emit_type_reg(array_type,expr.addr!=0,expr.reg);//!expr.reg);
+		if (array_type->deref_all()->name==ARRAY){
+			cg.emit_i32_lit(0);
+		}
 		cg.emit_type_operand(index);
+		cg.emit_ins_end();
 		return CgValue(0,inner_type,dst);
 	}
 	//[3] FUNCTION CALL
