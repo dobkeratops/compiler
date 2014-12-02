@@ -118,7 +118,7 @@ enum Token {
 	PRINT,FN,STRUCT,CLASS,TRAIT,VIRTUAL,STATIC,ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,THIS,SELF,SUPER,VTABLEOF,CLOSURE,
 	LET,VAR,
 	CONST,MUT,VOLATILE,
-	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,
+	WHILE,IF,ELSE,DO,FOR,IN,RETURN,BREAK,CONTINUE,
 	// delimiters
 	OPEN_PAREN,CLOSE_PAREN,
 	OPEN_BRACE,CLOSE_BRACE,
@@ -784,7 +784,7 @@ struct ExprFor :  ExprFlow {
 	~ExprFor(){}
 	virtual const char* kind_str()const		{return"if";}
 	bool is_undefined()const				{return (pattern&&pattern->is_undefined())||(init &&init->is_undefined())||(cond&&cond->is_undefined())||(incr&&incr->is_undefined())||(body&& body->is_undefined())||(else_block&&else_block->is_undefined());}
-	Expr* find_break_expr();
+	Expr* find_next_break_expr(Expr* prev=0);
 	Node* clone()const;
 	ResolvedType resolve(Scope* scope,const Type*,int flags);
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;

@@ -216,7 +216,7 @@ const char* g_token_str[]={
 	"print___","fn","struct","class","trait","virtual","static","enum","array","vector","union","variant","with","match","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
 	"let","var",
 	"const","mut","volatile",
-	"while","if","else","do","for","in","return","break",
+	"while","if","else","do","for","in","return","break","continue",
 	"(",")",
 	"{","}",
 	"[","]",
@@ -250,7 +250,7 @@ int g_tok_info[]={
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
 	0,0,			// let,var
 	0,0,0,			// modifiers const,mut,volatile
-	0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
+	0,0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
 	0,0, //( )
 	0,0, //{ }
 	0,0, // [ ]
@@ -1926,6 +1926,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
 		ASSERT(this->lhs && this->rhs);
 		auto rhs_t=rhs->resolve(sc,desired,flags);
+		if (op_ident==BREAK){
+			if (this->rhs) rhs->resolve(sc,desired,flags);
+			return propogate_type(flags,(Node*)this,this->type_ref(),this->rhs->type_ref());
+		}
 		if (op_ident==LET_ASSIGN){
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			if (desired) {
@@ -2782,6 +2786,14 @@ struct TextInput {
 		if (r==CLOSE_BRACE || r==CLOSE_BRACKET || r==CLOSE_PAREN) depth--;
 		return r;
 	}
+	int eat_if(Name a, Name b, Name c){
+		auto t=peek_tok(); if (t==a || t==b || t==c) return (int)t;
+		return 0;
+	}
+	int eat_if(Name a, Name b){
+		auto t=peek_tok(); if (t==a || t==b) return (int)t;
+		return 0;
+	}
 	bool eat_if(Name i) {
 		if (peek_tok()==i) {eat_tok(); return true;}
 		else return false;
@@ -2875,6 +2887,7 @@ ExprStructDef* parse_struct(TokenStream& src);
 ExprStructDef* parse_enum(TokenStream& src);
 ExprMatch* parse_match(TokenStream& src);
 ExprLiteral* parse_literal(TokenStream& src);
+ExprOp* parse_flow(TokenStream& src,Name flow);
 
 
 template<typename T>
@@ -3002,6 +3015,10 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		else if (src.eat_if(IF)){
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_if(src));
+		}
+		else if (auto t=src.eat_if(BREAK,RETURN,CONTINUE)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			operands.push_back(parse_flow(src,t));
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
@@ -3692,6 +3709,14 @@ Node* ExprFor::clone()const{
 	n->body=(Expr*)cond->clone_if();
 	n->else_block=(Expr*)cond->clone_if();
 	return n;
+}
+ExprOp* parse_flow(TokenStream& src,Name flow_statement){
+	// break is an operator. label,return.
+	Expr* expr=nullptr;;
+	if (!(src.peek_tok()==CLOSE_BRACE || src.peek_tok()==SEMICOLON)){
+		expr=parse_expr(src);
+	}
+	return new ExprOp(flow_statement, src.pos,nullptr,expr);
 }
 // make a flag for c or rust mode
 // exact c parser
