@@ -486,6 +486,11 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 void	ExprDef::remove_ref(Node* ref){
 	Node** pp=&refs;
 	Node* p;
+	auto dbg=[&](){
+		for (auto r=refs; r; r=r->next_of_def){
+			dbprintf("ref by %p %s %s %d\n",r, r->kind_str(), str(r->name),r->	pos.line);
+		}
+	};
 	for (p=*pp; p; pp=&p->next_of_def, p=*pp) {
 		if (p==ref) *pp=p->next_of_def;
 	}
@@ -920,6 +925,17 @@ bool Type::is_complex()const{
 	if (this->is_struct()||this->name==ARRAY||this->name==VARIANT) return true;
 	return false;
 }
+Type* g_bool,*g_void;
+Type* Type::get_bool(){
+	/// todo type hash on inbuilt indices
+	if (g_bool)return g_bool;
+	return (g_bool=new Type(nullptr,BOOL));
+}
+Type* Type::get_void(){
+	if (g_void)return g_void;
+	return (g_bool=new Type(nullptr,VOID));
+}
+
 bool Type::is_struct()const{
 	return struct_def!=0 || name>=IDENT; //TODO .. it might be a typedef.
 }
@@ -1145,7 +1161,10 @@ bool ExprFnDef::is_generic() const {
 }
 bool ExprBlock::is_undefined() const{
 	if (!this) return false; //only presencence of "_" is undefined.
-	for (auto x:argls){if (x->is_undefined()) return true;}
+	for (auto x:argls){
+		if (x->is_undefined())
+			return true;
+	}
 	return false;
 }
 
@@ -1923,13 +1942,23 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	auto op_ident=name;
 	if (this->type()) this->type()->resolve(sc,desired,flags);
 //	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
+	if (op_ident==BREAK){
+		if (this->rhs) {
+			// break expression..
+			rhs->resolve(sc,desired,flags);
+			auto loop = sc->current_loop();
+			if (!loop && flags&R_FINAL) {
+				error(this,"break without loop");
+			}
+			propogate_type(flags,(Node*)this, rhs->type_ref(),loop->type_ref());
+			propogate_type(flags,(Node*)this,this->type_ref(),this->rhs->type_ref());
+		}
+		return propogate_type_fwd(flags, this, desired, this->type_ref());
+	}
+
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
 		ASSERT(this->lhs && this->rhs);
 		auto rhs_t=rhs->resolve(sc,desired,flags);
-		if (op_ident==BREAK){
-			if (this->rhs) rhs->resolve(sc,desired,flags);
-			return propogate_type(flags,(Node*)this,this->type_ref(),this->rhs->type_ref());
-		}
 		if (op_ident==LET_ASSIGN){
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			if (desired) {
@@ -2106,12 +2135,15 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	else if (is_condition(op_ident)){
 		auto lhst=lhs->resolve(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
 		auto rhst=rhs->resolve(sc,lhs->type_ref(),flags);
+		propogate_type(flags,(Node*)this, lhs->type_ref(),rhs->type_ref());
 		::verify(lhs->get_type());
 		::verify(rhs->get_type());
 		if (!this->get_type()){
 			this->set_type(new Type(this,BOOL));
 		};
-		return rhst;
+		// TODO: actually we want to ensure the result *converts* to bool
+		// compares might not return bool, they just need an operator(bool)
+		return propogate_type_fwd(flags,this,desired,this->type_ref());
 	}
 	else {
 		// regular operator
@@ -2153,6 +2185,18 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 			// reverse pass too
 			for (n=(int)this->argls.size()-1;n>=0; n--) {
 				this->argls[n]->resolve(sc,0,flags);
+			}
+			if ((flags & R_FINAL) &&ret.type && desired  &&this->argls.back()->type()){
+				if (!ret.type->eq(desired)){
+					newline(0);
+					dbprintf("mismattched types..\n",n);
+				ret.type->dump(-1); newline(0); desired->dump(-1);newline(0);
+				this->argls.back()->type()->dump(0);
+				dbprintf("n=%d",n);
+				this->argls.back()->dump(0);
+				newline(0);
+				auto ret1=this->argls.back()->resolve(sc,desired,flags);
+				}
 			}
 			return propogate_type(flags,this, ret);
 		}
@@ -2501,11 +2545,26 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags)
 	return propogate_type(flags,this, rt,this->ret_type); // todo: hide FnDef->type. its too confusing
 }
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
-	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn);
+	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
 	if (init) init->resolve(sc,0,flags);
-	if (cond) cond->resolve(sc,0,flags);
-	if (body) body->resolve(sc,0,flags);
-	if (else_block) else_block->resolve(sc,0,flags);
+	if (cond) cond->resolve(sc,Type::get_bool(),flags);
+	if (body) body->resolve(sc,desired,flags);
+	if (else_block) {
+		else_block->resolve(sc,desired,flags);
+		propogate_type(flags, (Node*)this, this->type_ref(), else_block->type_ref());
+	}
+	//else should be void
+	else{
+		propogate_type_fwd(flags, (Node*)this, Type::get_void(),this->body->type_ref());
+	}
+	auto dbg=[&](){
+		newline(0);dbprintf("debug:for: this,else: this type\n");
+		this->type()->dump_if(0);newline(0);
+		newline(0);
+		else_block->dump_if(0);newline(0);
+	};
+	propogate_type_fwd(flags, (Node*)this, desired, this->type_ref());
+
 	return ResolvedType();
 }
 //global fn:   definer_scope->capture_from =0;
@@ -2542,7 +2601,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 	}
 
 	definer_scope->add_fn(this);
-	auto sc=definer_scope->make_inner_scope(&this->scope,this);
+	auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
 	this->set_receiver(recs);
 	if (definer_scope->capture_from){
 		sc->capture_from=definer_scope->capture_from; // this is an 'inner function' (lambda, or local)
@@ -2786,8 +2845,8 @@ struct TextInput {
 		if (r==CLOSE_BRACE || r==CLOSE_BRACKET || r==CLOSE_PAREN) depth--;
 		return r;
 	}
-	int eat_if(Name a, Name b, Name c){
-		auto t=peek_tok(); if (t==a || t==b || t==c) return (int)t;
+	Name eat_if(Name a, Name b, Name c){
+		auto t=peek_tok(); if (t==a || t==b || t==c) return eat_tok();
 		return 0;
 	}
 	int eat_if(Name a, Name b){
@@ -3623,6 +3682,14 @@ void ExprStructDef::dump(int depth) const{
 	newline(depth);dbprintf("}");
 }
 
+ExprFor*	Scope::current_loop(){
+	for (auto sc=this; sc;sc=sc->parent_within_fn()){
+		if (auto n=sc->node->as_for())
+			return n;
+	}
+	return nullptr;
+}
+
 ExprStructDef* Scope::find_struct(const Node* node) {
 	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){return sd;} return find_struct_named(node);
 }
@@ -3647,7 +3714,7 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 	}
 
 	if (!this->is_generic()){
-		auto sc=definer_scope->make_inner_scope(&this->scope,this);
+		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
 		for (auto m:fields){
 			m->resolve(sc,nullptr,flags);
 		}
@@ -3712,8 +3779,9 @@ Node* ExprFor::clone()const{
 }
 ExprOp* parse_flow(TokenStream& src,Name flow_statement){
 	// break is an operator. label,return.
-	Expr* expr=nullptr;;
+	Expr* expr=nullptr;
 	if (!(src.peek_tok()==CLOSE_BRACE || src.peek_tok()==SEMICOLON)){
+		dbprintf("%s\n",str(src.peek_tok()));
 		expr=parse_expr(src);
 	}
 	return new ExprOp(flow_statement, src.pos,nullptr,expr);
@@ -3788,7 +3856,7 @@ void Type::verify(){
 }
 
 ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
-	auto sc=outer_s->make_inner_scope(&this->scope,outer_s->owner_fn);
+	auto sc=outer_s->make_inner_scope(&this->scope,outer_s->owner_fn,this);
 	
 
 	::verify(this->cond->get_type());
@@ -3823,6 +3891,10 @@ void ExprFor::dump(int d) const {
 		newline(d);dbprintf("else{");
 		this->else_block->dump_if(d+1);
 		newline(d);dbprintf("}");
+	}
+	if(this->type()){
+	dbprintf(":");
+	this->type()->dump_if(d);
 	}
 }
 
@@ -3970,15 +4042,18 @@ const char* g_TestBasicSyntax=
 /*14*/ "fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}\n"
 ;
 
-const char* g_TestFlow=
+const char* g_TestFlow=\
 "fn printf(s:str,...)->int;				\n"
 "fn main(argc:int, argv:**char)->int{	\n"
-"	i:=5;								\n"
-"	for i:=0,j:=0; i<10; i+=1,j+=7 {	\n"
+"	i:=5; b:=argc<9;						\n"
+"	v:=for i:=0,j:=0;		\n"
+"			i<10;			\n"
+"			i+=1,j+=7 {	\n"
 "		printf(\"for loop i=%d j=%d\\n\",i,j);	\n"
+"		if i==5 {break 0.5};				\n"
 "	}									\n"
 "	else{								\n"
-"		printf(\"loop complete i=%d\\n\",i);\n"
+"		printf(\"loop complete i=%d\\n\",i);0.6\n"
 "	}									\n"
 "	printf(\"outer scope i=%d\\n\",i);	\n"
 "	0									\n"
@@ -4189,10 +4264,10 @@ void dump_help(){
 void run_tests(){
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret1=compile_source(g_TestFlow,"g_TestFlow","test1.ll",B_TYPES|B_RUN);
 	auto ret5=compile_source(g_TestAlloc,"g_TestAlloc","test5.ll",B_TYPES|B_RUN);
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test0.ll",B_TYPES|B_RUN);
-	auto ret1=compile_source(g_TestFlow,"g_TestFlow","test1.ll",B_TYPES|B_RUN);
 	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);
 	auto ret3=compile_source(g_TestMemberFn,"g_TestMemberFn","test3.ll",B_DEFS| B_TYPES|B_RUN);
 }

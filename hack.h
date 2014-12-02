@@ -293,7 +293,7 @@ public:
 	SrcPos pos;						// where is it
 	Node(){}
 	ExprDef*	def=0;		// definition of the entity here. (function call, struct,type,field);
-	Node*		next_of_def;
+	Node*		next_of_def=0;
 	void set_def(ExprDef* d);
 	virtual  ~Node(){};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
@@ -331,6 +331,7 @@ public:
 	virtual CgValue compile(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
 	virtual ExprIdent* as_ident() {return nullptr;}
+	virtual ExprFor* as_for() {return nullptr;}
 	virtual ExprFnDef* as_fn_def() {return nullptr;}
 	virtual ExprBlock* as_block() {return nullptr;}
 	virtual ArgDef* as_arg_def() {return nullptr;}
@@ -468,6 +469,8 @@ struct Type : Expr{
 	bool			eq(const Type* other) const;
 	void			dump_sub()const;
 	void			dump(int depth)const;
+	static Type*	get_bool() ;
+	static Type*	get_void() ;
 	Node*	clone() const;
 	bool	is_array()const		{return name==ARRAY;}
 	bool	is_template()const	{ return sub!=0;}
@@ -571,7 +574,7 @@ struct ExprFlow:Expr{	// control flow statements
 };
 
 struct ExprDef :Expr{	// any that is a definition
-	Node*	refs;
+	Node*	refs=0;
 	void	remove_ref(Node* ref);
 	virtual ExprStructDef* member_of()const{return nullptr;}
 };
@@ -731,19 +734,23 @@ public:
 	NamedItems* find_named_items_local(Name name);
 	NamedItems* get_named_items_local(Name name);
 	NamedItems* find_named_items_rec(Name name);
+	ExprFor*		current_loop();
 private:
 	void push_child(Scope* sub) { sub->owner_fn=this->owner_fn; sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 public:
 	Scope* parent_or_global()const{
 		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
 	}
-	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner){
+	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner){
 		if (!*pp_scope){
 			auto sc=new Scope;
 			push_child(sc);
 			sc->owner_fn=owner;
 			*pp_scope=sc;
+			ASSERT(sc->node==0);
+			if(!sc->node){sc->node=sub_owner;}
 		}
+		
 		return *pp_scope;
 	};
 };
@@ -758,7 +765,12 @@ struct ExprIf :  ExprFlow {
 	ExprIf(const SrcPos& s){pos=s;name=0;cond=0;body=0;else_block=0;}
 	~ExprIf(){}
 	Node*	clone() const;
-	bool	is_undefined()const				{return cond->is_undefined()||body->is_undefined()||else_block->is_undefined();}
+	bool	is_undefined()const			{
+		if (cond)if (cond->is_undefined()) return true;
+		if (body)if (body->is_undefined()) return true;
+		if (else_block)if (else_block->is_undefined()) return true;
+		return false;
+	}
 	virtual const char*	kind_str()const		{return"if";}
 	ResolvedType	resolve(Scope* scope,const Type*,int flags) ;
 	virtual void	find_vars_written(Scope* s,set<Variable*>& vars ) const;
@@ -782,15 +794,16 @@ struct ExprFor :  ExprFlow {
 	bool is_c_for()const			{return !pattern;}
 	bool is_for_in()const			{return pattern && cond==0 && incr==0;}
 	~ExprFor(){}
-	virtual const char* kind_str()const		{return"if";}
+	virtual const char* kind_str()const		{return"for";}
 	bool is_undefined()const				{return (pattern&&pattern->is_undefined())||(init &&init->is_undefined())||(cond&&cond->is_undefined())||(incr&&incr->is_undefined())||(body&& body->is_undefined())||(else_block&&else_block->is_undefined());}
 	Expr* find_next_break_expr(Expr* prev=0);
 	Node* clone()const;
+	virtual Scope*		get_scope()			{return this->scope;}
+	virtual ExprFor*	as_for()			{return this;}
 	ResolvedType resolve(Scope* scope,const Type*,int flags);
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
 	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc);
-	virtual Scope*	get_scope()				{return this->scope;}
 };
 
 struct Call;

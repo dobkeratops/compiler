@@ -798,6 +798,8 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	// write the initializer block first; it sets up variables initial state
 	auto ofp=cg.ofp;
 	int index=cg.m_next_reg++;
+	
+	auto retval=CgValue();
 	auto l_init=gen_label("init",index);
 	cg.emit_branch(l_init);
 	cg.emit_label(l_init);
@@ -836,7 +838,7 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	if (nf->incr) nf->incr->compile(cg,sc);
 	cg.emit_branch(l_for);
 	cg.emit_label(l_else);
-	if (nf->else_block) nf->else_block->compile(cg,sc);
+	if (nf->else_block) {retval=nf->else_block->compile(cg,sc);}
 	cg.emit_branch(l_endfor);
 	cg.emit_label(l_endfor);
 	// now write the phi-nodes.
@@ -846,7 +848,7 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	fseek(ofp, 0,SEEK_END);
 
 	//TODO: return value.
-	return CgValue();
+	return retval;
 }
 CgValue CodeGen::emit_cast_raw(CgValue&lhs_val, Type* to_type){
 	return emit_cast_sub(CgValue(next_reg(),to_type),lhs_val,to_type);
@@ -1039,6 +1041,10 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			auto v=sc->find_variable_rec(e->lhs->name); WARN(v &&"semantic analysis should have created var");
 			auto dst=v->get_reg(v->name, &cg.m_next_reg, true);
 			CgValue ret;
+			auto dbg=[&](){
+				dbprintf("assign from rhs %s\n",e->rhs->kind_str());
+				e->rhs->dump(0);newline(0);dbprintf("rhs type=\n");e->rhs->type()->dump_if(0);newline(0);
+			};
 			if (rhs.is_literal()){//TODO simplify this, how does this case unify?
 				v->regname=dst;
 				rhs.load(cg,dst);
