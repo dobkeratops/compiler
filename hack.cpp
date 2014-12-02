@@ -6,6 +6,7 @@
 const char** g_pp,*g_p;
 const char* g_filename=0;
 
+//#define dbprintf_varscope dbprintf
 inline void dbprintf_varscope(const char*,...){}
 inline void dbprintf_generic(const char*,...){}
 inline void dbprintf_lambdas(const char*,...){}
@@ -408,6 +409,11 @@ StringTable g_Names(g_token_str);
 Name getStringIndex(const char* str,const char* end) {
 	return g_Names.get_index(str, end,0);
 }
+Name getStringIndexConcat(const char* s1, const char* s2){
+	char tmp[512];
+	snprintf(tmp,511,s1,s1);
+	return getStringIndex(tmp);
+}
 const char* getString(const Name& n) {
 	return g_Names.index_to_name[index(n)].c_str();
 }
@@ -480,6 +486,7 @@ void	ExprDef::remove_ref(Node* ref){
 	for (p=*pp; p; pp=&p->next_of_def, p=*pp) {
 		if (p==ref) *pp=p->next_of_def;
 	}
+	ref->def=0;
 }
 
 
@@ -490,7 +497,7 @@ void Node::set_def(ExprDef *d){
 	}
 	else {
 		if (d!=this->def){
-			dbprintf("WARNING!!-was %d %s now %d %s",def->pos.line,def->name_str(), d->pos.line,d->name_str());
+			dbprintf("WARNING!!-was %d %s now %d %s\n",def->pos.line,def->name_str(), d->pos.line,d->name_str());
 //			ASSERT(d==this->def);
 		}
 		def->remove_ref(this);
@@ -677,7 +684,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		}
 	} else
 	if (auto v=scope->find_variable_rec(this->name)){ // look for scope variable..
-		v->on_stack=flags&R_PUT_ON_STACK;
+		v->on_stack|=flags&R_PUT_ON_STACK;
 		this->set_def(v);
 		return propogate_type(flags,this, this->type_ref(),v->type_ref());
 	}
@@ -1813,10 +1820,19 @@ Variable* Scope::find_variable_rec(Name name){
 }
 
 Variable* Scope::try_capture_var(Name name) {
+	for (auto v=capture_from->vars;v; v=v->next_of_capture){
+		if (v->name==name &&v->capture_in){
+			dbprintf_varscope("Found Captured Var %s in %s %s\n",str(name),this->name(),str(v->capture_in->name));
+			return v;
+		}
+	}
+	dbprintf_varscope("Trying to capture %s in %s\n",str(name),this->name());
+	dbprintf_varscope("%s captures from %s\n",str(name),this->capture_from->name());
 	if (auto ofn=dynamic_cast<ExprFnDef*>(this->owner_fn)){
 		auto v=capture_from->find_variable_rec(name);
 		if (v) {
-			auto cp=ofn->get_or_create_capture();
+			dbprintf_varscope("capture: found %s in %s\n",str(name),this->capture_from->name());
+			auto cp=ofn->get_or_create_capture(this->capture_from->owner_fn->as_fn_def());
 			if (v->capture_in==0){
 				v->capture_in=cp; v->next_of_capture=cp->vars; cp->vars=v;
 				dbprintf_varscope("%s captured by %s from %s\n",str(name),this->name(),capture_from->name());
@@ -2399,7 +2415,7 @@ void Capture::coalesce_with(Capture *other){
 
 		f->next_of_capture= this->capture_by;	// push f to this' capture_by list.
 		this->capture_by=f;
-		f->capture=this;
+		f->my_capture=this;
 	}
 	// steal other's variables
 	while (other->vars){
@@ -2412,13 +2428,18 @@ void Capture::coalesce_with(Capture *other){
 	}
 }
 
-Capture* ExprFnDef::get_or_create_capture(){
-	if (!this->capture) {
-		this->capture = new Capture;
-		this->capture->capture_by = this;
-		this->next_of_capture=0;
+Capture* ExprFnDef::get_or_create_capture(ExprFnDef* src){
+	if (!this->my_capture) {
+		auto c=new Capture;
+		this->my_capture = c;
+		c->capture_by = this;
+		c->capture_from=src;
+		c->next_of_from=src->captures;
+		src->captures=c;
+		c->pos=src->pos;
+		c->name=getStringIndexConcat(str(this->name),str(src->name));
 	}
-	return capture;
+	return my_capture;
 }
 
 int ExprFnDef::type_parameter_index(Name n) const {
@@ -3855,7 +3876,15 @@ const char* g_TestMemberFn=
 /*19*/	"	py.method();	\n"
 /*20*/	"		\n"
 /*20*/  "}														\n";
-
+const char* g_TestClosure=
+/*1*/  "fn printf(s:str,...)->int;  							\n"
+/*10*/ "fn take_closure(pfunc:(int)->void){ pfunc(5);}\n"
+/*  */	"fn main(argc:int, argv:**char)->int{		\n"
+/*  */	"	y:=11;z:=12			\n"
+/*51*/	"	take_closure(|x|{printf(\"closure x=%d captured y=%d z=%d\\n\",x,y,z);});\n"
+/*17*/	"	0\n"
+/*20*/  "}														\n";
+;
 const char* g_TestBasicSyntax=
 /* 1*/ "*++x=*--y e+r:int foo(e,r);\n"
 /* 2*/ "self.pos+self.vel*dt;\n"
@@ -4092,6 +4121,7 @@ void dump_help(){
 void run_tests(){
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test0.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestFlow,"g_TestFlow","test1.ll",B_TYPES|B_RUN);
 	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);

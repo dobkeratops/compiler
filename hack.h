@@ -278,15 +278,7 @@ struct ResolvedType{
 	//operator bool()const { return status==COMPLETE && type!=0;}
 };
 
-struct Capture {
-	ExprFnDef*		capture_from;
-	ExprFnDef*		capture_by;
-	Variable*		vars;
-	Capture*		next_of_from;
-	ExprStructDef*	the_struct;
-	void 			coalesce_with(Capture* other);
-	ExprStructDef*	get_struct();
-};
+struct Capture;
 // load data->vtb // if this matters it would be inlined
 // load vtb->fn
 // when the time comes - vtb->destroy()
@@ -360,7 +352,6 @@ struct TypeParam: Node{
 	const char* kind_str()const{return "TypeParam";}
 };
 
-
 struct LLVMType {
 	Name name;
 	bool is_pointer;
@@ -390,7 +381,21 @@ public:
 	virtual bool is_variable_name()const	{return false;}
 	virtual Scope* get_scope()				{return nullptr;}
 };
-
+struct Capture : Expr{
+	Name			tyname(){return name;};
+//	Type*			type=0;			// a hidden type, LLVM needs it.
+	ExprFnDef*		capture_from=0;
+	ExprFnDef*		capture_by=0;
+	Variable*		vars=0;
+	Capture*		next_of_from=0;
+	ExprStructDef*	the_struct=0;
+	void 			coalesce_with(Capture* other);
+	ExprStructDef*	get_struct();
+	virtual Node* clone() const{
+		dbprintf("warning todo template instatntiation of captures\n");
+		return nullptr;
+	};
+};
 
 struct Type : Expr{
 	int marker;
@@ -469,8 +474,7 @@ struct Type : Expr{
 	bool	is_function() const	{ return name==FN;}
 	bool	is_closure() const	{ return name==CLOSURE;}
 	Type*	fn_return() const	{ return sub->next;}
-	Type*	fn_args() const		{ return sub->sub;}
-	void	clear_reg()			{regname=0;};
+	Type*	fn_args() const		{ return sub->sub;} 	void	clear_reg()			{regname=0;};
 	bool	is_pointer()const		{return (this && this->name==PTR) || (this->name==REF);}
 	bool	is_void()const			{return !this || this->name==VOID;}
 	int		num_derefs()const		{if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
@@ -654,13 +658,16 @@ struct Call {
 enum VarKind{VkArg,Local,Global};
 struct Variable : ExprDef{
 	bool		on_stack=false;
-	Capture*	capture_in=0;	// todo: scope or capture could be unified?
+	Capture*	capture_in=0;	// todo: scope or capture could be unified? 'in this , or in capture ...'
 	VarKind		kind;
 	Scope*		owner=0;
+	short capture_index;
+	bool		keep_on_stack(){return on_stack||capture_in!=0;}
 	Variable*	next_of_scope=0;	// TODO could these be unified, var is owned by capture or scope
 	Variable*	next_of_capture=0;
 	Expr*		initialize=0; // if its an argdef, we instantiate an initializer list
 	Variable(SrcPos pos,Name n,VarKind k){this->pos=pos,name=n; initialize=0; owner=0;kind=k;this->set_type(0);}
+	bool		is_captured()const{return this->capture_in!=nullptr;}
 	Node* clone() const {
 		auto v=new Variable(this->pos,name,this->kind);
 		std::cout<<"clone "<<str(name)<<this<<" as "<<v<<"\n";
@@ -869,7 +876,8 @@ struct  ExprFnDef : ExprDef {
 	ExprBlock*	callers=0;			// linklist of callers to here
 	NamedItems*	name_ptr=0;
 	Scope*		scope=0;
-	Capture*	capture=0;			// for closures- hidden param,environment struct passed in
+	Capture*	captures=0;			//
+	Capture*	my_capture=0;			// for closures- hidden param,environment struct passed in
 	ExprStructDef* m_receiver=0;
 	
 	Type* ret_type=0;
@@ -897,7 +905,7 @@ struct  ExprFnDef : ExprDef {
 	int		get_name()const {return index(name);}
 	Name	get_mangled_name()const;
 	bool	is_generic() const;
-	bool	is_closure() const			{return capture!=0 || m_closure;}
+	bool	is_closure() const			{return my_capture!=0 || m_closure;}
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
 	int		min_args()					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}
@@ -911,7 +919,7 @@ struct  ExprFnDef : ExprDef {
 	ResolvedType	resolve_function(Scope* definer,ExprStructDef* receiver, const Type* desired, int flags);
 	ResolvedType	resolve(Scope* scope,const Type* desired,int flags);
 	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);
-	Capture*		get_or_create_capture();
+	Capture*		get_or_create_capture(ExprFnDef* src);
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	Expr*		get_return_value() const;
 	Type*		return_type()const {

@@ -8,10 +8,12 @@ void name_mangle(char* buffer, int size, const Type* f);
 void name_mangle_append_scope(char* buffer, int size, const Scope* s);
 char* name_mangle_append_name(char* buffer, int size, Name n);
 
+class CodeGen;
 class CgValue;
 struct ExprFnDef;
 enum EmitFnMode {EmitDefinition,EmitDeclaration,EmitType};
 struct Type; struct ExprFnDef;
+void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp);
 
 class CodeGen {
 public:
@@ -23,6 +25,7 @@ public:
 		depth=0;
 		curr_fn=0;
 	}
+	Type* m_i8ptr=0;
 	char comma;
 	int depth;
 	bool commas[32];
@@ -36,13 +39,15 @@ public:
 	void emit_ins_end();
 	void emit_txt(const char* str,...);
 	void emit_type(CgValue& lv );
-	void emit_type(const Type* t, bool is_ref=false); // these would prefer to be extentions, dont want 'CodeGen' dependant on the AST.
+	void emit_type(const Type* t, bool is_ref=false); // these would prefer to be
+	//extentions, dont want 'CodeGen' dependant on the AST.
 	void emit_type_reg(const Type* t,bool ref, Name reg);
 	void emit_function_type(ExprFnDef* fn_node);
 	void emit_function_type(const Type* t);
 	void emit_global(Name n);
 	void emit_ins_begin_sub();
 	void emit_undef();
+	CgValue emit_alloca_typename(RegisterName reg, Name ty);
 	CgValue emit_alloca_type(Expr* holder, Type* t);
 	RegisterName  emit_ins_begin(RegisterName reg, const char* op);
 	void emit_ins_name(const char* txt);
@@ -73,7 +78,16 @@ public:
 	void emit_label(Name l);
 	void emit_branch( Name l);
 	void emit_branch(CgValue cond, Name label_then, Name label_else);
+	CgValue emit_cast_raw(CgValue&lhsv, Type* rhse);
 	CgValue emit_cast(CgValue dst, CgValue&lhsv, Expr* rhse);
+	CgValue emit_cast_sub(CgValue dst, CgValue&lhs_val, Type* rhst);
+	CgValue emit_cast_to_i8ptr(RegisterName src, Type* srctype);
+	CgValue emit_cast_from_i8ptr(RegisterName src, Type* totype, RegisterName dst=0);
+	CgValue emit_cast_reg(RegisterName dst, RegisterName src_reg, Type*src_type, Type* dst_type);
 	void emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode);
-
+	Type* i8ptr();
+	// API refactoring
+	CgValue emit_extract(CgValue src, int index);
+	CgValue emit_insert(CgValue src, int index);
+	CgValue emit_getelementptr(RegisterName ptr,Type* struct_t,int index, Type* elem_t);
 };
