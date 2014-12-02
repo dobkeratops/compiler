@@ -70,6 +70,7 @@ public:
 	void emit_instruction_sub(Name opname,Type* type,  CgValue dst,CgValue src1);
 	void emit_instruction(Name opname,Type* type,  CgValue dst,CgValue src1);
 	void emit_instruction(Name opname,Type* type,  CgValue dst,CgValue src1,CgValue src2);
+	void emit_instruction_reg_i32(Name opname,Type* type,  CgValue dst,CgValue src1,int val);
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
 	void emit_i32_reg(Name reg);

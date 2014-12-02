@@ -2071,17 +2071,25 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// new struct initializer ->  malloc(sizeof(struct)); codegen struct initializer 'inplace'; ret is ptr[S]
 		// can we generalize this:
 		//  ident{expr,..} actually means run the init expr in there, like 'with'
-		rhs->resolve(sc, desired?desired->sub:nullptr, flags);
-		
 		/// todo: generalize inference with wrapper , eg A vs X[B]. use for *t, &t, new t, t[i]
+		auto b=rhs->as_block(); if (!b && flags){error(b,"new type[n] or new type{..} expected");}
 		if (desired && !get_type()){
 			this->set_type(desired);
 		}
 		if (!desired && !get_type() && rhs->get_type()) {
-			this->set_type( new Type(this,PTR,(Type*)rhs->get_type()->clone()) );
+			this->set_type( new Type(this,PTR,(Type*)b->get_type()->clone()) );
 		}
 		if (get_type())
-			propogate_type(flags, (Node*)this, this->get_type()->sub, rhs->type_ref());
+			propogate_type(flags, (Node*)this, this->get_type()->sub, b->type_ref());
+		
+		if (rhs->is_subscript()){
+			b->call_expr->resolve(sc,get_type()?get_type()->sub:nullptr,flags);
+			b->set_type(b->call_expr->get_type());
+		}
+		else {
+			b->resolve(sc, desired?desired->sub:nullptr, flags);
+		
+		}
 
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
@@ -3907,7 +3915,8 @@ const char* g_TestAlloc=
 /* */	"struct Foo{x:int,y:int};					\n"
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	pfoo:= new Foo{4,5};			\n"
-/*  */	"	printf(\"new foo %p x,y=%d,%d\\n\",pfoo,pfoo.x,pfoo.y);			\n"
+/*  */	"	pfoos:= new Foo[10];			\n"
+/*  */	"	printf(\"new foo %p x,y=%d,%d array alloc=%p\\n\",pfoo,pfoo.x,pfoo.y,pfoos);			\n"
 /*17*/	"	0\n"
 /*20*/  "}														\n";
 ;

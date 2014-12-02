@@ -548,6 +548,22 @@ CgValue CodeGen::emit_malloc(Type* t,size_t count){
 	emit_cast_reg(r2,r1, i8ptr(), t);
 	return CgValue(r2,t);
 }
+CgValue CodeGen::emit_malloc_array(Type* t,CgValue count){
+	auto rsizereg=next_reg();
+	auto rsize=CgValue(rsizereg,count.type);
+	emit_instruction_reg_i32("mul", count.type, rsize, count, t->sub->size());
+	ASSERT(t->name==PTR &&"pass a pointer type in, it allocs *T.necasery to avoid allocating a ptr[T]");
+	auto r1=next_reg();
+	auto r2=next_reg();
+	/// todo factor out call above.. cut-paste hell. its imm vs reg , we dont know how to put constant in reg:(
+	emit_ins_begin(r1,"call i8* @malloc");
+	emit_args_begin();
+	emit_type_operand(rsize);
+	emit_args_end();
+	emit_ins_end();
+	emit_cast_reg(r2,r1, i8ptr(), t);
+	return CgValue(r2,t);
+}
 
 void CodeGen::emit_type_reg(const Type* t,bool ref, Name reg){
 	emit_type(t,ref);
@@ -585,6 +601,17 @@ void CodeGen::emit_instruction(Name opname,Type* type,  CgValue dst,CgValue src1
 	emit_instruction_sub(opname,type,dst,src1);
 	emit_comma();
 	src2.emit_operand(*this);
+	emit_ins_end();
+}
+
+void CodeGen::emit_instruction_reg_i32(Name opname,Type* type,  CgValue dst,CgValue src1,int imm_val){
+	ASSERT(type!=0);
+	src1.load(*this);
+ 
+	emit_ins_begin_sub();
+	emit_instruction_sub(opname,type,dst,src1);
+	emit_comma();
+	emit_txt("%d",imm_val);
 	emit_ins_end();
 }
 
@@ -1070,6 +1097,15 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 				if (b->is_struct_initializer()){
 					auto reg=cg.emit_malloc(this->type(),1);
 					return b->compile_sub(cg,sc,reg.reg);
+				} else if (b->is_subscript()){ // new Foo[5] makes 5 foos; [5,6,7] is like new int[3],(fill..)
+					if (b->argls.size()==1){
+						auto num=b->argls[0]->compile(cg,sc);
+						auto reg=cg.emit_malloc_array(this->type(),num);
+						return reg;//CgValue(reg,this->type());
+					}
+					else{
+						// empty dynamic array ctr
+					}
 				}
 			}
 			error(e,"TODO:new only works for  new StructName{....} \n");
