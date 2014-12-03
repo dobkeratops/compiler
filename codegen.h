@@ -87,6 +87,7 @@ public:
 	void emit_type_operand(const CgValue& src);
 	void emit_label(Name l);
 	void emit_branch( Name l);
+	void emit_return(CgValue val);
 	void emit_branch(CgValue cond, Name label_then, Name label_else);
 	CgValue emit_cast_raw(CgValue&lhsv, Type* rhse);
 	CgValue emit_cast(CgValue dst, CgValue&lhsv, Expr* rhse);

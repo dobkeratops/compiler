@@ -19,7 +19,9 @@ fn something(f:float){
 }
 fn something(f:float,x){
 }
-
+fn take_closure(funcp:(int)->void){
+    funcp(10);
+}
 
 struct Union[X,Y]{
  tag:int,
@@ -59,6 +61,7 @@ fn main(argc:int,argv:**char)->int{
 	}
     something_foo(&fv);
 	something(&fv);
+    take_closure(|x|{printf("closure says %d %d\n",x,y);})
 
 	x:=if argc<2{printf("<2");1}else{printf(">2");2};
 	printf("yada yada yada\n");

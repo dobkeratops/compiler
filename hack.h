@@ -314,8 +314,10 @@ public:
 	Node* clone_if()const				{ if(this) return this->clone();else return nullptr;}
 	void dump_if(int d)const			{if (this) this->dump(d);}
 	virtual void clear_reg()			{regname=0;};
-	RegisterName get_reg(Name baseName, int* new_index, bool force_new);
-	RegisterName get_reg_new(Name baseName, int* new_index);
+	RegisterName get_reg(int* new_index, bool force_new);
+	RegisterName get_reg_new(int* new_index);
+	RegisterName get_reg_named(Name baseName, int* new_index, bool force_new);
+	RegisterName get_reg_named_new(Name baseName, int* new_index);
 	RegisterName get_reg_existing();
 	Node*	parent()					{return this->m_parent;}
 	void	set_parent(Node* p)			{this->m_parent=p;}
@@ -347,6 +349,8 @@ public:
 	virtual Variable* as_variable() {return nullptr;}
 	ArgDef*			as_field() {return this->as_arg_def();}
 	virtual void verify() {};
+	virtual Type* get_elem_type(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
+	virtual size_t alignment()const {return 16;} // unless you know more..
 };
 
 
@@ -391,25 +395,10 @@ public:
 	virtual bool is_variable_name()const	{return false;}
 	virtual Scope* get_scope()				{return nullptr;}
 };
-struct Capture : Expr{
-	Name			tyname(){return name;};
-//	Type*			type=0;			// a hidden type, LLVM needs it.
-	ExprFnDef*		capture_from=0;
-	ExprFnDef*		capture_by=0;
-	Variable*		vars=0;
-	Capture*		next_of_from=0;
-	ExprStructDef*	the_struct=0;
-	void 			coalesce_with(Capture* other);
-	ExprStructDef*	get_struct();
-	virtual Node* clone() const{
-		dbprintf("warning todo template instatntiation of captures\n");
-		return nullptr;
-	};
-};
 
 struct Type : Expr{
 	vector<TypeParam> typeparams;
-	ExprStructDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
+	ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
 	Node* 	m_origin=0;				// where it comes from
@@ -443,13 +432,7 @@ struct Type : Expr{
 		auto a=this->sub; auto ret=a->next; auto recv=ret?ret->next:nullptr;
 		return FnInfo{a,ret,recv};
 	}
-	ExprStructDef* get_receiver()const {
-		if (this->sub)
-			if (this->sub->next)
-				if (this->sub->next->next)
-					return this->sub->next->next->struct_def;
-		return nullptr;
-	}
+	ExprStructDef* get_receiver()const;
 	// we have a stupid OO receiver because we want C++ compatability;
 	// we can use it for lambda too. We will have extention methods.
 	void	set_fn_details(Type* args,Type* ret,ExprStructDef* rcv){
@@ -587,6 +570,22 @@ struct ExprDef :Expr{	// any that is a definition
 	void	remove_ref(Node* ref);
 	virtual ExprStructDef* member_of()const{return nullptr;}
 };
+struct Capture : ExprDef{
+	Name			tyname(){return name;};
+	ExprFnDef*		capture_from=0;
+	ExprFnDef*		capture_by=0;
+	Variable*		vars=0;
+	Capture*		next_of_from=0;
+	ExprStructDef*	the_struct=0;
+	void 			coalesce_with(Capture* other);
+	ExprStructDef*	get_struct();
+	virtual Node* clone() const{
+		dbprintf("warning todo template instatntiation of captures\n");
+		return nullptr;
+	};
+	Type*			get_elem_type(int i);
+	
+};
 
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
 	vector<TypeParam> typeparams;
@@ -635,7 +634,7 @@ struct ArgDef :ExprDef{
 	Node*	clone() const;
 	Name	as_name()const				{return this->name;}
 	size_t	size()const					{return this->type()?this->type()->size():0;}
-	int		alignment() const			{ return 4;}//todo, eval templates/other structs, consider pointers, ..
+	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
 	virtual void	translate_typeparams(const TypeParamXlat& tpx);
 	ResolvedType	resolve(Scope* sc, const Type* desired, int flags) override;
 	ArgDef*	as_arg_def()		{return this;}
@@ -856,7 +855,7 @@ struct ExprStructDef: ExprDef {
 	ExprStructDef* next_of_name;
 	Name	get_mangled_name()const;
 	ExprStructDef(SrcPos sp,Name n)		{name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
-	int		alignment() const			{int max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
+	size_t		alignment() const			{size_t max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
 	void			dump(int depth)const;
 	size_t			size() const;
@@ -868,11 +867,12 @@ struct ExprStructDef: ExprDef {
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc);
+	Type*			get_elem_type(int i){return this->fields[i]->type();}
 };
 
 inline Type* Type::get_elem(int index){
 	if (this->struct_def)
-		return this->struct_def->fields[index]->type();
+		return this->struct_def->get_elem_type(index);
 	ASSERT(index>=0);
 	auto s=sub;
 	for (;s&&index>0;s=s->next,--index){};

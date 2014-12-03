@@ -6,8 +6,8 @@
 const char** g_pp,*g_p;
 const char* g_filename=0;
 
-//#define dbprintf_varscope dbprintf
-inline void dbprintf_varscope(const char*,...){}
+#define dbprintf_varscope dbprintf
+//inline void dbprintf_varscope(const char*,...){}
 inline void dbprintf_generic(const char*,...){}
 inline void dbprintf_lambdas(const char*,...){}
 inline void dbprintf_instancing(const char*,...){}
@@ -535,24 +535,27 @@ void Node::set_def(ExprDef *d){
 	}
 }
 
-ExprStructDef* Node::as_struct_def()const{ error(this,"expect struct def"); return nullptr;};
+ExprStructDef* Node::as_struct_def()const{
+	//error(this,"expect struct def");
+	return nullptr;
+};
 RegisterName Node::get_reg_existing(){ASSERT(regname); return regname;}
-RegisterName Node::get_reg(Name baseName, int *new_index, bool force_new){
+RegisterName Node::get_reg(int *new_index, bool force_new){
 	// variable might be in a local scope shadowing others, so it still needs a unique name
 	// names are also modified by writes, for llvm SSA
 	if (!regname || force_new){
 		auto old=regname;
-		auto ret= get_reg_new(baseName,new_index);
+		auto ret= get_reg_new(new_index);
 		return ret;
 	} else{
 		return regname;
 	}
 }
-RegisterName Node::get_reg_new(Name baseName, int* new_index) {
-	char name[256];
-	const char* s=getString(baseName);
-	sprintf(name, "r%d%s",(*new_index)++,isSymbolStart(s[0])?s:"rfv");
-	return this->regname=g_Names.get_index(name,0,0);
+RegisterName Node::get_reg_new(int* new_index) {
+	char rname[256];
+	const char* s=getString(name);
+	sprintf(rname, "r%d%s",(*new_index)++,isSymbolStart(s[0])?s:"rfv");
+	return this->regname=g_Names.get_index(rname,0,0);
 }
 void verify(const Type* a){
 	if (a){
@@ -735,6 +738,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 //			if (g_verbose){
 //				g_pRoot->as_block()->scope->dump(0);
 //			}
+			scope->find_variable_rec(this->name); // look for scope variable..
 			error(this,scope,"\'%s\' undeclared",str(this->name));
 		}
 		return ResolvedType();
@@ -1004,7 +1008,7 @@ size_t Type::size() const{
 		return size;
 	}
 	if (this->struct_def){
-		return struct_def->size();
+		return struct_def->as_struct_def()->size();
 	}
 	return 0;
 }
@@ -1014,8 +1018,20 @@ ExprStructDef* Type::get_struct()const{
 	while (p && !p->is_struct()){
 		p=p->sub;
 	}
-	return p?p->struct_def:0;
+	if (!p) return nullptr;
+	auto sd=p->struct_def;
+	if (!sd) return nullptr;
+	return sd->as_struct_def();
 }
+ExprStructDef* Type::get_receiver()const
+{
+	if (this->sub)
+		if (this->sub->next)
+			if (this->sub->next->next)
+				return this->sub->next->next->struct_def->as_struct_def();
+	return nullptr;
+}
+
 size_t ExprStructDef::size()const{
 	size_t sum=0;
 	for (auto i=0; i<fields.size();i++){
@@ -1687,8 +1703,8 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	if (args.size()>0){
 		if (auto rt=args[0]->type()){
 			auto rec_t=rt->deref_all();
-			if (rec_t->struct_def){
-				rec_scope=rec_t->struct_def->scope;
+			if (auto sd=rec_t->get_struct()){
+				rec_scope=sd->scope;
 				if (rec_scope){
 					ff.find_fn_from_scopes(rec_scope,nullptr);
 				}
@@ -1871,7 +1887,7 @@ Variable* Scope::try_capture_var(Name name) {
 		}
 	}
 	dbprintf_varscope("Trying to capture %s in %s\n",str(name),this->name());
-	dbprintf_varscope("%s captures from %s\n",str(name),this->capture_from->name());
+	dbprintf_varscope(" from %s\n",this->capture_from->name());
 	if (auto ofn=dynamic_cast<ExprFnDef*>(this->owner_fn)){
 		auto v=capture_from->find_variable_rec(name);
 		if (v) {
@@ -1885,8 +1901,10 @@ Variable* Scope::try_capture_var(Name name) {
 			else if (v->capture_in!=cp) {
 				dbprintf_varscope("var %s already captured by %s, coalesce with %s\n",str(name),str(v->capture_in->capture_by->name),this->name());
 				cp->coalesce_with(v->capture_in);
+				return v;
 //			error(v,ofn,"can't capture variable twice yet- TODO, coalesce capture blocks");
 			}
+			return v;
 		}
 	}
 	return nullptr;// we can't capture.
@@ -2504,6 +2522,13 @@ ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scop
 	}
 	verify_all();
 }
+
+Type* Capture::get_elem_type(int i){
+	auto v=vars;
+	for (; v&&i>0; i--,v=v->next_of_capture);
+	return v->type();
+}
+
 
 void Capture::coalesce_with(Capture *other){
 	// remap all functions that use the other to point to me
@@ -4049,8 +4074,9 @@ const char* g_TestClosure=
 /*1*/ 	"fn printf(s:str,...)->int;  							\n"
 /*10*/	"fn take_closure(pfunc:(int)->void){ pfunc(5);}\n"
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
-/*  */	"	y:=11;z:=12			\n"
+/*  */	"	y:=11;z:=12;w:=0; y+=10;w+=7;			\n"
 /*51*/	"	take_closure(|x|{printf(\"closure x=%d captured y=%d z=%d\\n\",x,y,z);});\n"
+"printf(\" y=%d z=%d w=%d\\n\",y+=90,z,w);\n"
 /*17*/	"	0\n"
 /*20*/  "}														\n";
 ;
@@ -4171,7 +4197,7 @@ const char* g_TestProg2=
 /*48*/ "	take_fn(localtest);					\n"
 /*49*/ "	localtest(10);						\n"
 /*50*/ "	take_fn(fn(x){printf(\"hello from anon function %d\\n\",x);});		\n"
-/*51*/ "	take_closure(|x|{printf(\"hello from closure function %d\\n\",x);});\n"
+/*51*/ "	take_closure(|y|{printf(\"hello from closure function x=%d y=%d\\n\",x,y);});\n"
 /*52*/ "	bar(1,2,3);							\n"
 /*53*/ "	retval}								\n"
 /*54*/ "	struct FooStruct{x:int,y:int};		\n"
@@ -4304,12 +4330,12 @@ void dump_help(){
 void run_tests(){
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
+	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestFlow,"g_TestFlow","test1.ll",B_TYPES|B_RUN);
 	auto ret5=compile_source(g_TestAlloc,"g_TestAlloc","test5.ll",B_TYPES|B_RUN);
-	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test0.ll",B_TYPES|B_RUN);
 	auto ret3=compile_source(g_TestMemberFn,"g_TestMemberFn","test3.ll",B_DEFS| B_TYPES|B_RUN);
-	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);
 }
 
 int main(int argc, const char** argv) {

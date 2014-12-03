@@ -5,9 +5,12 @@ fn printf(s:str,...)->int;
 struct Foo {
 	vx:int, vy:int, vz:int
 }
+
 fn something(f){
 	printf("f.x %d,.y %d,.z %d\n", f.vx, f.vy, f.vz);
 }
+
+
 fn main(argc:int,argv:**char)->int{
 	xs=:array[int,512];
 	q:=xs[1]; p1:=&xs[1];
@@ -33,4 +36,11 @@ fn main(argc:int,argv:**char)->int{
 	printf("yada yada yada\n");
 	printf("\nhhhhello world %.3f %d\n", lerp(10.0,20.0,0.5),y );0
 }
+
+
+
+
+
+
+
 
