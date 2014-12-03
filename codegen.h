@@ -80,7 +80,7 @@ public:
 	void emit_i32_lit(int index);
 	void emit_i32_reg(Name reg);
 	RegisterName	emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index);
-	void emit_store(RegisterName reg, Type* type, RegisterName addr);
+	CgValue emit_store(RegisterName reg, Type* type, RegisterName addr);
 	void emit_fn_ptr(Name n);
 	void emit_fn(Name n);
 	void emit_comment(const char* str,...);

@@ -91,15 +91,6 @@ RegisterName	CodeGen::emit_extractvalue(RegisterName dst,Type* type,RegisterName
 	return dst;
 }
 
-void CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
-	emit_ins_begin_name("store");
-	emit_type(type,0);
-	emit_reg(reg);
-	emit_type(type,1);
-	emit_reg(addr);
-	emit_txt(", align 4");
-	emit_ins_end();
-}
 void CodeGen::emit_global(Name n){
 	emit_txt("@%s ",str(n));
 }
@@ -358,6 +349,29 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	}
 	CgValue store(CodeGen& cg,const CgValue& src) const{
 		auto src_in_reg=src.load(cg);
+		
+		if (elem>=0){
+			auto newreg=next_reg_name(&cg.m_next_reg);
+			if (/*this->type->is_pointer()*/ reg && !addr){
+				auto x=this->get_elem_index(cg, elem);
+				return cg.emit_store(src_in_reg.reg,src.type, x.addr);
+			}else if (addr && !reg){
+				auto x=this->get_elem_index(cg, elem);
+				return cg.emit_store(src_in_reg.reg,src.type, x.addr);
+
+			}else {
+				ASSERT(this->type->name!=PTR);
+				cg.emit_ins_begin(newreg,"insertelement");
+				cg.emit_type_reg(this->type,false,reg); cg.emit_comma();
+				auto elem_t=this->type->get_elem(elem);
+				cg.emit_type_reg(elem_t,false,src_in_reg.reg);
+				cg.emit_i32_lit(this->elem);
+				cg.emit_ins_end();
+				return CgValue(newreg, this->type);
+			}
+		}
+
+		
 		if (addr)
 			cg.emit_store(src_in_reg.reg, type, addr);
 		else if (reg) {
@@ -453,6 +467,18 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		return CgValue();
 	}
 };
+
+CgValue CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
+	emit_ins_begin_name("store");
+	emit_type(type,0);
+	emit_reg(reg);
+	emit_type(type,1);
+	emit_reg(addr);
+	emit_txt(", align 4");
+	emit_ins_end();
+	return CgValue(0,type,addr);
+}
+
 
 CgValue Node::compile_if(CodeGen& cg, Scope* sc){
 	if (this)

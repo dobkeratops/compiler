@@ -4353,11 +4353,11 @@ void dump_help(){
 void run_tests(){
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret3=compile_source(g_TestFlow,"g_TestFlow","test3.ll",B_TYPES|B_RUN);
 	auto ret2=compile_source(g_TestArray,"g_TestArray","test2.ll",B_TYPES|B_RUN);
 	auto ret0=compile_source(g_TestBasic,"g_TestBasic","test0.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestStruct,"g_TestStruct","test1.ll",B_TYPES|B_RUN);
-	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);
 	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
 	auto ret7=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test7.ll",B_TYPES|B_RUN);
