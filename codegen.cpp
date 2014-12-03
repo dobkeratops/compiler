@@ -31,7 +31,7 @@ void CodeGen::emit_txt(const char* str,...){// catch all, just spit out given st
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
 	fprintf(ofp,"%s",tmp);
-	printf("%s",tmp);
+	//printf("%s",tmp);
 }
 
 void CodeGen::emit_nest_begin(const char* str){
@@ -122,7 +122,6 @@ void CodeGen::emit_prelude(){
 	emit_txt("declare i8* @malloc(i32)\n");
 	emit_txt("declare i8* @free(i8*)\n");
 	emit_txt("declare i8* @realloc(i32,i8*,i32)\n");
-//	emit_txt("declare i32 @printf(i8*,...)\n");// it doesn't like us redefining.
 	emit_txt(";\n");
 }
 
@@ -180,11 +179,6 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 //			return this->to_stack(cg).addr_op(cg,t);
 		}
 	}
-	//CgValue to_stack(CodeGen& cg){
-	//	CgValue stack_val(0,this->type,cg.emit_alloca_type(nullptr,this->type).addr,this->elem);
-	//	stack_val.store(cg,this->reg);
-	//	return stack_val;
-	//}
 	CgValue deref_op(CodeGen& cg, Type* t) {
 		ASSERT(this->type->name==PTR || this->type->name==REF);
 		if (!t) { t=this->type->sub;}
@@ -310,7 +304,6 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			case T_FLOAT:
 				cg.emit_txt(" 0x%x00000000 ",lit->u.val_uint);
 				break;
-				//					getelementptr inbounds ([21 x i8]* @.str3, i32 0, i32 0)
 			case T_CONST_STRING:
 				cg.emit_txt(" getelementptr inbounds([%d x i8]* @%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
 				break;
@@ -354,7 +347,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		
 		if (elem>=0){
 			auto newreg=next_reg_name(&cg.m_next_reg);
-			if (/*this->type->is_pointer()*/ reg && !addr){
+			if ( reg && !addr){
 				auto x=this->get_elem_index(cg, elem);
 				return cg.emit_store(src_in_reg.reg,src.type, x.addr);
 			}else if (addr && !reg){
@@ -380,7 +373,6 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			cg.emit_store(src_in_reg.reg, type, reg);
 		} else if (val) {
 			if (auto v=val->as_variable()) {
-//			dbprintf("todo - store to variable %s %s\n",str(val->reg_name),val->name_str());
 				if (v->reg_is_addr && v->reg_name) {
 					cg.emit_store(src_in_reg.reg, type, v->reg_name);
 					return CgValue(v);
@@ -400,42 +392,6 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		}
 		return *this;
 	}
-	/*
-	RegisterName store_from(CodeGen& cg,RegisterName valreg)const{
-		/// TODO this is still suspect mess. raw reg in interface.
-		auto ofp=cg.ofp;
-		if (val && !val->reg_is_addr){
-			val->reg_name=valreg;
-			reg=valreg;
-		}
-		if (elem>=0){
-			auto srcreg=valreg;
-			auto newreg=next_reg_name(&cg.m_next_reg);
-			if (this->type->is_pointer()){
-				auto x=this->get_elem_index(cg, elem);
-				x.store_from(cg, valreg);
-				//this->reg=newreg;
-				return newreg;
-			}else {
-				cg.emit_ins_begin(newreg,"insertelement");
-				cg.emit_type_reg(this->type,false,reg); cg.emit_comma();
-				auto elem_t=this->type->get_elem(elem);
-				cg.emit_type_reg(elem_t,false,valreg);
-				cg.emit_i32_lit(this->elem);
-				cg.emit_ins_end();
-			}
-			this->reg=newreg;
-			return newreg;
-		}
-		else if (addr && type) {
-			if (reg!=0){cg.emit_comment("warning %s/%s overwrite %s?\n", str(reg),str(addr),str(valreg));}
-		//	ASSERT(reg==0);
-			reg=valreg;
-			cg.emit_store(valreg, type, addr);
-		}
-		return valreg;
-	}
-	 */
 	CgValue get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const{	//calculates & returns adress
 		ASSERT(type );
 		auto sd=type->get_struct();
@@ -448,15 +404,9 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 		if ((bool)reg && !addr && !(this->type->is_pointer())){
 			// lazy ref to inreg field index,
 			// 'load'/'store' will do 'insert'/'extract'
-			cg.emit_comment("dot reg=%s type=%s index=%d",str(reg),str(this->type->name),field_index);
 			return CgValue(reg,type,0,field_index);
 		}
 		else {
-//			if ((this->num_pointers()+(this->addr?1:0))>1){
-//				auto nreg =
-//			}
-			
-			cg.emit_comment("dot reg/addr=%s/%s type=%s index=%d",str(reg),str(addr),str(this->type->name),field_index);
 			auto sd=this->type->deref_all()->struct_def;
 			if (!field_type)
 				field_type=sd->get_elem_type(field_index);//fields[field_index]->type();
@@ -578,9 +528,6 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 		auto sd=t->get_struct();
 		if (!sd) {
 			/// TODO we quieted this error because closure objs dont make a struct
-//			t->m_origin->dump(0);
-//			t->dump(-1);
-//			error(t->m_origin?t->m_origin:t,"struct %s not resolved in %p\n",str(t->name),t);
 			emit_reg(t->name);
 		}else
 		if (sd->name) emit_struct_name(sd->get_mangled_name());
@@ -602,7 +549,6 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 		emit_struct_end();
 	}
 	else if (t->is_function()){
-		//error(t,"TODO,write function type unified ");
 		emit_separator(""); // .. because function_type also calls comma
 		emit_function_type( t);
 	}
@@ -657,12 +603,9 @@ void CodeGen::emit_type_reg(const Type* t,bool ref, Name reg){
 	emit_reg(reg);
 }
 void CodeGen::emit_type_operand(const CgValue& src){
-//	if (src.is_valid()){
-		emit_type(src.type,(src.reg==0&&src.addr));
-		src.emit_operand(*this);
-//	} else {
-//		emit_txt(" void ");
-//	}
+	/// TODO we wanted to unify 'void' here (!src.valid()) but contexts where its' called dont seem to work
+	emit_type(src.type,(src.reg==0&&src.addr));
+	src.emit_operand(*this);
 }
 
 void CodeGen::emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,CgValue src1){
@@ -754,16 +697,6 @@ CgValue CodeGen::emit_alloca_type(Expr* holder, Type* t) {
 	emit_ins_end();
 	return CgValue(0,t, r);
 }
-CgValue CodeGen::emit_alloca_typename(RegisterName var, RegisterName typname) {
-//	RegisterName r= holder?holder->get_reg(t->name, &m_next_reg, false):next_reg();
-//	emit_ins_begin(r,"alloca"); emit_reg(typname);
-//	cg.emit_txt(ofp,", align 16");
-//	emit_ins_end();
-//	return CgValue(0,t, r);
-	ASSERT(0);
-	return CgValue();
-}
-
 
 void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 	auto ofp=cg.ofp;
@@ -775,14 +708,10 @@ void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 		cg.emit_comment("local %s:%t..",v->name_str(),v->type()->name_str());
 		if (v->kind!=Local) continue;
 		auto vt=v->expect_type();
-		//if (!v->on_stack)
-		//	continue; //reg vars experiment
 		if (v->capture_in)
 			continue; // no local emited if its in the capture
 		auto r= v->get_reg(&cg.m_next_reg, true);
 		if (vt->is_struct() || v->keep_on_stack()) {
-			// alloc_struct
-//			cg.emit_txt(ofp,"\t"); emit_reg(ofp,r); cg.emit_txt(" = alloca %%%s , align %d\n",getString(vt->name),vt->struct_def->alignment());
 			cg.emit_alloca_type(v, vt);
 			v->reg_is_addr=true;
 		} else if (vt->is_array()){
@@ -1037,10 +966,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* 
 			error_end(arg);
 			ASSERT(reg.type);
 		}
-	//	auto regval=CgValue(reg.load(cg,0,arg->type()),arg->type());
 		auto r=reg.load(cg,arg->type());
-		//regval=reg;
-		//regval.load(cg);
 		l_args.push_back(r);
 	}
 	
@@ -1049,9 +975,8 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* 
 	RegisterName indirect_call=0;
 	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
 	
-	auto ret_type=e->type();	// semantic analysis should have done this
+	auto ret_type=e->type();
 	auto dst=(ret_type->name!=VOID)?e->get_reg_new(&cg.m_next_reg):0;
-	//auto rt=call_fn->get_return_value();
 	
 	auto l_emit_arg_list=[&](Type* rect,RegisterName receiver){
 		cg.emit_args_begin();
@@ -1069,7 +994,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* 
 	if (e->call_expr->is_function_name()) {
 		//[3.3.1] Direct Call
 		cg.emit_ins_begin(dst,"call");
-		cg.emit_function_type(call_fn);// NOTE we need this until we handle elipsis
+		cg.emit_function_type(call_fn);/// TODO NOTE we need this until we handle elipsis
 		cg.emit_global(call_fn->get_mangled_name());
 		l_emit_arg_list(0,0);
 		cg.emit_ins_end();
@@ -1147,9 +1072,6 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		
 		if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
 			ASSERT(sc->find_scope_variable(e->lhs->name));
-//			if (lhs_v) dst.reg=lhs_v->regname;
-				//					lhs_v->regname=dst.reg;
-//			return CgValue(0,lhs_v->type(),dst.reg);
 			return lhs_v->on_stack?CgValue(0,lhs_v->type(),lhs_v->reg_name):CgValue(lhs_v->reg_name,lhs_v->type(),0);
 		}
 		else if(opname==AS) {
@@ -1159,14 +1081,6 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		else
 		if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
 			return lhs.store(cg,rhs);
-/*			if(!lhs_v->reg_is_addr){
-				lhs_v->reg_name=rhs.reg;
-				return rhs;
-			}else{
-				lhs_v->reg_name=rhs.reg;
-				return rhs;
-			}
- */
 		}
 		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
 			return lhs.store(cg,rhs);
@@ -1177,8 +1091,6 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		}else {
 			// RISClike 3operand dst=op(src1,src2)
 			auto r=cg.emit_instruction(opname,e->get_type(),0,lhs,rhs);
-//			dst.type=e->get_type();
-			ASSERT(r.type->eq(e->get_type()));
 			return r;
 		}
 	} else if (!e->lhs && e->rhs){ // prefix operator
@@ -1274,7 +1186,7 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		auto dstreg=cg.next_reg();//ar->get_reg(&cg.m_next_reg,false);
 		if (!n->reg_name){n->reg_name=expr.reg;}
 
-		// TODO , clarify this, i dont know why; we're resolving a case to fix array of structs & raw local array
+		/// TODO , clarify this, I dont know why exactly; we're resolving a case to fix array of structs & raw local array ; difference is allocated array vs stack local array;
 		if (expr.type->num_pointers()+(expr.addr?1:0) > 1){
 			expr=expr.load(cg);
 		}
@@ -1316,8 +1228,8 @@ CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc){
 		return CgValue(cp->reg_name,cp->type(),0,var->capture_index);
 	}
 	if (var && var!=n->def){
-//			error(n,"var/def out of synx %s %s\n",n->name_str(),var->name_str());
-//			return CgValue();
+		error(n,"var/def out of sync %s %s\n",n->name_str(),var->name_str());
+		return CgValue();
 	}
 	return CgValue(var);
 }

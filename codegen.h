@@ -56,7 +56,6 @@ public:
 	void emit_global(Name n);
 	void emit_ins_begin_sub();
 	void emit_undef();
-	CgValue emit_alloca_typename(RegisterName reg, Name ty);
 	CgValue emit_alloca_type(Expr* holder, Type* t);
 	RegisterName  emit_ins_begin(RegisterName reg, const char* op);
 	void emit_ins_name(const char* txt);
