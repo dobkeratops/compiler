@@ -14,8 +14,12 @@ struct ExprFnDef;
 enum EmitFnMode {EmitDefinition,EmitDeclaration,EmitType};
 struct Type; struct ExprFnDef;
 void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp);
+CgValue	CgValueVoid();
 
 class CodeGen {
+	/// todo: move the external interface entirely to use wrapped CgValues,pass name hints for outputs
+	/// codegen can depend on a subset of the ast concepts . Type,..
+	/// we might need to rework AST to know about SSA, see the current awful hack for 'for'
 public:
 	FILE* ofp;
 	bool prelude_done=false;
@@ -33,6 +37,7 @@ public:
 	bool commas[32];
 	vector<Node*> compile_later;
 	ExprFnDef*	curr_fn;	// The current function being compiled - no nesting allowed. (defer with 'compile_later')
+	typedef  int EmitLoc;
 	Name next_reg();
 	/// TODO: wrapper functions for every instruction codegen needs
 	/// so single calls to codegen can emit different back ends (LLVM, C, ..)
@@ -97,5 +102,8 @@ public:
 	CgValue emit_getelementptr(RegisterName ptr,Type* struct_t,int index, Type* elem_t);
 	CgValue emit_malloc( Type* t,size_t count);
 	CgValue emit_malloc_array( Type* t,CgValue count);
+	EmitLoc get_pos(){return ftell(ofp);}
+	void set_pos(EmitLoc loc){fseek(ofp,loc,SEEK_SET);}
+	void set_pos_end(){fseek(ofp,0,SEEK_END);}
 	void emit_free(CgValue ptr,  Type* t,size_t count);
 };

@@ -413,6 +413,15 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	}
 };
 
+CgValue Node::compile_if(CodeGen& cg, Scope* sc){
+	if (this)
+		return this->compile(cg,sc);
+	else
+		return CgValueVoid();
+}
+
+
+
 void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp){
 	if (!cp) return;
 	for (auto v=cp->vars; v;v=v->next_of_capture){
@@ -767,6 +776,7 @@ struct LoopPhiVar {
 	RegisterName reg_start;
 	RegisterName reg_end;
 };
+
 void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, Name l_end, bool extra) {
 	for (auto& v: phi_vars) {
 		v.reg_end=v.var->regname;
@@ -828,7 +838,7 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	auto l_endfor=gen_label("endfor",index);
 	cg.emit_branch(l_for);
 	cg.emit_label(l_for);
-	auto phipos=ftell(ofp);// YUK. any way around this? eg write condition at end?
+	auto phipos=cg.get_pos();
 	emit_phi(cg,sc,phi_vars,l_init,l_for,true);//alloc space
 
 	auto cond_result=nf->cond?nf->cond->compile(cg,sc):CgValue();
@@ -842,10 +852,10 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	cg.emit_branch(l_endfor);
 	cg.emit_label(l_endfor);
 	// now write the phi-nodes.
-	auto endpos=ftell(ofp);// YUK. any way around this?
-	fseek(ofp, phipos,SEEK_SET);
+	
+	cg.set_pos(phipos);
 	emit_phi(cg,sc,phi_vars,l_init,l_body,false);
-	fseek(ofp, 0,SEEK_END);
+	cg.set_pos_end();
 
 	//TODO: return value.
 	return retval;
@@ -865,7 +875,7 @@ CgValue CodeGen::emit_cast_sub(CgValue dst, CgValue&lhs_val, Type* rhst){
 CgValue CodeGen::emit_cast_reg(RegisterName dstr, RegisterName lhsr, Type* lhst, Type* rhst)
 {
 	const char* ins="nop";
-	if (rhst->is_pointer()){
+	if (rhst->is_pointer() || rhst->is_pointer()){
 		ins="bitcast";
 	}else
 	if (lhst->is_int() && rhst->is_float()){
@@ -995,6 +1005,9 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* 
 	}
 }
 
+CgValue	CgValueVoid(){
+	return CgValue();
+}
 
 CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	auto n=this;

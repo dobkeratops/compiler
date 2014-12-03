@@ -108,6 +108,22 @@ void error_sub(const Node* n, const char* level, const char* txt ){
 		}
 	}
 }
+void error(const SrcPos& pos, const char* str ,...){
+	char txt[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(txt, str, arglist );
+	va_end( arglist );
+	
+	g_num_errors++;
+	error_newline();
+	printf("%s:%d:%d:",g_filename,pos.line,pos.col);
+	printf("\t%s",txt);
+	if (strlen(txt)){
+		if (txt[strlen(txt)-1]!='\n'){g_error_on_newline=false;}
+	}
+}
+
 void error_begin(const Node* n, const char* str, ... ){
 	char buffer[1024];
 	va_list arglist;
@@ -240,7 +256,6 @@ const char* g_token_str[]={
 	"_",
 	NULL,	
 };
-
 
 int g_tok_info[]={
 	0,
@@ -412,10 +427,17 @@ StringTable g_Names(g_token_str);
 Name getStringIndex(const char* str,const char* end) {
 	return g_Names.get_index(str, end,0);
 }
+Name strConcat(Name n1, Name n2);
+inline Name strConcat(Name n1, Name n2,Name n3){ return strConcat(n1,strConcat(n2,n3));}
+
 Name getStringIndexConcat(const char* s1, const char* s2){
 	char tmp[512];
 	snprintf(tmp,511,s1,s1);
 	return getStringIndex(tmp);
+}
+Name strConcat(Name n1, Name n2){
+	// todo - we could optimize the string table around concatenations
+	return getStringIndexConcat(str(n1),str(n2));
 }
 const char* getString(const Name& n) {
 	return g_Names.index_to_name[index(n)].c_str();
@@ -637,8 +659,8 @@ ExprStructDef* dump_find_struct(Scope* s, Name name){
 }
 void ExprOp::find_vars_written(Scope* s, set<Variable *> &vs) const{
 	auto flags=operator_flags(name);
-	if (lhs) lhs->find_vars_written(s,vs);
-	if (rhs) rhs->find_vars_written(s,vs);
+	lhs->find_vars_written_if(s,vs);
+	rhs->find_vars_written_if(s,vs);
 	if (flags&WRITE_LHS){
 		if (auto vname=dynamic_cast<ExprIdent*>(this->lhs)){
 			if (auto var=s->find_variable_rec(vname->name)){
@@ -655,24 +677,21 @@ void ExprOp::find_vars_written(Scope* s, set<Variable *> &vs) const{
 	}
 }
 
-void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const
-{
-	if (this->call_expr){
-		this->call_expr->find_vars_written(s, vars);
-	}
+void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const{
+	this->call_expr->find_vars_written_if(s, vars);
 	for (auto a:argls)
 		a->find_vars_written(s,vars);
 }
 void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{
-	cond->find_vars_written(s,vars);
-	if (body)	body->find_vars_written(s,vars);
-	if (else_block)	else_block->find_vars_written(s,vars);
+	cond->find_vars_written_if(s,vars);
+	body->find_vars_written_if(s,vars);
+	else_block->find_vars_written_if(s,vars);
 }
 void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
-	if (incr)	incr->find_vars_written(s,vars);
-	if (cond)	cond->find_vars_written(s,vars);
-	if (body)	body->find_vars_written(s,vars);
-	if (else_block)	else_block->find_vars_written(s,vars);
+	incr->find_vars_written_if(s,vars);
+	cond->find_vars_written_if(s,vars);
+	body->find_vars_written_if(s,vars);
+	else_block->find_vars_written_if(s,vars);
 }
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
@@ -2546,14 +2565,15 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags)
 }
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
-	if (init) init->resolve(sc,0,flags);
-	if (cond) cond->resolve(sc,Type::get_bool(),flags);
-	if (body) body->resolve(sc,desired,flags);
+	init->resolve_if(sc,0,flags);
+	cond->resolve_if(sc,Type::get_bool(),flags);
+	incr->resolve_if(sc,0,flags);
+	body->resolve_if(sc,desired,flags);
 	if (else_block) {
 		else_block->resolve(sc,desired,flags);
 		propogate_type(flags, (Node*)this, this->type_ref(), else_block->type_ref());
 	}
-	//else should be void
+	//without an else bllock, we can't return
 	else{
 		propogate_type_fwd(flags, (Node*)this, Type::get_void(),this->body->type_ref());
 	}
@@ -2691,6 +2711,9 @@ struct NumDenom{int num; int denom;};
 struct TextInput {
 	char filename[512];
 	SrcPos	pos;
+	enum {MAX_DEPTH=32};
+	SrcPos	bracket_pos[MAX_DEPTH];
+	int		bracket[MAX_DEPTH];
 	const char* buffer,*tok_start,*tok_end,*prev_start,*line_start;
 	Name curr_tok;int typaram_depth=0;
 #ifdef WATCH_TOK
@@ -2810,6 +2833,12 @@ struct TextInput {
 			}
 		}
 	}
+	static int close_of(int tok){
+		if (tok==OPEN_BRACE)return CLOSE_BRACE;
+		if (tok==OPEN_BRACKET)return CLOSE_BRACKET;
+		if (tok==OPEN_PAREN)return CLOSE_PAREN;
+		return 0;
+	}
 	void advance_tok() {
 		advance_tok_sub();
 		typeparam_hack();
@@ -2841,8 +2870,20 @@ struct TextInput {
 		for (const char* c=tok_start; c!=tok_end;c++) {}
 		auto r=curr_tok;
 		advance_tok();
-		if (r==OPEN_BRACE || r==OPEN_BRACKET || r==OPEN_PAREN) depth++;
-		if (r==CLOSE_BRACE || r==CLOSE_BRACKET || r==CLOSE_PAREN) depth--;
+		if (r==OPEN_BRACE || r==OPEN_BRACKET || r==OPEN_PAREN) {
+			bracket_pos[depth]=pos;ASSERT(depth<32);bracket[depth++]=(int)r;
+		}
+		if (r==CLOSE_BRACE || r==CLOSE_BRACKET || r==CLOSE_PAREN) {
+			auto open=bracket[--depth];
+			if (depth<0)
+				::error(pos, "too many close brackets");
+			auto close=close_of((int)open);
+			if (close!=(int)r ) {
+				::error(pos,"found %s expected %s",str(r),str(close));
+				::error(bracket_pos[depth+1],"from here");
+				::error_end(0);
+			}
+		}
 		return r;
 	}
 	Name eat_if(Name a, Name b, Name c){
@@ -4061,20 +4102,20 @@ const char* g_TestFlow=\
 ;
 const char* g_TestTyparamInference=
 /* 1*/ "struct Union[A,B]{a:A,b:B, tag:int};		\n"
-/* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{	\n"
+/* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
 /* 3*/ "	u.a=v; u.tag=0; 						\n"
-/* 4*/ "}										\n"
-/* 5*/ "fn setv[A,B](u:&Union[A,B], v:B)->void{	\n"
+/* 4*/ "}											\n"
+/* 5*/ "fn setv[A,B](u:&Union[A,B], v:B)->void{		\n"
 /* 6*/ "	u.b=v; u.tag=1; 						\n"
-/* 7*/ "}										\n"
+/* 7*/ "}											\n"
 /* 8*/ "fn main(argc:int, argv:**char)->int{		\n"
 /* 9*/ "	u=:Union[int,float];					\n"
-/*10*/ "	setv(&u,10)	;							\n"
+/*10*/ "	setv(&u,10)								\n"
 /*11*/ "	printf(\"u.tag=%d\\n\",u.tag);			\n"
 /*12*/ "	setv(&u,10.0)	;						\n"
-/*13*/ " printf(\"u.tag=%d\\n\",u.tag);			\n"
+/*13*/ " printf(\"u.tag=%d\\n\",u.tag);				\n"
 /*14*/ "	0}										\n"
-/*15*/ "fn printf(s:str,...)->int;				\n"
+/*15*/ "fn printf(s:str,...)->int;					\n"
 ;
 const char* g_TestProg2=
 
@@ -4205,7 +4246,6 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 	return 0;
 }
 
-
 int compile_source_file(const char* filename, int options) {
 	char outname[256];
 	filename_change_ext(outname,filename,"ll");
@@ -4268,8 +4308,8 @@ void run_tests(){
 	auto ret5=compile_source(g_TestAlloc,"g_TestAlloc","test5.ll",B_TYPES|B_RUN);
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test0.ll",B_TYPES|B_RUN);
-	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);
 	auto ret3=compile_source(g_TestMemberFn,"g_TestMemberFn","test3.ll",B_DEFS| B_TYPES|B_RUN);
+	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);
 }
 
 int main(int argc, const char** argv) {

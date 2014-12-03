@@ -53,6 +53,7 @@ extern void error(const Node*,const char*,...);
 extern void error(const char*,...);
 extern void error_begin(const Node* n, const char* str, ... );
 extern void error_end(const Node* n);
+extern void error(const SrcPos& pos, const char* str ,...);
 extern bool is_comparison(Name n);
 extern Name getStringIndex(const char* str,const char* end) ;
 extern const char* getString(const Name&);
@@ -141,8 +142,8 @@ enum Token {
 	COMMA,SEMICOLON,DOUBLE_SEMICOLON,
 	// after these indices, comes indents
 	ELIPSIS,RANGE,
-	PLACEHOLDER,
-	IDENT
+	PLACEHOLDER,UNDERSCORE=PLACEHOLDER,
+	IDENT,
 };
 struct Name;
 struct TypeParam;
@@ -166,7 +167,7 @@ struct TypeParamXlat;
 struct VarDecl;
 class CodeGen;
 class CgValue;
-
+extern CgValue CgValueVoid();
 
 Name getStringIndex(const char* str,const char* end=0);
 const char* str(int);
@@ -248,6 +249,7 @@ struct StringTable {
 	void dump();
 };
 extern StringTable g_Names;
+extern CgValue CgValueVoid();
 Name getStringIndex(const char* str,const char* end);
 Name getNumberIndex(int num);	// ints in the type system stored like so
 int getNumberInt(Name n);
@@ -298,6 +300,10 @@ public:
 	virtual  ~Node(){};	// node ID'd by vtable.
 	virtual void dump(int depth=0) const{};
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
+	ResolvedType resolve_if(Scope* scope, const Type* desired,int flags){
+		if (this) return this->resolve(scope,desired,flags);
+		else return ResolvedType();
+	}
 	virtual const char* kind_str()const	{return"node";}
 	virtual int get_name() const		{return 0;}
 	virtual Name get_mangled_name()const {return name;}
@@ -316,6 +322,8 @@ public:
 	virtual CgValue codegen(CodeGen& cg,bool contents);
 	virtual bool is_undefined()const										{if (this && name==PLACEHOLDER) return true; return false;}
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const	{return ;}
+	void find_vars_written_if(Scope*s, set<Variable*>& vars) const{ if(this)this->find_vars_written(s, vars);
+	}
 	virtual void translate_typeparams(const TypeParamXlat& tpx){ error(this,"not handled for %s",this->kind_str()); };
 	virtual ExprOp* as_op()const			{error(this,"expected op, found %s:%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name as_name()const {
@@ -329,6 +337,7 @@ public:
 	virtual int recurse(std::function<int(Node* f)> f){dbprintf("recurse not implemented\n");return 0;};
 
 	virtual CgValue compile(CodeGen& cg, Scope* sc);
+	CgValue compile_if(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
 	virtual ExprIdent* as_ident() {return nullptr;}
 	virtual ExprFor* as_for() {return nullptr;}
@@ -825,7 +834,7 @@ struct ExprStructDef: ExprDef {
 	Type*	inherits_type=0;
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
-	ExprStructDef* vtable;
+	ExprStructDef* vtable=0;
 	bool is_generic() const;
 	ExprStructDef* instances=0, *instance_of=0,*next_instance=0;
 	ExprFnDef* constructor_fn=0;
