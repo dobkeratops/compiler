@@ -186,6 +186,8 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	//	return stack_val;
 	//}
 	CgValue deref_op(CodeGen& cg, Type* t) {
+		ASSERT(this->type->name==PTR || this->type->name==REF);
+		if (!t) { t=this->type->sub;}
 		// todo type assertion 't' is the output type.
 		if (!addr) {		// the value we were given is now the *adress* - we return a reference, not a pointer.
 			return CgValue(0,t,reg);
@@ -450,14 +452,21 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			return CgValue(reg,type,0,field_index);
 		}
 		else {
+//			if ((this->num_pointers()+(this->addr?1:0))>1){
+//				auto nreg =
+//			}
+			
 			cg.emit_comment("dot reg/addr=%s/%s type=%s index=%d",str(reg),str(addr),str(this->type->name),field_index);
 			auto sd=this->type->deref_all()->struct_def;
 			if (!field_type)
 				field_type=sd->get_elem_type(field_index);//fields[field_index]->type();
 			auto areg=cg.next_reg();
-			cg.emit_ins_begin(areg, "getelementptr inbounds");
+			cg.emit_ins_begin(areg, "getelementptr   inbounds  ");
 			cg.emit_type_operand(*this);
+			auto numptr=this->type->num_pointers()+(this->addr?1:0);
+			ASSERT(numptr==1);
 			cg.emit_i32_lit(0);
+			
 			cg.emit_i32_lit(field_index);
 			cg.emit_ins_end();
 			return CgValue(0,field_type,areg);
@@ -629,7 +638,8 @@ CgValue CodeGen::emit_malloc(Type* t,size_t count){
 }
 CgValue CodeGen::emit_malloc_array(Type* t,CgValue count){
 	auto rsizereg=next_reg();
-	auto rsize=emit_instruction_reg_i32("mul", count.type, 0, count, t->sub->size());
+	auto cr=count.load(*this);
+	auto rsize=emit_instruction_reg_i32("mul", cr.type, 0, cr, t->sub->size());
 	ASSERT(t->name==PTR &&"pass a pointer type in, it allocs *T.necasery to avoid allocating a ptr[T]");
 	auto r1=next_reg();
 	auto r2=next_reg();
@@ -677,12 +687,13 @@ CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname, CgValue s
 }
 CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname,  CgValue src1,CgValue src2){
 	ASSERT(type!=0);
-	dbprintf("src1.reg=%s/%s.%d\n",str(src1.reg),str(src1.addr),src1.elem);
 	auto r1=src1.load(*this);
-	dbprintf("src1.reg=%s/%s.%d r=%s\n",str(src1.reg),str(src1.addr),src1.elem, str(r1.reg));
 	auto r2=src2.load(*this);
 	auto dstr=next_reg();
- 
+	auto dbg=[&](){
+		dbprintf("src1.reg=%s/%s.%d\n",str(src1.reg),str(src1.addr),src1.elem);
+		dbprintf("src1.reg=%s/%s.%d r=%s\n",str(src1.reg),str(src1.addr),src1.elem, str(r1.reg));
+	};
 	emit_ins_begin_sub();
 	emit_instruction_sub(opname,type,dstr,r1);
 	emit_comma();
@@ -1114,6 +1125,11 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	if (opname==DOT || opname==ARROW){
 		if (rhs->as_ident()) {
 			auto lhsv=e->lhs->compile(cg,sc);
+			// auto-deref is part of language semantics, done here..
+			while (lhsv.type->num_pointers()+(lhsv.addr?1:0) > 1){
+				cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
+				lhsv = lhsv.deref_op(cg,0);
+			}
 			return lhsv.get_elem(cg,e->rhs,sc);
 		}
 		else{
@@ -1257,7 +1273,11 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		auto inner_type=array_type->sub;
 		auto dstreg=cg.next_reg();//ar->get_reg(&cg.m_next_reg,false);
 		if (!n->reg_name){n->reg_name=expr.reg;}
-		
+
+		// TODO , clarify this, i dont know why; we're resolving a case to fix array of structs & raw local array
+		if (expr.type->num_pointers()+(expr.addr?1:0) > 1){
+			expr=expr.load(cg);
+		}
 		auto index_reg=index.load(cg);
 		cg.emit_ins_begin(dstreg,"getelementptr inbounds");
 		cg.emit_type_reg(array_type,expr.addr!=0,expr.addr?expr.addr:expr.reg);//!expr.reg);
@@ -1266,7 +1286,7 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		}
 		cg.emit_type_operand(index_reg);
 		cg.emit_ins_end();
-		return CgValue(0,inner_type,dstreg);
+		return CgValue(0,n->type(),dstreg);
 	}
 	//[3] FUNCTION CALL
 	else if (e->is_function_call()){
