@@ -31,7 +31,9 @@ void CodeGen::emit_txt(const char* str,...){// catch all, just spit out given st
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
 	fprintf(ofp,"%s",tmp);
-	//printf("%s",tmp);
+#ifdef DEBUG2
+	printf("%s",tmp);
+#endif
 }
 
 void CodeGen::emit_nest_begin(const char* str){
@@ -582,6 +584,19 @@ CgValue CodeGen::emit_malloc(Type* t,size_t count){
 	emit_ins_end();
 	return emit_cast_reg(r1, i8ptr(), t);
 }
+CgValue CodeGen::emit_free(CgValue ptr,size_t count){
+	ASSERT(ptr.type->is_pointer() &&"pass a pointer type in, it allocs *T.necasery to avoid allocating a ptr[T]");
+	auto r=ptr.load(*this);
+	auto r1=this->emit_cast_to_i8ptr(r);
+	emit_ins_begin(0,"call i8* @free"); /// TODO: sized form of free.
+	emit_args_begin();
+	emit_type_operand(r1);
+//	emit_i32_lit(t->sub->size()*count);
+	emit_args_end();
+	emit_ins_end();
+	return CgValue();
+}
+
 CgValue CodeGen::emit_malloc_array(Type* t,CgValue count){
 	auto rsizereg=next_reg();
 	auto cr=count.load(*this);
@@ -897,6 +912,14 @@ void CodeGen::emit_return(CgValue ret){
 	}
 }
 
+CgValue CodeGen::emit_cast_to_i8ptr(CgValue& val) {
+	return emit_cast_reg(val.reg, val.type, i8ptr());
+}
+CgValue CodeGen::emit_cast_from_i8ptr(CgValue& val, Type* totype) {
+	return emit_cast_reg(val.reg, i8ptr(), totype);
+}
+
+
 CgValue CodeGen::emit_cast_raw(CgValue&src_val, Type* to_type){
 	return emit_cast_sub(src_val,to_type);
 }
@@ -1093,7 +1116,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			auto r=cg.emit_instruction(opname,e->get_type(),0,lhs,rhs);
 			return r;
 		}
-	} else if (!e->lhs && e->rhs){ // prefix operator
+	} else if (!e->lhs && e->rhs){ // prefix unary operators
 		if (opname==ADDR){
 			auto src=e->rhs->compile(cg,sc);
 			if (!src.type || !n->type()) {
@@ -1122,6 +1145,13 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 				}
 			}
 			error(e,"TODO:new only works for  new StructName{....} \n");
+			return CgValue();
+		}
+		else if (opname==DELETE){
+			auto x=rhs->compile(cg,sc);
+			cg.emit_free(x,1);	///TODO array types, rustlike DST??
+			
+			/// TODO call destructor here.
 			return CgValue();
 		}
 		else {
@@ -1186,7 +1216,7 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		auto dstreg=cg.next_reg();//ar->get_reg(&cg.m_next_reg,false);
 		if (!n->reg_name){n->reg_name=expr.reg;}
 
-		/// TODO , clarify this, I dont know why exactly; we're resolving a case to fix array of structs & raw local array ; difference is allocated array vs stack local array;
+		/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
 		if (expr.type->num_pointers()+(expr.addr?1:0) > 1){
 			expr=expr.load(cg);
 		}

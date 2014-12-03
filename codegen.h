@@ -91,6 +91,8 @@ public:
 	CgValue emit_cast_raw(CgValue&lhsv, Type* rhse);
 	CgValue emit_cast(CgValue&lhsv, Expr* rhse);
 	CgValue emit_cast_sub(CgValue&lhs_val, Type* rhst);
+	CgValue emit_cast_to_i8ptr(CgValue& val);
+	CgValue emit_cast_from_i8ptr(CgValue& val,Type* totype);
 	CgValue emit_cast_to_i8ptr(RegisterName src, Type* srctype);
 	CgValue emit_cast_from_i8ptr(RegisterName src, Type* totype, RegisterName dst=0);
 	CgValue emit_cast_reg(RegisterName src_reg, Type*src_type, Type* dst_type);
@@ -101,6 +103,7 @@ public:
 	CgValue emit_insert(CgValue src, int index);
 	CgValue emit_getelementptr(RegisterName ptr,Type* struct_t,int index, Type* elem_t);
 	CgValue emit_malloc( Type* t,size_t count);
+	CgValue emit_free( CgValue ptr,size_t count);
 	CgValue emit_malloc_array( Type* t,CgValue count);
 	EmitLoc get_pos(){return ftell(ofp);}
 	void set_pos(EmitLoc loc){fseek(ofp,loc,SEEK_SET);}

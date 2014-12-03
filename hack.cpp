@@ -1,6 +1,7 @@
 
 #include "hack.h"
-#include "codegen.h"
+#include "codegen.h"/*  */	"	pfoos[1].x=10;					\n"
+
 #include "repl.h"
 
 const char** g_pp,*g_p;
@@ -2149,7 +2150,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// can we generalize this:
 		//  ident{expr,..} actually means run the init expr in there, like 'with'
 		/// todo: generalize inference with wrapper , eg A vs X[B]. use for *t, &t, new t, t[i]
-		auto b=rhs->as_block(); if (!b && flags){error(b,"new type[n] or new type{..} expected");}
+		auto b=rhs->as_block();
+		if (!b && flags){
+			error(b,"new type[n] or new type{..} expected");
+		}
 		if (desired && !get_type()){
 			this->set_type(desired);
 		}
@@ -2169,6 +2173,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
+	}
+	else if (op_ident==DELETE ){
+		rhs->resolve(sc,nullptr,flags);
+		return ResolvedType();
 	}
 	else if (is_condition(op_ident)){
 		auto lhst=lhs->resolve(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
@@ -4082,15 +4090,16 @@ const char* g_TestClosure=
 /*20*/  "}														\n";
 ;
 const char* g_TestAlloc=
-/*1*/ 	"fn printf(s:str,...)->int;  							\n"
-/* */	"struct Foo{x:int,y:int};					\n"
-/*  */	"fn main(argc:int, argv:**char)->int{		\n"
-/*  */	"	pfoo:= new Foo{4,5};			\n"
-/*  */	"	pfoos:= new Foo[10];			\n"
-/*  */	"	pfoos[1].x=10;					\n"
-/*  */	"	printf(\"new foo %p x,y=%d,%d array alloc=%p\\n\",pfoo,pfoo.x,pfoo.y,pfoos);			\n"
-/*17*/	"	0\n"
-/*20*/  "}														\n";
+/*1*/ 	"fn printf(s:str,...)->int;  			\n"
+/*2*/	"struct Foo{x:int,y:int};				\n"
+/*3*/	"fn main(argc:int, argv:**char)->int{	\n"
+/*4*/	"	pfoo:= new Foo{4,5};			\n"
+/*5*/	"	pfoos:= new Foo[10];			\n"
+/*6*/	"	pfoos[1].x=10;					\n"
+/*7*/	"	printf(\"new foo %p x,y=%d,%d array alloc=%p\\n\",pfoo,pfoo.x,pfoo.y,pfoos);			\n"
+/*8*/	"	delete pfoo;					\n"
+/*9*/	"	0\n"
+/*10*/  "}														\n";
 ;
 const char* g_TestBasic=
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
@@ -4107,6 +4116,7 @@ const char* g_TestStruct=
 /*17*/	"	0\n"
 /*20*/  "}														\n";
 ;
+
 const char* g_TestArray=
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	xs=:array[int,10];\n"
