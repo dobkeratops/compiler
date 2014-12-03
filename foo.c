@@ -21,10 +21,12 @@ int main(int argc, const char** argv) {
 	void (*fp)(int) = foo;
 	double d=x;
 	printf("%p",fp);
-	struct Foo* ptr=malloc(sizeof(struct Foo));
+	struct Foo* ptr=(struct Foo*) malloc(sizeof(struct Foo));
 	float* ptr2=(float*)ptr;
+	y+=5.2346f;
+	x=0.035+0.0f;
 	if (argc < 2){
-		printf("hello world %.3f %d\n",z,tmp[10]);
+		printf("hello world %.3f %.3f %d\n",y,100.0f,tmp[10]);
 	}
 		printf("<2");
 	return 0;

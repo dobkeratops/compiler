@@ -290,7 +290,7 @@ class Node {
 public:
 	Node*	m_parent=0;					// for search & error messages,convenience TODO option to strip.
 	Name name;
-	RegisterName regname;			// temporary for llvm SSA calc. TODO: these are really in Expr, not NOde.
+	RegisterName reg_name;			// temporary for llvm SSA calc. TODO: these are really in Expr, not NOde.
 	bool reg_is_addr=false;
 	SrcPos pos;						// where is it
 	Node(){}
@@ -313,7 +313,7 @@ public:
 	virtual Node* clone() const=0;
 	Node* clone_if()const				{ if(this) return this->clone();else return nullptr;}
 	void dump_if(int d)const			{if (this) this->dump(d);}
-	virtual void clear_reg()			{regname=0;};
+	virtual void clear_reg()			{reg_name=0;};
 	RegisterName get_reg(int* new_index, bool force_new);
 	RegisterName get_reg_new(int* new_index);
 	RegisterName get_reg_named(Name baseName, int* new_index, bool force_new);
@@ -469,7 +469,7 @@ struct Type : Expr{
 	bool	is_function() const	{ return name==FN;}
 	bool	is_closure() const	{ return name==CLOSURE;}
 	Type*	fn_return() const	{ return sub->next;}
-	Type*	fn_args() const		{ return sub->sub;} 	void	clear_reg()			{regname=0;};
+	Type*	fn_args() const		{ return sub->sub;} 	void	clear_reg()			{reg_name=0;};
 	bool	is_pointer()const		{return (this && this->name==PTR) || (this->name==REF);}
 	bool	is_void()const			{return !this || this->name==VOID;}
 	int		num_derefs()const		{if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
@@ -536,7 +536,7 @@ struct ExprBlock :public ExprScopeBlock{
 	Node*		clone() const;
 	bool		is_undefined()const;
 	void		create_anon_struct_initializer();
-	void			clear_reg()				{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); regname=0;};
+	void			clear_reg()				{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); reg_name=0;};
 	virtual const char* kind_str()const		{return"block";}
 	ExprBlock* 		as_block() override 	{return this;}
 	virtual Scope*	get_scope()				{return this->scope;}
@@ -669,7 +669,7 @@ struct Call {
 */
 enum VarKind{VkArg,Local,Global};
 struct Variable : ExprDef{
-	bool		on_stack=false;
+	bool		on_stack=true;
 	Capture*	capture_in=0;	// todo: scope or capture could be unified? 'in this , or in capture ...'
 	VarKind		kind;
 	Scope*		owner=0;
@@ -686,6 +686,7 @@ struct Variable : ExprDef{
 		v->initialize = verify_cast<Expr*>(this->initialize->clone_if());
 		v->next_of_scope=0; v->set_type(this->get_type()); return v;
 	}
+	Variable*	as_variable() {return this;}
 	void dump(int depth) const;
 };
 // scopes are created when resolving

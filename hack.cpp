@@ -480,7 +480,7 @@ int get_typeparam_index(const vector<TypeParam>& tps, Name name) {
 	return -1;
 }
 
-Expr::Expr(){ m_type=0;visited=0;regname=0;}
+Expr::Expr(){ m_type=0;visited=0;reg_name=0;}
 ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type* b) {
 	if (!n->pos.line){
 		error(n,"AST node hasn't been setup properly");
@@ -539,23 +539,24 @@ ExprStructDef* Node::as_struct_def()const{
 	//error(this,"expect struct def");
 	return nullptr;
 };
-RegisterName Node::get_reg_existing(){ASSERT(regname); return regname;}
+RegisterName Node::get_reg_existing(){ASSERT(reg_name); return reg_name;}
 RegisterName Node::get_reg(int *new_index, bool force_new){
 	// variable might be in a local scope shadowing others, so it still needs a unique name
 	// names are also modified by writes, for llvm SSA
-	if (!regname || force_new){
-		auto old=regname;
+	//ASSERT(!on_stack);
+	if (!reg_name || force_new){
+		auto old=reg_name;
 		auto ret= get_reg_new(new_index);
 		return ret;
 	} else{
-		return regname;
+		return reg_name;
 	}
 }
 RegisterName Node::get_reg_new(int* new_index) {
 	char rname[256];
 	const char* s=getString(name);
 	sprintf(rname, "r%d%s",(*new_index)++,isSymbolStart(s[0])?s:"rfv");
-	return this->regname=g_Names.get_index(rname,0,0);
+	return this->reg_name=g_Names.get_index(rname,0,0);
 }
 void verify(const Type* a){
 	if (a){
@@ -4091,6 +4092,28 @@ const char* g_TestAlloc=
 /*17*/	"	0\n"
 /*20*/  "}														\n";
 ;
+const char* g_TestBasic=
+/*  */	"fn main(argc:int, argv:**char)->int{		\n"
+/*  */	"	x:=2;\n"
+"y:=3;\n"
+"z:=x+y;			\n"
+/*17*/	"	0\n"
+/*20*/  "}														\n";
+;
+const char* g_TestStruct=
+/*54*/ "	struct FooStruct{x:int,y:int};		\n"
+/*  */	"fn main(argc:int, argv:**char)->int{		\n"
+/*  */	"	x:=FooStruct{1,2};\n"
+/*17*/	"	0\n"
+/*20*/  "}														\n";
+;
+const char* g_TestArray=
+/*  */	"fn main(argc:int, argv:**char)->int{		\n"
+/*  */	"	xs=:array[int,10];\n"
+/*  */	"	xs[1]=5;\n"
+/*17*/	"	0\n"
+/*20*/  "}														\n";
+;
 
 const char* g_TestBasicSyntax=
 /* 1*/ "*++x=*--y e+r:int foo(e,r);\n"
@@ -4109,22 +4132,22 @@ const char* g_TestBasicSyntax=
 /*14*/ "fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}\n"
 ;
 
-const char* g_TestFlow=\
-"fn printf(s:str,...)->int;				\n"
-"fn main(argc:int, argv:**char)->int{	\n"
-"	i:=5; b:=argc<9;						\n"
-"	v:=for i:=0,j:=0;		\n"
-"			i<10;			\n"
-"			i+=1,j+=7 {	\n"
-"		printf(\"for loop i=%d j=%d\\n\",i,j);	\n"
-"		if i==5 {break 0.5};				\n"
-"	}									\n"
-"	else{								\n"
-"		printf(\"loop complete i=%d\\n\",i);0.6\n"
-"	}									\n"
-"	printf(\"outer scope i=%d\\n\",i);	\n"
-"	0									\n"
-"}\n"
+const char* g_TestFlow=
+/*1*/	"fn printf(s:str,...)->int;				\n"
+/*2*/	"fn main(argc:int, argv:**char)->int{	\n"
+/*3*/	"	i:=5; b:=argc<9;						\n"
+/*4*/	"	v:=for i:=0,j:=0;		\n"
+/*5*/	"			i<10;			\n"
+/*6*/	"			i+=1,j+=7 {	\n"
+/*7*/	"		printf(\"for loop i=%d j=%d\\n\",i,j);	\n"
+/*8*/	"										\n"
+/*9*/	"	}									\n"
+/*10*/	"	else{								\n"
+/*11*/	"		printf(\"loop complete i=%d\\n\",i);0.6\n"
+/*12*/	"	}									\n"
+/*13*/	"	printf(\"outer scope i=%d\\n\",i);	\n"
+/*14*/	"	0									\n"
+/*15*/	"}\n"
 ;
 const char* g_TestTyparamInference=
 /* 1*/ "struct Union[A,B]{a:A,b:B, tag:int};		\n"
@@ -4330,12 +4353,15 @@ void dump_help(){
 void run_tests(){
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret3=compile_source(g_TestFlow,"g_TestFlow","test3.ll",B_TYPES|B_RUN);
+	auto ret2=compile_source(g_TestArray,"g_TestArray","test2.ll",B_TYPES|B_RUN);
+	auto ret0=compile_source(g_TestBasic,"g_TestBasic","test0.ll",B_TYPES|B_RUN);
+	auto ret1=compile_source(g_TestStruct,"g_TestStruct","test1.ll",B_TYPES|B_RUN);
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
-	auto ret2=compile_source(g_TestProg2,"g_TestProg","test2.ll",B_TYPES|B_RUN);
-	auto ret1=compile_source(g_TestFlow,"g_TestFlow","test1.ll",B_TYPES|B_RUN);
-	auto ret5=compile_source(g_TestAlloc,"g_TestAlloc","test5.ll",B_TYPES|B_RUN);
-	auto ret0=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test0.ll",B_TYPES|B_RUN);
-	auto ret3=compile_source(g_TestMemberFn,"g_TestMemberFn","test3.ll",B_DEFS| B_TYPES|B_RUN);
+	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);
+	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
+	auto ret7=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test7.ll",B_TYPES|B_RUN);
+	auto ret8=compile_source(g_TestMemberFn,"g_TestMemberFn","test8.ll",B_DEFS| B_TYPES|B_RUN);
 }
 
 int main(int argc, const char** argv) {

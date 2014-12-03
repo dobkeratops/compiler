@@ -72,10 +72,10 @@ public:
 	void emit_pointer_begin();
 	void emit_pointer_end();
 	void emit_phi_reg_label(Name reg, Name label);
-	void emit_instruction_sub(Name opname,Type* type,  CgValue dst,CgValue src1);
-	void emit_instruction(Name opname,Type* type,  CgValue dst,CgValue src1);
-	void emit_instruction(Name opname,Type* type,  CgValue dst,CgValue src1,CgValue src2);
-	void emit_instruction_reg_i32(Name opname,Type* type,  CgValue dst,CgValue src1,int val);
+	void emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,CgValue src1);
+	CgValue emit_instruction(Name opname,Type* type,  Name outname,CgValue src1);
+	CgValue emit_instruction(Name opname,Type* type,  Name outname,CgValue src1,CgValue src2);
+	CgValue emit_instruction_reg_i32(Name opname,Type* type,  Name outname,CgValue src1,int val);
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
 	void emit_i32_reg(Name reg);
@@ -90,11 +90,11 @@ public:
 	void emit_return(CgValue val);
 	void emit_branch(CgValue cond, Name label_then, Name label_else);
 	CgValue emit_cast_raw(CgValue&lhsv, Type* rhse);
-	CgValue emit_cast(CgValue dst, CgValue&lhsv, Expr* rhse);
-	CgValue emit_cast_sub(CgValue dst, CgValue&lhs_val, Type* rhst);
+	CgValue emit_cast(CgValue&lhsv, Expr* rhse);
+	CgValue emit_cast_sub(CgValue&lhs_val, Type* rhst);
 	CgValue emit_cast_to_i8ptr(RegisterName src, Type* srctype);
 	CgValue emit_cast_from_i8ptr(RegisterName src, Type* totype, RegisterName dst=0);
-	CgValue emit_cast_reg(RegisterName dst, RegisterName src_reg, Type*src_type, Type* dst_type);
+	CgValue emit_cast_reg(RegisterName src_reg, Type*src_type, Type* dst_type);
 	void emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode);
 	Type* i8ptr();
 	// API refactoring
