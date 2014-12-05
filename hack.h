@@ -28,7 +28,7 @@ typedef int32_t OneBasedIndex;
 #define R_PUT_ON_STACK 0x8000
 
 struct SrcPos {
-	OneBasedIndex	line; //1-based line index
+	OneBasedIndex	line;
 	int16_t col;
 	void set(OneBasedIndex l,int c){line=l   ;col=c;}
 	void printf(FILE* ofp){ fprintf(ofp,"%d,%d",line,col); }
@@ -45,7 +45,30 @@ extern void verify_all_sub();
 #define verify_all()
 struct Node;
 struct Name;
+struct TypeParam;
+struct ExprType;
+struct ExprOp;
+struct  ExprFnDef;
+struct ExprFor;
+struct ExprStructDef;
+struct ExprIf;
+struct ExprBlock;
+struct ExprLiteral;
+struct ExprIdent;
+struct ArgDef;
+struct ExprDef;
 struct Scope;
+struct Type;
+struct Variable;
+struct ResolvedType;
+struct Module;
+struct TypeParamXlat;
+struct VarDecl;
+class CodeGen;
+class CgValue;
+
+
+
 extern void dbprintf(const char*,...);
 extern void error(const Node*,const Node*,const char*,...);
 void error(const Node* n,const Scope* s, const char* str, ... );
@@ -60,6 +83,8 @@ extern const char* getString(const Name&);
 extern bool is_operator(Name tok);
 extern bool is_ident(Name tok);
 extern bool is_type(Name tok);
+extern void verify(const Type* t);
+
 
 bool is_number(Name n);
 
@@ -145,47 +170,29 @@ enum Token {
 	PLACEHOLDER,UNDERSCORE=PLACEHOLDER,
 	IDENT,
 };
-struct Name;
-struct TypeParam;
-struct ExprType;
-struct ExprOp;
-struct  ExprFnDef;
-struct ExprFor;
-struct ExprStructDef;
-struct ExprIf;
-struct ExprBlock;
-struct ExprLiteral;
-struct ExprIdent;
-struct ArgDef;
-struct ExprDef;
-struct Scope;
-struct Type;
-struct Variable;
-struct ResolvedType;
-struct Module;
-struct TypeParamXlat;
-struct VarDecl;
-class CodeGen;
-class CgValue;
 extern CgValue CgValueVoid();
 
 Name getStringIndex(const char* str,const char* end=0);
 const char* str(int);
 inline int index(Name);
-#ifdef DEBUG_NAMES
+#ifndef DEBUG2
 struct Name {
-	char* str;
-	int32_t index;
-	Name()		{index=0;str=0;}
+	int32_t m_index;
+	Name()		{m_index=0;}
+	Name(int i)		{m_index=i;}
 	Name(const char* a, const char* end=0){
-		if (!end) end=end+strlen(a);
+		if (!end) end=a+strlen(a);
 		size_t len=end-a;
-		str=(char*) malloc(len+1); memcpy(str,a,len); str[len]=0;
-		index=getStringIndex(a,end);
+		m_index=(int)getStringIndex(a,end);
 	}
-	Name(const Name& b)	{index=b.index; str=b.str;}
-	bool operator==(const Name& b)const	{return index==b.index;}
-	bool operator==(int b)const			{return index==b;}
+	Name(const Name& b)	{m_index=b.m_index; }
+	bool operator<(int b)const	{return m_index<b;}
+	bool operator>(int b)const	{return m_index>b;}
+	bool operator>=(int b)const	{return m_index>=b;}
+	bool operator<=(int index)const {return m_index<=index;}
+	bool operator==(const Name& b)const	{return m_index==b.m_index;}
+	bool operator==(int b)const			{return m_index==b;}
+	bool operator!=(const Name& b)const	{return m_index!=b.m_index;}
 	void translate_typeparams(const TypeParamXlat& tpx);
 	bool operator!()const{return m_index==0;}
 	explicit operator bool()const{return m_index!=0;}
@@ -203,7 +210,7 @@ struct Name {
 	Name(const char* a, const char* end=0){
 		if (!end)
 			end=a+strlen(a);
-		m_index=index(getStringIndex(a,end));
+		m_index=(int)getStringIndex(a,end);
 	}
 	Name(const Name& b)	{m_index=b.m_index; s=str(m_index);}
 	//	operator int32_t(){return index;}
@@ -285,20 +292,25 @@ struct Capture;
 // load vtb->fn
 // when the time comes - vtb->destroy()
 //                       vtb->trace
+struct LLVMType {
+	Name name;
+	bool is_pointer;
+};
 
-class Node {
+struct Node {
+private:Type* m_type=0;
+
 public:
 	Node*	m_parent=0;					// for search & error messages,convenience TODO option to strip.
 	Name name;
-	RegisterName reg_name;			// temporary for llvm SSA calc. TODO: these are really in Expr, not NOde.
+	RegisterName reg_name=0;			// temporary for llvm SSA calc. TODO: these are really in Expr, not NOde.
 	bool reg_is_addr=false;
 	SrcPos pos;						// where is it
 	Node(){}
 	ExprDef*	def=0;		// definition of the entity here. (function call, struct,type,field);
 	Node*		next_of_def=0;
 	void set_def(ExprDef* d);
-	virtual  ~Node(){};	// node ID'd by vtable.
-	virtual void dump(int depth=0) const{};
+	virtual void dump(int depth=0) const;
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
 	ResolvedType resolve_if(Scope* scope, const Type* desired,int flags){
 		if (this) return this->resolve(scope,desired,flags);
@@ -351,36 +363,15 @@ public:
 	virtual void verify() {};
 	virtual Type* get_elem_type(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
 	virtual size_t alignment()const {return 16;} // unless you know more..
-};
-
-
-
-struct TypeParam: Node{
-	Type* bound=0;	// eg traits/concepts
-	Type* defaultv=0;
-	Type* value=0;
-	TypeParam(){};
-	TypeParam(Name n, Type* dv){name=n;defaultv=dv;};
-	void dump(int depth)const;
-	Node* clone() const override;
-	const char* kind_str()const{return "TypeParam";}
-};
-
-struct LLVMType {
-	Name name;
-	bool is_pointer;
-};
-extern void verify(const Type* t);
-
-struct Expr : Node{					// anything yielding a value
-private:Type* m_type;
-public:
-	int visited;					// anti-recursion flag.
-
-	void dump(int depth) const;
-	void dump_top()const;
-	Expr();
-	virtual const char* kind_str()const{return"expr";}
+	virtual ~Node(){
+		error("dont call delete, we haven't sorted out ownership of Types or nodes. compiler implementation doesn't need to free anything. Types will be owned by a manager, not the ast ");
+	}
+	LLVMType get_type_llvm() const;
+	virtual Type* eval_as_type()const		{return nullptr;};
+	virtual ExprBlock* is_subscript()const	{return (ExprBlock*)nullptr;}
+	virtual bool is_function_name()const	{return false;}
+	virtual bool is_variable_name()const	{return false;}
+	virtual Scope* get_scope()				{return nullptr;}
 	Type* expect_type() const;
 	Type* get_type() const		{ if(this) {::verify(this->m_type);return this->m_type;}else return nullptr;}
 	Type*& type()				{::verify(this->m_type);return this->m_type;}
@@ -388,16 +379,26 @@ public:
 	void type(const Type* t)	{::verify(t);this->m_type=(Type*)t;}
 	void set_type(const Type* t){::verify(t);this->m_type=(Type*)t;};
 	Type*& type_ref()			{return this->m_type;}
-	LLVMType get_type_llvm() const;
-	virtual Type* eval_as_type()const		{return nullptr;};
-	virtual ExprBlock* is_subscript()const	{return (ExprBlock*)nullptr;}
-	virtual bool is_function_name()const	{return false;}
-	virtual bool is_variable_name()const	{return false;}
-	virtual Scope* get_scope()				{return nullptr;}
+	void dump_top()const;
+};
+
+struct TypeParam: Node{
+	Type* bound=0;	// eg traits/concepts
+	Type* defaultv=0;
+	TypeParam(){};
+	TypeParam(Name n, Type* dv){name=n;defaultv=dv;};
+	void dump(int depth)const;
+	Node* clone() const override;
+	const char* kind_str()const{return "TypeParam";}
+};
+
+struct Expr : public Node{					// anything yielding a value
+public:
+	int visited;					// anti-recursion flag.
 };
 
 struct Type : Expr{
-	vector<TypeParam> typeparams;
+	vector<TypeParam*> typeparams;
 	ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
@@ -588,7 +589,7 @@ struct Capture : ExprDef{
 };
 
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
-	vector<TypeParam> typeparams;
+	vector<TypeParam*> typeparams;
 };
 
 struct ExprLiteral : ExprDef {
@@ -825,7 +826,7 @@ struct ExprStructDef: ExprDef {
 	Name mangled_name=0;
 	bool is_enum_=false;
 	bool is_enum() { return is_enum_;}
-	vector<TypeParam>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
+	vector<TypeParam*>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	vector<Type*>		instanced_types;
 	vector<ArgDef*>			fields;
 	vector<ExprLiteral*>	literals;
@@ -911,7 +912,7 @@ struct  ExprFnDef : ExprDef {
 	// calls from un-instanced routines can partially implement?
 
 	Name mangled_name=0;
-	vector<TypeParam> typeparams;
+	vector<TypeParam*> typeparams;
 	vector<ArgDef*> args;
 	bool variadic;
 	bool c_linkage=false;
@@ -998,8 +999,8 @@ struct ExprIdent :Expr{
 };
 
 struct TypeParamXlat{
-	const vector<TypeParam>& typeparams; const vector<Type*>& given_types;
-	TypeParamXlat(	const vector<TypeParam>& t, const vector<Type*>& g):typeparams(t),given_types(g){}
+	const vector<TypeParam*>& typeparams; const vector<Type*>& given_types;
+	TypeParamXlat(	const vector<TypeParam*>& t, const vector<Type*>& g):typeparams(t),given_types(g){}
 	bool typeparams_all_set()const{
 		for (int i=0; i<given_types.size(); i++) {
 			if (given_types[i]==0) return false;

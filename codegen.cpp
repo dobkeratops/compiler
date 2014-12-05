@@ -127,7 +127,6 @@ void CodeGen::emit_prelude(){
 	emit_txt(";\n");
 }
 
-
 struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
 	// TODO: this should be a tagged-union?
 	// these values aren't persistent so it doesn't matter too much.
@@ -139,7 +138,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	int ofs;
 	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
 	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
-	explicit CgValue(Expr* n) {
+	explicit CgValue(Node* n) {
 		// todo - unify with 'expr'
 		addr=0; reg=0; ofs=0;elem=-1;
 		val = n;
@@ -216,26 +215,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			auto outr=cg.next_reg();
 			
 			if (auto lit=dynamic_cast<ExprLiteral*>(val)){
-				if (lit->type()->name==INT){
-					cg.emit_ins_begin(outr,"or");
-					cg.emit_i32_lit(0);  this->emit_literal(cg,lit);
-				} else if(lit->type()->name==FLOAT){
-					// todo, i guess we're goint to have t make a global constants table
-					cg.emit_ins_begin(outr,"fadd");
-					cg.emit_txt("float 0.0, ");  this->emit_literal(cg,lit);
-				} else if (lit->type()->name==STR){
-					cg.emit_ins_begin(outr,"getelementptr inbounds");
-					cg.emit_comma();
-					cg.emit_txt("[%d x i8]* @%s",lit->llvm_strlen, getString(lit->name));
-
-					cg.emit_i32_lit(0);
-					cg.emit_i32_lit(0);
-					ASSERT(lit->llvm_strlen);
-				} else {
-					error(lit,"literal type not handled yet");
-				}
-				cg.emit_ins_end();
-				return CgValue(outr,lit->type());
+				return cg.emit_literal(lit);
 				// todo: string literal, vector literals, bit formats
 			}
 			else if (auto fp=dynamic_cast<ExprFnDef*>(val)){
@@ -429,6 +409,35 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	}
 };
 
+CgValue CodeGen::emit_literal(ExprLiteral *lit){
+	auto outr=this->next_reg();
+	if (lit->type()->name==INT){
+		emit_ins_begin(outr,"or");
+		emit_i32_lit(0);
+		emit_comma();
+		emit_txt("%d",lit->u.val_int);
+	} else if(lit->type()->name==FLOAT){
+		// todo, i guess we're goint to have t make a global constants table
+		emit_ins_begin(outr,"fadd");
+		emit_txt("float 0.0, ");
+		emit_txt(" 0x%x00000000",lit->u.val_int);
+	} else if (lit->type()->name==STR){
+		emit_ins_begin(outr,"getelementptr inbounds");
+		emit_comma();
+		emit_txt("[%d x i8]* @%s",lit->llvm_strlen, getString(lit->name));
+		
+		emit_i32_lit(0);
+		emit_i32_lit(0);
+		ASSERT(lit->llvm_strlen);
+	} else {
+		error(lit,"literal type not handled yet");
+	}
+	emit_ins_end();
+	return CgValue(outr,lit->type());
+	
+}
+
+
 CgValue CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
 	emit_ins_begin_name("store");
 	emit_type(type,0);
@@ -452,21 +461,8 @@ CgValue Node::compile_if(CodeGen& cg, Scope* sc){
 
 void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp){
 	if (!cp) return;
-	for (auto v=cp->vars; v;v=v->next_of_capture){
-		//		ASSERT(v->on_stack);
-		return;
-		/*
-		if (v->keep_on_stack()){
-//			dbprintf_closure("reg %s must be committed to stack\n",str(v->regname));
-			auto cpv=CgValue(cp->reg_name,cp->type());
-			auto x=cpv.get_elem_index(cg, v->capture_index,v->type());
-			x.store_from(cg,v->reg_name);
-		}
-		 */
-	}
+	return;
 }
-
-
 void debug_op(Name opname) {
 }
 

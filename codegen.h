@@ -17,6 +17,7 @@ void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp);
 CgValue	CgValueVoid();
 
 class CodeGen {
+	/// TODO adapt interface to handle CodeGenLLVM CodeGenC
 	/// todo: move the external interface entirely to use wrapped CgValues,pass name hints for outputs
 	/// codegen can depend on a subset of the ast concepts . Type,..
 	/// we might need to rework AST to know about SSA, see the current awful hack for 'for'
@@ -78,6 +79,7 @@ public:
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
 	void emit_i32_reg(Name reg);
+	CgValue emit_literal(ExprLiteral* l);
 	RegisterName	emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index);
 	CgValue emit_store(RegisterName reg, Type* type, RegisterName addr);
 	void emit_fn_ptr(Name n);

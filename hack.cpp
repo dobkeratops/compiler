@@ -174,6 +174,15 @@ void error(const Node* n,const char* str, ... ){
 	error_sub(n,"error",buffer);
 	error_end(n);
 }
+void error(const char* str, ... ){
+	char buffer[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(buffer, str, arglist );
+	va_end( arglist );
+	error_sub(nullptr,"error",buffer);
+	error_end(nullptr);
+}
 
 void error(const Node* n,const Node* n2, const char* str, ... ){
 	char buffer[1024];
@@ -459,29 +468,28 @@ void newline(int depth) {
 // Even a block is an evaluatable expression.
 // it may contain outer level statements.
 
-Type* Expr::expect_type() const {
+Type* Node::expect_type() const {
 	if (this->m_type) return m_type;
 	error((const Node*)this,"%s has no type\n", str(name));
 	return nullptr;
 }
-void Expr::dump(int depth) const {
+void Node::dump(int depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("(?)");
 }
-void Expr::dump_top() const {
+void Node::dump_top() const {
 	if (!this) return;
 	dbprintf("%s ", getString(name));
 }
 
-int get_typeparam_index(const vector<TypeParam>& tps, Name name) {
+int get_typeparam_index(const vector<TypeParam*>& tps, Name name) {
 	for (int i=(int)(tps.size()-1); i>=0; i--) {
-		if (tps[i].name==name)
+		if (tps[i]->name==name)
 			return i;
 	}
 	return -1;
 }
 
-Expr::Expr(){ m_type=0;visited=0;reg_name=0;}
 ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type* b) {
 	if (!n->pos.line){
 		error(n,"AST node hasn't been setup properly");
@@ -993,14 +1001,20 @@ size_t Type::alignment() const{
 size_t Type::size() const{
 	auto tf=this->raw_type_flags();
 	if (tf){return tf&RT_SIZEMASK};
-	if (this->name==VARIANT){
-		auto align=this->alignment();
+	auto union_size=[](const Type *t){
 		size_t max_elem_size=0;
-		for (auto s=this->sub; s;s=s->next){
+		for (auto s=t->sub; s;s=s->next){
 			auto sz=s->size();
 			if (sz>max_elem_size)max_elem_size=sz;
 		}
-		return align+max_elem_size;
+		return max_elem_size;
+	};
+	if (this->name==UNION){
+		return union_size(this);
+	}
+	if (this->name==VARIANT){
+		auto align=this->alignment();
+		return align+union_size(this);
 	}
 	if (this->name==TUPLE){
 		int size=0;
@@ -1089,6 +1103,8 @@ ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
 		switch (type_id) {
 		case T_VOID: t=new Type(this,VOID); break;
 		case T_INT: t=new Type(this,INT); break;
+		case T_ZERO: t=new Type(this,ZERO); break;
+		case T_ONE: t=new Type(this,ONE); break;
 		case T_FLOAT: t=new Type(this,FLOAT); break;
 		case T_CONST_STRING: t=new Type(this,STR); break;
 		default: break;
@@ -1144,13 +1160,13 @@ ExprLiteral::~ExprLiteral(){
 		free((void*)u.val_str);
 	}
 }
-void dump_typeparams(const vector<TypeParam>& ts) {
+void dump_typeparams(const vector<TypeParam*>& ts) {
 	bool a=false;
 	if (ts.size()==0) return;
 	dbprintf("[");
 	for (auto t:ts){
 		if (a)dbprintf(",");
-		print_tok(t.name);if (t.defaultv){dbprintf("=");t.defaultv->dump(-1);}
+		print_tok(t->name);if (t->defaultv){dbprintf("=");t->defaultv->dump(-1);}
 		a=true;
 	}
 	dbprintf("]");
@@ -1440,7 +1456,7 @@ int num_known_arg_types(vector<Expr*>& args) {
 	
 //}
 
-int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam>& fn_tps,  const Type* fn_arg, const Type* given_arg)
+int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam*>& fn_tps,  const Type* fn_arg, const Type* given_arg)
 {
 	int ret_score=0;
 //	if (!fn_arg && !given_arg) return 0;
@@ -1600,7 +1616,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			dbprintf("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
 			dbprintf("%s score=%d; matched typeparams{:-\n",str(f->name),score);
 			for (auto i=0; i<f->typeparams.size(); i++){
-				dbprintf("%s = %s;", str(f->typeparams[i].name), matched_type_params[i]?str(matched_type_params[i]->name):"" );
+				dbprintf("%s = %s;", str(f->typeparams[i]->name), matched_type_params[i]?str(matched_type_params[i]->name):"" );
 			}
 			dbprintf("}\n");
 			dbprintf("\n");
@@ -1717,27 +1733,6 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	for (auto src=this; src; prev=src,src=src->parent) {// go back thru scopes first;
 		ff.find_fn_from_scopes(src,prev);
 	}
-	// then search subscopes, excluding 'this'
-	// TODO: consider "name-distance" as part of resolve algorithm??
-	// only search subscopes if nothing was found here.
-/*	if (!best) {
-		for (auto src=this->child; src; src=src->next) {
-			if (auto fname=src->find_named_items_local(name)){
-				for (auto f=fname->fn_defs; f;f=f->next_of_name) {
-					find_fn_sub(f,name, args,ret_type,&best,&best_score,&ambiguity);
-				}
-			}
-		}
-	}
- */
-	
-//	if (!best) {
-//		printf("\ncant find any function  %s\n",getString(name));
-//		this->global->dump(0);
-//		printf("\ncant find any function  %s\n",getString(name));
-//		exit(0);
-//		return 0;f
-//	}
 	if (!ff.candidates.size()){
 		if (flags & R_FINAL)
 			error(callsite,"can't find function %s\n",str(name));
@@ -1962,8 +1957,6 @@ void dump(vector<T*>& src) {
 	}
 }
 
-// the fact is, i DO like C++.
-// I just dont like header files.
 template<typename T>
 T* expect_cast(Node* n){
 	auto r=dynamic_cast<T*>(n);
@@ -2576,7 +2569,7 @@ Capture* ExprFnDef::get_or_create_capture(ExprFnDef* src){
 
 int ExprFnDef::type_parameter_index(Name n) const {
 	for (auto i=0; i<typeparams.size(); i++){
-		if (n==typeparams[i].name)
+		if (n==typeparams[i]->name)
 			return i;
 	}
 	return -1;
@@ -2742,7 +2735,7 @@ bool isOperator(char c){return c=='+'||c=='-'||c=='*'||c=='/'||c=='.'||c=='='||c
 
 struct NumDenom{int num; int denom;};
 
-struct TextInput {
+struct Lexer {
 	char filename[512];
 	SrcPos	pos;
 	enum {MAX_DEPTH=32};
@@ -2766,7 +2759,7 @@ struct TextInput {
 		va_end( arglist );
 		printf("\n"); error_newline=true;
 	}
-	TextInput(const char* src,const char *filename_){
+	Lexer(const char* src,const char *filename_){
 		strncpy(filename,filename_,512);
 		g_filename=filename;
 		
@@ -3007,7 +3000,7 @@ struct TextInput {
 };
 
 void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
-typedef TextInput TokenStream;
+typedef Lexer TokenStream;
 
 // todo: plugin arch? Node::parse(), dispatch on registered keywords?
 Expr* parse_lisp(TokenStream& src);
@@ -3083,7 +3076,7 @@ void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 	}
 	was_operand=true;
 }
-LLVMType Expr::get_type_llvm() const
+LLVMType Node::get_type_llvm() const
 {
 	if (!this) return LLVMType{VOID,0};
 	if (!this->m_type) return LLVMType{VOID,0};
@@ -3389,7 +3382,7 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	}
 	return a;
 }
-void parse_typeparams(TokenStream& src,vector<TypeParam>& out) {
+void parse_typeparams(TokenStream& src,vector<TypeParam*>& out) {
 	while (!src.eat_if(CLOSE_BRACKET)){
 //		if (src.eat_if(CLOSE_BRACKET)) break;
 		auto name=src.eat_tok();
@@ -3397,7 +3390,7 @@ void parse_typeparams(TokenStream& src,vector<TypeParam>& out) {
 //		if (src.eat_if(ASSIGN)) {
 //			int d=src.eat_tok();
 //		}
-		out.push_back(TypeParam{name,src.eat_if(ASSIGN)?parse_type(src,0,nullptr):0});
+		out.push_back(new TypeParam{name,src.eat_if(ASSIGN)?parse_type(src,0,nullptr):0});
 		src.eat_if(COMMA);
 	}
 }
@@ -3573,7 +3566,7 @@ void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
 }
 int TypeParamXlat::typeparam_index(const Name& n) const{
 	for (int i=0; i<this->typeparams.size(); i++){
-		if (this->typeparams[i].name==n) return i;
+		if (this->typeparams[i]->name==n) return i;
 	}
 	return -1;
 }
@@ -3663,7 +3656,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 			ty_params.push_back(tp);
 		}
 		for (;i<parent->typeparams.size(); i++) {
-			ty_params.push_back(parent->typeparams[i].defaultv);
+			ty_params.push_back(parent->typeparams[i]->defaultv);
 		}
 		
 		ins = (ExprStructDef*)this->clone(); // todo: Clone could take typeparams
@@ -3745,7 +3738,7 @@ void ExprStructDef::dump(int depth) const{
 		{	t->dump(depth+1);dbprintf(",");};
 	}else{
 		for (auto t:this->typeparams)
-			{t.dump(depth+1);dbprintf(",");}
+			{t->dump(depth+1);dbprintf(",");}
 	}
 	dbprintf("]");
 	if (this->inherits) {dbprintf(" : %s", str(inherits->name));}
@@ -4253,7 +4246,7 @@ enum COMPILE_FLAGS {
 };
 int compile_source(const char *buffer, const char* filename, const char* outname, int flags){
 
-	TextInput	src(buffer,filename);
+	Lexer	src(buffer,filename);
 
 	auto node=parse_block(src,0,SEMICOLON,nullptr);
 	g_pRoot=node;
