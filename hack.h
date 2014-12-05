@@ -361,7 +361,10 @@ public:
 	virtual Variable* as_variable() {return nullptr;}
 	ArgDef*			as_field() {return this->as_arg_def();}
 	virtual void verify() {};
+	// abstract interface to 'struct-like' entities;
 	virtual Type* get_elem_type(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
+	virtual Name get_elem_name(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
+	virtual int get_elem_count()const{return 0;}
 	virtual size_t alignment()const {return 16;} // unless you know more..
 	virtual ~Node(){
 		error("dont call delete, we haven't sorted out ownership of Types or nodes. compiler implementation doesn't need to free anything. Types will be owned by a manager, not the ast ");
@@ -585,7 +588,8 @@ struct Capture : ExprDef{
 		return nullptr;
 	};
 	Type*			get_elem_type(int i);
-	
+	Name			get_elem_name(int i);
+	int				get_elem_count();
 };
 
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
@@ -838,7 +842,7 @@ struct ExprStructDef: ExprDef {
 	ExprStructDef* vtable=0;
 	bool is_generic() const;
 	ExprStructDef* instances=0, *instance_of=0,*next_instance=0;
-	ExprFnDef* constructor_fn=0;
+	ExprFnDef* default_constructor=0;							// TODO scala style..
 	NamedItems* name_ptr=0;
 //	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} error(this,"no field %s",str(name));return nullptr;}
 	ArgDef* find_field(const Node* rhs)const;
@@ -856,7 +860,7 @@ struct ExprStructDef: ExprDef {
 	virtual const char* kind_str()const	{return"struct";}
 	ExprStructDef* next_of_name;
 	Name	get_mangled_name()const;
-	ExprStructDef(SrcPos sp,Name n)		{name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; constructor_fn=0;name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
+	ExprStructDef(SrcPos sp,Name n)		{name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
 	size_t		alignment() const			{size_t max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
 	void			dump(int depth)const;
@@ -870,6 +874,8 @@ struct ExprStructDef: ExprDef {
 	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc);
 	Type*			get_elem_type(int i){return this->fields[i]->type();}
+	Name			get_elem_name(int i){return this->fields[i]->name;}
+	int				get_elem_count(){return this->fields.size();}
 };
 
 inline Type* Type::get_elem(int index){
@@ -882,7 +888,7 @@ inline Type* Type::get_elem(int index){
 	return s;
 }
 
-/// TODO - move to plugin-architecture, EnumDef should be there implementing Rust style enum.
+/// TODO - seperate 'core types(C like)' from 'sugar types' (eg enum,trait..)
 struct EnumDef  : ExprStructDef {
 //	void dump(int depth)const;
 //	virtual void translate_typeparams(const TypeParamXlat& tpx);
@@ -890,6 +896,7 @@ struct EnumDef  : ExprStructDef {
 	const char* kind_str()const{return "enum";}
 	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){}
 };
+
 // todo.. generic instantiation: typeparam logic, and adhoc mo
 struct  ExprFnDef : ExprDef {
 	ExprFnDef*	next_of_module=0; // todo: obsolete this.

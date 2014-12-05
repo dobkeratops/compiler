@@ -2531,6 +2531,17 @@ Type* Capture::get_elem_type(int i){
 	return v->type();
 }
 
+Name Capture::get_elem_name(int i){
+	auto v=vars;
+	for (; v&&i>0; i--,v=v->next_of_capture);
+	return v->name;
+}
+int Capture::get_elem_count(){
+	auto v=vars;
+	int i=0;
+	for (; v; i++,v=v->next_of_capture);
+	return i;
+}
 
 void Capture::coalesce_with(Capture *other){
 	// remap all functions that use the other to point to me
@@ -3819,8 +3830,8 @@ ExprFor* parse_for(TokenStream& src){
 	} else {//if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
 		p->pattern=0;
 		p->init=first;
-		p->cond=parse_expr(src);
-		src.expect(SEMICOLON,"eg for init;cond;inc{..}");
+		p->cond=parse_block(src,SEMICOLON,COMMA,0);
+		//ssrc.expect(SEMICOLON,"eg for init;cond;inc{..}");
 		p->incr=parse_block(src,OPEN_BRACE,COMMA,0);
 	}
  //else {
@@ -3862,7 +3873,8 @@ ExprIf* parse_if(TokenStream& src){
 	// TODO: assignments inside the 'if ..' should be in-scope
 	// eg if (result,err)=do_something(),err==ok {....}  else {...}
 	auto p=new ExprIf(src.pos);
-	p->cond=parse_block(src, OPEN_BRACE, 0, 0);
+//	p->cond=parse_block(src, OPEN_BRACE, 0, 0);
+	p->cond=parse_block(src,OPEN_BRACE,COMMA,0);
 	p->body=parse_block(src, CLOSE_BRACE,SEMICOLON,0);
 	verify(p->cond->get_type());
 

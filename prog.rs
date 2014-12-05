@@ -1,4 +1,4 @@
-fn lerp(a,b,f)->float{(b-a)*f+a};
+fn lerp(a,b,f)->float{(b-a)*f+a}
 fn foo(a:*char)->void;
 fn printf(s:str,...)->int;
 
