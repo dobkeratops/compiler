@@ -175,7 +175,7 @@ extern CgValue CgValueVoid();
 Name getStringIndex(const char* str,const char* end=0);
 const char* str(int);
 inline int index(Name);
-#ifndef DEBUG2
+#if DEBUG<2
 struct Name {
 	int32_t m_index;
 	Name()		{m_index=0;}
@@ -199,7 +199,6 @@ struct Name {
 	explicit operator int()const{return m_index;}
 };
 inline int index(Name n){return n.m_index;}
-
 
 #else
 struct Name {

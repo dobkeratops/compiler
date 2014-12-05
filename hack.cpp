@@ -7,12 +7,20 @@
 const char** g_pp,*g_p;
 const char* g_filename=0;
 
-//#define dbprintf_varscope dbprintf
+#if DEBUG>=3
+#define dbprintf_varscope dbprintf
+#define dbprintf_generic dbprintf
+#define dbprintf_lambdas dbprintf
+#define dbprintf_instancing dbprintf
+#define dbprintf_resolve dbprintf
+#else
 inline void dbprintf_varscope(const char*,...){}
 inline void dbprintf_generic(const char*,...){}
 inline void dbprintf_lambdas(const char*,...){}
 inline void dbprintf_instancing(const char*,...){}
 inline void dbprintf_resolve(const char*,...){}
+#endif
+
 const int g_debug_get_instance=false;
 struct VTablePtrs {
 	void* expr_op;
