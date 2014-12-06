@@ -467,8 +467,10 @@ struct Type : Expr{
 	Type*		get_elem(int index);
 	int			num_pointers()const;
 	int			num_pointers_and_arrays()const;
-	ExprStructDef*	get_struct() const; // strip away all pointers.
-	bool			eq(const Type* other) const;
+	ExprStructDef*	struct_def_noderef()const;
+	ExprStructDef*	get_struct() const; // with autoderef
+	bool			is_coercible(const Type* other) const{return eq(other,true);};
+	bool			eq(const Type* other,bool coerce=false) const;
 	bool			eq(const Type* other, const TypeParamXlat& xlat )const;
 	void			dump_sub()const;
 	void			dump(int depth)const;
@@ -896,7 +898,8 @@ struct ExprStructDef: ExprDef {
 	ExprStructDef*	root_class();
 	int				get_elem_count(){return this->fields.size();}
 	bool			is_vtable_built(){return this->vtable_name!=0;}
-	const ExprFnDef*		find_function(Name n, const Type* fn_type);
+	const ExprFnDef*		find_function_for_vtable(Name n, const Type* fn_type);
+	bool			has_base_class(ExprStructDef* other)const;
 };
 
 inline Type* Type::get_elem(int index){

@@ -919,19 +919,35 @@ bool type_compare(const Type* t,int a0, int a1){
 	return false;
 }
 
-bool Type::eq(const Type* other) const{
+ExprStructDef* Type::struct_def_noderef()const { // without autoderef
+	if (struct_def) return struct_def->as_struct_def();
+	else return nullptr;
+};
+
+
+bool Type::eq(const Type* other,bool coerce) const{
+	/// TODO factor out common logic, is_coercible(),eq(),eq(,xlat)
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
 	if (this &&this->name==AUTO){
-		if (this->sub && other) return this->sub->eq(other->sub);
+		if (this->sub && other) return this->sub->eq(other->sub,coerce);
 		else return true;
 	}
 	if (other && other->name==AUTO){
-		if (other->sub && this) return other->sub->eq(this->sub);
+		if (other->sub && this) return other->sub->eq(this->sub,coerce);
 		else return true;
 	}
 	if (!(this && other)) return false;
-	if (this->name!=other->name)return false;
+	
+	auto s1=this->struct_def_noderef();
+	auto s2= other->struct_def_noderef();
+	if (s1&&s2){
+		if (!s1->has_base_class(s2))
+			return false;
+	}
+	else
+		if (this->name!=other->name)return false;
+
 //	if (!this->sub && other->sub)) return true;
 	if (other->name==STR && type_compare(this,PTR,CHAR)) return true;
 	if (this->name==STR && type_compare(other,PTR,CHAR)) return true;
@@ -939,11 +955,12 @@ bool Type::eq(const Type* other) const{
 	auto p=this->sub,o=other->sub;
 		
 	for (; p && o; p=p->next,o=o->next) {
-		if (!p->eq(o)) return false;
+		if (!p->eq(o,coerce)) return false;
 	}
 	if (o || p) return false; // didnt reach both..
 	return true;
 }
+
 bool Type::eq(const Type* other,const TypeParamXlat& xlat) const{
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
@@ -1081,6 +1098,13 @@ size_t Type::size() const{
 		return struct_def->as_struct_def()->size();
 	}
 	return 0;
+}
+bool
+ExprStructDef::has_base_class(ExprStructDef* other)const{
+	for (auto x=this; x;x=x->inherits)
+		if (x==other)
+			return true;
+	return false;
 }
 
 ExprStructDef* Type::get_struct()const{
@@ -3948,24 +3972,28 @@ void ExprStructDef::roll_vtable() {
 		for (auto svf:static_virtual){
 			this->vtable->fields.push_back(svf);
 		}
-		// base class gets a vtable pointer
-		this->fields.insert(this->fields.begin(), new ArgDef(pos,getStringIndex("__vtable_ptr"),new Type(PTR,this->vtable)));
 	}
-	
+	// base class gets a vtable pointer
+	if (this->vtable){
+		this->fields.insert(
+			this->fields.begin(),
+			new ArgDef(pos,getStringIndex("__vtable_ptr"),
+			new Type(PTR,this->vtable)));
+	}
 
 	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??
 }
-const ExprFnDef* ExprStructDef::find_function(Name n, const Type* sig){
+const ExprFnDef* ExprStructDef::find_function_for_vtable(Name n, const Type* sig){
 	for (auto f:this->functions){
-		if (f->name==n && f->fn_type->eq(sig))
+		if (f->name==n && f->fn_type->is_coercible(sig)) /// TODO only 'this' other params should be specific should coerce
 			return f;
 	}
 	for (auto f:this->virtual_functions){
-		if (f->name==n && f->fn_type->eq(sig))
+		if (f->name==n && f->fn_type->is_coercible(sig))
 			return f;
 	}
 	for (auto f:this->static_functions){
-		if (f->name==n && f->fn_type->eq(sig))
+		if (f->name==n && f->fn_type->is_coercible(sig))
 			return f;
 	}
 	return nullptr;
@@ -4041,7 +4069,7 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 
 		if (this->inherits_type && !this->inherits){
 			this->inherits_type->resolve(definer_scope,desired,flags);
-			this->inherits=definer_scope->find_struct(this->inherits_type);
+			this->inherits=definer_scope->find_struct_named(this->inherits_type->name);
 		}
 		roll_vtable();
 		
@@ -4422,13 +4450,26 @@ const char* g_TestVTable=
 /*1*/	"fn printf(s:str,...)->int;				\n"
 "struct Foo {									\n"
 "	x:int,y:int,								\n"
-"	virtual foo(){printf(\"hello from foo\\n\");},		\n"
-"	virtual bar(){printf(\"hello from bar\\n\");},		\n"
-"	virtual baz(){printf(\"hello from bar\\n\");},		\n"
+"	virtual foo(){printf(\"hello from Foo.foo x=%d\\n\",x);},		\n"
+"	virtual bar(){printf(\"hello from Foo.bar\\n\");},		\n"
+"	virtual baz(){printf(\"hello from Foo.baz\\n\");},		\n"
+"}\n"
+"struct Bar : Foo{									\n"
+"	x:int,y:int,								\n"
+"	fn foo(){printf(\"hello from Bar.foo x=%d\\n\",x);},		\n"
+"	fn bar(){printf(\"hello from Bar.bar\\n\");},		\n"
+"	fn baz(){printf(\"hello from Bar.baz\\n\");},		\n"
 "}\n"
 "fn main(argc:int, argv:**char)->int{	\n"
-"	x:= new Foo{x=0,y=0};						\n"
-"	x.foo();0							\n"
+"	x1:= new Foo{x=10,y=0};						\n"
+"	x2:= new Bar{x=20,y=0};						\n"
+"	x1.foo();							\n"
+"	take_interface(x1);							\n"
+"	take_interface(x2 as*Foo);							\n"
+"	0										\n"
+"}\n"
+"fn take_interface(pf:*Foo){\n"
+"   pf.foo()\n"
 "}\n"
 ;
 

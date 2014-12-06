@@ -63,6 +63,7 @@ public:
 	void emit_function_type(ExprFnDef* fn_node);
 	void emit_function_type(const Type* t);
 	void emit_global(Name n);
+	void emit_fn_cast_global(Name n,const Type* srct,const Type* dstt);
 	void emit_ins_begin_sub();
 	void emit_undef();
 	CgValue emit_alloca_type(Expr* holder, Type* t);

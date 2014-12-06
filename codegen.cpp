@@ -754,6 +754,23 @@ void compile_raw_vtable(CodeGen& cg, ExprStructDef* sd){
 	cg.emit_ins_end();
 }
 
+void CodeGen::emit_fn_cast_global(Name n,const Type* srct, const Type *dstt){
+	auto&cg=*this;
+	
+//	cg.emit_comma();
+	cg.emit_type(dstt);
+	cg.emit_nest_begin("");
+	cg.emit_txt("bitcast");
+	cg.emit_nest_begin("(");
+	cg.emit_function_type(srct);
+	cg.emit_global(n);
+	cg.emit_separator(" to ");
+	cg.emit_function_type(dstt);
+	cg.emit_nest_end(")");
+	cg.emit_nest_end("");
+	
+}
+
 void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef* vtable_layout){
 	// compile formatted vtable with additional data..
 	if (!vtable_layout->is_compiled){
@@ -767,13 +784,13 @@ void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef
 	cg.emit_struct_begin();
 
 	for (auto a:vtable_layout->fields){
-		cg.emit_type(a->type(),false);
+//		cg.emit_type(a->type(),false);
 //		cg.emit_comma();
 		cg.emit_txt(" ");
 		auto* s=sd;
 		for (;s;s=s->inherits){
-			if (auto f=s->find_function(a->name, a->type())){
-				cg.emit_global(f->get_mangled_name());
+			if (auto f=s->find_function_for_vtable(a->name, a->type())){
+				cg.emit_fn_cast_global(f->get_mangled_name(),f->fn_type,a->type());
 				break;
 			}
 		}
