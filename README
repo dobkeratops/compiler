@@ -1,4 +1,4 @@
-LLVM langauge experiment
+LLVM langauge experiment,
 
 a subset of C/C++,+sugar, resyntaxed like Rust.  implemented in C++.
 
@@ -16,6 +16,7 @@ Currently supports:-
 - stack-based closures
 - function overloading
 - templates
+- limited vtables (base class describes layout, single inheritance)
 - emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 Very early days, the compiler is a few weeks old.
@@ -54,13 +55,14 @@ Goals In detail:-
  - maybe aim to transpile Rust aswell? (given our AST will have C++ and Rust-like elements in one place)
  - scala like sugar for default constructor
 
-[3] Additional features inspired by other languages:
+[3] Additional features..  & inspired by other languages:
  - 100% Open World design - free functions/UFCS/Extention methods
  - minimal syntax changes to rearrange code,
  - adhoc gather of functions into interfaces (like go), or sort by function into switch dispatch
  - use any parameter as 'this'/vtable 
  - possibly multimethods - automate rolling double-dispatch (hence 'any param' as vtable)
  - some sort of reflection, opt in, and compile time.
+ - where vtables are used, more flexibility eg hot-swapping, 'static-virtual data', auto roll classfactory& 'message-map'
 
 [4] enhance template engine to replace macro usecases.
  - eg 'ident' parameters, more?
