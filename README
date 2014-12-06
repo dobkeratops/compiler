@@ -29,8 +29,9 @@ Long Term Goals:-
 - features for parallelism, GPGPU programming
 
 This could all probably be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these goals.
+this is probably all way beyond a 1man project but I'll see how far I can get..
 
-In detail:-
+Goals In detail:-
 
 [1] Resyntax a significant subset of C++, in the spirit of SPECS; 
   - should be possible to non-destructively translate a subset back & forth.
@@ -49,7 +50,8 @@ In detail:-
  - optional trait bounds on templates?
  - rust-like trait-objects
  - maybe aim to compile a subset of Rust programs,
-   - ... if we can reconcile Rust ideas with C++ semantics.
+   - ... if we can reconcile Rust ideas with C++ semantics
+ - maybe aim to transpile Rust aswell? (given our AST will have C++ and Rust-like elements in one place)
  - scala like sugar for default constructor
 
 [3] Additional features inspired by other languages:

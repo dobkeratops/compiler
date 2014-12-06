@@ -3608,6 +3608,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 		}
 		src.eat_if(COMMA); src.eat_if(SEMICOLON);
 	}
+	// if there's any virtual functions, stuff a vtable pointer in the start
 	return sd;
 }
 
@@ -3928,13 +3929,15 @@ void ExprStructDef::roll_vtable() {
 		this->vtable=root->vtable;
 	}
 	else{
+		if (!this->virtual_functions.size())
+			return;
 		this->vtable=new ExprStructDef(this->pos,getStringIndexConcat(name,"__vtable_format"));
 		this->vtable->vtable_name=getStringIndex("void__vtable");
 
 		for (auto f:this->virtual_functions) {
 			// todo: static-virtual fields go here!
 			this->vtable->fields.push_back(
-				new ArgDef(
+										   new ArgDef(
 					this->pos,
 					f->name,
 					f->fn_type,
@@ -3945,7 +3948,11 @@ void ExprStructDef::roll_vtable() {
 		for (auto svf:static_virtual){
 			this->vtable->fields.push_back(svf);
 		}
+		// base class gets a vtable pointer
+		this->fields.insert(this->fields.begin(), new ArgDef(pos,getStringIndex("__vtable_ptr"),new Type(PTR,this->vtable)));
 	}
+	
+
 	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??
 }
 const ExprFnDef* ExprStructDef::find_function(Name n, const Type* sig){
@@ -4414,12 +4421,13 @@ const char* g_TestLoop=
 const char* g_TestVTable=
 /*1*/	"fn printf(s:str,...)->int;				\n"
 "struct Foo {									\n"
-"	virtual foo(){printf(\"hello from foo\\n\");}		\n"
-"	virtual bar(){printf(\"hello from bar\\n\");}		\n"
-"	virtual baz(){printf(\"hello from bar\\n\");}		\n"
+"	x:int,y:int,								\n"
+"	virtual foo(){printf(\"hello from foo\\n\");},		\n"
+"	virtual bar(){printf(\"hello from bar\\n\");},		\n"
+"	virtual baz(){printf(\"hello from bar\\n\");},		\n"
 "}\n"
 "fn main(argc:int, argv:**char)->int{	\n"
-"	x:= new Foo{};						\n"
+"	x:= new Foo{x=0,y=0};						\n"
 "	x.foo();0							\n"
 "}\n"
 ;
