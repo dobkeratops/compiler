@@ -80,6 +80,7 @@ extern void error_end(const Node* n);
 extern void error(const SrcPos& pos, const char* str ,...);
 extern bool is_comparison(Name n);
 extern Name getStringIndex(const char* str,const char* end) ;
+extern Name getStringIndex(Name base, const char* str) ;
 extern const char* getString(const Name&);
 extern bool is_operator(Name tok);
 extern bool is_ident(Name tok);
@@ -834,14 +835,20 @@ struct ExprStructDef: ExprDef {
 	// but its' backwards.
 	// it'll want TypeParams aswell.
 	Name mangled_name=0;
+	Name vtable_name=0;
+	bool is_compiled=false;
 	bool is_enum_=false;
 	bool is_enum() { return is_enum_;}
 	vector<TypeParam*>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	vector<Type*>		instanced_types;
 	vector<ArgDef*>			fields;
+	vector<ArgDef*>			static_virtual;
+	vector<ArgDef*>			static_fields;
 	vector<ExprLiteral*>	literals;
 	vector<ExprStructDef*>	structs;
+	vector<ExprFnDef*>		virtual_functions;
 	vector<ExprFnDef*>		functions;
+	vector<ExprFnDef*>		static_functions;
 	Type*	inherits_type=0;
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
@@ -866,6 +873,7 @@ struct ExprStructDef: ExprDef {
 	virtual const char* kind_str()const	{return"struct";}
 	ExprStructDef* next_of_name;
 	Name	get_mangled_name()const;
+	bool	has_vtable()const{return this->virtual_functions.size()!=0||(this->inherits?this->inherits->has_vtable():0);}
 	ExprStructDef(SrcPos sp,Name n)		{name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0; derived=0; name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;}
 	size_t		alignment() const			{size_t max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
@@ -882,8 +890,13 @@ struct ExprStructDef: ExprDef {
 	Type*			get_elem_type(int i){return this->fields[i]->type();}
 	Name			get_elem_name(int i){return this->fields[i]->name;}
 	int 			get_elem_index(Name name){int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
-
+	int				override_index(ExprFnDef* f);
+	int				vtable_size();
+	int				vtable_base_index();
+	ExprStructDef*	root_class();
 	int				get_elem_count(){return this->fields.size();}
+	bool			is_vtable_built(){return this->vtable_name!=0;}
+	const ExprFnDef*		find_function(Name n, const Type* fn_type);
 };
 
 inline Type* Type::get_elem(int index){
@@ -919,6 +932,7 @@ struct  ExprFnDef : ExprDef {
 	Capture*	captures=0;			//
 	Capture*	my_capture=0;			// for closures- hidden param,environment struct passed in
 	ExprStructDef* m_receiver=0;
+	int				vtable_index=-1;
 	
 	Type* ret_type=0;
 	Type* fn_type=0;				// eg (args)->return
@@ -956,6 +970,7 @@ struct  ExprFnDef : ExprDef {
 	virtual ExprFnDef* as_fn_def() {return this;}
 	Node*			instanced_by()const{if (this->instance_of){return this->refs;}else return nullptr;}
 	void			dump(int ind) const;
+	void			dump_sub(int ind,Name prefix) const;
 	ResolvedType	resolve_function(Scope* definer,ExprStructDef* receiver, const Type* desired, int flags);
 	ResolvedType	resolve(Scope* scope,const Type* desired,int flags);
 	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);

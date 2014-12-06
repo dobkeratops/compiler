@@ -1,6 +1,7 @@
-// omit function body to declare prototypes for external linking, C++ mangle
+// omit function body to declare prototypes for external linking,
+// TODO: distinguish extern "c" from c++ mangle
+
 fn printf(s:str,...)->int;
-fn foo(a:*char)->void;
 
 // stolen from rust: function syntax 'fn <function name>(args) optional return value {body}
 // however ommitting return value means infer it, not 'void' 
@@ -95,12 +96,30 @@ fn main(argc:int,argv:**char)->int{
     setv(&u,5);
  
     // demo of type inference with polymorphic lambdas
-    // we could overload 'map' to supply different combinations of types
+    // we could overload 'match' to supply different combinations of types
     z:=map(&u,
         |x:&int|{printf("union was set to int %d\n",*x);15},
         |x:&float|{printf("union was set to float %.3f\n",*x);17}
     );
     printf("map union returned z=%d\n",z);
+
+
+	// C++ equivalent doesn't seem to match template args.
+    // as far as i've tried it. (of course C++ can do it other ways)
+    // eg
+	//template<typename X,typename Y>
+	//struct  Union1{int tag;X x; Y y;};
+	//template<typename X,typename Y,typename R>
+		//R match_union(Union1<X,Y>& u, std::function<R(X)>& fx, std::function<R(Y)>& fy){
+	//	if (u.tag==0) return fx(u.x);
+	//	return fy(u.y);
+	//}
+	//Union1<int,float> u;
+	//match_union(u, [](int x){printf("int\n");return 0;},[](float x){printf("float\n");return 1;});
+
+
+
+
 
 	xs=:array[int,512];   // like C++ array<int,512>
 	q:=xs[1]; p1:=&xs[1];
@@ -132,6 +151,7 @@ fn main(argc:int,argv:**char)->int{
 
 	fv2:=new Foo{vx=23,vy=24,vz=25}; // struct allocate & init
 	something_foo(fv2);
+
 
 	fv3:=new Foo{31,32,33}; // struct initializer, sequential
 	something_foo(fv3);

@@ -1,11 +1,13 @@
 LLVM langauge experiment
 
-a subset of C/C++,+sugar, resyntaxed like Rust. compiler implemented in C++.
+a subset of C/C++,+sugar, resyntaxed like Rust.  implemented in C++.
 
-'$make' to compile & run demo
-'$./hack hello.rpp' to compile & run example program.
+'$ make' to compile & run inbuilt test
+'$ ./hack hello.rpp' to compile & run example program.
 see 'hello.rpp' example source; 
-'hack.cpp' is compiler's main.
+'hack.cpp' is contains main & bulk of the compiler
+
+I dont have a name yet hence 'hack'..
 
 Currently supports:-
 
@@ -14,6 +16,7 @@ Currently supports:-
 - stack-based closures
 - function overloading
 - templates
+- emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 Very early days, the compiler is a few weeks old.
 
@@ -31,11 +34,15 @@ In detail:-
 
 [1] Resyntax a significant subset of C++, in the spirit of SPECS; 
   - should be possible to non-destructively translate a subset back & forth.
+  - context free grammar
+  - graph like module import: any file in a project can be the root for its own tests
   - allow use with established C++ libraries & sourcebases
-  - could be considered a 'dialect' rather than a 'language'.
-  - self host by translating own source.
+  - could be considered a 'dialect'/'hybrid' rather than a 'language'.
+  - add alternate parser that can directly read subset of C++ headers ?
+     (or adapt a rust community tool for C++ -> rust translation..)
+  - self host by translating own source, be mindful of c++ subset used to write this
 
-[2] Additional features inspired by Rust & other languages:
+[2] Additional Features inspired by Rust & other languages:
  - 2 way inference
  - expression oriented syntax.
  - ADTs (possibly implement as sugar for dynamic_cast<>)
@@ -43,26 +50,30 @@ In detail:-
  - rust-like trait-objects
  - maybe aim to compile a subset of Rust programs,
    - ... if we can reconcile Rust ideas with C++ semantics.
-
+ - scala like sugar for default constructor
 
 [3] Additional features inspired by other languages:
- - 100% Open World design - freefunctoins/UFCS/Extention methods
-   - gather into interfaces adhoc, or sort by function into switch dispatch
- - use any parameter as 'this'/vtable (no syntax changes to rearrange code)
- - whole-program forward inference
- - reflection
- - possibly multimethods (automate double-dispatch?)
+ - 100% Open World design - free functions/UFCS/Extention methods
+ - minimal syntax changes to rearrange code,
+ - adhoc gather of functions into interfaces (like go), or sort by function into switch dispatch
+ - use any parameter as 'this'/vtable 
+ - possibly multimethods - automate rolling double-dispatch (hence 'any param' as vtable)
+ - some sort of reflection, opt in, and compile time.
 
-[3] enhance template engine to replace macro usecases.
+[4] enhance template engine to replace macro usecases.
  - eg 'ident' parameters, more?
+ - functions in the type system to stringify, concat etc.
 
-[4] a subset should make a passable dynamic language
-  - a single language to handle the C++&embedded Lua usecase. 
+[5] a subset should make a passable dynamic language
+  - whole-program forward inference
+  - a single language to handle the C++/embedded Lua usecase. 
   - hence the desire for whole-program inference
     - (recover Rusts old RefCount ptr sigils '@' pointers)
+  - maybe want a REPL.
+  - statements at root level?
 
-[5] features aimed at parallel,GPGPU/shader programming 
+[6] features aimed at parallel,GPGPU/shader programming 
   - eg compile the same code on GPU or CPU for debugging, streamline boilerplate.
-  - want intrinsic float4 type with .xyz member swizzle
-  - recover rusts' "do" notation for internal iterators
-
+  - want intrinsic float4 type with .xyz member swizzle, and half type.
+  - GPU&shader programming is important enough to hardcode language features.
+  - recover rusts' lost "do" notation for pleasant internal iterators, 

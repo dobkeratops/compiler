@@ -12,7 +12,28 @@ struct Foo {
 	float x;float y;float z;float w;
 };
 
+struct Base {
+	double d;
+};
+
+struct Bar : Base{
+	float x;
+	virtual void foo_fn(){
+		printf("hello from foo\n");
+	}
+	virtual void bar_fn(){
+		printf("hello from foo\n");
+	}
+};
+struct Baz : Bar{
+	int y;
+	void foo_fn(){
+		printf("hello from baz\n");
+	}
+};
+
 int main(int argc, const char** argv) {
+	Baz* b=new Baz;
 	int tmp[512];
 	tmp[2]=10;
 	tmp[5]=50;

@@ -516,7 +516,21 @@ void CodeGen::emit_phi_reg_label(Name reg, Name label){
 	emit_reg(label);
 	emit_txt("]");
 }
-
+void CodeGen::emit_typename(Name tn, bool ref) { // should be extention-method.
+	emit_comma(); // type always starts new operand
+	if (ref) emit_pointer_begin();
+	emit_reg(tn);
+	if (ref) emit_pointer_end();
+}
+void CodeGen::emit_array_type(const Type* t, int count, bool ref) { // should be extention-method.
+	emit_comma(); // type always starts new operand
+	if (ref) emit_pointer_begin();
+	emit_nest_begin("[");
+	emit_txt("%d x ",count);
+	emit_type(t);
+	emit_nest_begin("]");
+	if (ref) emit_pointer_end();
+}
 void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method.
 	emit_comma(); // type always starts new operand
 	if (!t) { emit_txt("<type_expected>");return;}
@@ -702,6 +716,60 @@ void dump_locals(Scope* s){
 		}
 	}
 }
+void compile_raw_vtable(CodeGen& cg, ExprStructDef* sd){
+	// raw vtable looks more like what clang spits out, but we want static fields & more metadata
+	cg.emit_txt("@%s = private unnamed_addr",str(sd->vtable_name));
+	cg.emit_ins_begin_name("constant");
+	cg.emit_array_type(cg.i8ptr(), sd->virtual_functions.size());
+	/// todo: this is wrong, we should have vtable_index
+	cg.emit_nest_begin("[");
+	for (auto vf:sd->virtual_functions){
+		cg.emit_type(cg.i8ptr());
+		cg.emit_txt("bitcast");
+		cg.emit_nest_begin("(");
+		cg.emit_function_type(vf->fn_type);
+		cg.emit_global(vf->name);
+		cg.emit_separator(" to ");
+		cg.emit_type(cg.i8ptr());
+		cg.emit_nest_end(")");
+	}
+	cg.emit_nest_end("]");
+	cg.emit_ins_end();
+}
+
+void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef* vtable_layout){
+	// compile formatted vtable with additional data..
+	if (!vtable_layout->is_compiled){
+		// the vtable really is just a struct; eventually a macro system could generate
+		vtable_layout->compile(cg,sc);
+		vtable_layout->is_compiled=true;
+	}
+	cg.emit_txt("@%s = ",str(sd->vtable_name));
+	cg.emit_ins_begin_name("global");
+	cg.emit_typename(str(vtable_layout->mangled_name));
+	cg.emit_struct_begin();
+
+	for (auto a:vtable_layout->fields){
+		cg.emit_type(a->type(),false);
+//		cg.emit_comma();
+		cg.emit_txt(" ");
+		auto* s=sd;
+		for (;s;s=s->inherits){
+			if (auto f=s->find_function(a->name, a->type())){
+				cg.emit_global(f->get_mangled_name());
+				break;
+			}
+		}
+		if (!s){
+			cg.emit_undef();
+		}
+	}
+	
+	cg.emit_struct_end();
+	cg.emit_txt(", align 16");
+	cg.emit_ins_end();
+	
+}
 
 CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 	auto st=this;
@@ -714,11 +782,16 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 		}
 	} else {
 		cg.emit_comment("instance %s of %s in %s %p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st);
+
+		// instantiate the vtable
+		// todo: step back thru the hrc to find ov[i]errides
+		if (this->vtable)
+			compile_vtable_data(cg, this,sc, this->vtable);
+
 		cg.emit_struct_name(st->get_mangled_name());
 		cg.emit_ins_name("type");
 		cg.emit_struct_begin();
-		// todo: properly wrap translations to LLVM types.
-		int i=0; for (auto fi: st->fields){
+		for (auto fi: st->fields){
 			cg.emit_type(fi->type(), false);
 		};
 		cg.emit_struct_end();

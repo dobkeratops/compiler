@@ -54,6 +54,8 @@ public:
 	void emit_reg(RegisterName dst );
 	void emit_ins_end();
 	void emit_txt(const char* str,...);
+	void emit_typename(Name n ,bool is_ref=false);
+	void emit_array_type(const Type* t, int count, bool ref=false);
 	void emit_type(CgValue& lv );
 	void emit_type(const Type* t, bool is_ref=false); // these would prefer to be
 	//extentions, dont want 'CodeGen' dependant on the AST.

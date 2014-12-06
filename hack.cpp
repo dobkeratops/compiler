@@ -14,6 +14,7 @@ const char* g_filename=0;
 #define dbprintf_resolve dbprintf
 #define dbprintf_fnmatch dbprintf
 #define dbprintf_type dbprintf
+#define dbprintf_vtable dbprintf
 #else
 inline void dbprintf_fnmatch(const char*,...){}
 inline void dbprintf_varscope(const char*,...){}
@@ -22,6 +23,7 @@ inline void dbprintf_lambdas(const char*,...){}
 inline void dbprintf_instancing(const char*,...){}
 inline void dbprintf_resolve(const char*,...){}
 inline void dbprintf_type(const char*,...){}
+inline void dbprintf_vtable(const char*,...){}
 #endif
 
 const int g_debug_get_instance=false;
@@ -455,14 +457,14 @@ Name getStringIndex(const char* str,const char* end) {
 Name strConcat(Name n1, Name n2);
 inline Name strConcat(Name n1, Name n2,Name n3){ return strConcat(n1,strConcat(n2,n3));}
 
-Name getStringIndexConcat(const char* s1, const char* s2){
+Name getStringIndexConcat(Name base, const char* s2){
 	char tmp[512];
-	snprintf(tmp,511,s1,s1);
+	snprintf(tmp,511,"%s%s",str(base),s2);
 	return getStringIndex(tmp);
 }
 Name strConcat(Name n1, Name n2){
 	// todo - we could optimize the string table around concatenations
-	return getStringIndexConcat(str(n1),str(n2));
+	return getStringIndexConcat(n1,str(n2));
 }
 const char* getString(const Name& n) {
 	return g_Names.index_to_name[index(n)].c_str();
@@ -762,7 +764,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 //				g_pRoot->as_block()->scope->dump(0);
 //			}
 			scope->find_variable_rec(this->name); // look for scope variable..
-			error(this,scope,"\'%s\' undeclared",str(this->name));
+			error(this,scope,"\'%s\' undeclared identifier",str(this->name));
 		}
 		return ResolvedType();
 	}
@@ -1138,7 +1140,7 @@ void ExprLiteral::dump(int depth) const{
 //	then we can just make function expressions for types.
 
 void	ExprLiteral::translate_typeparams(const TypeParamXlat& tpx){
-	
+
 }
 
 ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
@@ -1286,10 +1288,13 @@ void ExprFnDef::set_receiver(ExprStructDef* r){
 
 
 
-
 void ExprFnDef::dump(int ind) const {
+	dump_sub(ind,FN);
+}
+
+void ExprFnDef::dump_sub(int ind, Name prefix) const {
 	if (!this) return;
-	newline(ind);dbprintf("fn %s",getString(name));dump_typeparams(this->typeparams);dbprintf("(");
+	newline(ind);dbprintf("%s %s",getString(prefix),getString(name));dump_typeparams(this->typeparams);dbprintf("(");
 	for (int i=0; i<args.size();i++){
 		args[i]->dump(-1);
 		if (i<args.size()-1) dbprintf(",");
@@ -2698,7 +2703,7 @@ Capture* ExprFnDef::get_or_create_capture(ExprFnDef* src){
 		c->next_of_from=src->captures;
 		src->captures=c;
 		c->pos=src->pos;
-		c->name=getStringIndexConcat(str(this->name),str(src->name));
+		c->name=getStringIndexConcat(this->name,str(src->name));
 	}
 	return my_capture;
 }
@@ -3075,9 +3080,13 @@ struct Lexer {
 		auto t=peek_tok(); if (t==a || t==b || t==c) return eat_tok();
 		return 0;
 	}
-	int eat_if(Name a, Name b){
+	Name eat_if(Name a, Name b){
 		auto t=peek_tok(); if (t==a || t==b) return (int)t;
 		return 0;
+	}
+	Name eat_if_not(Name i) {
+		if (peek_tok()!=i) {return eat_tok();}
+		else return Name(0);
 	}
 	bool eat_if(Name i) {
 		if (peek_tok()==i) {eat_tok(); return true;}
@@ -3553,19 +3562,25 @@ void parse_typeparams(TokenStream& src,vector<TypeParam*>& out) {
 	}
 }
 
-ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name);
+ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* force_inherit);
+
 ExprStructDef* parse_struct(TokenStream& src) {
 	auto pos=src.pos;
-	auto tok=src.eat_ident();
-	return parse_struct_body(src,pos,tok);
+	auto sname=src.eat_ident();
+	return parse_struct_body(src,pos,sname,nullptr);
 }
-ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name){
+// TODO: are struct,trait,enum actually all the same thing with a different 'default'
+
+ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* force_inherit){
 	auto sd=new ExprStructDef(pos,name);
+	// todo, namespace it FFS.
 	if (src.eat_if(OPEN_BRACKET)) {
 		parse_typeparams(src,sd->typeparams);
 	}
 	if (src.eat_if(COLON)) {
 		sd->inherits_type = parse_type(src,0,nullptr); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
+	} else {
+		sd->inherits_type = force_inherit; // enum is sugar rolling a number of classes from base
 	}
 	if (!src.eat_if(OPEN_BRACE))
 		return sd;
@@ -3575,8 +3590,18 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name){
 		if (tok==CLOSE_BRACE){src.eat_tok(); break;}
 		if (src.eat_if(STRUCT)) {
 			sd->structs.push_back(parse_struct(src));
-		} else if (src.eat_if(FN)){
+		} else if (auto cmd=src.eat_if(FN)){
 			sd->functions.push_back(parse_fn(src,sd));
+		} else if (auto cmd=src.eat_if(VIRTUAL)){
+			if (sd->inherits_type){
+				error(sd,"limited vtables - currently this can only describe the vtable layout in the base class.\nTODO - this is just a temporary simplification,  other priorities eg rust-style traits, ADTs, static-virtuals, reflection..\n");
+			}
+			sd->virtual_functions.push_back(parse_fn(src,sd));
+		} else if (auto cmd=src.eat_if(STATIC)){
+			auto arg=parse_arg(src,CLOSE_PAREN);
+			if (src.eat_if(VIRTUAL)){
+				sd->static_virtual.push_back(arg);
+			} else sd->static_fields.push_back(arg);
 		} else {
 			auto arg=parse_arg(src,CLOSE_PAREN);
 			sd->fields.push_back(arg);
@@ -3585,6 +3610,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name){
 	}
 	return sd;
 }
+
 ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
 	Name tok;
 	auto sd=new ExprStructDef(pos,name);
@@ -3620,7 +3646,7 @@ ExprStructDef* parse_enum(TokenStream& src) {
 		if (tok==CLOSE_BRACE){break;}
 		// got an ident, now what definition follows.. =value, {fields}, (types), ..
 		if (src.peek_tok()==OPEN_BRACE){
-			ed->structs.push_back(parse_struct_body(src,subpos,tok));
+			ed->structs.push_back(parse_struct_body(src,subpos,tok,nullptr));
 		} else if (src.peek_tok()==OPEN_BRACKET){
 			ed->structs.push_back(parse_tuple_struct_body(src,subpos,tok));
 		} else if (src.eat_if(ASSIGN)){
@@ -3871,31 +3897,71 @@ void ExprStructDef::inherit_from(Scope * sc,Type *base_type){
 	ASSERT(inherits==0); next_of_inherits=base_instance->derived; base_instance->derived=this; this->inherits=base_instance;
 }
 
+ExprStructDef* ExprStructDef::root_class(){
+	for (auto s=this; s;s=s->inherits){
+		if (!s->inherits)
+			return s;
+	}
+	return this;
+}
 void ExprStructDef::roll_vtable() {
+	
+	if (this->is_vtable_built()){// ToDO: && is-class. and differentiate virtual functions. For the
+		return;
+	}
+	dbprintf_vtable("rolling vtable for %s,inherits %s\n",str(this->name),this->inherits?str(this->inherits->name):"void");
 	if (this->vtable){ return;} // done already
 	if (this->inherits) {this->inherits->roll_vtable();}
 
+	this->vtable_name=getStringIndexConcat(name, "__vtable_instance");
+
 	// todo - it should be namespaced..
-	char vtn[512];sprintf(vtn,"%s__vtable",str(this->name));
-	this->vtable=new ExprStructDef(this->pos,getStringIndex(vtn));
-	this->vtable->scope=this->scope;
+	//this->vtable->scope=this->scope;
 
 	// todo: we will create a global for the vtable
 	// we want to be able to emulate rust trait-objects
 	// & hotswap vtables at runtime for statemachines
 
-	for (int i=0; i<this->functions.size();i++) {
-		auto f=this->functions[i];
-		// todo: static-virtual fields go here!
-		this->vtable->fields.push_back(
-			new ArgDef(
-				this->pos,
-				f->name,
-				f->fn_type,//todo:  insertion of 'this'
-				new ExprIdent(this->pos, f->name)
-			)
-		);
+	// todo: this is a simplification - only the class root describes the vtable.
+	auto root=this->root_class();
+	if (root!=this){
+		this->vtable=root->vtable;
 	}
+	else{
+		this->vtable=new ExprStructDef(this->pos,getStringIndexConcat(name,"__vtable_format"));
+		this->vtable->vtable_name=getStringIndex("void__vtable");
+
+		for (auto f:this->virtual_functions) {
+			// todo: static-virtual fields go here!
+			this->vtable->fields.push_back(
+				new ArgDef(
+					this->pos,
+					f->name,
+					f->fn_type,
+					new ExprIdent(this->pos, f->name)
+				)
+			);
+		}
+		for (auto svf:static_virtual){
+			this->vtable->fields.push_back(svf);
+		}
+	}
+	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??
+}
+const ExprFnDef* ExprStructDef::find_function(Name n, const Type* sig){
+	for (auto f:this->functions){
+		if (f->name==n && f->fn_type->eq(sig))
+			return f;
+	}
+	for (auto f:this->virtual_functions){
+		if (f->name==n && f->fn_type->eq(sig))
+			return f;
+	}
+	for (auto f:this->static_functions){
+		if (f->name==n && f->fn_type->eq(sig))
+			return f;
+	}
+	return nullptr;
 }
 
 void ExprStructDef::dump(int depth) const{
@@ -3916,6 +3982,7 @@ void ExprStructDef::dump(int depth) const{
 	for (auto m:this->fields)	{m->dump(depth+1);}
 	for (auto s:this->structs)	{s->dump(depth+1);}
 	for (auto f:this->functions){f->dump(depth+1);}
+	for (auto f:this->virtual_functions){f->dump(depth+1);}
 	newline(depth);dbprintf("}");
 }
 
@@ -3952,13 +4019,16 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 
 	if (!this->is_generic()){
 		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
-		for (auto m:fields){
-			m->resolve(sc,nullptr,flags);
-		}
+		for (auto m:fields){m->resolve(sc,nullptr,flags);}
+		for (auto m:static_fields){m->resolve(sc,nullptr,flags);}
+		for (auto m:static_virtual){m->resolve(sc,nullptr,flags);}
 		for (auto s:structs){
 			s->resolve(sc,nullptr,flags);
 		}
 		for (auto f:functions){
+			f->resolve(sc,nullptr,flags);
+		}
+		for (auto f:virtual_functions){
 			f->resolve(sc,nullptr,flags);
 		}
 
@@ -3966,10 +4036,10 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 			this->inherits_type->resolve(definer_scope,desired,flags);
 			this->inherits=definer_scope->find_struct(this->inherits_type);
 		}
-		if (this->functions.size()){// ToDO: && is-class. and differentiate virtual functions. For the minute, *all* functoins defined in struct are virtual. we want UFCS for non-virtuals.
-			roll_vtable();
-		}
-		if (this->vtable) this->vtable->resolve(definer_scope,desired,flags);
+		roll_vtable();
+		
+		/// TODO clarify that we dont resolve a vtable.
+		//if (this->vtable) this->vtable->resolve(definer_scope,desired,flags);
 	} else{
 		for (auto ins=this->instances; ins; ins=ins->next_instance)
 			ins->resolve(definer_scope,nullptr, flags);
@@ -4204,6 +4274,8 @@ ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner) {
 		char tmp[512]; sprintf(tmp,"anon_fn_%d",src.pos.line);
 		fndef->name=getStringIndex(tmp);
 	}
+	// todo: generalize: any named parameter might be 'this'.
+	//.. but such functions will be outside the struct.
 	if (owner){
 		fndef->args.push_back(new ArgDef(src.pos,THIS,new Type(PTR,owner)));
 	}
@@ -4338,6 +4410,20 @@ const char* g_TestLoop=
 /*14*/	"	0									\n"
 /*15*/	"}\n"
 ;
+
+const char* g_TestVTable=
+/*1*/	"fn printf(s:str,...)->int;				\n"
+"struct Foo {									\n"
+"	virtual foo(){printf(\"hello from foo\\n\");}		\n"
+"	virtual bar(){printf(\"hello from bar\\n\");}		\n"
+"	virtual baz(){printf(\"hello from bar\\n\");}		\n"
+"}\n"
+"fn main(argc:int, argv:**char)->int{	\n"
+"	x:= new Foo{};						\n"
+"	x.foo();0							\n"
+"}\n"
+;
+
 const char* g_TestTyparamInference=
 /* 1*/ "struct Union[A,B]{a:A,b:B, tag:int};		\n"
 /* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
@@ -4625,7 +4711,8 @@ void run_tests(){
 	/// TODO , actually verify these produced the right output!
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
-	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_DEFS| B_TYPES|B_RUN);
+	auto ret11=compile_source(g_TestVTable,"g_TestVTable","test11.ll", B_TYPES|B_RUN);
+	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_TYPES|B_RUN);
 	auto ret10=compile_source(g_TestIf,"g_TestIf","test10.ll",B_TYPES|B_RUN);
 	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);
 
