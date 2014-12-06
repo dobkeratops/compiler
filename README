@@ -2,9 +2,10 @@ LLVM langauge experiment
 
 a subset of C/C++,+sugar, resyntaxed like Rust. compiler implemented in C++.
 
-see 'hello.rpp' example source.
 '$make' to compile & run demo
 '$./hack hello.rpp' to compile & run example program.
+see 'hello.rpp' example source; 
+'hack.cpp' is compiler's main.
 
 Currently supports:-
 
@@ -18,9 +19,9 @@ Very early days, the compiler is a few weeks old.
 
 Long Term Goals:-
 
-- C++ resyntaxed
+- significant C++ subset resyntaxed
 - open-world polymorphism
-- Rust inspired
+- add Rust inspired features
 - a subset should make a passable embedded dynamic language
 - features for parallelism, GPGPU programming
 
