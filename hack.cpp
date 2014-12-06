@@ -467,7 +467,8 @@ Name strConcat(Name n1, Name n2){
 	return getStringIndexConcat(n1,str(n2));
 }
 const char* getString(const Name& n) {
-	return g_Names.index_to_name[index(n)].c_str();
+	auto i=index(n);
+	return i?g_Names.index_to_name[i].c_str():"";
 }
 Name getNumberIndex(int num){
 	char tmp[32];sprintf(tmp,"%d",num); return g_Names.get_index(tmp,0,StringTable::Number);
@@ -4436,12 +4437,12 @@ const char* g_TestLoop=
 /*5*/	"			i<10;			\n"
 /*6*/	"			i+=1,j+=7 {	\n"
 /*7*/	"		printf(\"for loop i=%d j=%d\\n\",i,j);	\n"
-/*8*/	"										\n"
+/*8*/	"		if i==5 {break 44;}						\n"
 /*9*/	"	}									\n"
 /*10*/	"	else{								\n"
-/*11*/	"		printf(\"loop complete i=%d\\n\",i);0.6\n"
+/*11*/	"		printf(\"loop complete i=%d\\n\",i);55\n"
 /*12*/	"	}									\n"
-/*13*/	"	printf(\"outer scope i=%d\\n\",i);	\n"
+/*13*/	"	printf(\"loop ret=%d; outer scope i=%d\\n\",v,i);	\n"
 /*14*/	"	0									\n"
 /*15*/	"}\n"
 ;
@@ -4760,10 +4761,10 @@ void run_tests(){
 	/// TODO , actually verify these produced the right output!
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);
 	auto ret11=compile_source(g_TestVTable,"g_TestVTable","test11.ll", B_TYPES|B_RUN);
 	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_TYPES|B_RUN);
 	auto ret10=compile_source(g_TestIf,"g_TestIf","test10.ll",B_TYPES|B_RUN);
-	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);
 
 	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
 	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);

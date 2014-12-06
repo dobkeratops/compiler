@@ -34,6 +34,11 @@ public:
 	char	comma;
 	int		depth;
 	bool	commas[32];
+
+	int flow_depth=0;
+	JumpLabel	flow_break_to[32];
+	JumpLabel	flow_continue_to[32];
+	static CgValue 	flow_result[32]; // hack till we move stupid header
 	ExprFnDef*	curr_fn;	// The current function being compiled - no nesting allowed. (defer with 'compile_later')
 	
 	CodeGen(FILE* _ofp, int nr){
@@ -117,6 +122,8 @@ public:
 	// API refactoring
 	CgValue emit_getelementref(const CgValue& src, int i0, int field_index);
 	CgValue emit_getelementref(const CgValue& src, Name n);
+	CgValue emit_loadelement(const CgValue& obj, Name field);
+	CgValue emit_storeelement(const CgValue& obj, Name field,const CgValue& data);
 	CgValue emit_extract(CgValue src, int index);
 	CgValue emit_insert(CgValue src, int index);
 	CgValue emit_getelementptr(RegisterName ptr,Type* struct_t,int index, Type* elem_t);
@@ -125,6 +132,10 @@ public:
 	CgValue emit_free( CgValue ptr,size_t count);
 	CgValue emit_free_array(Type* t, CgValue count);
 	CgValue emit_malloc_array( Type* t,CgValue count);
+	// abstract control-flow in codegen, so we can plug in LLVM or C backend.
+	CgValue emit_for(ExprFor* f,Expr* init,Expr* cond, Expr* incr, Expr* body, Expr* else_block);
+	CgValue emit_break(CgValue v);
+	CgValue emit_continue();
 	EmitLoc get_pos(){return ftell(ofp);}
 	void set_pos(EmitLoc loc){fseek(ofp,loc,SEEK_SET);}
 	void set_pos_end(){fseek(ofp,0,SEEK_END);}

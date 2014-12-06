@@ -267,7 +267,7 @@ float getNumberFloat(Name n);
 const char* getString(const Name& index);
 void indent(int depth);
 inline const char* str(const Name& n){return getString(n);}
-inline const char* str(int i){return g_Names.index_to_name[i].c_str();}
+inline const char* str(int i){return i?g_Names.index_to_name[i].c_str():"";}
 int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite);
 
 struct ResolvedType{

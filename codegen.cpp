@@ -892,6 +892,21 @@ void CodeGen::emit_branch(CgValue cond, Name label_then, Name label_else){
 	emit_txt("i1 %%%s, label %%%s, label %%%s",str(cond.reg), str(label_then), str(label_else));
 	emit_ins_end();
 }
+CgValue CodeGen::emit_break(  CgValue v){
+	
+	auto i=this->flow_depth-1;
+	ASSERT(i>=0);
+	this->flow_result[i].store(*this, v);
+	emit_branch(this->flow_break_to[i]);
+	return this->flow_result[i];
+}
+CgValue CodeGen::emit_continue(){
+	auto i=this->flow_depth-1;
+	emit_branch(this->flow_continue_to[i]);
+	return this->flow_result[i];
+}
+
+
 
 Name CodeGen::gen_label(const char* label,int index){
 	auto i=index?index:this->m_next_reg++;
@@ -968,22 +983,36 @@ void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, N
 	cg.emit_txt("\n");
 }
 
-CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
-//  initializer
-// for:
-//  test condition br else
-//   body
-//   (break br endfor)
-//   increment
-//   br loop
-// break:
-// else:
-// endfor:
-	auto nf=this;
+	//  initializer
+	// for:
+	//  test condition br else
+	//   body
+	//   (break br endfor)
+	//   increment
+	//   br loop
+	// break:
+	// else:
+	// endfor:
+CgValue 	CodeGen::flow_result[32]; // hack till we move stupid header
+
+CgValue emit_for_llvm(CodeGen& cg, ExprFor* e_for, Expr* e_init,Expr* e_cond, Expr* e_incr, Expr* e_body, Expr* e_else_block){
+	int index=cg.m_next_reg++;
+	auto l_for=cg.gen_label("cond",index);
+	auto l_body=cg.gen_label("body",index);
+	auto l_else=cg.gen_label("else",index);
+	auto l_endfor=cg.gen_label("endfor",index);
+
+	auto i=	cg.flow_depth++;
+	ASSERT(i<32);
+
+	cg.flow_break_to[i]		=l_endfor;
+	cg.flow_continue_to[i]	=l_for;
+	auto result_ref=cg.flow_result[i]		=cg.emit_alloca_type(e_for, e_for->type());
+	
+	auto nf=e_for;
 	auto curr_fn=cg.curr_fn;
 	auto sc=nf->scope;
 	// write the initializer block first; it sets up variables initial state
-	int index=cg.m_next_reg++;
 
 	auto retval=CgValue();
 	auto l_init=cg.gen_label("init",index);
@@ -994,9 +1023,9 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	set<Variable*> emit_vars;
 	set<Variable*> else_vars;
 	// Now scan all the blocks to see which are changed.
-	nf->cond->find_vars_written_if(sc,emit_vars);
-	nf->body->find_vars_written_if(sc,emit_vars);
-	nf->incr->find_vars_written_if(sc,emit_vars);
+	e_cond->find_vars_written_if(sc,emit_vars);
+	e_body->find_vars_written_if(sc,emit_vars);
+	e_incr->find_vars_written_if(sc,emit_vars);
 	vector<LoopPhiVar> phi_vars;
 	for (auto v :emit_vars){
 		if (v->on_stack) continue; // no need for phi-nodes for stack vars.
@@ -1009,23 +1038,21 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 		//todo: can we allocate regnames in the AST? find last-write?
 		phi_vars.push_back(phi);
 	}
-	auto l_for=cg.gen_label("cond",index);
-	auto l_body=cg.gen_label("body",index);
-	auto l_else=cg.gen_label("else",index);
-	auto l_endfor=cg.gen_label("endfor",index);
+	
 	cg.emit_branch(l_for);
 	cg.emit_label(l_for);
 	auto phipos=cg.get_pos();
 	emit_phi(cg,sc,phi_vars,l_init,l_for,true);//alloc space
 
-	auto cond_result=nf->cond->compile_if(cg,sc);
+	auto cond_result=e_cond->compile_if(cg,sc);
 	cg.emit_branch(cond_result, l_body, l_else);
 	cg.emit_label(l_body);
-	nf->body->compile_if(cg,sc);
-	nf->incr->compile_if(cg,sc);
+	e_body->compile_if(cg,sc);
+	e_incr->compile_if(cg,sc);
 	cg.emit_branch(l_for);
 	cg.emit_label(l_else);
-	retval=nf->else_block->compile_if(cg,sc);
+	retval=e_else_block->compile_if(cg,sc);
+	result_ref.store(cg,retval);
 	cg.emit_branch(l_endfor);
 	cg.emit_label(l_endfor);
 	// now write the phi-nodes.
@@ -1034,9 +1061,21 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	emit_phi(cg,sc,phi_vars,l_init,l_body,false);
 	cg.set_pos_end();
 
+	cg.flow_depth--;
 	//TODO: return value.
-	return retval;
+	return result_ref;
 }
+
+CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
+	return cg.emit_for(this, this->init,this->cond, this->incr, this->body, this->else_block);
+}
+CgValue CodeGen::emit_for(ExprFor* e_for, Expr* e_init,Expr* e_cond, Expr* e_incr, Expr* e_body, Expr* e_else_block){
+	// this is the kind of stupid bouncing we want to write a new language to avoid
+	// not sure how far we want to abstract this.. codegen llvm/C or not. using ExprFor as
+	// universal 'back end' loop is quite flexible
+	return emit_for_llvm(*this,e_for, e_init, e_cond,e_incr,e_body,e_else_block);
+}
+
 void CodeGen::emit_return(CgValue ret){
 	if (ret.is_valid() && !ret.type->is_void()) {
 		auto r=ret.load(*this);
@@ -1177,7 +1216,6 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		}
 		if (vtable_fn) {
 			// we have a vcall, so now emit it..
-			vtable_fn->dump(0);
 			// load the vtable
 			auto recvv=recvp.load(cg);
 			auto vtblref=cg.emit_getelementref(recvv, getStringIndex("__vtable_ptr"));
@@ -1185,9 +1223,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			//load the fnptr
 			auto fn_ptr=cg.emit_getelementref(vtbl,fn_name).load(cg);
 			cg.emit_ins_begin(dst,"call");
-//			cg.emit_function_type(vtable_fn->type());
 			cg.emit_type_operand(fn_ptr);
-//			l_emit_arg_list(recvv.type,recvv.reg);//addr?recv.addr:recv.reg);
 			l_emit_arg_list(0,0);
 			cg.emit_ins_end();
 
@@ -1334,6 +1370,11 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			cg.emit_free(x,1);	///TODO array types, rustlike DST??
 			
 			/// TODO call destructor here.
+			return CgValue();
+		}
+		else if (opname==BREAK){
+			cg.emit_comment("BREAK EXPRESSION");
+			cg.emit_break(rhs->compile(cg,sc));
 			return CgValue();
 		}
 		else {
