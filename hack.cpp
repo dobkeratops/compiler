@@ -4441,6 +4441,12 @@ Option g_Options[]={
 };
 void dump_help(){
 	printf("embryonic C++/Rust hybrid language\n");
+	printf("(we dont even have a name yet)\n");
+	printf("to run: \n");
+	printf("   hack srcfile [-options]\n");
+	printf("default is compile and run. -e to generate exe and not run.\n");
+	printf(" \n");
+	
 	for (auto opt=g_Options;opt->name;opt++){
 		printf("%c - %s\n",opt->name,opt->help);
 	}
@@ -4491,7 +4497,11 @@ int main(int argc, const char** argv) {
 		}
 	}
 	if (argc<=1) {
+		#if DEBUG>=2
 		run_tests();
+		#else
+		dump_help();
+		#endif
 	}
 }
 
