@@ -6,7 +6,6 @@ fn foo(a:*char)->void;
 // however ommitting return value means infer it, not 'void' 
 
 fn something(f:float){
-    printf("something overloaded with float param\n");
 }
 
 // typeparameter sugar -omitted types get typeparams automatically,
@@ -46,7 +45,7 @@ fn something_foo(f:&Foo,x:&Foo){
 	printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
 }
 fn something(f:&Foo){
-    printf("something_foo with 1 arg\n");
+    printf("something overloaded with &Foo param\n");
 	printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
 }
 fn something(f:float,x){
@@ -55,10 +54,13 @@ fn something(f:float,x){
 }
 
 // [X,Y] = typeparams like scala TODO we might want to accept both
+// for familiarity. 
+// [] reads better especially nested, nesting but < > are more widespread
+//
 // this isn't a union yet, its just  test to show the type-inference
 // can handle getting a 'tag' from methods matching type X or Y
-// we may introduce propper tagged unions like Rust, or simply rely on
-// better inference & overloading to emulate them with templates?
+// we will probably introduce propper tagged unions like Rust, 
+// but also want to use improved inference/templates to implement 'variant' better.
 
 struct Union[X,Y]{
  tag:int,
@@ -70,7 +72,6 @@ fn setv[X,Y](u:&Union[X,Y],x:Y)->void{
  u.tag=1;
 }
 
-// for familiarity. [] read better for nesting but < > are more widespread
 fn setv[X,Y](u:&Union[X,Y],x:X)->void{
  printf("setv X\n");
  u.tag=0;
@@ -128,9 +129,8 @@ fn main(argc:int,argv:**char)->int{
     // frees up '?' for other use, eg optional types..(TODO arbitrary operators)
     // last expression in the compound blocks is return value from block
 
-	x:=if argc<2{printf("<2");1}else{printf(">2");2};
-	printf("yada yada yada\n");
-	printf("\nHello World %d\n", y );
+	x:=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >2",argc);2};
+	printf("\nHello World %d %d\n", x, y );
 
     // Stolen from rust: last statement is a return value. 
     // takes some getting used to but makes semicolons significant and
