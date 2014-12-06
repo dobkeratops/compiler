@@ -13,6 +13,7 @@ const char* g_filename=0;
 #define dbprintf_instancing dbprintf
 #define dbprintf_resolve dbprintf
 #define dbprintf_fnmatch dbprintf
+#define dbprintf_type dbprintf
 #else
 inline void dbprintf_fnmatch(const char*,...){}
 inline void dbprintf_varscope(const char*,...){}
@@ -20,6 +21,7 @@ inline void dbprintf_generic(const char*,...){}
 inline void dbprintf_lambdas(const char*,...){}
 inline void dbprintf_instancing(const char*,...){}
 inline void dbprintf_resolve(const char*,...){}
+inline void dbprintf_type(const char*,...){}
 #endif
 
 const int g_debug_get_instance=false;
@@ -954,7 +956,7 @@ bool Type::eq(const Type* other,const TypeParamXlat& xlat) const{
 	if (!(this && other)) return false;
 	// TODO: might be more subtle than this for HKT
 	auto ti=xlat.typeparam_index(other->name);
-	dbprintf("%s %s\n",str(this->name),str(other->name));
+	dbprintf_type("%s %s\n",str(this->name),str(other->name));
 	if (ti>=0){
 		return this->eq(xlat.given_types[ti],xlat);
 	}
@@ -1383,6 +1385,9 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	if (return_type && !new_fn->return_type()){
 		new_fn->ret_type=const_cast<Type*>(return_type);
 	}
+#if DEBUG >=2
+	return_type->dump_if(-1);
+#endif
 	verify_all();
 
 	auto callsiteb=dynamic_cast<const ExprBlock*>(callsite);
@@ -1400,8 +1405,24 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	srcfn->instances=new_fn;
 	new_fn->instance_of = srcfn;
 	new_fn->resolved=false;
-	new_fn->resolve(src_fn_owner,nullptr,flags);//todo: we can use output type ininstantiation too
+	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type ininstantiation too
 //	new_fn->dump(0);
+	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
+#if DEBUG >=2
+	dbprintf_fnmatch("%s return type=\n",new_fn->name_str());
+	srcfn->type()->dump_if(-1);
+	dbprintf_fnmatch(" from ");
+	new_fn->type()->dump_if(-1);
+	dbprintf_fnmatch("\n");
+	new_fn->fn_type->dump_if(-1);
+	dbprintf_fnmatch("\nlast expression:");
+	new_fn->body->as_block()->argls.back()->dump(0);
+	dbprintf_fnmatch("\nlast expression type:");
+	new_fn->body->as_block()->argls.back()->type()->dump(0);
+	dbprintf_fnmatch("\n");
+#endif
+	
+
 	verify_all();
 	return new_fn;	// welcome new function!
 }
@@ -1536,8 +1557,10 @@ int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam
 		}
 		else if (!(matched_tps[ti]->eq(given_arg))) {// or we already found it - match..
 //			dbprintf_fnmatch("match %s !=%s\n",str(fn_arg->name),str(given_arg->name));
+#if DEBUG>=3
 			matched_tps[ti]->dump(-1);
 			given_arg->dump(-1);
+#endif
 			return ret_score-1000;
 		}
 	} else {
@@ -1686,6 +1709,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	}
 	// find generic typeparams..
 	if (f->typeparams.size()){
+#if DEBUG>=2
 		dbprintf_fnmatch("%s score=%d; before typaram match\n",str(f->name),score);
 		dbprintf_fnmatch("callsite:\n");
 		for (int i=0; i<callsite->as_block()->argls.size();i++) {
@@ -1696,7 +1720,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			dbprintf_fnmatch("\n");
 		}
 		dbprintf_fnmatch("\n");
-
+#endif
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
 			score+=match_typeparams_from_arg(matched_type_params,f->typeparams, f->args[i]->get_type(), args[i]->get_type());
 		}
@@ -2332,6 +2356,12 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 				auto ret1=this->argls.back()->resolve(sc,desired,flags);
 				}
 			}
+			propogate_type(flags, this, this->argls.back()->type_ref());
+#if DEBUG>=2
+			this->type()->dump_if(-1);
+			this->argls.back()->dump_if(-1);
+			newline(0);
+#endif
 			return propogate_type(flags,this, ret);
 		}
 		else {ASSERT(0);return ResolvedType();}
@@ -2790,6 +2820,12 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		
 		if (this->body){
 			auto ret=this->body->resolve(sc, this->ret_type, flags);
+			propogate_type(flags, (const Node*)this,this->ret_type,this->body->type_ref());
+#if DEBUG>=2
+			this->ret_type->dump_if(-1);
+			this->body->type()->dump_if(-1);
+			newline(0);
+#endif
 //			this->ret_type=ret.type;
 			
 			propogate_type(flags, (const Node*)this, ret,this->ret_type);
@@ -2811,8 +2847,8 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		this->set_type(this->fn_type);
 	}
 	if (!this->is_generic()){
-		this->fn_type->resolve(scope,nullptr,flags);
-		this->return_type()->resolve(scope,nullptr,flags);
+		this->fn_type->resolve_if(scope,nullptr,flags);
+		this->return_type()->resolve_if(scope,nullptr,flags);
 	}
 	return ResolvedType(fn_type,ResolvedType::COMPLETE);
 }
@@ -3642,8 +3678,10 @@ void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
 
 void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 	for (auto &a:args) a->translate_typeparams(tpx);
-	if (this->ret_type)
+	if (this->ret_type) {
 		this->ret_type->translate_typeparams(tpx);
+	} else {
+	}
 	this->body->translate_typeparams(tpx);
 	
 	if (tpx.typeparams_all_set())
@@ -4066,7 +4104,16 @@ ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	if (else_block){
 		propogate_type_fwd(flags,this, desired,bt);
 		propogate_type(flags,this, bt);
-		return else_block->resolve(sc,bt,flags);
+		else_block->resolve(sc,bt,flags);
+		propogate_type(flags,this, this->body->type_ref(), else_block->type_ref());
+		propogate_type(flags,this, this->type_ref(), else_block->type_ref());
+
+#if DEBUG >2
+		this->body->type()->dump_if();
+		this->else_block->type()->dump_if();
+		this->type()->dump_if();
+#endif
+		return propogate_type(flags,this, this->type_ref(), this->body->type_ref());
 	}
 	else {
 		// TODO: Could it actually return Body|void ? perhaps we could implicityly ask for that?
@@ -4093,8 +4140,8 @@ void ExprFor::dump(int d) const {
 		newline(d);dbprintf("}");
 	}
 	if(this->type()){
-	dbprintf(":");
-	this->type()->dump_if(d);
+		dbprintf(":");
+		this->type()->dump_if(d);
 	}
 }
 
@@ -4368,21 +4415,22 @@ const char* g_TestProg2=
 /*54*/ "	struct FooStruct{x:int,y:int};		\n"
 ;
 
-char g_TestHello[]= //
+char g_TestPolyLambda[]= //
 "fn printf(s:str,...)->int;\n"
-/*1*/ "fn debugme[X,Y](u:&Union[X,Y], fx:(&X)->void,fy:(&Y)->void){\n"
-/*2*/ " if u.tag==0 { fx(&u.x);}\n"
-/*3*/ " else { fy(&u.y);}\n"
+/*1*/ "fn debugme[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{\n"
+/*2*/ " if u.tag==0 { fx(&u.x)}\n"
+/*3*/ " else { fy(&u.y)}\n"
 /*4*/ "}\n"
 /*5*/ "fn main(argc:int,argv:**char)->int{\n"
 /*6*/ "fv:=Foo{vx=13,vy=14,vz=15};\n"
 /*7*/ " u=:Union[int,float];\n"
 /*8*/ " setv(&u,0.0);\n"
 /*9*/ " setv(&u,0);\n"
-/*10*/ " debugme(&u,											\n"
-/*11*/ "	|x:&int|{printf(\"union was set to int\\n\");},	\n"
-/*12*/ "	|x:&float|{printf(\"union was set to float\\n\");}	\n"
+/*10*/ " z:=debugme(&u,											\n"
+/*11*/ "	|x:&int|{printf(\"union was set to int\\n\");10},	\n"
+/*12*/ "	|x:&float|{printf(\"union was set to float\\n\");12}	\n"
 /*13*/ "	);												\n"
+		"printf(\"map union returns %d\\n\", z);						\n"
 "	xs=:array[int,512];\n"
 "q:=xs[1]; p1:=&xs[1];\n"
 "	xs[2]=000;\n"
@@ -4577,9 +4625,9 @@ void run_tests(){
 	/// TODO , actually verify these produced the right output!
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_DEFS| B_TYPES|B_RUN);
 	auto ret10=compile_source(g_TestIf,"g_TestIf","test10.ll",B_TYPES|B_RUN);
 	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);
-	auto ret9=compile_source(g_TestHello,"g_TestHello","test9.ll",B_DEFS| B_TYPES|B_RUN);
 
 	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
 	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);
@@ -4592,7 +4640,9 @@ void run_tests(){
 }
 
 int main(int argc, const char** argv) {
-	
+#if DEBUG>=2
+	printf("compiled with debug level=%d\n", DEBUG);
+#endif
 //	dbprintf("precedences: ->%d *%d +%d &%d \n", precedence(ARROW),precedence(MUL),precedence(ADD),precedence(AND));
 //	compile_source_file("~/hack/test_hack/prog.rs",0xf);
 	int options=0,given_opts=0;

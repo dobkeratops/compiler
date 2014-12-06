@@ -93,12 +93,14 @@ fn main(argc:int,argv:**char)->int{
     // calls to templated functions
     setv(&u,2.0);
     setv(&u,5);
-    z:=
-    map(&u,
-        |x:&int|{printf("union was set to int %d\n",*x);10},
-        |x:&float|{printf("union was set to float %.3f\n",*x);11}
+ 
+    // demo of type inference with polymorphic lambdas
+    // we could overload 'map' to supply different combinations of types
+    z:=map(&u,
+        |x:&int|{printf("union was set to int %d\n",*x);15},
+        |x:&float|{printf("union was set to float %.3f\n",*x);17}
     );
-    printf("z=%d\n",z);
+    printf("map union returned z=%d\n",z);
 
 	xs=:array[int,512];   // like C++ array<int,512>
 	q:=xs[1]; p1:=&xs[1];

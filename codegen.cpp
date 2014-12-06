@@ -742,7 +742,12 @@ void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 		cg.emit_alloca_type(cp, cp->type()->deref_all());
 	}
 	for (auto v=sc->vars; v;v=v->next_of_scope){
+		if (!v->type()) {
+			cg.emit_comment("warning var %s has no type, something is wrong\n",v->name_str());
+			continue;
+		}
 		cg.emit_comment("local %s:%t..",v->name_str(),v->type()->name_str());
+		
 		if (v->kind!=Local) continue;
 		auto vt=v->expect_type();
 		if (v->capture_in)
