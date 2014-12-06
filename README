@@ -3,6 +3,8 @@ LLVM langauge experiment
 a subset of C/C++,+sugar, resyntaxed like Rust. compiler implemented in C++.
 
 see 'hello.rpp' example source.
+'$make' to compile & run demo
+'$./hack hello.rpp' to compile & run example program.
 
 Currently supports:-
 
