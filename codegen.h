@@ -20,26 +20,32 @@ class CodeGen {
 	/// TODO adapt interface to handle CodeGenLLVM CodeGenC
 	/// todo: move the external interface entirely to use wrapped CgValues,pass name hints for outputs
 	/// codegen can depend on a subset of the ast concepts . Type,..
+	/// TODO: we might want CodeGen to actually know about C's for & C If-Then-Else
+	///   eg emit_forloop(Node* init,Node* cond,Node* incr, Node* body)// defer..
+	///   this might increase boilerplate for LLVM case, but facilitate generating readable C
 	/// we might need to rework AST to know about SSA, see the current awful hack for 'for'
 public:
-	FILE* ofp;
-	bool prelude_done=false;
-	int m_next_reg;
+	typedef  Name JumpLabel;
+	FILE*	ofp;
+	bool	prelude_done=false;
+	int		m_next_reg;
+	Type*	m_i8ptr=0;
+	Type*	m_ptr=0;
+	char	comma;
+	int		depth;
+	bool	commas[32];
+	ExprFnDef*	curr_fn;	// The current function being compiled - no nesting allowed. (defer with 'compile_later')
+	
 	CodeGen(FILE* _ofp, int nr){
 		ofp=_ofp; m_next_reg=nr;
 		comma=0;
 		depth=0;
 		curr_fn=0;
 	}
-	Type* m_i8ptr=0;
-	Type* m_ptr=0;
-	char comma;
-	int depth;
-	bool commas[32];
 	vector<Node*> compile_later;
-	ExprFnDef*	curr_fn;	// The current function being compiled - no nesting allowed. (defer with 'compile_later')
 	typedef  int EmitLoc;
-	Name next_reg();
+	RegisterName next_reg();
+	RegisterName next_reg(Name name);
 	/// TODO: wrapper functions for every instruction codegen needs
 	/// so single calls to codegen can emit different back ends (LLVM, C, ..)
 	Type* ptr_to(Type* other);
@@ -72,6 +78,9 @@ public:
 	void emit_pointer_begin();
 	void emit_pointer_end();
 	void emit_phi_reg_label(Name reg, Name label);
+	JumpLabel	gen_label(const char* name,int index=0);
+	CgValue emit_call(CgValue fnc, CgValue arg);
+	CgValue emit_call(CgValue fnc, CgValue arg1,CgValue arg2);
 	void emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,CgValue src1);
 	CgValue emit_instruction(Name opname,Type* type,  Name outname,CgValue src1);
 	CgValue emit_instruction(Name opname,Type* type,  Name outname,CgValue src1,CgValue src2);
@@ -101,11 +110,15 @@ public:
 	void emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode);
 	Type* i8ptr();
 	// API refactoring
+	CgValue emit_getelementref(const CgValue& src, int i0, int field_index);
+	CgValue emit_getelementref(const CgValue& src, Name n);
 	CgValue emit_extract(CgValue src, int index);
 	CgValue emit_insert(CgValue src, int index);
 	CgValue emit_getelementptr(RegisterName ptr,Type* struct_t,int index, Type* elem_t);
+	CgValue emit_assign(const CgValue& dst, const CgValue& src);
 	CgValue emit_malloc( Type* t,size_t count);
 	CgValue emit_free( CgValue ptr,size_t count);
+	CgValue emit_free_array(Type* t, CgValue count);
 	CgValue emit_malloc_array( Type* t,CgValue count);
 	EmitLoc get_pos(){return ftell(ofp);}
 	void set_pos(EmitLoc loc){fseek(ofp,loc,SEEK_SET);}

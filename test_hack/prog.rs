@@ -26,7 +26,15 @@ fn call_ptr(f:fn(int)->void){
 	f(5);
 }
 
+//adds itself to vtable of x,y for all known y,x;
+//adds double dispatch
 
+fn collide(virtual x, virtual y){
+	
+}
+
+
+h
 fn main(argc:int,argv:**char)->int{
 	x:=0;
 	call_ptr(fn(lambda_arg){printf("hello from closure %d\n",lambda_arg);});

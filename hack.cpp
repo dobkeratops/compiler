@@ -1,7 +1,6 @@
 
 #include "hack.h"
-#include "codegen.h"/*  */	"	pfoos[1].x=10;					\n"
-
+#include "codegen.h"
 #include "repl.h"
 
 const char** g_pp,*g_p;
@@ -557,23 +556,20 @@ ExprStructDef* Node::as_struct_def()const{
 	return nullptr;
 };
 RegisterName Node::get_reg_existing(){ASSERT(reg_name); return reg_name;}
-RegisterName Node::get_reg(int *new_index, bool force_new){
+RegisterName Node::get_reg(CodeGen& cg, bool force_new){
 	// variable might be in a local scope shadowing others, so it still needs a unique name
 	// names are also modified by writes, for llvm SSA
 	//ASSERT(!on_stack);
 	if (!reg_name || force_new){
 		auto old=reg_name;
-		auto ret= get_reg_new(new_index);
+		auto ret= get_reg_new(cg);
 		return ret;
 	} else{
 		return reg_name;
 	}
 }
-RegisterName Node::get_reg_new(int* new_index) {
-	char rname[256];
-	const char* s=getString(name);
-	sprintf(rname, "r%d%s",(*new_index)++,isSymbolStart(s[0])?s:"rfv");
-	return this->reg_name=g_Names.get_index(rname,0,0);
+RegisterName Node::get_reg_new(CodeGen& cg) {
+	return this->reg_name=cg.next_reg(name);
 }
 void verify(const Type* a){
 	if (a){
@@ -2760,13 +2756,13 @@ struct Lexer {
 	enum {MAX_DEPTH=32};
 	SrcPos	bracket_pos[MAX_DEPTH];
 	int		bracket[MAX_DEPTH];
-	const char* buffer,*tok_start,*tok_end,*prev_start,*line_start;
+	const char* buffer=0,*tok_start=0,*tok_end=0,*prev_start=0,*line_start=0;
 	Name curr_tok;int typaram_depth=0;
 #ifdef WATCH_TOK
 	char watch_tok[64][12];
 #endif
-	bool error_newline;
-	int indent,depth;
+	bool error_newline=false;
+	int indent=0,depth=0;
 	void error(const char* str,...){
 		if(!error_newline){printf("\n");}
 		printf("%s:%d:",filename,pos.line);
@@ -2819,9 +2815,19 @@ struct Lexer {
 		if (*tok_end)
 			tok_end++; // step past last quote.
 	}
+	bool is_comment(const char* c){
+		if (*c && c[0]=='/'){if(c[1]=='/') return true;} return false;
+	}
 	void skip_whitespace(){
 		bool newline=false;
-		while (isWhitespace(*tok_end)&&*tok_end) {
+		while ((isWhitespace(*tok_end) || is_comment(tok_end))&&*tok_end) {
+			if (is_comment(tok_end)){
+				// skip comment
+				tok_end+=2;
+				while (*tok_end!='\n' && *tok_end){
+					tok_end++;
+				}
+			}
 			if (*tok_end=='\n') {pos.line++;line_start=tok_end; typaram_depth=0;indent=0;newline=true;}
 			if (newline)indent++;
 			pos.col=tok_end-line_start;
@@ -4249,6 +4255,72 @@ const char* g_TestProg2=
 /*54*/ "	struct FooStruct{x:int,y:int};		\n"
 ;
 
+char g_TestHello[]= //
+"fn main(argc:int,argv:**char)->int{\n"
+"fv:=Foo{vx=13,vy=14,vz=15};\n"
+" u=:Union[int,float];\n"
+" setv(&u,0.0);\n"
+" setv(&u,0);\n"
+"	xs=:array[int,512];\n"
+"q:=xs[1]; p1:=&xs[1];\n"
+"	xs[2]=000;\n"
+"	xs[2]+=400;\n"
+"	*p1=30;\n"
+"z:=5;\n"
+"y:=xs[1]+z+xs[2];\n"
+"x:=0;\n"
+"	something_foo(&fv,&fv);\n"
+"	for i:=0,j:=0; i<10; i+=1,j+=10 {\n"
+"		x+=i;\n"
+"		printf(\"i,j=%d,%d,x=%d\\n\",i,j,x);\n"
+"	}else{\n"
+"		printf(\"loop exit fine\\n\");\n"
+"	}\n"
+"		something_foo(&fv);\n"
+"		something(&fv);\n"
+"		take_closure(|x|{printf(\"closure says %d %d\\n\",x,y);})\n"
+"		\n"
+"		x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};\n"
+"		printf(\"yada yada yada\\n\");\n"
+"		printf(\"\\nHello World %d\n\", y );\n"
+"		0\n"
+"		}\n"
+"fn lerp(a,b,f)->float{(b-a)*f+a};\n"
+"fn foo(a:*char)->void;\n"
+"fn printf(s:str,...)->int;\n"
+"struct Foo {\n"
+"vx:int, vy:int, vz:int\n"
+"}\n"
+"fn something_foo(f:&Foo){\n"
+"	printf(\"f.x= %d\\n\", f.vx);\n"
+"}\n"
+"fn something_foo(f:&Foo,x:&Foo){\n"
+"	printf(\"something_foo with 2 args overloaded\\n\");\n"
+"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx,f.vy,f.vz);\n"
+"}\n"
+"fn something(f:&Foo){\n"
+"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx, f.vy, f.vz);\n"
+"}\n"
+"fn something(f:float){\n"
+"}\n"
+"fn something(f:float,x){\n"
+"}\n"
+"fn take_closure(funcp:(int)->void){\n"
+"	funcp(10);\n"
+"}\n"
+"struct Union[X,Y]{\n"
+"tag:int,\n"
+"x:X,y:Y,\n"
+"};\n"
+"fn setv[X,Y](u:&Union[X,Y],x:Y)->void{\n"
+" printf(\"setv Y\\n\");\n"
+"}\n"
+"fn setv[X,Y](u:&Union[X,Y],x:X)->void{\n"
+" printf(\"setv X\\n\");\n"
+"}\n"
+;
+
+
 void filename_change_ext(char* dst,const char* src,const char* new_ext){
 	strcpy(dst,src);
 	char* s=dst;
@@ -4368,14 +4440,18 @@ Option g_Options[]={
 	{0,0,0,0}
 };
 void dump_help(){
+	printf("embryonic C++/Rust hybrid language\n");
 	for (auto opt=g_Options;opt->name;opt++){
 		printf("%c - %s\n",opt->name,opt->help);
 	}
 }
 
 void run_tests(){
+	/// TODO , actually verify these produced the right output!
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret9=compile_source(g_TestHello,"g_TestHello","test9.ll",B_DEFS| B_TYPES|B_RUN);
+
 	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
 	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);

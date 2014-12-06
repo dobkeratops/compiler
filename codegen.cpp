@@ -389,19 +389,9 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 			return CgValue(reg,type,0,field_index);
 		}
 		else {
-			auto sd=this->type->deref_all()->struct_def;
-			if (!field_type)
-				field_type=sd->get_elem_type(field_index);//fields[field_index]->type();
-			auto areg=cg.next_reg();
-			cg.emit_ins_begin(areg, "getelementptr   inbounds  ");
-			cg.emit_type_operand(*this);
 			auto numptr=this->type->num_pointers()+(this->addr?1:0);
 			ASSERT(numptr==1);
-			cg.emit_i32_lit(0);
-			
-			cg.emit_i32_lit(field_index);
-			cg.emit_ins_end();
-			return CgValue(0,field_type,areg);
+			return cg.emit_getelementref(*this,0,field_index);
 		}
 	}
 	CgValue index(RegisterName index){ // calculates & returns adress
@@ -409,6 +399,29 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	}
 };
 
+CgValue CodeGen::emit_getelementref(const CgValue &src, Name n){
+	return emit_getelementref(src, 0, src.type->deref_all()->struct_def->get_elem_index(n));
+}
+
+CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index){
+
+	auto numptr=src.type->num_pointers()+(src.addr?1:0);
+	ASSERT(numptr==1);
+	
+	auto sd=src.type->deref_all()->struct_def;
+	auto field_type=sd->get_elem_type(field_index);//fields[field_index]->type();
+	auto areg=this->next_reg();
+	this->emit_ins_begin(areg, "getelementptr inbounds  ");
+	this->emit_type_operand(src);
+	this->emit_i32_lit(0);
+	
+	this->emit_i32_lit(field_index);
+	this->emit_ins_end();
+	return CgValue(0,field_type,areg);
+}
+CgValue CodeGen::emit_assign(const CgValue& dst, const CgValue& src){
+	return dst.store(*this, src.load(*this));
+}
 CgValue CodeGen::emit_literal(ExprLiteral *lit){
 	auto outr=this->next_reg();
 	if (lit->type()->name==INT){
@@ -434,7 +447,6 @@ CgValue CodeGen::emit_literal(ExprLiteral *lit){
 	}
 	emit_ins_end();
 	return CgValue(outr,lit->type());
-	
 }
 
 
@@ -659,14 +671,21 @@ CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname,  CgValue 
 CgValue CodeGen::emit_instruction_reg_i32(Name opname,Type* type,  Name outname,CgValue src1,int imm_val){
 	ASSERT(type!=0);
 	auto r1=src1.load(*this);
+	ASSERT(r1.type->is_int());
 	auto dstr=next_reg();
- 
+
 	emit_ins_begin_sub();
 	emit_instruction_sub(opname,type,dstr,src1);
 	emit_comma();
 	emit_txt("%d",imm_val);
 	emit_ins_end();
 	return CgValue(dstr,type);
+}
+RegisterName CodeGen::next_reg(Name name){
+	char rname[256];
+	const char* s=getString(name);
+	sprintf(rname, "r%d%s",this->m_next_reg++,isSymbolStart(s[0])?s:"rfv");
+	return getStringIndex(rname);
 }
 
 void dump_locals(Scope* s){
@@ -702,7 +721,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 }
 
 CgValue CodeGen::emit_alloca_type(Expr* holder, Type* t) {
-	RegisterName r= holder?holder->get_reg(&m_next_reg, false):next_reg();
+	RegisterName r= holder?holder->get_reg(*this, false):next_reg();
 	emit_ins_begin(r,"alloca"); emit_type(t,false);
 	emit_txt(", align %zu", t->alignment());
 	emit_ins_end();
@@ -721,7 +740,7 @@ void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 		auto vt=v->expect_type();
 		if (v->capture_in)
 			continue; // no local emited if its in the capture
-		auto r= v->get_reg(&cg.m_next_reg, true);
+		auto r= v->get_reg(cg, true);
 		if (vt->is_struct() || v->keep_on_stack()) {
 			cg.emit_alloca_type(v, vt);
 			v->reg_is_addr=true;
@@ -739,9 +758,7 @@ void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 		}
 	}
 }
-Name gen_label(const char* s, int index){
-	char tmp[256];sprintf(tmp,"%s%d",s,index); return getStringIndex(tmp);
-}
+
 void CodeGen::emit_label(Name l){
 	emit_txt("%s:\n",str(l));
 }
@@ -757,6 +774,12 @@ void CodeGen::emit_branch(CgValue cond, Name label_then, Name label_else){
 	emit_ins_end();
 }
 
+Name CodeGen::gen_label(const char* label,int index){
+	auto i=index?index:this->m_next_reg++;
+	char tmp[256];sprintf(tmp,"%s%d",label,i);
+	return getStringIndex(tmp);
+}
+
 CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
 	auto curr_fn=cg.curr_fn;
@@ -765,24 +788,24 @@ CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 	RegisterName outname=cg.next_reg();
 	auto condition=ifn->cond->compile(cg,sc);
 	int index=cg.m_next_reg++;
-	auto label_if=gen_label("if",index);
-	auto label_endif=gen_label("endif",index);
+	auto label_if=cg.gen_label("if",index);
+	auto label_endif=cg.gen_label("endif",index);
 	if (ifn->else_block){
-		auto label_else=gen_label("else",index);
+		auto label_else=cg.gen_label("else",index);
 		cg.emit_branch(condition,label_if,label_else);
 		cg.emit_label(label_if);
 		auto if_result=ifn->body->compile(cg,sc);
-		if_result.load(cg,0);
+		if_result=if_result.load(cg,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_else);
 		auto else_result=ifn->else_block->compile(cg,sc);
-		else_result.load(cg,0);
+		else_result=else_result.load(cg,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		// phi node picks result, conditional assignment
 		if (if_result.is_valid() && else_result.is_valid()){
 			cg.emit_ins_begin(outname,"phi");
-			cg.emit_type(if_result.type, if_result.is_addr());
+			cg.emit_type(if_result);
 			cg.emit_separator("");
 			cg.emit_phi_reg_label(if_result.reg,label_if);
 			cg.emit_phi_reg_label(else_result.reg,label_else);
@@ -838,11 +861,10 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	auto curr_fn=cg.curr_fn;
 	auto sc=nf->scope;
 	// write the initializer block first; it sets up variables initial state
-	auto ofp=cg.ofp;
 	int index=cg.m_next_reg++;
-	
+
 	auto retval=CgValue();
-	auto l_init=gen_label("init",index);
+	auto l_init=cg.gen_label("init",index);
 	cg.emit_branch(l_init);
 	cg.emit_label(l_init);
 	auto init=nf->init->compile(cg,sc);
@@ -865,10 +887,10 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 		//todo: can we allocate regnames in the AST? find last-write?
 		phi_vars.push_back(phi);
 	}
-	auto l_for=gen_label("cond",index);
-	auto l_body=gen_label("body",index);
-	auto l_else=gen_label("else",index);
-	auto l_endfor=gen_label("endfor",index);
+	auto l_for=cg.gen_label("cond",index);
+	auto l_body=cg.gen_label("body",index);
+	auto l_else=cg.gen_label("else",index);
+	auto l_endfor=cg.gen_label("endfor",index);
 	cg.emit_branch(l_for);
 	cg.emit_label(l_for);
 	auto phipos=cg.get_pos();
@@ -995,7 +1017,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* 
 	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
 	
 	auto ret_type=e->type();
-	auto dst=(ret_type->name!=VOID)?e->get_reg_new(&cg.m_next_reg):0;
+	auto dst=(ret_type->name!=VOID)?e->get_reg_new(cg):0;
 	
 	auto l_emit_arg_list=[&](Type* rect,RegisterName receiver){
 		cg.emit_args_begin();
@@ -1293,7 +1315,7 @@ void CodeGen::emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode){
 		cg.emit_type(a->type(),false);//was a->is_complex. confusion here over pass by ref/val. we think fn sigs should be 1:1. but raw struct type should  be pass by val? will we have to copy struct val?
 		if (mode==EmitDefinition){
 			auto var=scope->get_or_create_scope_variable(a,a->name, VkArg);
-			var->get_reg(&cg.m_next_reg, false);
+			var->get_reg(cg, false);
 			cg.emit_reg(var->reg_name);
 		}
 	}
@@ -1398,7 +1420,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 	if (fn_node->fn_type->name==CLOSURE){
 		auto cp=fn_node->my_capture;
 		if (cp){
-			cp->reg_name=cp->get_reg_new(&cg.m_next_reg);
+			cp->reg_name=cp->get_reg_new(cg);
 			cp->reg_name =cg.emit_cast_reg(getStringIndex("__env_i8ptr"), cg.i8ptr(),cp->type()).reg;
 		}
 	}

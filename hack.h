@@ -112,6 +112,8 @@ T verify_cast(U src){auto p=dynamic_cast<T>(src);ASSERT(p);return p;}
 void newline(int depth);
 
 template<class T,class Y> T* isa(const Y& src){ return dynamic_cast<T>(src);}
+template<class T> T& orelse(T& a, T& b){if ((bool)a)return a; else return b;}
+template<class T> void next(T*& n){if (n) n=n->next;}
 
 #define PRECEDENCE 0xff
 #define PREFIX 0x100
@@ -325,8 +327,8 @@ public:
 	Node* clone_if()const				{ if(this) return this->clone();else return nullptr;}
 	void dump_if(int d)const			{if (this) this->dump(d);}
 	virtual void clear_reg()			{reg_name=0;};
-	RegisterName get_reg(int* new_index, bool force_new);
-	RegisterName get_reg_new(int* new_index);
+	RegisterName get_reg(CodeGen& cg, bool force_new);
+	RegisterName get_reg_new(CodeGen& cg);
 	RegisterName get_reg_named(Name baseName, int* new_index, bool force_new);
 	RegisterName get_reg_named_new(Name baseName, int* new_index);
 	RegisterName get_reg_existing();
@@ -363,6 +365,7 @@ public:
 	// abstract interface to 'struct-like' entities;
 	virtual Type* get_elem_type(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name get_elem_name(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
+	virtual int get_elem_index(Name name){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return -1;}
 	virtual int get_elem_count()const{return 0;}
 	virtual size_t alignment()const {return 16;} // unless you know more..
 	virtual ~Node(){
@@ -874,6 +877,8 @@ struct ExprStructDef: ExprDef {
 	CgValue compile(CodeGen& cg, Scope* sc);
 	Type*			get_elem_type(int i){return this->fields[i]->type();}
 	Name			get_elem_name(int i){return this->fields[i]->name;}
+	int 			get_elem_index(Name name){int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
+
 	int				get_elem_count(){return this->fields.size();}
 };
 
@@ -1006,6 +1011,7 @@ struct ExprIdent :Expr{
 
 struct TypeParamXlat{
 	const vector<TypeParam*>& typeparams; const vector<Type*>& given_types;
+	TypeParamXlat();
 	TypeParamXlat(	const vector<TypeParam*>& t, const vector<Type*>& g):typeparams(t),given_types(g){}
 	bool typeparams_all_set()const{
 		for (int i=0; i<given_types.size(); i++) {
