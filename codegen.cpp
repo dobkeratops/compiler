@@ -2,7 +2,11 @@
 
 // TODO: properly abstract llvm instruction generation to move to llvm api.
 inline void dbprintf_mangle(const char*,...){}
-
+#if DEBUG>=2
+#define dbprintf_vcall dbprintf
+#else
+inline void dbprintf_vcall(const char*,...){}
+#endif
 
 void CodeGen::emit_struct_name(RegisterName dst ){emit_reg(dst);}
 Name next_reg_name(int *next_reg_index){
@@ -401,7 +405,8 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 };
 
 CgValue CodeGen::emit_getelementref(const CgValue &src, Name n){
-	return emit_getelementref(src, 0, src.type->deref_all()->struct_def->get_elem_index(n));
+	auto i=src.type->deref_all()->struct_def->get_elem_index(n);
+	return emit_getelementref(src, 0, i);
 }
 
 CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index){
@@ -467,6 +472,18 @@ CgValue CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
 	emit_ins_end();
 	return CgValue(0,type,addr);
 }
+CgValue CodeGen::emit_store_global(CgValue dst,Name globalvar){
+	auto r=next_reg();
+	ASSERT(dst.addr && "store requires a reference destination");
+	emit_ins_begin_name("store");
+	emit_type(dst.type,0);
+	emit_global(globalvar);
+	emit_type_operand(dst);
+	emit_txt(", align 8");
+	emit_ins_end();
+	return dst;
+}
+
 
 
 CgValue Node::compile_if(CodeGen& cg, Scope* sc){
@@ -1077,7 +1094,7 @@ Type* CodeGen::i8ptr(){
 	return this->m_i8ptr;
 }
 
-CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* e){
+CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiver, ExprBlock* e){
 	// [3.1]evaluate arguments
 	vector<CgValue> l_args;
 	
@@ -1107,11 +1124,11 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* 
 	auto ret_type=e->type();
 	auto dst=(ret_type->name!=VOID)?e->get_reg_new(cg):0;
 	
-	auto l_emit_arg_list=[&](Type* rect,RegisterName receiver){
+	auto l_emit_arg_list=[&](Type* envt,RegisterName envr){
 		cg.emit_args_begin();
-		if(rect && receiver){
-			cg.emit_type(rect);
-			cg.emit_reg(receiver);
+		if(envt && envr){
+			cg.emit_type(envt);
+			cg.emit_reg(envr);
 		}
 		for (auto a: l_args){
 			cg.emit_type_operand(a);
@@ -1121,15 +1138,52 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* 
 	
 	//[3.3] make the call..
 	if (e->call_expr->is_function_name()) {
-		//[3.3.1] Direct Call
-		cg.emit_ins_begin(dst,"call");
-		cg.emit_function_type(call_fn);/// TODO NOTE we need this until we handle elipsis
-		cg.emit_global(call_fn->get_mangled_name());
-		l_emit_arg_list(0,0);
-		cg.emit_ins_end();
-		
+		auto fn_name=e->call_expr->name;
+		ExprStructDef* vts=nullptr;
+		ArgDef* vtable_fn=nullptr;
+		CgValue vtable;
+		if (receiver) {
+			// lookup types to see if we have a vcall.
+			dbprintf_vcall("receiver: %s %s .%s\n",str(receiver->name),str(receiver->type()->name), str(e->call_expr->name));
+			ASSERT(recvp.type->is_pointer() && "haven't got auto-ref yet for receiver in a.foo(b) style call\n");
+			receiver->dump(-1); newline(0);
+			auto vtf=recvp.type->get_struct()->try_find_field(getStringIndex("__vtable_ptr"));
+			dbprintf_vcall("vtbl=%p\n",vtf);
+			if (vtf) {
+				vts=vtf->type()->get_struct();
+				dbprintf_vcall("vtable struct=%p\n",vts);
+			}
+		}
+		if (vts) {
+			dbprintf_vcall("looks like a vcall %s\n",vts, str(vts->name));
+			vtable_fn=vts->try_find_field(fn_name);
+		}
+		if (vtable_fn) {
+			// we have a vcall, so now emit it..
+			vtable_fn->dump(0);
+			// load the vtable
+			auto recvv=recvp.load(cg);
+			auto vtblref=cg.emit_getelementref(recvv, getStringIndex("__vtable_ptr"));
+			auto vtbl=vtblref.load(cg);
+			//load the fnptr
+			auto fn_ptr=cg.emit_getelementref(vtbl,fn_name).load(cg);
+			cg.emit_ins_begin(dst,"call");
+//			cg.emit_function_type(vtable_fn->type());
+			cg.emit_type_operand(fn_ptr);
+//			l_emit_arg_list(recvv.type,recvv.reg);//addr?recv.addr:recv.reg);
+			l_emit_arg_list(0,0);
+			cg.emit_ins_end();
+
+		} else {
+			//[3.3.1] Direct Call
+			cg.emit_ins_begin(dst,"call");
+			cg.emit_function_type(call_fn);/// TODO NOTE we need this until we handle elipsis
+			cg.emit_global(call_fn->get_mangled_name());
+			l_emit_arg_list(0,0);
+			cg.emit_ins_end();
+		}
 	} else {
-		//[3.3.2] Indirect Call... Function Pointer
+		//[3.3.2] Indirect Call... Function Object
 		auto fn_obj = e->call_expr->compile(cg, sc);
 		indirect_call=fn_obj.load(cg).reg;
 		if (fn_obj.type->is_closure()){
@@ -1141,7 +1195,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,Expr* receiver, ExprBlock* 
 			cg.emit_reg(indirect_call_f);
 			l_emit_arg_list(cg.i8ptr(),envptr);
 			cg.emit_ins_end();
-		} else{
+		}else{
 			//[.2] ..Raw Function Pointer
 			cg.emit_ins_begin(dst,"call");
 			cg.emit_function_type(e->call_expr->type());
@@ -1188,7 +1242,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		}
 		else{
 			// compile method call
-			return compile_function_call(cg,sc,e->lhs,e->rhs->as_block());
+			return compile_function_call(cg,sc,e->lhs->compile(cg,sc),e->lhs,e->rhs->as_block());
 		}
 	}
 	else if (e->lhs && e->rhs){
@@ -1239,6 +1293,11 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			if (auto b=rhs->as_block()){
 				if (b->is_struct_initializer()){
 					auto reg=cg.emit_malloc(this->type(),1);
+					auto st=b->call_expr->type()->get_struct();
+					if (st->vtable){
+						auto vtref=cg.emit_getelementref(reg, getStringIndex("__vtable_ptr"));
+						cg.emit_store_global(vtref, st->vtable_name );
+					}
 					return b->compile_sub(cg,sc,reg.reg);
 				} else if (b->is_subscript()){ // new Foo[5] makes 5 foos; [5,6,7] is like new int[3],(fill..)
 					if (b->argls.size()==1){
@@ -1336,9 +1395,9 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		cg.emit_ins_end();
 		return CgValue(0,n->type(),dstreg);
 	}
-	//[3] FUNCTION CALL
+	//[3] FUNCTION CALL (no receiver)
 	else if (e->is_function_call()){
-		return compile_function_call(cg,sc,nullptr,e);
+		return compile_function_call(cg,sc,CgValue(),nullptr,e);
 	}
 	return CgValue();
 }

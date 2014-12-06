@@ -1,8 +1,14 @@
-debug: hack foo
+run: hack foo
 	./hack hello.rpp -tr
 
 hack: foo hack.cpp codegen.cpp repl.cpp hack.h codegen.h repl.h
 	g++ hack.cpp repl.cpp codegen.cpp -o hack -std=c++1y -g3 -DDEBUG
+
+#debug mode peppered with debug prints for everything
+debug: foo hack.cpp codegen.cpp repl.cpp hack.h codegen.h repl.h
+	g++ hack.cpp repl.cpp codegen.cpp -o hack -std=c++1y -g3 -DDEBUG=3
+	./hack
+
 
 test_llvm: hack
 	./hack 
