@@ -1052,7 +1052,9 @@ CgValue emit_for_llvm(CodeGen& cg, ExprFor* e_for, Expr* e_init,Expr* e_cond, Ex
 	cg.emit_branch(l_for);
 	cg.emit_label(l_else);
 	retval=e_else_block->compile_if(cg,sc);
-	result_ref.store(cg,retval);
+	if (retval.is_valid()){
+		result_ref.store(cg,retval);
+	}
 	cg.emit_branch(l_endfor);
 	cg.emit_label(l_endfor);
 	// now write the phi-nodes.

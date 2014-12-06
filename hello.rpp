@@ -132,14 +132,18 @@ fn main(argc:int,argv:**char)->int{
 
     // C-like for loops minus parens, compulsory {}
     // handles simple cases without needing a whole iterator library..
+	// enhanced with expression syntax: break <expr> , else {expr}
 
-	for i:=0,j:=0; i<10; i+=1,j+=10 {
+	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		x+=i;
 		printf("i,j=%d,%d,x=%d\n",i,j,x);
+		if i==5{break 55}
 	}else{
         // for..else block called if no 'break'
-		printf("loop exit fine\n");  
+		printf("loop exit fine\n"); 
+		44
 	}
+	printf("loop return value = %d\n",value);
     something_foo(&fv);
 	something(&fv);
 

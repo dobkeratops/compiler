@@ -2128,8 +2128,16 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			// break expression..
 			rhs->resolve(sc,desired,flags);
 			auto loop = sc->current_loop();
-			if (!loop && flags&R_FINAL) {
-				error(this,"break without loop");
+			if (flags & R_FINAL){
+				if (!loop && flags&R_FINAL) {
+					error(this,"break without loop");
+				}
+				if (rhs && !loop->else_block){
+					error(this,"break <expression> requires else block with alternate return expression, same type.");
+				}
+				if (loop->else_block){
+					propogate_type(flags,(Node*)this,rhs->type_ref(),loop->else_block->type_ref());
+				}
 			}
 			propogate_type(flags,(Node*)this, rhs->type_ref(),loop->type_ref());
 			propogate_type(flags,(Node*)this,this->type_ref(),this->rhs->type_ref());
@@ -4215,8 +4223,8 @@ ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 		propogate_type(flags,this, this->type_ref(), else_block->type_ref());
 
 #if DEBUG >2
-		this->body->type()->dump_if();
-		this->else_block->type()->dump_if();
+		this->body->type()->dump_if(0);
+		this->else_block->type()->dump_if(0);
 		this->type()->dump_if();
 #endif
 		return propogate_type(flags,this, this->type_ref(), this->body->type_ref());

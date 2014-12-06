@@ -11,7 +11,8 @@ I dont have a name yet hence 'hack'..
 
 Currently supports:-
 
-- C operators, functions, structs,if-else, for loops
+- C operators, functions, structs,if-else, 
+- C for loops+ break/else expression
 - Forward+Reverse Type Inference
 - stack-based closures
 - function overloading
