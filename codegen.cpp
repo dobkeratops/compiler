@@ -131,7 +131,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	// TODO: this should be a tagged-union?
 	// these values aren't persistent so it doesn't matter too much.
 	RegisterName reg;
-	int elem;     // if its a struct-in-reg
+	int elem=-1;     // if its a struct-in-reg
 	Type* type;
 	RegisterName addr;
 	Node*	val;		// which AST node it corresponds to
@@ -158,7 +158,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
 //	bool is_fn()const{return reg==0 && val==0 && type->name==FN && val!=0 && val->as_fn_def()!=0;}
 	bool is_struct_elem()const{return elem>=0;}
-	bool is_valid()const{return val!=0||reg!=0;}
+	bool is_valid()const{if (val) if (val->type()->name==VOID) return false;return val!=0||reg!=0||addr!=0;}
 	bool is_literal()const{return dynamic_cast<ExprLiteral*>(val)!=0;}
 	bool is_reg()const { return reg!=0;}
 	bool is_any()const{return is_literal()||is_reg();}
@@ -194,6 +194,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	}
 	
 	CgValue load(CodeGen& cg,Type* result_type=0) const{
+		//if (!this->is_valid()) return CgValue();
 		auto ofp=cg.ofp;
 		if (elem>=0){
 			// todo: why not 'addr' aswell?
@@ -424,17 +425,18 @@ CgValue CodeGen::emit_assign(const CgValue& dst, const CgValue& src){
 }
 CgValue CodeGen::emit_literal(ExprLiteral *lit){
 	auto outr=this->next_reg();
-	if (lit->type()->name==INT){
+	auto ltn=lit->type()->name;
+	if (ltn==INT){
 		emit_ins_begin(outr,"or");
 		emit_i32_lit(0);
 		emit_comma();
 		emit_txt("%d",lit->u.val_int);
-	} else if(lit->type()->name==FLOAT){
+	} else if(ltn==FLOAT){
 		// todo, i guess we're goint to have t make a global constants table
 		emit_ins_begin(outr,"fadd");
 		emit_txt("float 0.0, ");
 		emit_txt(" 0x%x00000000",lit->u.val_int);
-	} else if (lit->type()->name==STR){
+	} else if (ltn==STR){
 		emit_ins_begin(outr,"getelementptr inbounds");
 		emit_comma();
 		emit_txt("[%d x i8]* @%s",lit->llvm_strlen, getString(lit->name));
@@ -442,8 +444,13 @@ CgValue CodeGen::emit_literal(ExprLiteral *lit){
 		emit_i32_lit(0);
 		emit_i32_lit(0);
 		ASSERT(lit->llvm_strlen);
+	}
+	else if (ltn==VOID){
+		return CgValue();
 	} else {
+		lit->type()->dump_if(-1);
 		error(lit,"literal type not handled yet");
+		error_end(lit);
 	}
 	emit_ins_end();
 	return CgValue(outr,lit->type());
@@ -795,11 +802,11 @@ CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 		cg.emit_branch(condition,label_if,label_else);
 		cg.emit_label(label_if);
 		auto if_result=ifn->body->compile(cg,sc);
-		if_result=if_result.load(cg,0);
+		if (if_result.is_valid())if_result=if_result.load(cg,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_else);
 		auto else_result=ifn->else_block->compile(cg,sc);
-		else_result=else_result.load(cg,0);
+		if (else_result.is_valid())else_result=else_result.load(cg,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		// phi node picks result, conditional assignment
@@ -815,10 +822,13 @@ CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 		return CgValue(outname,return_type);
 	}
 	else {
+		/// TODO: ensure  if ... else if ... typechecks ok. 
 		cg.emit_branch(condition,label_if,label_endif);
+		cg.emit_label(label_if);
 		auto ifblock=ifn->body->compile(cg,sc);
+		if (ifblock.is_valid()) ifblock=ifblock.load(cg);
+		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
-		// TODO phi node
 		return CgValue();
 	}
 }

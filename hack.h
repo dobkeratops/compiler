@@ -267,7 +267,7 @@ const char* getString(const Name& index);
 void indent(int depth);
 inline const char* str(const Name& n){return getString(n);}
 inline const char* str(int i){return g_Names.index_to_name[i].c_str();}
-void match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite);
+int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite);
 
 struct ResolvedType{
 	// TODO: This is a misfeature;
@@ -340,6 +340,7 @@ public:
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const	{return ;}
 	void find_vars_written_if(Scope*s, set<Variable*>& vars) const{ if(this)this->find_vars_written(s, vars);
 	}
+	void translate_typeparams_if(const TypeParamXlat& tpx){if (this) this->translate_typeparams(tpx);}
 	virtual void translate_typeparams(const TypeParamXlat& tpx){ error(this,"not handled for %s",this->kind_str()); };
 	virtual ExprOp* as_op()const			{error(this,"expected op, found %s:%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name as_name()const {
@@ -359,6 +360,7 @@ public:
 	virtual ExprFor* as_for() {return nullptr;}
 	virtual ExprFnDef* as_fn_def() {return nullptr;}
 	virtual ExprBlock* as_block() {return nullptr;}
+	ExprBlock* as_block() const{return const_cast<Node*>(this)->as_block();}
 	virtual ArgDef* as_arg_def() {return nullptr;}
 	virtual Variable* as_variable() {return nullptr;}
 	ArgDef*			as_field() {return this->as_arg_def();}
@@ -466,6 +468,7 @@ struct Type : Expr{
 	int			num_pointers_and_arrays()const;
 	ExprStructDef*	get_struct() const; // strip away all pointers.
 	bool			eq(const Type* other) const;
+	bool			eq(const Type* other, const TypeParamXlat& xlat )const;
 	void			dump_sub()const;
 	void			dump(int depth)const;
 	static Type*	get_bool() ;
@@ -1021,6 +1024,7 @@ struct TypeParamXlat{
 		return true;
 	}
 	int typeparam_index(const Name& n) const;
+	void dump();
 };
 
 

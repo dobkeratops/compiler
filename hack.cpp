@@ -6,13 +6,15 @@
 const char** g_pp,*g_p;
 const char* g_filename=0;
 
-#if DEBUG>=3
+#if DEBUG>=2
 #define dbprintf_varscope dbprintf
 #define dbprintf_generic dbprintf
 #define dbprintf_lambdas dbprintf
 #define dbprintf_instancing dbprintf
 #define dbprintf_resolve dbprintf
+#define dbprintf_fnmatch dbprintf
 #else
+inline void dbprintf_fnmatch(const char*,...){}
 inline void dbprintf_varscope(const char*,...){}
 inline void dbprintf_generic(const char*,...){}
 inline void dbprintf_lambdas(const char*,...){}
@@ -158,7 +160,9 @@ void info(const Node* n, const char* str="", ... ){
 }
 void error_end(const Node* n){
 	error_newline();
-	if (g_num_errors>0){exit(0);}
+	if (g_num_errors>0){
+		exit(0);
+	}
 }
 
 void error(const Node* n,const Scope* s, const char* str, ... ){
@@ -204,7 +208,9 @@ void error(const Node* n,const Node* n2, const char* str, ... ){
 
 ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
 
-void print_tok(Name n){dbprintf("%s ",getString(n));};
+void print_tok(Name n){
+	dbprintf("%s ",getString(n));
+};
 
 bool g_lisp_mode=false;
 int g_size_of[]={
@@ -476,7 +482,8 @@ void newline(int depth) {
 // it may contain outer level statements.
 
 Type* Node::expect_type() const {
-	if (this->m_type) return m_type;
+	if (this->m_type)
+		return m_type;
 	error((const Node*)this,"%s has no type\n", str(name));
 	return nullptr;
 }
@@ -933,6 +940,43 @@ bool Type::eq(const Type* other) const{
 	if (o || p) return false; // didnt reach both..
 	return true;
 }
+bool Type::eq(const Type* other,const TypeParamXlat& xlat) const{
+	if ((!this) && (!other)) return true;
+	// if its' auto[...] match contents; if its plain auto, match anything.
+	if (this &&this->name==AUTO){
+		if (this->sub && other) return this->sub->eq(other->sub,xlat);
+		else return true;
+	}
+	if (other && other->name==AUTO){
+		if (other->sub && this) return other->sub->eq(this->sub,xlat);
+		else return true;
+	}
+	if (!(this && other)) return false;
+	// TODO: might be more subtle than this for HKT
+	auto ti=xlat.typeparam_index(other->name);
+	dbprintf("%s %s\n",str(this->name),str(other->name));
+	if (ti>=0){
+		return this->eq(xlat.given_types[ti],xlat);
+	}
+	ti=xlat.typeparam_index(this->name);
+	if (ti>=0){
+		return xlat.given_types[ti]->eq(other,xlat);
+	}
+
+	if (this->name!=other->name)return false;
+	//	if (!this->sub && other->sub)) return true;
+	if (other->name==STR && type_compare(this,PTR,CHAR)) return true;
+	if (this->name==STR && type_compare(other,PTR,CHAR)) return true;
+	
+	auto p=this->sub,o=other->sub;
+	
+	for (; p && o; p=p->next,o=o->next) {
+		if (!p->eq(o,xlat)) return false;
+	}
+	if (o || p) return false; // didnt reach both..
+	return true;
+}
+
 void Type::dump_sub()const{
 	if (!this) return;
 	if (this->name==TUPLE) {
@@ -944,8 +988,10 @@ void Type::dump_sub()const{
 		dbprintf(")");
 	} else{
 		dbprintf("%s",getString(name));
+#if DEBUG>=2
 		if (this->struct_def)
 			dbprintf(" %s", str(this->struct_def->get_mangled_name()));
+#endif
 		if (sub){
 			dbprintf("[");
 			for (auto t=sub; t; t=t->next){
@@ -1464,12 +1510,23 @@ int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam
 {
 	int ret_score=0;
 //	if (!fn_arg && !given_arg) return 0;
-	if (!fn_arg) return 0;// dont care if trying to match given with 'any'
+	// if either is unspecified.. match anything there
+	// TODO:
+	if (!fn_arg) return 0;
 	if (!given_arg) return 0;
 	
-	for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->next,sub2=sub2->next) {
-		ret_score+=match_typeparams_from_arg(matched_tps,fn_tps, sub1, sub2);
+	dbprintf_fnmatch("%s/s ",str(fn_arg->name),str(given_arg->name));
+	if (fn_arg->sub || given_arg->sub) {
+		dbprintf_fnmatch("[");
+		for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->	next,sub2=sub2->next) {
+			ret_score+=match_typeparams_from_arg(matched_tps,fn_tps, sub1, sub2);
+		}
+		dbprintf_fnmatch("]");
 	}
+	// if either is 'AUTO' - consider it ok.
+	if (fn_arg->name==AUTO) return ret_score;
+	if (given_arg->name==AUTO) return ret_score;
+
 	int ti = get_typeparam_index(fn_tps, fn_arg->name);
 	if (ti>=0) {
 		// Is this a generic typeparam?
@@ -1478,24 +1535,39 @@ int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam
 			return ret_score+1;
 		}
 		else if (!(matched_tps[ti]->eq(given_arg))) {// or we already found it - match..
+//			dbprintf_fnmatch("match %s !=%s\n",str(fn_arg->name),str(given_arg->name));
+			matched_tps[ti]->dump(-1);
+			given_arg->dump(-1);
 			return ret_score-1000;
 		}
 	} else {
 		// concrete types - compare absolutely
-		if (fn_arg->name != given_arg->name)
+		if (fn_arg->name != given_arg->name) {
+			dbprintf_fnmatch("\nmatch %s !=%s\n",str(fn_arg->name),str(given_arg->name));
 			return ret_score-1000;	// mismatch is instant fail for this candidate.
+		}
 	}
 	return ret_score;
 }
 
-void match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite){
+int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite){
 	// TODO: allow the types to feedback in the math
 	matched.resize(f->typeparams.size());
+	int score=0;
+#if DEBUG>=2
+	callsite->dump(0);newline(0);
+#endif
 	for (int i=0; i<f->typeparams.size();i++) matched[i]=0;
 	for (int i=0; i<callsite->argls.size(); i++) {
-		match_typeparams_from_arg(matched,f->typeparams, f->args[i]->type(), callsite->argls[i]->type());
+#if DEBUG>=2
+		f->args[i]->type()->dump_if(-1); newline(0);
+		callsite->argls[i]->type()->dump_if(-1); newline(0);
+#endif
+		score+=match_typeparams_from_arg(matched,f->typeparams, f->args[i]->type(), callsite->argls[i]->type());
 	}
-	match_typeparams_from_arg(matched, f->typeparams, f->ret_type, callsite->type());
+	score+=match_typeparams_from_arg(matched, f->typeparams, f->ret_type, callsite->type());
+	dbprintf_fnmatch("score matching gets %d\n",score);
+	return score;
 }
 
 struct FindFunction {
@@ -1548,6 +1620,7 @@ void FindFunction::insert_candidate(ExprFnDef* f,int score){
 }
 
 void FindFunction::consider_candidate(ExprFnDef* f) {
+	dbprintf_fnmatch("consider candidate %d %s\n",f->pos.line,str(f->name));
 	verify_all();
 	for (auto& c:this->candidates){
 		if (c.f==f)
@@ -1570,9 +1643,11 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	// +1 for any matching arg type regardless of placement,bonus if aprox right order
 	for (int i=0; i<args.size(); i++) {
 		auto at=args[i]->get_type(); if (!at) continue;
-		for (int j=0; j<f->args.size(); j++) {
+		for (int jj=i; jj<f->args.size(); jj++) {
+			auto j=jj%args.size();
 			if (f->args[j]->get_type()->eq(at)){
 				score++;
+				break;
 				if (j==i) score+=10*(1+args.size()-i); // exact positional match scores higher earlier
 			}
 		}
@@ -1611,20 +1686,30 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	}
 	// find generic typeparams..
 	if (f->typeparams.size()){
+		dbprintf_fnmatch("%s score=%d; before typaram match\n",str(f->name),score);
+		dbprintf_fnmatch("callsite:\n");
+		for (int i=0; i<callsite->as_block()->argls.size();i++) {
+			dbprintf_fnmatch("arg %s:",  str(args[i]->name));
+			callsite->as_block()->argls[i]->type()->dump_if(-1);
+			dbprintf_fnmatch("\tvs\t");
+			f->args[i]->type()->dump_if(-1);
+			dbprintf_fnmatch("\n");
+		}
+		dbprintf_fnmatch("\n");
+
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
 			score+=match_typeparams_from_arg(matched_type_params,f->typeparams, f->args[i]->get_type(), args[i]->get_type());
 		}
 		score+=match_typeparams_from_arg(matched_type_params, f->typeparams,f->ret_type,ret_type);
-		auto dbp=[&](){
-			dbprintf("typaram matcher for %s\n",f->name_str());
-			dbprintf("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
-			dbprintf("%s score=%d; matched typeparams{:-\n",str(f->name),score);
-			for (auto i=0; i<f->typeparams.size(); i++){
-				dbprintf("%s = %s;", str(f->typeparams[i]->name), matched_type_params[i]?str(matched_type_params[i]->name):"" );
+		dbprintf_fnmatch("typaram matcher for %s\n",f->name_str());
+		dbprintf_fnmatch("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
+		dbprintf_fnmatch("%s score=%d; matched typeparams{:-\n",str(f->name),score);
+		for (auto i=0; i<f->typeparams.size(); i++){
+			dbprintf_fnmatch("[%d]%s = %s;\n", i,str(f->typeparams[i]->name),matched_type_params[i]?str(matched_type_params[i]->name):"" );
 			}
-			dbprintf("}\n");
-			dbprintf("\n");
-		};
+		dbprintf_fnmatch("}\n");
+		dbprintf_fnmatch("\n");
+		
 	}
 	verify_all();
 	// fill any unmatched with defaults?
@@ -1647,11 +1732,11 @@ void FindFunction::find_fn_sub(Expr* src) {
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
 		if (verbose)
-			dbprintf("consider %s %d for %s %d\n",f->name_str(),f->pos.line, this->callsite->name_str(),this->callsite->pos.line);
+			dbprintf_fnmatch("consider %s %d for %s %d\n",f->name_str(),f->pos.line, this->callsite->name_str(),this->callsite->pos.line);
 		consider_candidate(f);
 		int i=0;
 		for (auto ins=f->instances; ins; ins=ins->next_instance,i++) {
-			if (verbose)dbprintf("%s ins=%d\n",f->name_str(),i);
+			dbprintf_fnmatch("%s ins=%d\n",f->name_str(),i);
 			consider_candidate(ins);
 		}
 	}
@@ -1750,10 +1835,16 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 			error_begin(callsite,(name!=PLACEHOLDER)?"unmatched call %s":"possible calls for %s",str(name));
 			// For the best match, say what you'd have to do to fix, then show all matches
 			if (args.size()<best.f->min_args()){info(best.f,"maybe requires %d args, %d given",best.f->min_args(),args.size());}
+			vector<Type*> callsite_tys;
+			match_typeparams(callsite_tys, best.f,callsite->as_block());
+			auto tpxlat=TypeParamXlat{best.f->typeparams,callsite_tys};
 			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
-				if (!args[i]->type()->eq(best.f->args[i]->type())){
+
+				if (!args[i]->type()->eq(best.f->args[i]->type(),tpxlat)){
 					info(best.f->args[i],"maybe arg %d should be ",i); best.f->args[i]->type()->dump_if(-1);
 					info(args[i],"was given "); args[i]->type()->dump_if(-1);newline(0);
+					tpxlat.dump();
+					info(args[i],"\n");
 					break;
 				}
 			}       
@@ -2936,6 +3027,12 @@ struct Lexer {
 				::error_end(0);
 			}
 		}
+#ifdef DEBUG2
+		if (!strcmp(getString(r),"debugme")){
+			dbprintf("found debug token\n");
+		}
+#endif
+
 		return r;
 	}
 	Name eat_if(Name a, Name b, Name c){
@@ -2954,7 +3051,8 @@ struct Lexer {
 	Name eat_if_placeholder(){if (is_placeholder()){advance_tok(); return PLACEHOLDER;} else return Name();}
 	Name eat_ident() {
 		auto r=eat_tok();
-		if (r<IDENT) {error("expected ident found %s",getString(r));exit(0);}
+		if (r<IDENT) {
+			::error(pos,"expected ident found %s",getString(r));error_end(0);}
 		return r;
 	}
 	int eat_int() {
@@ -3020,11 +3118,11 @@ struct Lexer {
 
 	Name peek_tok(){return curr_tok;}
 	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
-	Name expect(Name t, const char* err=""){ decltype(t) x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s;%s\n",str(t), str(x),err);exit(0);} return x;}
-	Name expect(Name a,Name b, const char* err=""){ auto x=eat_tok();if (!(a==x || b==x)) {error(0,"expected %s or %s found %s;%s\n",str(a),str(b), str(x),err);exit(0);} return x;}
+	Name expect(Name t, const char* err=""){ decltype(t) x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s;%s\n",str(t), str(x),err);} return x;}
+	Name expect(Name a,Name b, const char* err=""){ auto x=eat_tok();if (!(a==x || b==x)) {error(0,"expected %s or %s found %s;%s\n",str(a),str(b), str(x),err);} return x;}
 };
 
-void unexpected(int t){error(0,"unexpected %s\n",getString(t));exit(0);}
+void unexpected(int t){error(0,"unexpected %s\n",getString(t));}
 typedef Lexer TokenStream;
 
 // todo: plugin arch? Node::parse(), dispatch on registered keywords?
@@ -3071,7 +3169,6 @@ void pop_operator_call( vector<SrcOp>& operators,vector<Expr*>& operands) {
 //						printf("\noperands:");dump(operands);
 //						printf("operators");dump(operators);
 		error(0,"\nerror: %s arity %d, %lu operands given\n",str(op.op),arity(op.op),operands.size());
-		exit(0);
 	}
 	p->pos=p->lhs?p->lhs->pos:p->rhs->pos;
 	operands.push_back((Expr*)p);
@@ -3133,7 +3230,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 				break;
 			if (src.eat_if(wrong_close)) {
 				error(0,"unexpected %s, expected %s",getString(close),getString(wrong_close));
-				exit(0);
+				error_end(0);
 			}
 		} else { // single expression mode - we dont consume delimiter.
 			auto peek=src.peek_tok();
@@ -3315,7 +3412,7 @@ ExprLiteral* parse_literal(TokenStream& src) {
 		ln=new ExprLiteral(src.pos,src.eat_string());
 	} else {
 		error(0,"error parsing literal\n");
-		exit(0);
+		error_end(0);
 	}
 	return ln;
 }
@@ -3400,7 +3497,7 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	auto a=new ArgDef(src.pos,argname);
 	a->pos=src.pos;
 	if (src.eat_if(COLON)) {
-		a->type()=parse_type(src,CLOSE_PAREN,a);
+		a->type()=parse_type(src,close,a);
 	}
 	if (src.eat_if(ASSIGN)){
 		a->default_expr=parse_expr(src);
@@ -3500,9 +3597,9 @@ ExprStructDef* parse_enum(TokenStream& src) {
 }
 
 void ExprIf::translate_typeparams(const TypeParamXlat& tpx){
-	this->cond->translate_typeparams(tpx);
-	this->body->translate_typeparams(tpx);
-	this->else_block->translate_typeparams(tpx);
+	this->cond->translate_typeparams_if(tpx);
+	this->body->translate_typeparams_if(tpx);
+	this->else_block->translate_typeparams_if(tpx);
 }
 void ExprFor::translate_typeparams(const TypeParamXlat& tpx)
 {
@@ -3594,6 +3691,15 @@ int TypeParamXlat::typeparam_index(const Name& n) const{
 		if (this->typeparams[i]->name==n) return i;
 	}
 	return -1;
+}
+void TypeParamXlat::dump(){
+	dbprintf("[");
+	for (auto i=0; i<this->typeparams.size();i++){
+		if (i)dbprintf(",");
+		dbprintf("%s=",str(this->typeparams[i]->name));
+		this->given_types[i]->dump_if(-1);
+	}
+	dbprintf("]");
 }
 
 void Type::translate_typeparams(const TypeParamXlat& tpx){
@@ -4012,7 +4118,7 @@ void parse_fn_args_ret(ExprFnDef* fndef,TokenStream& src,int close){
 			fndef->variadic=true; src.eat_tok(); src.expect(CLOSE_PAREN); break;
 		}
 		if (src.eat_if(close)){break;}
-		auto arg=parse_arg(src,CLOSE_PAREN);
+		auto arg=parse_arg(src,close);
 		fndef->args.push_back(arg);
 		src.eat_if(COMMA);
 	}
@@ -4161,7 +4267,14 @@ const char* g_TestBasicSyntax=
 /*14*/ "fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}\n"
 ;
 
-const char* g_TestFlow=
+const char* g_TestIf=
+/*1*/	"fn printf(s:str,...)->int;				\n"
+/*2*/	"fn main(argc:int, argv:**char)->int{	\n"
+		"  x:=if argc<3{4} else{3};\n"
+/*14*/	"	0									\n"
+/*15*/	"}\n"
+;
+const char* g_TestLoop=
 /*1*/	"fn printf(s:str,...)->int;				\n"
 /*2*/	"fn main(argc:int, argv:**char)->int{	\n"
 /*3*/	"	i:=5; b:=argc<9;						\n"
@@ -4256,11 +4369,20 @@ const char* g_TestProg2=
 ;
 
 char g_TestHello[]= //
-"fn main(argc:int,argv:**char)->int{\n"
-"fv:=Foo{vx=13,vy=14,vz=15};\n"
-" u=:Union[int,float];\n"
-" setv(&u,0.0);\n"
-" setv(&u,0);\n"
+"fn printf(s:str,...)->int;\n"
+/*1*/ "fn debugme[X,Y](u:&Union[X,Y], fx:(&X)->void,fy:(&Y)->void){\n"
+/*2*/ " if u.tag==0 { fx(&u.x);}\n"
+/*3*/ " else { fy(&u.y);}\n"
+/*4*/ "}\n"
+/*5*/ "fn main(argc:int,argv:**char)->int{\n"
+/*6*/ "fv:=Foo{vx=13,vy=14,vz=15};\n"
+/*7*/ " u=:Union[int,float];\n"
+/*8*/ " setv(&u,0.0);\n"
+/*9*/ " setv(&u,0);\n"
+/*10*/ " debugme(&u,											\n"
+/*11*/ "	|x:&int|{printf(\"union was set to int\\n\");},	\n"
+/*12*/ "	|x:&float|{printf(\"union was set to float\\n\");}	\n"
+/*13*/ "	);												\n"
 "	xs=:array[int,512];\n"
 "q:=xs[1]; p1:=&xs[1];\n"
 "	xs[2]=000;\n"
@@ -4287,7 +4409,6 @@ char g_TestHello[]= //
 "		}\n"
 "fn lerp(a,b,f)->float{(b-a)*f+a};\n"
 "fn foo(a:*char)->void;\n"
-"fn printf(s:str,...)->int;\n"
 "struct Foo {\n"
 "vx:int, vy:int, vz:int\n"
 "}\n"
@@ -4456,12 +4577,13 @@ void run_tests(){
 	/// TODO , actually verify these produced the right output!
 	printf("no sources given so running inbuilt tests.\n");
 	printf("typeparam test\n");
+	auto ret10=compile_source(g_TestIf,"g_TestIf","test10.ll",B_TYPES|B_RUN);
+	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);
 	auto ret9=compile_source(g_TestHello,"g_TestHello","test9.ll",B_DEFS| B_TYPES|B_RUN);
 
 	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
 	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
-	auto ret3=compile_source(g_TestFlow,"g_TestFlow","test3.ll",B_TYPES|B_RUN);
 	auto ret2=compile_source(g_TestArray,"g_TestArray","test2.ll",B_TYPES|B_RUN);
 	auto ret0=compile_source(g_TestBasic,"g_TestBasic","test0.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestStruct,"g_TestStruct","test1.ll",B_TYPES|B_RUN);
