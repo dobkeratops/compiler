@@ -1,5 +1,6 @@
 #pragma once
 extern "C" char* gets(char*);
+#include <cstdarg>
 #include <stdio.h>
 #include <iostream>
 #include <vector>
