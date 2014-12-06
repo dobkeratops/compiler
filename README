@@ -1,0 +1,65 @@
+LLVM langauge experiment
+
+a subset of C/C++,+sugar, resyntaxed like Rust. compiler implemented in C++.
+
+see 'hello.rpp' example source.
+
+Currently supports:-
+
+- C operators, functions, structs,if-else, for loops
+- Forward+Reverse Type Inference
+- stack-based closures
+- function overloading
+- templates
+
+Very early days, the compiler is a few weeks old.
+
+Long Term Goals:-
+
+- C++ resyntaxed
+- open-world polymorphism
+- Rust inspired
+- a subset should make a passable embedded dynamic language
+- features for parallelism, GPGPU programming
+
+This could all probably be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these goals.
+
+In detail:-
+
+[1] Resyntax a significant subset of C++, in the spirit of SPECS; 
+  - should be possible to non-destructively translate a subset back & forth.
+  - allow use with established C++ libraries & sourcebases
+  - could be considered a 'dialect' rather than a 'language'.
+  - self host by translating own source.
+
+[2] Additional features inspired by Rust & other languages:
+ - 2 way inference
+ - expression oriented syntax.
+ - ADTs (possibly implement as sugar for dynamic_cast<>)
+ - optional trait bounds on templates?
+ - rust-like trait-objects
+ - maybe aim to compile a subset of Rust programs,
+   - ... if we can reconcile Rust ideas with C++ semantics.
+
+
+[3] Additional features inspired by other languages:
+ - 100% Open World design - freefunctoins/UFCS/Extention methods
+   - gather into interfaces adhoc, or sort by function into switch dispatch
+ - use any parameter as 'this'/vtable (no syntax changes to rearrange code)
+ - whole-program forward inference
+ - reflection
+ - possibly multimethods (automate double-dispatch?)
+
+[3] enhance template engine to replace macro usecases.
+ - eg 'ident' parameters, more?
+
+[4] a subset should make a passable dynamic language
+  - a single language to handle the C++&embedded Lua usecase. 
+  - hence the desire for whole-program inference
+    - (recover Rusts old RefCount ptr sigils '@' pointers)
+
+[5] features aimed at parallel,GPGPU/shader programming 
+  - eg compile the same code on GPU or CPU for debugging, streamline boilerplate.
+  - want intrinsic float4 type with .xyz member swizzle
+  - recover rusts' "do" notation for internal iterators
+
