@@ -77,6 +77,7 @@ fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 }
 
 fn main(argc:int,argv:**char)->int{
+    printf("example program ./hello.rpp compiled & run by default makefile\n");
     // LHS=:RHS initializes empty var with given type Union<int,float> 
     //its a hack till we have let u:Union<int,float>.
     // inspiration from rust is to avoid un-init vars altogether using expression syntax.
