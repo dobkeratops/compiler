@@ -1,5 +1,5 @@
 run: hack
-	./hack hello.rpp -tr
+	./hack example.rs -tr
 
 SRC = main.cpp ast.cpp compiler.cpp  lexer.cpp parser.cpp codegen.cpp codegen_llvm.cpp run_test.cpp  repl.cpp
 HEADER = main.h ast.h compiler.h codegen.h lexer.h parser.h run_test.h  repl.h
@@ -7,7 +7,7 @@ hack: $(SRC) $(HEADER) foo
 	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG
 
 debug: hack
-	./hack hello.rpp -tr
+	./hack example.rs -tr
 
 # 'DEBUG=3' switches on verbose debug trace , 
 # dumps of intermediate state during resolving

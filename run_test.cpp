@@ -29,7 +29,7 @@ const char* g_TestMemberFn=
 /*20*/	"		\n"
 /*20*/  "}														\n";
 const char* g_TestClosure=
-/*1*/ 	"fn printf(s:str,...)->int;  							\n"
+/*1*/ 	"fn\"C\" printf(s:str,...)->int;  							\n"
 /*10*/	"fn take_closure(pfunc:(int)->void){ pfunc(5);}\n"
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	y:=11;z:=12;w:=0; y+=10;w+=7;			\n"
@@ -39,7 +39,7 @@ const char* g_TestClosure=
 /*20*/  "}														\n";
 ;
 const char* g_TestAlloc=
-/*1*/ 	"fn printf(s:str,...)->int;  			\n"
+/*1*/ 	"fn\"C\" printf(s:str,...)->int;  			\n"
 /*2*/	"struct Foo{x:int,y:int};				\n"
 /*3*/	"fn main(argc:int, argv:**char)->int{	\n"
 /*4*/	"	pfoo:= new Foo{4,5};			\n"
@@ -92,14 +92,14 @@ const char* g_TestBasicSyntax=
 ;
 
 const char* g_TestIf=
-/*1*/	"fn printf(s:str,...)->int;				\n"
+/*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
 /*2*/	"fn main(argc:int, argv:**char)->int{	\n"
 "  x:=if argc<3{4} else{3};\n"
 /*14*/	"	0									\n"
 /*15*/	"}\n"
 ;
 const char* g_TestLoop=
-/*1*/	"fn printf(s:str,...)->int;				\n"
+/*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
 /*2*/	"fn main(argc:int, argv:**char)->int{	\n"
 /*3*/	"	i:=5; b:=argc<9;						\n"
 /*4*/	"	v:=for i:=0,j:=0;		\n"
@@ -158,7 +158,7 @@ const char* g_TestTyparamInference=
 /*12*/ "	setv(&u,10.0)	;						\n"
 /*13*/ " printf(\"u.tag=%d\\n\",u.tag);				\n"
 /*14*/ "	0}										\n"
-/*15*/ "fn printf(s:str,...)->int;					\n"
+/*15*/ "fn\"C\" printf(s:str,...)->int;					\n"
 ;
 const char* g_TestProg2=
 
@@ -221,7 +221,7 @@ const char* g_TestProg2=
 ;
 
 char g_TestPolyLambda[]= //
-"fn printf(s:str,...)->int;\n"
+"fn\"C\" printf(s:str,...)->int;\n"
 /*1*/ "fn debugme[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{\n"
 /*2*/ " if u.tag==0 { fx(&u.x)}\n"
 /*3*/ " else { fy(&u.y)}\n"
