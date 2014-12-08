@@ -527,17 +527,20 @@ struct ExprOp: public Expr{
 	int		get_operator() const			{return index(this->name);}
 	int		get_op_name() const				{return index(this->name);}
 	bool	is_undefined()const				{return (lhs?lhs->is_undefined():false)||(rhs?rhs->is_undefined():false);}
-	virtual ExprOp*		as_op()const		{return const_cast<ExprOp*>(this);}
-	virtual const char* kind_str()const		{return"operator";}
-	virtual void translate_typeparams(const TypeParamXlat& tpx);
-	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
-	virtual void find_vars_written(Scope* s, set<Variable*>& vars) const;
-	virtual void verify();
+	ExprOp*		as_op()const override		{return const_cast<ExprOp*>(this);}
+	const char* kind_str()const override		{return"operator";}
+	void 		translate_typeparams(const TypeParamXlat& tpx) override;
+	ResolvedType resolve(Scope* scope, const Type* desired,int flags) override;
+	void 		find_vars_written(Scope* s, set<Variable*>& vars) const override;
+	void 		verify() override;
 	CgValue compile(CodeGen& cg, Scope* sc);
 };
 
+/// 'ExpressionBlock' - expr( expr,expr,...)
+///- any group of expressions
+///  eg functioncall +args, compound statement, struct-initializer, subscript expr (like fncall)
 struct ExprBlock :public ExprScopeBlock{
-	// used for operators, function calls and compound statement
+	// used for function calls and compound statement
 	// started out with lisp-like (op operands..) where a compound statement is just (do ....)
 	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
 	// the similarity between all is
@@ -560,7 +563,7 @@ struct ExprBlock :public ExprScopeBlock{
 	bool	is_anon_struct()const			{return this->is_struct_initializer() && !this->call_expr;}
 	bool	is_array_initializer()const		{return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
 	void	set_delim(int delim)			{delimiter=delim;}
-	virtual ExprBlock* is_subscript()const	{if (this->bracket_type==OPEN_BRACKET && call_expr) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
+	ExprBlock* is_subscript()const override	{if (this->bracket_type==OPEN_BRACKET && call_expr) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
 	ExprFnDef*	get_fn_call()const;
 	Name		get_fn_name() const;
 	void		dump(int depth) const;
@@ -568,14 +571,14 @@ struct ExprBlock :public ExprScopeBlock{
 	bool		is_undefined()const;
 	void		create_anon_struct_initializer();
 	void			clear_reg()				{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); reg_name=0;};
-	virtual const char* kind_str()const		{return"block";}
-	ExprBlock* 		as_block() override 	{return this;}
-	virtual Scope*	get_scope()				{return this->scope;}
+	const char* kind_str() const  override		{return"block";}
+	ExprBlock* 		as_block()  override 	{return this;}
+	Scope*	get_scope()	override			{return this->scope;}
 	void 			verify();
 	CgValue 		compile(CodeGen& cg, Scope* sc);
 	CgValue 		compile_sub(CodeGen& cg, Scope* sc,RegisterName dst);
-	virtual void	translate_typeparams(const TypeParamXlat& tpx);
-	virtual void	find_vars_written(Scope* s,set<Variable*>& vars )const;
+	void	translate_typeparams(const TypeParamXlat& tpx) override;
+	void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 	ResolvedType	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
 };
@@ -588,6 +591,9 @@ struct Pattern : Node {
 	Node*	clone()const;
 	
 };
+
+/// rust match, doesn't work yet - unlikely to support everything it does
+/// C++ featureset extended with 2way inference can emulate match like boost variant but improved.
 struct ExprMatch : Expr {
 	const char*		kind_str() const {return "match";}
 	CgValue			compile(CodeGen& cg, Scope* sc);
@@ -625,11 +631,14 @@ extern bool g_lisp_mode;
 struct ExprFlow:Expr{	// control flow statements
 };
 
-struct ExprDef :Expr{	// any that is a definition
+/// any node that is a Definition, maintains list of refs
+struct ExprDef :Expr{
 	Node*	refs=0;
 	void	remove_ref(Node* ref);
 	virtual ExprStructDef* member_of()const{return nullptr;}
 };
+
+/// Capture of local variables for a lambda function
 struct Capture : ExprDef{
 	Name			tyname(){return name;};
 	ExprFnDef*		capture_from=0;
@@ -639,7 +648,7 @@ struct Capture : ExprDef{
 	ExprStructDef*	the_struct=0;
 	void 			coalesce_with(Capture* other);
 	ExprStructDef*	get_struct();
-	virtual Node* clone() const{
+	Node* clone() const override{
 		dbprintf("warning todo template instatntiation of captures\n");
 		return nullptr;
 	};
@@ -677,7 +686,9 @@ struct ExprLiteral : ExprDef {
 	void translate_typeparams(const TypeParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc);
 };
-/// 'ArgDef' used for function arguments and struct-fields. both have ident:type=<default expr>
+
+/// 'ArgDef' used for function arguments and struct-fields.
+/// both have ident:type=<default expr>
 struct ArgDef :ExprDef{
 	Scope*	owner=0;
 	void set_owner(Scope* s){
@@ -698,7 +709,7 @@ struct ArgDef :ExprDef{
 	Name	as_name()const				{return this->name;}
 	size_t	size()const					{return this->type()?this->type()->size():0;}
 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
-	virtual void	translate_typeparams(const TypeParamXlat& tpx);
+	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	ResolvedType	resolve(Scope* sc, const Type* desired, int flags) override;
 	ArgDef*	as_arg_def()		{return this;}
 };
@@ -716,20 +727,6 @@ struct NamedItems {		// everything defined under a name
 	NamedItems(Name n,Scope* s){  name=n; owner=s;next=0;fn_defs=0;structs=0;types=0;}
 };
 
-/*
-struct Call {
-	// linked through caller->callee & scope block
-	Scope* scope;
-	Call* next_of_scope;
-
-	Expr*	caller;
-	Call* next_of_caller;             
-
-	ExprFnDef*	callee;
-	Call* next_of_fn;
-	Call(){scope=0;next_of_scope=0;caller=0;next_of_caller=0;callee=0;next_of_fn=0;}
-};
-*/
 enum VarKind{VkArg,Local,Global};
 struct Variable : ExprDef{
 	bool		on_stack=true;
@@ -752,7 +749,10 @@ struct Variable : ExprDef{
 	Variable*	as_variable() {return this;}
 	void dump(int depth) const;
 };
-// scopes are created when resolving
+/// 'Scope'-
+/// scopes are created when resolving, held on some node types.
+/// blocks which can add locals or named entities have them.
+
 struct Scope {
 	ExprDef*	owner_fn=0;	// TODO: eliminate this, owner might be FnDef,Struct,ExprBlock
 	Expr*		node=0;
@@ -828,6 +828,7 @@ public:
 };
 
 ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block,Scope* scope,const Type* desired);
+/// if-else expression.
 struct ExprIf :  ExprFlow {
 	Scope*	scope=0;
 	Expr*	cond=0;
@@ -843,16 +844,16 @@ struct ExprIf :  ExprFlow {
 		if (else_block)if (else_block->is_undefined()) return true;
 		return false;
 	}
-	virtual const char*	kind_str()const		{return"if";}
+	const char*	kind_str()const	override	{return"if";}
 	ResolvedType	resolve(Scope* scope,const Type*,int flags) ;
-	virtual void	find_vars_written(Scope* s,set<Variable*>& vars ) const;
-	virtual void	translate_typeparams(const TypeParamXlat& tpx);
+	void	find_vars_written(Scope* s,set<Variable*>& vars ) const override;
+	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	CgValue			compile(CodeGen& cg, Scope* sc);
-	virtual Scope*	get_scope()				{return this->scope;}
+	Scope*	get_scope()	override			{return this->scope;}
 };
 
-/// For-Else loop. Currrently the lowest level loop construct
-/// TODO implement 'while..break' and make 'ForElse' desugar as while.
+/// For-Else loop/expression. Currrently the lowest level loop construct
+/// implement other styles of loop as specializations that omit init, incr etc.
 struct ExprFor :  ExprFlow {
 	Expr* pattern=0;
 	Expr* init=0;
@@ -866,22 +867,23 @@ struct ExprFor :  ExprFlow {
 	bool is_c_for()const			{return !pattern;}
 	bool is_for_in()const			{return pattern && cond==0 && incr==0;}
 	~ExprFor(){}
-	virtual const char* kind_str()const		{return"for";}
+	const char* kind_str()const	 override	{return"for";}
 	bool is_undefined()const				{return (pattern&&pattern->is_undefined())||(init &&init->is_undefined())||(cond&&cond->is_undefined())||(incr&&incr->is_undefined())||(body&& body->is_undefined())||(else_block&&else_block->is_undefined());}
 	Expr* find_next_break_expr(Expr* prev=0);
 	Node* clone()const;
-	virtual Scope*		get_scope()			{return this->scope;}
-	virtual ExprFor*	as_for()			{return this;}
+	Scope*		get_scope()override			{return this->scope;}
+	ExprFor*	as_for()override			{return this;}
 	ResolvedType resolve(Scope* scope,const Type*,int flags);
-	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const;
-	virtual void translate_typeparams(const TypeParamXlat& tpx);
+	void find_vars_written(Scope* s,set<Variable*>& vars ) const override;
+	void translate_typeparams(const TypeParamXlat& tpx) override;
 	CgValue compile(CodeGen& cg, Scope* sc);
 };
 
 struct Call;
 struct FnName;
 
-/// 'StructDef' should handle everything for struct,trait,impl,vtable class,mod/namespace,
+/// 'StructDef' handles everything for struct,trait,impl,vtable class,mod/namespace,
+///
 /// specific types derived expose a subset as language sugar.
 /// a transpiler should handle conversions eg spot a 'struct' with pure virtuals -> trait, etc.
 
@@ -925,7 +927,7 @@ struct ExprStructDef: ExprDef {
 		}
 		return -1;
 	}
-	virtual const char* kind_str()const	{return"struct";}
+	const char* kind_str()const	override{return"struct";}
 	ExprStructDef* next_of_name;
 	Name	get_mangled_name()const;
 	bool	has_vtable()const{return this->virtual_functions.size()!=0||(this->inherits?this->inherits->has_vtable():0);}
@@ -937,7 +939,7 @@ struct ExprStructDef: ExprDef {
 	Node*			clone()const;
 	Node*			clone_sub(ExprStructDef* into) const;
 	void			inherit_from(Scope* sc, Type* base);
-	virtual void	translate_typeparams(const TypeParamXlat& tpx);
+	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 	void			roll_vtable();
@@ -965,14 +967,14 @@ inline Type* Type::get_elem(int index){
 	return s;
 }
 
-/// TODO - seperate 'core types(C like)' from 'sugar types' (eg enum,trait..)
-/// a Rust Enum is sugar for a struct holding values & derived variant structs.
+/// TODO a Rust Enum is sugar for a struct holding constants & derived variant structs.
 struct EnumDef  : ExprStructDef {
 //	void dump(int depth)const;
 //	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	Node* clone()const;
 	const char* kind_str()const{return "enum";}
 	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
+	CgValue compile(CodeGen& cg, Scope* sc); // different compile behaviour: discriminant+opaque
 };
 
 /// a rust 'Trait' is a struct with only virtual functions
@@ -1016,8 +1018,6 @@ struct  ExprFnDef : ExprDef {
 	Type* ret_type=0;
 	Type* fn_type=0;				// eg (args)->return
 	bool resolved;
-	// Partial specialization may add one specific parameter...
-	// calls from un-instanced routines can partially implement?
 
 	Name mangled_name=0;
 	vector<TypeParam*> typeparams;
@@ -1029,7 +1029,7 @@ struct  ExprFnDef : ExprDef {
 	// eg a::foo(b,c)  has 3 args, 1 receiver.   foo(a,b,c) has 3 args, 0 receiver.
 	// its possible closures can desugar as methods?
 	// makes UFCS easier; in matcher, simply prioritize candidates with correct count
-	int num_receivers=0;
+	char num_receivers=0;
 	Expr* body=0;
 	ExprFnDef(){};
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
@@ -1042,11 +1042,11 @@ struct  ExprFnDef : ExprDef {
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
 	int		min_args()					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}
-	int 	max_args()					{return variadic?1024:args.size();}
+	int 	max_args()					{return variadic?1024:(int)args.size();}
 	bool	is_enough_args(int x)		{if (x<min_args()) return false; if (x> args.size() && !variadic) return false; return true;}
 	bool	too_many_args(int x)		{return x>max_args();}
-	virtual const char*	kind_str()const	{return"fn";}
-	virtual ExprFnDef* as_fn_def() {return this;}
+	const char*		kind_str()const	override{return"fn";}
+	ExprFnDef* 		as_fn_def() override{return this;}
 	Node*			instanced_by()const{if (this->instance_of){return this->refs;}else return nullptr;}
 	void			dump(int ind) const;
 	void			dump_sub(int ind,Name prefix) const;
@@ -1054,9 +1054,9 @@ struct  ExprFnDef : ExprDef {
 	ResolvedType	resolve(Scope* scope,const Type* desired,int flags);
 	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);
 	Capture*		get_or_create_capture(ExprFnDef* src);
-	virtual void	translate_typeparams(const TypeParamXlat& tpx);
-	Expr*		get_return_value() const;
-	Type*		return_type()const {
+	void			translate_typeparams(const TypeParamXlat& tpx)override;
+	Expr*			get_return_value() const;
+	Type*				return_type()const {
 		auto x=get_return_value(); if (auto xt=x->get_type()) return xt;
 		return this->ret_type;
 	}
@@ -1084,9 +1084,6 @@ struct StructInitializer{ // named initializer
 	ResolvedType resolve(const Type* desiredType,int flags);
 };
 
-// What details did we miss ?
-// Codegen is a big issue.
-
 struct ExprIdent :Expr{
 	// TODO: definition pointer. (ptr to field,function,struct,typedef..)
 	void		dump(int depth) const;
@@ -1095,16 +1092,16 @@ struct ExprIdent :Expr{
 	ExprIdent(const char* s,const char* e)	{name=Name(s,e);set_type(nullptr);}
 	ExprIdent(Name n,SrcPos sp)				{pos=sp;name=n;set_type(nullptr);}
 	ExprIdent(SrcPos sp,Name n)				{pos=sp;name=n;set_type(nullptr);}
-	virtual const char*	kind_str()const		{return"ident";}
-	virtual Name	as_name()const			{return name;};
-	ExprIdent*		as_ident()				{return this;}
-	virtual bool	is_function_name()const	{return dynamic_cast<ExprFnDef*>(this->def)!=0;}
-	virtual bool	is_variable_name()const	{return dynamic_cast<Variable*>(this->def)!=0;}
-	bool			is_placeholder()const	{return name==PLACEHOLDER;}
-	bool			is_undefined()const		{return is_placeholder();}
-	virtual void	translate_typeparams(const TypeParamXlat& tpx);
-	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
-	CgValue			compile(CodeGen&cg, Scope* sc);
+	const char*	kind_str()const override		{return"ident";}
+	Name		as_name()const override			{return name;};
+	ExprIdent*	as_ident()						{return this;}
+	bool		is_function_name()const	override{return dynamic_cast<ExprFnDef*>(this->def)!=0;}
+	bool		is_variable_name()const	override{return dynamic_cast<Variable*>(this->def)!=0;}
+	bool		is_placeholder()const			{return name==PLACEHOLDER;}
+	bool		is_undefined()const				{return is_placeholder();}
+	void		translate_typeparams(const TypeParamXlat& tpx) override;
+	CgValue		compile(CodeGen&cg, Scope* sc) override;
+	ResolvedType	resolve(Scope* scope, const Type* desired,int flags) override;
 };
 
 struct TypeParamXlat{

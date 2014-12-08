@@ -297,8 +297,6 @@ char g_TestPolyLambda[]= //
 
 void run_tests(){
 	/// TODO , actually verify these produced the right output!
-	printf("no sources given so running inbuilt tests.\n");
-	printf("typeparam test\n");
 	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);
 	auto ret11=compile_source(g_TestVTable,"g_TestVTable","test11.ll", B_TYPES|B_RUN);
 	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_TYPES|B_RUN);

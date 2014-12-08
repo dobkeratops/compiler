@@ -5,7 +5,8 @@ a subset of C/C++,+more, resyntaxed like Rust.  implemented in C++.
 '$ make' to compile & run inbuilt test
 '$ ./hack hello.rpp' to compile & run example program.
 see 'hello.rpp' example source; 
-'hack.cpp' is contains main & bulk of the compiler
+
+'compiler.h' descibes the ast, 'compiler.cpp' is contains bulk of the resolving
 
 I dont have a name yet hence 'hack'..
 
@@ -13,10 +14,10 @@ Currently supports:-
 
 - C operators, functions, structs,if-else, 
 - 'everything is an expression' syntax
-- C for loops + break/else expressions
+- function overloading
 - Forward+Reverse Type Inference within functions, forward between functions
 - stack-based closures
-- function overloading
+- C for loops + break/else expressions
 - templated functions & structs
 - new/delete ,and a ordered or named struct field initializer
 - limited vtables & single inheritance

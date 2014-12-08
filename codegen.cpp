@@ -1697,6 +1697,10 @@ int translate_llvm_string_constant(char* dst, int size, const char* src){
 	return len;
 }
 
+CgValue EnumDef::compile(CodeGen &cg, Scope *sc){
+	return CgValue();
+}
+
 CgValue compile_match_arm(CodeGen& cg, Scope* sc,Expr* match_expr, CgValue match_val, MatchArm* arm){
 	if (!arm->next){
 		// error check. we just ignore condition. error should assert its non exhaustive

@@ -112,6 +112,7 @@ Option g_Options[]={
 	{'r',0,B_RUN|B_EXECUTABLE,"build & run"},
 	{'e',0,B_EXECUTABLE,"compile executable"},
 	{'v',0,B_VERBOSE,"verbose mode"},
+	{'T',0,0,"run inbuilt tests"},
 	{'h',0,0,"help"},
 	{0,0,0,0}
 };
@@ -140,6 +141,7 @@ int main(int argc, const char** argv) {
 		if (a[0]=='-'){
 			for (auto j=1; a[j];j++){
 				if (a[j]=='h') dump_help();
+				if (a[j]=='T') run_tests();
 				for (auto opt=g_Options;opt->name;opt++){
 					if (opt->name==a[j]) {options&=~opt->clear;options|=opt->set;}
 				}
@@ -159,6 +161,7 @@ int main(int argc, const char** argv) {
 	}
 	if (argc<=1) {
 #if DEBUG>=2
+		printf("no sources given so running inbuilt tests.\n");
 		run_tests();
 #else
 		dump_help();
