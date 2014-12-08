@@ -22,7 +22,7 @@ dont have a name yet hence 'hack'..
  * C for loops + break/else expressions
  * templated functions & structs
  * new/delete ,and a ordered or named struct field initializer
- * limited vtables & single inheritance
+ * limited C++-style internal vtables & single inheritance
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 Very early days, the compiler is a few weeks old.
