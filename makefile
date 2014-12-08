@@ -1,18 +1,21 @@
 run: hack foo
 	./hack hello.rpp -tr
 
-hack: foo hack.cpp codegen.cpp repl.cpp hack.h codegen.h repl.h lexer.h parser.h lexer.cpp parser.cpp
-	g++ hack.cpp repl.cpp codegen.cpp lexer.cpp parser.cpp -o hack -std=c++1y -g3 -DDEBUG
+SRC = hack.cpp repl.cpp codegen.cpp lexer.cpp parser.cpp test.cpp main.cpp resolve.cpp ast.cpp
+HEADER = hack.h repl.h codegen.h lexer.h parser.h test.h main.h resolve.h
+hack: $(SRC) $(HEADER)
+	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG
 
-# debug: hack
-# 	./hack hello.rpp -tr
+debug: hack
+	./hack hello.rpp -tr
 
-
-# #debug mode peppered with debug prints for everything
-# debug3: foo hack.cpp codegen.cpp repl.cpp hack.h codegen.h repl.h lexer.h parser.h lexer.cpp parser.cpp
-	g++ hack.cpp repl.cpp codegen.cpp lexer.cpp parser.cpp -o hack -std=c++1y -g3 -DDEBUG=3
+debug3: $(SRC) $(HEADER)
+	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG=3
 	./hack
 
+clean:
+	rm ./hack
+	rm *.o
 
 test_llvm: hack
 	./hack 
