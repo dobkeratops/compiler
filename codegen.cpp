@@ -289,14 +289,10 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 	RegisterName indirect_call=0;
 	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
 	
-	auto ret_type=e->type();
-	auto dst=(ret_type->name!=VOID)?e->get_reg_new(cg):0;
-	
-	auto l_emit_arg_list=[&](Type* envt,RegisterName envr){
+	auto l_emit_arg_list=[&](CgValue env_ptr){
 		cg.emit_args_begin();
-		if(envt && envr){
-			cg.emit_type(envt);
-			cg.emit_reg(envr);
+		if(env_ptr.is_valid()){
+			cg.emit_type_operand(env_ptr);
 		}
 		for (auto a: l_args){
 			cg.emit_type_operand(a);
@@ -312,15 +308,15 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		CgValue vtable;
 		if (receiver) {
 			// lookup types to see if we have a vcall.
-			dbprintf_vcall("receiver: %s %s .%s\n",str(receiver->name),str(receiver->type()->name), str(e->call_expr->name));
 			ASSERT(recvp.type->is_pointer() && "haven't got auto-ref yet for receiver in a.foo(b) style call\n");
-			receiver->dump(-1); newline(0);
+			//receiver->dump(-1); newline(0);
 			auto vtf=recvp.type->get_struct()->try_find_field(getStringIndex("__vtable_ptr"));
-			dbprintf_vcall("vtbl=%p\n",vtf);
 			if (vtf) {
 				vts=vtf->type()->get_struct();
-				dbprintf_vcall("vtable struct=%p\n",vts);
 			}
+			dbprintf_vcall("receiver: %s %s .%s\n",str(receiver->name),str(receiver->type()->name), str(e->call_expr->name));
+			dbprintf_vcall("vtbl=%p\n",vtf);
+			dbprintf_vcall("vtable struct=%p\n",vts);
 		}
 		if (vts) {
 			dbprintf_vcall("looks like a vcall %s\n",vts, str(vts->name));
@@ -329,57 +325,38 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		if (vtable_fn) {
 			// we have a vcall, so now emit it..
 			// load the vtable
-			auto recvv=cg.load(recvp);
-			auto vtblref=cg.emit_getelementref(recvv, getStringIndex("__vtable_ptr"));
-			auto vtbl=cg.load(vtblref);
-			//load the fnptr
-			auto fn_ptr=cg.load(cg.emit_getelementref(vtbl,fn_name));
-			cg.emit_ins_begin(dst,"call");
-//			cg.emit_type_operand(fn_ptr);
-			cg.emit_function_type(fn_ptr.type);
-			cg.emit_reg(fn_ptr.reg);
-
-			l_emit_arg_list(0,0);
-			cg.emit_ins_end();
+			auto vtbl=cg.emit_getelementref(recvp, getStringIndex("__vtable_ptr"));
+			auto function_ptr=cg.emit_getelementval(vtbl,fn_name);
+			cg.emit_call_begin(function_ptr);
+			l_emit_arg_list(CgValue());
+			return cg.emit_call_end();
 
 		} else {
 			//[3.3.1] Direct Call
-			cg.emit_ins_begin(dst,"call");
-			cg.emit_function_type(call_fn);/// TODO NOTE we need this until we handle elipsis
-			cg.emit_global(call_fn->get_mangled_name());
-			l_emit_arg_list(0,0);
-			cg.emit_ins_end();
+			cg.emit_call_begin(CgValue(call_fn));
+			l_emit_arg_list(CgValue());
+			return cg.emit_call_end();
 		}
 	} else {
 		//[3.3.2] Indirect Call... Function Object
 		auto fn_obj = e->call_expr->compile(cg, sc);
-		indirect_call=cg.load(fn_obj).reg;
+		auto call_t=e->call_expr->type();
 		if (fn_obj.type->is_closure()){
 			//[.1] ..call Closure (function,environment*)
-			auto indirect_call_f=cg.emit_extractvalue(cg.next_reg(),fn_obj.type,indirect_call,0);
-			auto envptr=cg.emit_extractvalue(cg.next_reg(),fn_obj.type,indirect_call,1);
-			cg.emit_ins_begin(dst,"call");
-			cg.emit_function_type(e->call_expr->type());
-			cg.emit_reg(indirect_call_f);
-			l_emit_arg_list(cg.i8ptr(),envptr);
-			cg.emit_ins_end();
+			auto fn_ptr=cg.emit_getelementval(fn_obj,0,0,call_t);
+			auto envptr = cg.emit_getelementval(fn_obj,0,1,cg.i8ptr());
+			cg.emit_call_begin(fn_ptr);
+			l_emit_arg_list(envptr);
+			return cg.emit_call_end();
 		}else{
 			//[.2] ..Raw Function Pointer
-			cg.emit_ins_begin(dst,"call");
-			cg.emit_function_type(e->call_expr->type());
-			cg.emit_reg(indirect_call);
-			l_emit_arg_list(0,0);
-			cg.emit_ins_end();
+			cg.emit_call_begin(fn_obj.load(cg));
+			l_emit_arg_list(CgValue());
+			return cg.emit_call_end();
 		}
 	}
-	// [3.3.2] Indirect Call, Closure.
-	
-	
-	if (ret_type && ret_type->name!=VOID) {
-		return CgValue(dst,ret_type);
-	} else{
-		return CgValue();
-	}
+
+	return CgValue();
 }
 
 CgValue	CgValueVoid(){

@@ -1,4 +1,4 @@
-#include "codegen.h"
+ #include "codegen.h"
 /// details of compiling LLVM
 /// CodeGen is planned to be an interface, slot in 'CodeGenLLVM' / 'CodeGenC'
 using std::function;
@@ -123,6 +123,9 @@ void CodeGen::emit_operand(const CgValue& v){
 			ASSERT(v.addr==0 && "check case above, incorrect assumptions")
 			cg.emit_operand_literal(v,lit);
 		}
+		if (auto fn=dynamic_cast<ExprFnDef*>(v.val)) {
+			cg.emit_global(fn->get_mangled_name());
+		}
 		return;
 	} else {
 		cg.emit_txt(" <?CgV?> ");
@@ -191,14 +194,19 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 }
 
 
-CgValue CodeGen::emit_getelementref(const CgValue &src, Name n){
+CgValue CodeGen::emit_getelementref(const CgValue &src, Name n,const Type* t){
 	auto i=src.type->deref_all()->struct_def->get_elem_index(n);
-	return emit_getelementref(src, 0, i);
+	return emit_getelementref(src.load(*this), 0, i,t);
 }
 
-CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index){
+CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,const Type* override_type){
 
 	auto numptr=src.type->num_pointers()+(src.addr?1:0);
+	if (numptr==0){
+		auto ret=next_reg();
+		ASSERT(i0==0);
+		return CgValue(emit_extractvalue(ret, src.type, src.reg, field_index),override_type?override_type:src.type->get_elem_type(field_index));
+	}
 	ASSERT(numptr==1);
 	
 	auto sd=src.type->deref_all()->struct_def;
@@ -279,13 +287,6 @@ CgValue  CodeGen::emit_call(const CgValue& call_expr, const CgValue& arg1)
 CgValue  CodeGen::emit_call(const CgValue& call_expr, const CgValue& arg1, const CgValue& arg2)
 {
 	emit_call_begin(call_expr); emit_type_operand(arg1); emit_type_operand(arg2); return emit_call_end();
-}
-void CodeGen::emit_call_begin(const CgValue& s){
-}
-CgValue CodeGen::emit_call_end(){
-	error(0,"todo"); error_end(0);
-	emit_ins_end();
-	return CgValue();
 }
 
 void CodeGen::emit_type(CgValue& lv) {
@@ -763,7 +764,7 @@ void CodeGen::emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode){
 	else cg.emit_txt("\n");
 	cg.emit_nest_end("");
 }
-void CodeGen::emit_function_type(const Type* t) {
+void CodeGen::emit_function_type(const Type* t,bool variadic_overide) {
 	auto& cg=*this;
 	auto ofp=cg.ofp;
 	auto argtuple=t->sub;
@@ -779,6 +780,7 @@ void CodeGen::emit_function_type(const Type* t) {
 	for (auto arg=argtuple->sub; arg;arg=arg->next){
 		cg.emit_type(arg);
 	}
+	if(variadic_overide) cg.emit_txt(",...");
 	cg.emit_args_end();
 	cg.emit_pointer_end();
 }
@@ -898,6 +900,33 @@ void CodeGen::emit_separator(const char* txt){
 	emit_txt(txt);
 	this->comma=0;
 }
+
+void CodeGen::emit_call_begin(const CgValue& fnr){
+	auto fn=fnr;
+	if (fn.is_addr()){
+		fn=this->load(fn);
+	}
+	auto &cg=*this;
+	auto fnt=fn.type;
+	RegisterName r=0;
+	if(!fnt->fn_return()->is_void()){
+		r=this->next_reg();
+		emit_ins_begin(r, "call");
+	} else
+		emit_ins_begin_name("call");
+	ASSERT(cg.call_depth<(32-1));
+	return_reg[cg.call_depth++]=CgValue(r,fnt->fn_return());
+	bool variadic=false;
+	if (fn.val)if(fn.val->as_fn_def())variadic=fn.val->as_fn_def()->variadic;
+	emit_function_type(fnt, variadic);
+	emit_operand(fn);
+}
+CgValue CodeGen::emit_call_end(){
+	auto &cg=*this;
+	emit_ins_end();
+	return return_reg[--cg.call_depth];
+}
+
 RegisterName  CodeGen::emit_ins_begin(RegisterName reg, const char* op){
 	/// TODO: return 'CgValue' from emit_call_end(), dont take 'RegisterName' param.
 	if (!reg) { emit_ins_begin_name(op);}

@@ -384,7 +384,7 @@ public:
 	ArgDef*			as_field() {return this->as_arg_def();}
 	virtual void verify() {};
 	// abstract interface to 'struct-like' entities;
-	virtual Type* get_elem_type(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
+	virtual Type* get_elem_type(int index){error(this,"tried to get elem on name=%s kind=%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name get_elem_name(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
 	virtual int get_elem_index(Name name){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return -1;}
 	virtual int get_elem_count()const{return 0;}
@@ -498,7 +498,7 @@ struct Type : Expr{
 	bool	is_template()const	{ return sub!=0;}
 	bool	is_function() const	{ return name==FN;}
 	bool	is_closure() const	{ return name==CLOSURE;}
-	Type*	fn_return() const	{ return sub->next;}
+	Type*	fn_return() const	{ if (is_callable()) return sub->next; else return nullptr;}
 	Type*	fn_args() const		{ return sub->sub;} 	void	clear_reg()			{reg_name=0;};
 	bool	is_pointer()const		{return (this && this->name==PTR) || (this->name==REF);}
 	bool	is_void()const			{return !this || this->name==VOID;}

@@ -33,6 +33,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	RegisterName addr;
 	Node*	val;		// which AST node it corresponds to
 	int ofs;
+	explicit CgValue(RegisterName n,const Type* t):reg(n),type(const_cast<Type*>(t)){elem=-1;addr=0;ofs=0;val=0;}
 	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
 	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
 	explicit CgValue(Node* n);
@@ -74,6 +75,8 @@ public:
 	char	comma;
 	int		depth;
 	bool	commas[32];
+	int call_depth=0;
+	CgValue return_reg[32];
 
 	int flow_depth=0;
 	JumpLabel	flow_break_to[32];
@@ -106,7 +109,7 @@ public:
 	//extentions, dont want 'CodeGen' dependant on the AST.
 	void emit_type_reg(const Type* t,bool ref, Name reg);
 	void emit_function_type(ExprFnDef* fn_node);
-	void emit_function_type(const Type* t);
+	void emit_function_type(const Type* t,bool variadic=false);
 	void emit_global(Name n);
 	void emit_fn_cast_global(Name n,const Type* srct,const Type* dstt);
 	void emit_ins_begin_sub();
@@ -137,6 +140,7 @@ public:
 	void emit_operand_literal(const CgValue& cg,const ExprLiteral* lit);
 	CgValue emit_make_literal(ExprLiteral* l);
 	RegisterName	emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index);
+	CgValue	emit_extractvalue(CgValue& src , int index);
 	CgValue emit_store(RegisterName reg, Type* type, RegisterName addr);
 	CgValue 		emit_store_global(CgValue dst, Name globalvar);
 
@@ -163,8 +167,11 @@ public:
 	void emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode);
 	Type* i8ptr();
 	// API refactoring
-	CgValue emit_getelementref(const CgValue& src, int i0, int field_index);
-	CgValue emit_getelementref(const CgValue& src, Name n);
+	CgValue emit_getelementref(const CgValue& src, int i0, int field_index,const Type* elem_t=0);
+	inline CgValue emit_getelementval(const CgValue& src, int i0, int field_index,const Type* elem_t=0);
+	CgValue emit_getelementref(const CgValue& src, Name n,const Type* elem_t=0);
+//	inline CgValue emit_getelementval(const CgValue& src, Name n);
+	inline CgValue emit_getelementval(const CgValue& src, Name n,const Type* elem_t=0);
 	CgValue emit_getelementref(const CgValue& src, const CgValue& index);
 	CgValue emit_loadelement(const CgValue& obj, Name field);
 	CgValue emit_storeelement(const CgValue& obj, Name field,const CgValue& data);
@@ -212,3 +219,10 @@ void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, N
 inline CgValue CgValue::load(CodeGen& cg)const { return cg.load(*this);}
 inline CgValue CgValue::store(CodeGen& cg)const {return cg.store(*this);}
 inline CgValue CgValue::store(CodeGen& cg,const CgValue& src) const{return cg.store(*this,src);}
+inline CgValue CodeGen::emit_getelementval(const CgValue& src, Name n,const Type* t){
+	return emit_getelementref(src, n,t).load(*this);
+}
+inline CgValue CodeGen::emit_getelementval(const CgValue& src, int ar_i,int field_index,const Type* elem_t){
+	return emit_getelementref(src, ar_i, field_index,elem_t).load(*this);
+}
+
