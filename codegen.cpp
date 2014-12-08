@@ -280,13 +280,11 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			error_end(arg);
 			ASSERT(reg.type);
 		}
-		auto r=cg.load(reg,arg->type());
-		l_args.push_back(r);
+		l_args.push_back(cg.load(reg,arg->type()));
 	}
 	
 	//[3.2] evaluate call object..
 	auto call_fn=e->get_fn_call();
-	RegisterName indirect_call=0;
 	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
 	
 	auto l_emit_arg_list=[&](CgValue env_ptr){
@@ -396,11 +394,9 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		auto lhs_v=sc->find_variable_rec(e->lhs->name);
 		auto outname=lhs_v?lhs_v->name:opname;
 		
-		//auto dst=CgValue(n->get_reg(&cg.m_next_reg,false),n->get_type());
-		
 		if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
 			ASSERT(sc->find_scope_variable(e->lhs->name));
-			return lhs_v->on_stack?CgValue(0,lhs_v->type(),lhs_v->reg_name):CgValue(lhs_v->reg_name,lhs_v->type(),0);
+			return  CgValue(lhs_v);
 		}
 		else if(opname==AS) {
 			// if (prim to prim) {do fpext, etc} else..
@@ -513,8 +509,7 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		for (int i=0; i<e->argls.size() && i<si.value.size();i++) {
 			auto rvalue=si.value[i]->compile(cg,sc);
 			auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);
-			auto srcreg = cg.load(rvalue);
-			auto r=dst.store(cg,srcreg);
+			auto r=dst.store(cg,rvalue.load(cg));
 			if (r.type==struct_val.type)
 				struct_val=r; // mutate by insertion
 		}

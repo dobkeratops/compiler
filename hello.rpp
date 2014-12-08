@@ -123,12 +123,13 @@ fn main(argc:int,argv:**char)->int{
 
 	xs=:array[int,512];   // like C++ array<int,512>
 	q:=xs[1]; p1:=&xs[1];
-	xs[2]=000;
+	xs[2]=10;
 	xs[2]+=400;
 	*p1=30;
 	z:=5;
 	y:=xs[1]+z+xs[2];
 	x:=0;
+	printf("test refs to array:%d %d\n",xs[2], *p1);
 
     // C-like for loops minus parens, compulsory {}
     // handles simple cases without needing a whole iterator library..
