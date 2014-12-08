@@ -1,3 +1,3 @@
 #pragma once
-#include "hack.h"
+#include "compiler.h"
 void repl();

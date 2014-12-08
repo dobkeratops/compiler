@@ -22,6 +22,18 @@ extern "C" char* gets(char*);
 #define CRASH
 #endif
 
+
+struct Option{
+	char name;int clear;int set; const char* help;
+};
+extern Option g_Options[];
+void dump_help();
+
+enum COMPILE_FLAGS {
+	B_AST=0x0001,B_DEFS=0x0002,B_GENERICS=0x0004, B_TYPES=0x0008,B_LLVM=0x0010,B_EXECUTABLE=0x0020,B_RUN=0x0040,B_VERBOSE=0x0080
+};
+
+
 typedef int32_t OneBasedIndex;
 
 #define R_FINAL 0x0001
@@ -98,6 +110,9 @@ int arity(Name ntok);
 int is_right_assoc(Name ntok);
 int is_left_assoc(Name ntok);
 bool is_number(Name n);
+Name get_infix_operator(Name tok);
+Name get_prefix_operator(Name tok);
+
 
 int index_of(Name n);
 // todo: seperate Parser.

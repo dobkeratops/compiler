@@ -1,5 +1,5 @@
 #pragma once
-#include "hack.h"
+#include "compiler.h"
 extern const char* g_filename;
 
 // STUPID HEADER FILES STUPID CLASSES

@@ -1,8 +1,8 @@
 run: hack foo
 	./hack hello.rpp -tr
 
-SRC = hack.cpp repl.cpp codegen.cpp lexer.cpp parser.cpp test.cpp main.cpp resolve.cpp ast.cpp
-HEADER = hack.h repl.h codegen.h lexer.h parser.h test.h main.h resolve.h
+SRC = compiler.cpp repl.cpp codegen.cpp lexer.cpp parser.cpp test.cpp  resolve.cpp ast.cpp
+HEADER = compiler.h repl.h codegen.h lexer.h parser.h test.h main.h resolve.h
 hack: $(SRC) $(HEADER)
 	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG
 
