@@ -88,8 +88,15 @@ extern bool is_operator(Name tok);
 extern bool is_ident(Name tok);
 extern bool is_type(Name tok);
 extern void verify(const Type* t);
-
-
+bool is_condition(Name tok);
+bool is_comparison(Name tok);
+bool is_callable(Name tok);
+int operator_flags(Name tok);
+int precedence(Name ntok);
+int is_prefix(Name ntok);
+int arity(Name ntok);
+int is_right_assoc(Name ntok);
+int is_left_assoc(Name ntok);
 bool is_number(Name n);
 
 int index_of(Name n);
@@ -177,6 +184,9 @@ enum Token {
 	IDENT,
 };
 extern CgValue CgValueVoid();
+
+struct NumDenom{int num; int denom;};
+
 
 Name getStringIndex(const char* str,const char* end=0);
 const char* str(int);
