@@ -283,7 +283,8 @@ const char* g_token_str[]={
 	"*?","*!","&?","~[]","[]","&[]", // special pointers
 	",",";",";;",
 	"...","..",
-	"_",
+	"_","",
+	"\"C\"","__vtable_ptr","__env_ptr","__env_i8_ptr",
 	NULL,	
 };
 
@@ -318,6 +319,7 @@ int g_tok_info[]={
 	0,
 	0,0,
 	0, //placeholder
+	0,0,0,0,0
 };
 bool is_ident(Name tok){return tok>=IDENT;}
 bool is_type(Name tok){return tok<T_NUM_TYPES;}
@@ -424,13 +426,13 @@ StringTable::StringTable(const char** initial){
 //		auto tmp=g_token_str[i];
 //		get_index(tmp,tmp+strlen(tmp));
 //	}
-	nextId=IDENT;
-	index_to_name.resize(IDENT);
+	nextId=NUM_STRINGS;
+	index_to_name.resize(NUM_STRINGS);
 	for (int i=0; i<index_to_name.size(); i++) {
 		index_to_name[i]=std::string(g_token_str[i]);
 		names.insert(std::make_pair(index_to_name[i],i));
 	}
-	ASSERT(nextId==IDENT);
+	ASSERT(nextId==NUM_STRINGS);
 }
 int StringTable::get_index(const char* str, const char* end,char flag) {
 	if (!end) end=str+strlen(str);
@@ -3258,8 +3260,7 @@ void ExprStructDef::roll_vtable() {
 	if (this->vtable){
 		this->fields.insert(
 			this->fields.begin(),
-			new ArgDef(pos,getStringIndex("__vtable_ptr"),
-			new Type(PTR,this->vtable)));
+			new ArgDef(pos,__VTABLE_PTR,new Type(PTR,this->vtable)));
 	}
 
 	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??

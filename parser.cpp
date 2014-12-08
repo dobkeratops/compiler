@@ -159,7 +159,6 @@ void parse_fn_body(ExprFnDef* fndef, TokenStream& src){
 		fndef->body = parse_block(src, CLOSE_BRACE, SEMICOLON, nullptr);
 	} else if (tok==SEMICOLON || tok==COMMA || tok==CLOSE_BRACE ){
 		fndef->body=nullptr; // Its' just an extern prototype.
-		fndef->c_linkage=true;
 	} else{  // its' a single-expression functoin, eg lambda.
 		fndef->body=parse_expr(src);
 	}
@@ -168,7 +167,15 @@ void parse_fn_body(ExprFnDef* fndef, TokenStream& src){
 ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner) {
 	auto *fndef=new ExprFnDef(src.pos);
 	// read function name or blank
-	
+
+	if (auto tmp=src.eat_if_string()){
+		if (tmp==EXTERN_C){
+			fndef->c_linkage=true;
+		}else{
+			error(fndef,"unknown_linkage %s",str(tmp));
+		}
+	}
+
 	auto tok=src.eat_tok();
 	if (tok!=OPEN_PAREN) {
 		ASSERT(is_ident(tok));
@@ -378,7 +385,7 @@ ExprLiteral* parse_literal(TokenStream& src) {
 		if (n.denom==1) {ln=new ExprLiteral(src.pos,n.num);}
 		else {ln=new ExprLiteral(src.pos, (float)n.num/(float)n.denom);}
 	} else if (src.is_next_string()) {
-		ln=new ExprLiteral(src.pos,src.eat_string());
+		ln=new ExprLiteral(src.pos,src.eat_string_alloc());
 	} else {
 		error(0,"error parsing literal\n");
 		error_end(0);
@@ -553,7 +560,7 @@ ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
 	return sd;
 }
 
-ExprStructDef* parse_enum(TokenStream& src) {
+EnumDef* parse_enum(TokenStream& src) {
 	auto pos=src.pos;
 	auto tok=src.eat_ident();
 	auto ed=new EnumDef(src.pos,tok);

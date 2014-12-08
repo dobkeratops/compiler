@@ -1,7 +1,7 @@
 // omit function body to declare prototypes for external linking,
 // TODO: distinguish extern "c" from c++ mangle
 
-fn printf(s:str,...)->int;
+fn"C" printf(s:str,...)->int;
 
 // stolen from rust: function syntax 'fn <function name>(args) optional return value {body}
 // however ommitting return value means infer it, not 'void' 

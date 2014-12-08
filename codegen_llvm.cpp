@@ -743,7 +743,7 @@ void CodeGen::emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode){
 	if (fn_node->fn_type->name==CLOSURE){
 		cg.emit_type(cg.i8ptr());
 		if (mode==EmitDefinition){
-			cg.emit_reg(getStringIndex("__env_i8ptr"));
+			cg.emit_reg(__ENV_I8_PTR);
 		}
 	}
 	for (auto a:fn_node->args){

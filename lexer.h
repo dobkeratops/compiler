@@ -51,7 +51,8 @@ struct Lexer {
 	Name eat_if_placeholder();
 	Name eat_ident();
 	int eat_int();
-	const char* eat_string();
+	const char* eat_string_alloc();
+	Name eat_if_string();
 	NumDenom eat_number();
 	float eat_float();
 	bool is_next_number() const;

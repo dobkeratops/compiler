@@ -6,26 +6,26 @@ T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.po
 void dump(vector<Expr*>& v);
 extern Node* g_pRoot;	// temporary hack
 // todo: plugin arch? Node::parse(), dispatch on registered keywords?
-Expr* parse_lisp(TokenStream& src);
-ExprFnDef* parse_fn(TokenStream&src,ExprStructDef* owner);	// eg fn foo()
-ExprFnDef* parse_closure(TokenStream&src);//eg |x|
-ExprFor* parse_for(TokenStream&src);
-ExprIf* parse_if(TokenStream&src);
-TypeDef* parse_typedef(TokenStream&src);
-Type* parse_type(TokenStream& src, int close,Node* owner);
-ExprStructDef* parse_struct(TokenStream& src);
-ExprStructDef* parse_enum(TokenStream& src);
-ExprMatch* parse_match(TokenStream& src);
-ExprLiteral* parse_literal(TokenStream& src);
-ExprOp* parse_flow(TokenStream& src,Name flow);
-ExprMatch* parse_match(TokenStream& src);
-Pattern* parse_pattern(TokenStream& src,int close, int close2);
-Expr* parse_match_arm(TokenStream& src);
-Expr* parse_expr(TokenStream&src);
-ArgDef* parse_arg(TokenStream& src, int close);
-void parse_typeparams(TokenStream& src,vector<TypeParam*>& out);
+ExprBlock*	parse_block(TokenStream& src,int close,int delim, Expr* op);
+Expr*		parse_expr(TokenStream&src);
+Type*		parse_type(TokenStream& src, int close,Node* owner);
+Pattern*	parse_pattern(TokenStream& src,int close, int close2);
+ExprFnDef*	parse_fn(TokenStream&src,ExprStructDef* owner);	// eg fn foo()
+ExprFnDef*	parse_closure(TokenStream&src);//eg |x|{expr..}
+ExprFor*	parse_for(TokenStream&src);
+ExprIf*		parse_if(TokenStream&src);
+TypeDef*	parse_typedef(TokenStream&src);
+ExprMatch*	parse_match(TokenStream& src);
+ExprOp*		parse_flow(TokenStream& src,Name flow);
+ExprMatch*	parse_match(TokenStream& src);
+Expr*		parse_match_arm(TokenStream& src);
+ArgDef*		parse_arg(TokenStream& src, int close);
+void		parse_typeparams(TokenStream& src,vector<TypeParam*>& out);
+ExprStructDef*	parse_struct(TokenStream& src);
+EnumDef*	parse_enum(TokenStream& src);
+TraitDef*	parse_trait(TokenStream& src);
+ExprLiteral*	parse_literal(TokenStream& src);
 
-ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op);
 
 void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
 									vector<SrcOp>& operators,

@@ -6,7 +6,7 @@ extern int compile_source(const char *buffer, const char* filename, const char* 
 // when imported, a module inserts a call to that function.
 // that sets up global stuff for it.
 const char* g_TestMemberFn=
-/*1*/  "fn printf(s:str,...)->int;  							\n"
+/*1*/  "fn\"C\" printf(s:str,...)->int;  							\n"
 /*2*/  "struct Foo{												\n"
 /*3*/  "	q:int,												\n"
 /*4*/  "	fn method()->float{										\n"
@@ -117,7 +117,7 @@ const char* g_TestLoop=
 ;
 
 const char* g_TestVTable=
-/*1*/	"fn printf(s:str,...)->int;				\n"
+/*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
 "struct Foo {									\n"
 "	x:int,y:int,								\n"
 "	virtual foo(){printf(\"hello from Foo.foo x=%d\\n\",x);},		\n"
@@ -172,7 +172,7 @@ const char* g_TestProg2=
 /* 8*/ "}\n"
 /* 9*/ "fn take_fn(pfunc:fn(int)->void){ pfunc(5);}\n"
 /*10*/ "fn take_closure(pfunc:(int)->void){ pfunc(5);}\n"
-/*11*/ "fn printf(s:str,...)->int;\n"
+/*11*/ "fn\"C\" printf(s:str,...)->int;\n"
 /*12*/ "fn foo_bar(x){ printf(\"Hello From generic\\n\"); }      \n"
 /*13*/ "fn foo(x:int){ printf(\"Hello From indirect 	functionpointer call %d\\n\",x); }      \n"
 /*14*/ "fn bar(x:int,y:int,z:int)->int{ printf(\"bar says %d\\n\",x+y+z);0};\n"

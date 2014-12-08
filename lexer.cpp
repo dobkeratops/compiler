@@ -218,7 +218,7 @@ int Lexer::eat_int() {
 	auto nd=eat_number();
 	return nd.num/nd.denom;
 }
-const char* Lexer::eat_string() {
+const char* Lexer::eat_string_alloc() {
 	auto len=(tok_end-tok_start)-2;
 	ASSERT(len>=0);
 	auto ret=(char*)malloc(len+1);
@@ -226,6 +226,15 @@ const char* Lexer::eat_string() {
 	ret[len]=0;
 	advance_tok();
 	return ret;
+}
+Name Lexer::eat_if_string(){
+	if (tok_start[0]=='\"'){
+		// range of the token includes quotes. we just need contents
+		auto r= getStringIndex(tok_start,tok_end);
+		eat_tok();
+		return r;
+	}
+	return 0;
 }
 NumDenom Lexer::eat_number()  {
 	int	val=0;

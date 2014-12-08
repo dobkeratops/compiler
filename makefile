@@ -9,6 +9,8 @@ hack: $(SRC) $(HEADER) foo
 debug: hack
 	./hack hello.rpp -tr
 
+# 'DEBUG=3' switches on verbose debug trace , 
+# dumps of intermediate state during resolving
 debug3: $(SRC) $(HEADER)
 	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG=3
 	./hack

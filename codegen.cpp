@@ -78,6 +78,7 @@ CgValue CgValue::get_elem_index(CodeGen& cg, int field_index,Type *field_type) c
 	}
 }
 CgValue CgValue::index(RegisterName index){ // calculates & returns adress
+	ASSERT(0 && "TODO");
 	return CgValue();
 }
 
@@ -125,7 +126,7 @@ void compile_raw_vtable(CodeGen& cg, ExprStructDef* sd){
 	// raw vtable looks more like what clang spits out, but we want static fields & more metadata
 	cg.emit_txt("@%s = private unnamed_addr",str(sd->vtable_name));
 	cg.emit_ins_begin_name("constant");
-	cg.emit_array_type(cg.i8ptr(), sd->virtual_functions.size());
+	cg.emit_array_type(cg.i8ptr(), (int)sd->virtual_functions.size());
 	/// todo: this is wrong, we should have vtable_index
 	cg.emit_nest_begin("[");
 	for (auto vf:sd->virtual_functions){
@@ -308,7 +309,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			// lookup types to see if we have a vcall.
 			ASSERT(recvp.type->is_pointer() && "haven't got auto-ref yet for receiver in a.foo(b) style call\n");
 			//receiver->dump(-1); newline(0);
-			auto vtf=recvp.type->get_struct()->try_find_field(getStringIndex("__vtable_ptr"));
+			auto vtf=recvp.type->get_struct()->try_find_field(__VTABLE_PTR);
 			if (vtf) {
 				vts=vtf->type()->get_struct();
 			}
@@ -323,7 +324,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		if (vtable_fn) {
 			// we have a vcall, so now emit it..
 			// load the vtable
-			auto vtbl=cg.emit_getelementref(recvp, getStringIndex("__vtable_ptr"));
+			auto vtbl=cg.emit_getelementref(recvp,__VTABLE_PTR);
 			auto function_ptr=cg.emit_getelementval(vtbl,fn_name);
 			cg.emit_call_begin(function_ptr);
 			l_emit_arg_list(CgValue());
@@ -436,7 +437,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 					auto reg=cg.emit_malloc(this->type(),1);
 					auto st=b->call_expr->type()->get_struct();
 					if (st->vtable){
-						auto vtref=cg.emit_getelementref(reg, getStringIndex("__vtable_ptr"));
+						auto vtref=cg.emit_getelementref(reg,__VTABLE_PTR);
 						cg.emit_store_global(vtref, st->vtable_name );
 					}
 					return b->compile_sub(cg,sc,reg.reg);
@@ -511,8 +512,10 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 			auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);
 			auto r=dst.store(cg,rvalue.load(cg));
 			if (r.type==struct_val.type)
-				struct_val=r; // mutate by insertion
+				struct_val=r; // mutate by insertion if its 'in-reg'
 		}
+		// TODO: CLARIFY WHY... alloca returns 'ref' whilst struct-initializer gives a 'ptr'?
+		// eliminate this, its' messy. 'force_dst' should be a CgValue.
 		if (force_dst) { struct_val.reg=force_dst; struct_val.addr=0;}
 		return struct_val;
 	}
@@ -523,7 +526,7 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		auto index=ar->argls[0]->compile(cg,sc);
 		auto array_type=expr.type;
 		auto inner_type=array_type->sub;
-		auto dstreg=cg.next_reg();//ar->get_reg(&cg.m_next_reg,false);
+		auto dstreg=cg.next_reg();
 		if (!n->reg_name){n->reg_name=expr.reg;}
 
 		/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
@@ -531,6 +534,7 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 			expr=cg.load(expr);
 		}
 		auto index_reg=cg.load(index);
+		// TODO: abstract this into codegen -getelementref(CgValue ptr,CgValue index);
 		cg.emit_ins_begin(dstreg,"getelementptr inbounds");
 		cg.emit_type_reg(array_type,expr.addr!=0,expr.addr?expr.addr:expr.reg);//!expr.reg);
 		if (array_type->deref_all()->name==ARRAY){
@@ -651,7 +655,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 		auto cp=fn_node->my_capture;
 		if (cp){
 			cp->reg_name=cp->get_reg_new(cg);
-			cp->reg_name =cg.emit_cast_reg(getStringIndex("__env_i8ptr"), cg.i8ptr(),cp->type()).reg;
+			cp->reg_name =cg.emit_cast_reg(__ENV_I8_PTR, cg.i8ptr(),cp->type()).reg;
 		}
 	}
 
