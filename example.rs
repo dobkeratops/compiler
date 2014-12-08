@@ -1,6 +1,5 @@
-// omit function body to declare prototypes for external linking,
-// TODO: distinguish extern "c" from c++ mangle
-
+// Uses .rs extention for syntax highlighting, but this is not Rust source.
+// omit function body to declare prototypes for external linking,"C" linkage optional`
 fn"C" printf(s:str,...)->int;
 
 // stolen from rust: function syntax 'fn <function name>(args) optional return value {body}
@@ -62,6 +61,8 @@ fn something(f:float,x){
 // can handle getting a 'tag' from methods matching type X or Y
 // we will probably introduce propper tagged unions like Rust, 
 // but also want to use improved inference/templates to implement 'variant' better.
+// using rawpointers we could implement any tag/data scheme
+// (TODO: max[sizeof[X],sizeof[Y]] operators in template engine..)
 
 struct Union[X,Y]{
  tag:int,
@@ -86,9 +87,15 @@ fn map[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{
 
 fn main(argc:int,argv:**char)->int{
     printf("example program ./hello.rpp compiled & run by default makefile\n");
-    // LHS=:RHS initializes empty var with given type Union<int,float> 
+
+    // closure syntax stolen from Rust |args,..|{body...}
+	x:=0;
+    take_closure(|x|{printf("closure says x=%d y=%d\n",x,y);})
+
+    // LHS=:RHS is temporary syntax to init empty var with given type Union<int,float> 
     //its a hack till we have let u:Union<int,float>.
     // inspiration from rust is to avoid un-init vars altogether using expression syntax.
+	// the plan is to stick with rust 'let..', but keep 'go' like := in addition.
     u=:Union[int,float]; 
 
     // calls to templated functions
@@ -103,37 +110,10 @@ fn main(argc:int,argv:**char)->int{
     );
     printf("map union returned z=%d\n",z);
 
-
-	// C++ equivalent doesn't seem to match template args.
-    // as far as i've tried it. (of course C++ can do it other ways)
-    // eg
-	//template<typename X,typename Y>
-	//struct  Union1{int tag;X x; Y y;};
-	//template<typename X,typename Y,typename R>
-		//R match_union(Union1<X,Y>& u, std::function<R(X)>& fx, std::function<R(Y)>& fy){
-	//	if (u.tag==0) return fx(u.x);
-	//	return fy(u.y);
-	//}
-	//Union1<int,float> u;
-	//match_union(u, [](int x){printf("int\n");return 0;},[](float x){printf("float\n");return 1;});
-
-
-
-
-
-	xs=:array[int,512];   // like C++ array<int,512>
-	q:=xs[1]; p1:=&xs[1];
-	xs[2]=10;
-	xs[2]+=400;
-	*p1=30;
-	z:=5;
-	y:=xs[1]+z+xs[2];
-	x:=0;
-	printf("test refs to array:%d %d\n",xs[2], *p1);
-
     // C-like for loops minus parens, compulsory {}
     // handles simple cases without needing a whole iterator library..
 	// enhanced with expression syntax: break <expr> , else {expr}
+	// type of 'value' is infered from the break/else expressions
 
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		x+=i;
@@ -146,8 +126,30 @@ fn main(argc:int,argv:**char)->int{
 	}
 	printf("loop return value = %d\n",value);
 
-    // closure syntax stolen from Rust |args,..|{body...}
-    take_closure(|x|{printf("closure says %d %d\n",x,y);})
+	// C++ equivalent doesn't seem to match all template args.
+    // as far as i've tried it. (of course C++ can do it other ways)
+    // eg
+	//template<typename X,typename Y>
+	//struct  Union1{int tag;X x; Y y;};
+	//template<typename X,typename Y,typename R>
+		//R match_union(Union1<X,Y>& u, std::function<R(X)>& fx, std::function<R(Y)>& fy){
+	//	if (u.tag==0) return fx(u.x);
+	//	return fy(u.y);
+	//}
+	//Union1<int,float> u;
+	//match_union(u, [](int x){printf("int\n");return 0;},[](float x){printf("float\n");return 1;});
+
+	xs=:array[int,512];   // like C++ array<int,512>
+	q:=xs[1]; p1:=&xs[1];
+	xs[2]=10;
+	xs[2]+=400;
+	*p1=30;
+	z:=5;
+	y:=xs[1]+z+xs[2];
+	printf("test refs to array:%d %d\n",xs[2], *p1);
+
+
+	// Struct initializers...
 
 	fv:=Foo{vx=13,vy=14,vz=15}; // initialize struct on stack, named fields
 	something_foo(&fv,&fv);
@@ -166,8 +168,8 @@ fn main(argc:int,argv:**char)->int{
     // frees up '?' for other use, eg optional types..(TODO arbitrary operators)
     // last expression in the compound blocks is return value from block
 
-	x:=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >2",argc);2};
-	printf("\nHello World %d %d\n", x, y );
+	x1:=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >2",argc);2};
+	printf("\nHello World %d %d\n", x1, y );
 
     // Stolen from rust: last statement is a return value. 
     // takes some getting used to but makes semicolons significant and
