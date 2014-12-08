@@ -89,8 +89,8 @@ fn main(argc:int,argv:**char)->int{
     printf("example program ./hello.rpp compiled & run by default makefile\n");
 
     // closure syntax stolen from Rust |args,..|{body...}
-	x:=0;
-    take_closure(|x|{printf("closure says x=%d y=%d\n",x,y);})
+	captured_y:=0;
+    take_closure(|x|{printf("closure says x=%d y=%d\n",x,captured_y);})
 
     // LHS=:RHS is temporary syntax to init empty var with given type Union<int,float> 
     //its a hack till we have let u:Union<int,float>.
@@ -115,6 +115,7 @@ fn main(argc:int,argv:**char)->int{
 	// enhanced with expression syntax: break <expr> , else {expr}
 	// type of 'value' is infered from the break/else expressions
 
+	x:=0;
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		x+=i;
 		printf("i,j=%d,%d,x=%d\n",i,j,x);
