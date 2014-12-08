@@ -1,5 +1,9 @@
 #pragma once
+// TODO : this shouldn't need the whole AST prototypes, just a few key items.
 #include "compiler.h"
+
+// Describes interface to codegen(implemented by codegen_llvm);
+// codegen.cpp contains AST node 'compile' methods
 
 void output_code(FILE* outfile, Scope* scope,int depth=0);
 void name_mangle(char* buffer, int size, const ExprFnDef* f);
@@ -7,6 +11,9 @@ void name_mangle(char* buffer, int size, const ExprStructDef* f);
 void name_mangle(char* buffer, int size, const Type* f);
 void name_mangle_append_scope(char* buffer, int size, const Scope* s);
 char* name_mangle_append_name(char* buffer, int size, Name n);
+Name next_reg_name(int *next_reg_index);
+Name next_reg_name(Name prefix_name, int *next_reg_index);
+
 
 class CodeGen;
 class CgValue;
@@ -38,10 +45,10 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	bool is_addr() const {return reg==0 && val==0;}
 	CgValue addr_op(CodeGen& cg,Type* t);
 	CgValue deref_op(CodeGen& cg, Type* t);
-	
-//	void emit_operand(CodeGen& cg)const;
-	CgValue store(CodeGen& cg) const;
-	CgValue store(CodeGen& cg,const CgValue& src) const;
+
+	inline CgValue load(CodeGen& cg)const;
+	inline CgValue store(CodeGen& cg) const;
+	inline CgValue store(CodeGen& cg,const CgValue& src) const;
 	CgValue get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const;
 	CgValue get_elem_index(CodeGen& cg, int field_index,Type *field_type=0) const;
 	CgValue index(RegisterName index);
@@ -134,8 +141,8 @@ public:
 	CgValue 		emit_store_global(CgValue dst, Name globalvar);
 
 	// lazy load/store of abstract CgValue (ref or register)
-	CgValue store(const CgValue& dst, const CgValue& src){return dst.store(*this,src);};
-	CgValue store(const CgValue& dst){return dst.store(*this);};
+	CgValue store(const CgValue& dst, const CgValue& src);//{return dst.store(*this,src);};
+	CgValue store(const CgValue& dst);//{return dst.store(*this);};
 	void	emit_operand(const CgValue& val);
 	void emit_fn_ptr(Name n);
 	void emit_fn(Name n);
@@ -191,3 +198,17 @@ public:
 	void set_pos_end(){fseek(ofp,0,SEEK_END);}
 	void emit_free(CgValue ptr,  Type* t,size_t count);
 };
+
+struct LoopPhiVar {
+	CgValue val;//todo
+	Variable*	var;
+	RegisterName reg_pre;
+	RegisterName reg_start;
+	RegisterName reg_end;
+};
+
+void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, Name l_end, bool extra);
+
+inline CgValue CgValue::load(CodeGen& cg)const { return cg.load(*this);}
+inline CgValue CgValue::store(CodeGen& cg)const {return cg.store(*this);}
+inline CgValue CgValue::store(CodeGen& cg,const CgValue& src) const{return cg.store(*this,src);}
