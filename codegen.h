@@ -39,9 +39,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	CgValue addr_op(CodeGen& cg,Type* t);
 	CgValue deref_op(CodeGen& cg, Type* t);
 	
-	CgValue load(CodeGen& cg,Type* result_type=0) const;
-	void emit_operand_literal(CodeGen& cg,const ExprLiteral* lit)const;
-	void emit_operand(CodeGen& cg)const;
+//	void emit_operand(CodeGen& cg)const;
 	CgValue store(CodeGen& cg) const;
 	CgValue store(CodeGen& cg,const CgValue& src) const;
 	CgValue get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const;
@@ -129,6 +127,7 @@ public:
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
 	void emit_i32_reg(Name reg);
+	void emit_operand_literal(const CgValue& cg,const ExprLiteral* lit);
 	CgValue emit_make_literal(ExprLiteral* l);
 	RegisterName	emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index);
 	CgValue emit_store(RegisterName reg, Type* type, RegisterName addr);
@@ -137,8 +136,7 @@ public:
 	// lazy load/store of abstract CgValue (ref or register)
 	CgValue store(const CgValue& dst, const CgValue& src){return dst.store(*this,src);};
 	CgValue store(const CgValue& dst){return dst.store(*this);};
-	void	emit_operand(const CgValue& val){val.emit_operand(*this);};
-
+	void	emit_operand(const CgValue& val);
 	void emit_fn_ptr(Name n);
 	void emit_fn(Name n);
 	void emit_comment(const char* str,...);
@@ -182,6 +180,8 @@ public:
 	CgValue emit_call_end();
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg);
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg1,const CgValue& arg2);
+
+	CgValue load(const CgValue& v,Type* result_type=0);
 
 	// helper fn for simple cases eg implementing operator overload calls
 	// use this interface to allow emiting readable c

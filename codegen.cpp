@@ -174,38 +174,39 @@ CgValue CgValue::deref_op(CodeGen& cg, Type* t) {
 		return CgValue(0,t,reg);
 	} else {
 		// it its'  a reference type, we need to load that first.
-		auto ret=load(cg);
+		auto ret=cg.load(*this);
 		return CgValue(0,t,ret.reg); // ... and return it as another reference: eg given T&* p,  returning T& q=*p
 	}
 }
 
-CgValue CgValue::load(CodeGen& cg,Type* result_type) const{
+CgValue CodeGen::load(const CgValue& v,Type* result_type) {
 	//if (!this->is_valid()) return CgValue();
+	auto& cg=*this;
 	auto ofp=cg.ofp;
-	if (elem>=0){
+	if (v.elem>=0){
 		// todo: why not 'addr' aswell?
-		if (this->type->is_pointer() || (addr &&!reg)) {
-			cg.emit_comment("dot reg=%s addr=%s index=%d",str(reg),str(addr),elem);
-			auto sub=this->get_elem_index(cg,elem,result_type);
-			return sub.load(cg);
+		if (v.type->is_pointer() || (v.addr &&!v.reg)) {
+			cg.emit_comment("dot reg=%s addr=%s index=%d",str(v.reg),str(v.addr),v.elem);
+			auto sub=v.get_elem_index(cg,v.elem,result_type);
+			return cg.load(sub);
 		} else{
 			// elem acess
 			auto r=cg.next_reg();
 			cg.emit_ins_begin(r,"extractelement");
-			cg.emit_type_reg(this->type,false,reg);
-			cg.emit_i32_lit(this->elem);
+			cg.emit_type_reg(v.type,false,v.reg);
+			cg.emit_i32_lit(v.elem);
 			cg.emit_ins_end();
-			return CgValue(r,this->type->get_elem(elem));
+			return CgValue(r,v.type->get_elem(v.elem));
 		}
 	}
-	if(val) {
+	if(v.val) {
 		auto outr=cg.next_reg();
 		
-		if (auto lit=dynamic_cast<ExprLiteral*>(val)){
+		if (auto lit=dynamic_cast<ExprLiteral*>(v.val)){
 			return cg.emit_make_literal(lit);
 			// todo: string literal, vector literals, bit formats
 		}
-		else if (auto fp=dynamic_cast<ExprFnDef*>(val)){
+		else if (auto fp=dynamic_cast<ExprFnDef*>(v.val)){
 			if (fp->is_closure()) {
 				// Build a pair. we would also build the Capture Object here.
 				// TODO: we're blocked from making a nice' emit_make_pair()' wrapper here
@@ -235,33 +236,34 @@ CgValue CgValue::load(CodeGen& cg,Type* result_type) const{
 				return CgValue(outr,fp->fn_type);
 			} else {// raw function
 				cg.emit_ins_begin(outr,"load");
-				cg.emit_type(this->type,true);
+				cg.emit_type(v.type,true);
 				cg.emit_fn_ptr(fp->get_mangled_name());
 				cg.emit_ins_end();
 				return CgValue(outr,fp->fn_type);
 			}
 		}
-		else if (auto v=dynamic_cast<Variable*>(val)){
-			if (v->reg_is_addr){
-				auto r= CgValue(0,v->type(),v->reg_name);
-				return r.load(cg);
+		else if (auto var=dynamic_cast<Variable*>(v.val)){
+			if (var->reg_is_addr){
+				auto r= CgValue(0,var->type(),var->reg_name);
+				return cg.load(r);
 			} else
-				return *this;	//NOP - remember its' lazy, this is a valid case for reg-reg
+				return v;	//NOP - remember its' lazy, this is a valid case for reg-reg
 		}
 	}
-	if ((bool)addr) {
-		ASSERT(reg==0);
+	if ((bool)v.addr) {
+		ASSERT(v.reg==0);
 		auto dstr=cg.next_reg();
 		cg.emit_ins_begin(dstr,"load");
-		cg.emit_type_reg(type, addr!=0,addr);// an extra pointer level if its' a reference
+		cg.emit_type_reg(v.type, v.addr!=0,v.addr);// an extra pointer level if its' a reference
 		cg.emit_ins_end();
-		return CgValue(dstr,type);
+		return CgValue(dstr,v.type);
 	}
-	ASSERT(reg && !addr);
-	return *this;
+	ASSERT(v.reg && !v.addr);
+	return v;
 }
-void CgValue::emit_operand_literal(CodeGen& cg,const ExprLiteral* lit)const{
-	auto &v=*this;
+
+void CodeGen::emit_operand_literal(const CgValue& v, const ExprLiteral* lit) {
+	auto &cg=*this;
 	if (cg.comma){cg.emit_txt(",");} cg.comma=true;
 	auto ofp=cg.ofp;
 	switch (lit->type_id) {
@@ -282,8 +284,8 @@ void CgValue::emit_operand_literal(CodeGen& cg,const ExprLiteral* lit)const{
 			break;
 		}
 }
-void CgValue::emit_operand(CodeGen& cg)const{
-	auto &v=*this;
+void CodeGen::emit_operand(const CgValue& v){
+	auto &cg=*this;
 	auto ofp=cg.ofp;
 	if (v.reg!=0){
 		cg.emit_reg(v.reg);
@@ -296,7 +298,7 @@ void CgValue::emit_operand(CodeGen& cg)const{
 	else if (v.val){
 		if (auto lit=dynamic_cast<ExprLiteral*>(v.val)) {
 			ASSERT(v.addr==0 && "check case above, incorrect assumptions")
-			emit_operand_literal(cg,lit);
+			cg.emit_operand_literal(v,lit);
 		}
 		return;
 	} else {
@@ -316,7 +318,7 @@ CgValue CgValue::store(CodeGen& cg) const{// for read-modify-write
 }
 CgValue CgValue::store(CodeGen& cg,const CgValue& src) const{
 	auto &dst=*this;
-	auto src_in_reg=src.load(cg);
+	auto src_in_reg=cg.load(src);
 	
 	if (elem>=0){
 		auto newreg=next_reg_name(&cg.m_next_reg);
@@ -411,7 +413,7 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index)
 	return CgValue(0,field_type,areg);
 }
 CgValue CodeGen::emit_assign(const CgValue& dst, const CgValue& src){
-	return dst.store(*this, src.load(*this));
+	return dst.store(*this, this->load(src));
 }
 CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 	auto outr=this->next_reg();
@@ -631,7 +633,7 @@ CgValue CodeGen::emit_malloc(Type* t,size_t count){
 }
 CgValue CodeGen::emit_free(CgValue ptr,size_t count){
 	ASSERT(ptr.type->is_pointer() &&"pass a pointer type in, it allocs *T.necasery to avoid allocating a ptr[T]");
-	auto r=ptr.load(*this);
+	auto r=this->load(ptr);
 	auto r1=this->emit_cast_to_i8ptr(r);
 	emit_ins_begin(0,"call i8* @free"); /// TODO: sized form of free.
 	emit_args_begin();
@@ -644,7 +646,7 @@ CgValue CodeGen::emit_free(CgValue ptr,size_t count){
 
 CgValue CodeGen::emit_malloc_array(Type* t,CgValue count){
 	auto rsizereg=next_reg();
-	auto cr=count.load(*this);
+	auto cr=this->load(count);
 	auto rsize=emit_instruction_reg_i32("mul", cr.type, 0, cr, t->sub->size());
 	ASSERT(t->name==PTR &&"pass a pointer type in, it allocs *T.necasery to avoid allocating a ptr[T]");
 	auto r1=next_reg();
@@ -665,7 +667,7 @@ void CodeGen::emit_type_reg(const Type* t,bool ref, Name reg){
 void CodeGen::emit_type_operand(const CgValue& src){
 	/// TODO we wanted to unify 'void' here (!src.valid()) but contexts where its' called dont seem to work
 	emit_type(src.type,(src.reg==0&&src.addr));
-	src.emit_operand(*this);
+	this->emit_operand(src);
 }
 
 void CodeGen::emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,CgValue src1){
@@ -678,11 +680,11 @@ void CodeGen::emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,Cg
 	else{
 		emit_type(type,false);
 	}
-	src1.emit_operand(*this);
+	this->emit_operand(src1);
 }
 CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname, CgValue src1){
 	auto dstr=next_reg();
-	auto r1=src1.load(*this);
+	auto r1=load(src1);
 	emit_ins_begin_sub();
 	emit_instruction_sub(opname,type,dstr,r1);
 	emit_ins_end();
@@ -690,8 +692,8 @@ CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname, CgValue s
 }
 CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname,  CgValue src1,CgValue src2){
 	ASSERT(type!=0);
-	auto r1=src1.load(*this);
-	auto r2=src2.load(*this);
+	auto r1=this->load(src1);
+	auto r2=this->load(src2);
 	auto dstr=next_reg();
 	auto dbg=[&](){
 		dbprintf("src1.reg=%s/%s.%d\n",str(src1.reg),str(src1.addr),src1.elem);
@@ -700,14 +702,14 @@ CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname,  CgValue 
 	emit_ins_begin_sub();
 	emit_instruction_sub(opname,type,dstr,r1);
 	emit_comma();
-	r2.emit_operand(*this);
+	this->emit_operand(r2);
 	emit_ins_end();
 	return CgValue(dstr, type);
 }
 
 CgValue CodeGen::emit_instruction_reg_i32(Name opname,Type* type,  Name outname,CgValue src1,int imm_val){
 	ASSERT(type!=0);
-	auto r1=src1.load(*this);
+	auto r1=load(src1);
 	ASSERT(r1.type->is_int());
 	auto dstr=next_reg();
 
@@ -800,8 +802,7 @@ void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef
 	
 	cg.emit_struct_end();
 	cg.emit_txt(", align 16");
-	cg.emit_ins_end();
-	
+	cg.emit_ins_end();	
 }
 
 CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
@@ -834,6 +835,10 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 }
 
 CgValue CodeGen::emit_alloca_type(Expr* holder, Type* t) {
+	if (t->is_void()){
+		emit_comment("void value not allocated for %d",holder->pos.line);
+		return CgValue();
+	}
 	RegisterName r= holder?holder->get_reg(*this, false):next_reg();
 	emit_ins_begin(r,"alloca"); emit_type(t,false);
 	emit_txt(", align %zu", t->alignment());
@@ -886,9 +891,9 @@ void CodeGen::emit_branch( Name l){
 	emit_ins_end();
 }
 void CodeGen::emit_branch(CgValue cond, Name label_then, Name label_else){
-	cond.load(*this);
+	auto cr=load(cond);
 	emit_ins_begin_name("br");
-	emit_txt("i1 %%%s, label %%%s, label %%%s",str(cond.reg), str(label_then), str(label_else));
+	emit_txt("i1 %%%s, label %%%s, label %%%s",str(cr.reg), str(label_then), str(label_else));
 	emit_ins_end();
 }
 CgValue CodeGen::emit_break(  CgValue v){
@@ -926,11 +931,11 @@ CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()>
 		cg.emit_branch(condition,label_if,label_else);
 		cg.emit_label(label_if);
 		auto if_result=f_compile_body();//body->compile(cg,sc);
-		if (if_result.is_valid())if_result=if_result.load(cg,0);
+		if (if_result.is_valid())if_result=cg.load(if_result,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_else);
 		auto else_result=else_block->compile(cg,sc);
-		if (else_result.is_valid())else_result=else_result.load(cg,0);
+		if (else_result.is_valid())else_result=cg.load(else_result,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		// phi node picks result, conditional assignment
@@ -950,7 +955,7 @@ CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()>
 		cg.emit_branch(condition,label_if,label_endif);
 		cg.emit_label(label_if);
 		auto ifblock=f_compile_body();//body->compile(cg,sc);
-		if (ifblock.is_valid()) ifblock=ifblock.load(cg);
+		if (ifblock.is_valid()) ifblock=cg.load(ifblock);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		return CgValue();
@@ -1092,7 +1097,7 @@ CgValue CodeGen::emit_for(ExprFor* e_for, Expr* e_init,Expr* e_cond, Expr* e_inc
 
 void CodeGen::emit_return(CgValue ret){
 	if (ret.is_valid() && !ret.type->is_void()) {
-		auto r=ret.load(*this);
+		auto r=this->load(ret);
 		emit_ins_begin_name("ret");
 		//emit_type(cg,ret);//rtn->get_type(),ret.is_addr());
 		//ret.emit_operand(cg);
@@ -1120,7 +1125,7 @@ CgValue CodeGen::emit_cast(CgValue&src_val, Expr* rhs_type_expr){
 	return emit_cast_sub(src_val,rhs_type_expr->type());
 }
 CgValue CodeGen::emit_cast_sub(CgValue&lhs_val, Type* rhst){
-	auto lhs_reg=lhs_val.load(*this);
+	auto lhs_reg=this->load(lhs_val);
 //	auto lhst=lhs_val.type;
 	return emit_cast_reg(lhs_reg.reg, lhs_val.type, rhst);
 }
@@ -1171,7 +1176,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 	// process function argumetns & load
 	if (receiver){
 		auto recr=receiver->compile(cg,sc);
-		l_args.push_back(recr.load(cg,recr.type));
+		l_args.push_back(  cg.load(recr,recr.type) );
 	}
 	for (auto arg:e->argls){
 		auto reg=arg->compile(cg,sc);
@@ -1182,7 +1187,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			error_end(arg);
 			ASSERT(reg.type);
 		}
-		auto r=reg.load(cg,arg->type());
+		auto r=cg.load(reg,arg->type());
 		l_args.push_back(r);
 	}
 	
@@ -1231,11 +1236,11 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		if (vtable_fn) {
 			// we have a vcall, so now emit it..
 			// load the vtable
-			auto recvv=recvp.load(cg);
+			auto recvv=cg.load(recvp);
 			auto vtblref=cg.emit_getelementref(recvv, getStringIndex("__vtable_ptr"));
-			auto vtbl=vtblref.load(cg);
+			auto vtbl=cg.load(vtblref);
 			//load the fnptr
-			auto fn_ptr=cg.emit_getelementref(vtbl,fn_name).load(cg);
+			auto fn_ptr=cg.load(cg.emit_getelementref(vtbl,fn_name));
 			cg.emit_ins_begin(dst,"call");
 			cg.emit_type_operand(fn_ptr);
 			l_emit_arg_list(0,0);
@@ -1252,7 +1257,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 	} else {
 		//[3.3.2] Indirect Call... Function Object
 		auto fn_obj = e->call_expr->compile(cg, sc);
-		indirect_call=fn_obj.load(cg).reg;
+		indirect_call=cg.load(fn_obj).reg;
 		if (fn_obj.type->is_closure()){
 			//[.1] ..call Closure (function,environment*)
 			auto indirect_call_f=cg.emit_extractvalue(cg.next_reg(),fn_obj.type,indirect_call,0);
@@ -1435,7 +1440,7 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		for (int i=0; i<e->argls.size() && i<si.value.size();i++) {
 			auto rvalue=si.value[i]->compile(cg,sc);
 			auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);
-			auto srcreg = rvalue.load(cg);
+			auto srcreg = cg.load(rvalue);
 			auto r=dst.store(cg,srcreg);
 			if (r.type==struct_val.type)
 				struct_val=r; // mutate by insertion
@@ -1455,9 +1460,9 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 
 		/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
 		if (expr.type->num_pointers()+(expr.addr?1:0) > 1){
-			expr=expr.load(cg);
+			expr=cg.load(expr);
 		}
-		auto index_reg=index.load(cg);
+		auto index_reg=cg.load(index);
 		cg.emit_ins_begin(dstreg,"getelementptr inbounds");
 		cg.emit_type_reg(array_type,expr.addr!=0,expr.addr?expr.addr:expr.reg);//!expr.reg);
 		if (array_type->deref_all()->name==ARRAY){
