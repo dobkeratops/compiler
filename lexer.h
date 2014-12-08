@@ -1,7 +1,6 @@
 #pragma once
 #include "compiler.h"
 extern const char* g_filename;
-
 // STUPID HEADER FILES STUPID CLASSES
 /*
 template<typename T>
@@ -23,13 +22,15 @@ struct Lexer {
 	enum {MAX_DEPTH=32};
 	SrcPos	bracket_pos[MAX_DEPTH];
 	int		bracket[MAX_DEPTH];
-	const char* buffer=0,*tok_start=0,*tok_end=0,*prev_start=0,*line_start=0;
+	const char* buffer=0,*tok_start=0,*toik_end=0,*prev_start=0,*line_start=0;
 	Name curr_tok;int typaram_depth=0;
 #ifdef WATCH_TOK
 	char watch_tok[64][12];
 #endif
 	bool error_newline=false;
 	int indent=0,depth=0;
+
+	
 	void error(const char* str,...){
 		if(!error_newline){printf("\n");}
 		printf("%s:%d:",filename,pos.line);
@@ -296,9 +297,17 @@ struct Lexer {
 		return *tok_start=='\'';
 	}
 	
-	Name peek_tok(){return curr_tok;}
-	void reverse(){ ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;}
-	Name expect(Name t, const char* err=""){ decltype(t) x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s;%s\n",str(t), str(x),err);} return x;}
-	Name expect(Name a,Name b, const char* err=""){ auto x=eat_tok();if (!(a==x || b==x)) {error(0,"expected %s or %s found %s;%s\n",str(a),str(b), str(x),err);} return x;}
+	Name peek_tok(){
+		return curr_tok;
+	}
+	void reverse(){
+		ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;
+	}
+	Name expect(Name t, const char* err=""){
+		decltype(t) x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s;%s\n",str(t), str(x),err);} return x;
+	}
+	Name expect(Name a,Name b, const char* err=""){
+		auto x=eat_tok();if (!(a==x || b==x)) {error(0,"expected %s or %s found %s;%s\n",str(a),str(b), str(x),err);} return x;
+	}
 };
 typedef Lexer TokenStream;

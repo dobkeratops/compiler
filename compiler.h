@@ -23,22 +23,7 @@ extern "C" char* gets(char*);
 #endif
 
 
-struct Option{
-	char name;int clear;int set; const char* help;
-};
-extern Option g_Options[];
-void dump_help();
-
-enum COMPILE_FLAGS {
-	B_AST=0x0001,B_DEFS=0x0002,B_GENERICS=0x0004, B_TYPES=0x0008,B_LLVM=0x0010,B_EXECUTABLE=0x0020,B_RUN=0x0040,B_VERBOSE=0x0080
-};
-
-
 typedef int32_t OneBasedIndex;
-
-#define R_FINAL 0x0001
-#define R_REVERSE 0x0002
-#define R_PUT_ON_STACK 0x8000
 
 struct SrcPos {
 	OneBasedIndex	line;
@@ -54,6 +39,11 @@ struct SrcPos {
 struct Span {
 	SrcPos start,end;
 };
+
+#define R_FINAL 0x0001
+#define R_REVERSE 0x0002
+#define R_PUT_ON_STACK 0x8000
+
 extern void verify_all_sub();
 #define verify_all()
 struct Node;

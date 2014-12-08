@@ -1,5 +1,4 @@
-#include "compiler.h"
-#include "test.h"
+#include "run_test.h"
 
 extern int compile_source(const char *buffer, const char* filename, const char* outname, int flags);
 

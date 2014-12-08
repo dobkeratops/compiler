@@ -2,7 +2,7 @@
 #include "compiler.h"
 #include "parser.h"
 #include "codegen.h"
-#include "test.h"
+#include "run_test.h"
 
 void filename_change_ext(char* dst,const char* src,const char* new_ext){
 	strcpy(dst,src);
