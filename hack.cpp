@@ -272,7 +272,7 @@ const char* g_token_str[]={
 	"&","|","^","%","<<",">>","?:","?>","?<",					//bitwise
 	"<",">","<=",">=","==","!=",		//compares
 	"&&","||",		//logical
-	"=",":=","=:",
+	"=",":=","=:","@",
 	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
 	".=",	// linklist follow
 	"++","--","++","--", //inc/dec
@@ -304,7 +304,7 @@ int g_tok_info[]={
 	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,READ|9,READ|9,READ|9,	//bitwise
 	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,	// COMPARES
 	READ|13,READ|14,	//logical
-	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
+	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,0, // assignment
 	
 	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16, // assign-op
 	WRITE_LHS|READ|ASSOC|16, // dot-assign
@@ -3216,7 +3216,9 @@ ExprStructDef* parse_enum(TokenStream& src);
 ExprMatch* parse_match(TokenStream& src);
 ExprLiteral* parse_literal(TokenStream& src);
 ExprOp* parse_flow(TokenStream& src,Name flow);
-
+ExprMatch* parse_match(TokenStream& src);
+Pattern* parse_pattern(TokenStream& src,int close, int close2);
+Expr* parse_match_arm(TokenStream& src);
 
 template<typename T>
 T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
@@ -3261,6 +3263,8 @@ void flush_op_stack(ExprBlock* block, vector<SrcOp>& ops,vector<Expr*>& vals) {
 
 ExprBlock* parse_block(TokenStream&src,int close,int delim, Expr* op);
 
+/// parse_expr - parse a single expression
+/// TODO - refactor 'parse_block', this is backwards!
 Expr* parse_expr(TokenStream&src) {
 	return parse_block(src,0,0,nullptr);
 }
@@ -3286,6 +3290,82 @@ LLVMType Node::get_type_llvm() const
 	if (tn==PTR || tn==DEREF ||tn==ADDR ) return LLVMType{this->m_type->sub->name,true};
 	// todo structs, etc - llvm DOES know about these.
 	return LLVMType{0,0};
+}
+
+ExprMatch* parse_match(TokenStream& src){
+	auto m=new ExprMatch(); m->pos=src.pos;
+	m->expr=parse_expr(src);
+	src.expect(OPEN_BRACE);
+	MatchArm** pp=&m->arms;
+	while (src.peek_tok()!=CLOSE_BRACE){
+		auto a=new MatchArm();
+		a->pos=src.pos;
+		*pp=a;
+		pp=&a->next;
+		a->pattern=parse_pattern(src,FAT_ARROW,0);
+		a->body=parse_expr(src);
+		auto tok=src.expect(COMMA,CLOSE_BRACE);
+		if (tok==CLOSE_BRACE)
+			break;
+	}
+	return	m;
+}
+
+// todo: we're not sure we need a whole other parser
+// couldn't expressions,types,patterns all use the same gramar & parser,
+// & just interpret the nodes differently?
+Pattern* parse_pattern(TokenStream& src,int close,int close2=0){
+	Pattern* p=new Pattern(); p->pos=src.pos;auto first=p;p->name=0;
+	while (auto t=src.eat_tok()){
+		if (t==close || t==close2) break;
+		if (t==OPEN_PAREN){
+			if (!p->name){
+			// tuple..
+				p->name=TUPLE;
+			}
+			p->sub=parse_pattern(src,CLOSE_PAREN,0);
+		}
+		// todo - range ".."
+		// todo - slice patterns
+		else if (t==LET_ASSIGN || t==ASSIGN_COLON || t== ASSIGN ||t==PATTERN_BIND){ // todo its @ in scala,rust
+			auto np=new Pattern;
+			np->name=PATTERN_BIND;
+			np->sub = p;
+			first=np; // assert only once
+		}
+		else if (t==COMMA){
+			p=p->next=new Pattern();
+		} else if (t==OR && close!=CLOSE_PAREN){ // todo - bit more elaborate. should be ANY(....)  distinct from TUPLE(...)
+			p=p->next=new Pattern();
+		} else{
+			p->name=t;
+		}
+	}
+	return first;
+}
+
+Node*Pattern::clone() const{
+	auto np=new Pattern(); np->pos=pos;
+	np->next=(Pattern*)np->clone_if();// todo not recursive!!
+	np->sub=(Pattern*)np->clone_if();
+	return np;
+}
+
+Node*
+ExprMatch::clone()const{
+	auto m=new ExprMatch();
+	m->pos=pos;
+	m->expr=(Expr*)expr->clone_if();
+	m->arms=(MatchArm*)arms->clone_if();
+	return m;
+}
+Node* MatchArm::clone()const{
+	auto a=new MatchArm();
+	a->pos=pos;
+	
+	a->body=(Expr*)body->clone();
+	a->next=(MatchArm*)next->clone_if();//TODO not recursive ffs.
+	return a;
 }
 
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
@@ -3330,8 +3410,13 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_enum(src));
 		}
+		else if (src.eat_if(MATCH)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			operands.push_back(parse_match(src));
+		}
 		else if (src.eat_if(FN)) {
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			/// TODO local functions should be sugar for rolling a closure bound to a variable.
 			auto local_fn=parse_fn(src,nullptr);
 			operands.push_back(local_fn);
 		}
@@ -3449,7 +3534,8 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	return node;
 }
 
-void gather_vtable(ExprStructDef* d) {
+void
+gather_vtable(ExprStructDef* d) {
 }
 
 void

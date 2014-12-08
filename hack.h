@@ -56,6 +56,8 @@ struct ExprIf;
 struct ExprBlock;
 struct ExprLiteral;
 struct ExprIdent;
+struct Match;
+struct MatchArm;
 struct ArgDef;
 struct ExprDef;
 struct Scope;
@@ -163,7 +165,7 @@ enum Token {
 	AND,OR,XOR,MOD,SHL,SHR,OR_ELSE,MAX,MIN,
 	LT,GT,LE,GE,EQ,NE,
 	LOG_AND,LOG_OR,
-	ASSIGN,LET_ASSIGN,ASSIGN_COLON,
+	ASSIGN,LET_ASSIGN,ASSIGN_COLON,PATTERN_BIND,
 	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,AND_ASSIGN,OR_ASSIGN,XOR_ASSIGN,MOD_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,
 	DOT_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
@@ -493,7 +495,9 @@ struct Type : Expr{
 	CgValue	compile(CodeGen& cg, Scope* sc);
 };
 
-struct ExprScopeBlock : Expr{};
+struct ExprScopeBlock : Expr{
+	Scope*		scope=0;
+};
 struct ExprOp: public Expr{
 	Expr	*lhs=0,*rhs=0;
 	Node* clone() const;
@@ -529,7 +533,6 @@ struct ExprBlock :public ExprScopeBlock{
 	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...} call_expr[argls..] call_expr{argls}
 	vector<Expr*>	argls;
 	//ExprFnDef*	call_target=0;
-	Scope*		scope=0;
 	ExprBlock*	next_of_call_target=0;	// to walk callers to a function
 	// these are supposed to be mutually exclusive substates, this would be an enum ideally.
 	ExprBlock(){};
@@ -561,9 +564,39 @@ struct ExprBlock :public ExprScopeBlock{
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 	ResolvedType	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
 };
-struct ExprMatch : ExprBlock {
-	// todo..
+/// TODO a pattern might become different to Expr
+/// simplest must behave like 'ident'
+struct Pattern : Node {
+	ResolvedType	resolve(Scope* sc, Type* desired, int flags){ASSERT(0 && "dont resolve pattern"); return ResolvedType();}
+	Pattern* next=0;
+	Pattern* sub=0;
+	Node*	clone()const;
+	
 };
+struct ExprMatch : Expr {
+	const char*		kind_str() const {return "match";}
+	CgValue			compile(CodeGen& cg, Scope* sc);
+	ResolvedType	resolve(Scope* sc, Type* desired, int flags);
+	Expr*		expr=0;
+	MatchArm*	arms=0;
+	Node*	clone()const;
+};
+struct MatchArm : ExprScopeBlock {
+	/// if match expr satisfies the pattern,
+	///  binds variables from the pattern & executes 'expr'
+	Pattern*	pattern=0;
+	Expr*		cond=0;
+	Expr*		body=0;
+	MatchArm*	next=0;
+	void		dump(int depth);
+	Node*		clone() const;
+	void		translate_typeparams(const TypeParamXlat& tpx){}
+	CgValue		compile_check(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
+	// todo - as patterns exist elsewhere, so 'compile-bind might generalize'.
+	CgValue		compile_bind(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
+	ResolvedType	resolve(Scope* sc, Type* desired, int flags);
+};
+
 enum TypeId{
 //	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
 	T_NONE,
@@ -573,7 +606,6 @@ enum TypeId{
 bool is_type(int tok);
 extern bool g_lisp_mode;
 // module base: struct(holds fns,structs), function(local fns), raw module.
-
 
 struct ExprFlow:Expr{	// control flow statements
 };

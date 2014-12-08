@@ -135,6 +135,7 @@ public:
 	// IF,FOR are part of the codegen interface to swap C/LLVM backends
 	CgValue emit_for(ExprFor* f,Expr* init,Expr* cond, Expr* incr, Expr* body, Expr* else_block);
 	CgValue emit_if(Node* n, Expr* cond, Expr* body, Expr* else_block);
+	CgValue emit_if_sub(Node* n, Scope* sc,std::function<CgValue()> f_cond, std::function<CgValue()> f_body, Expr* else_block);
 	CgValue emit_break(CgValue v);
 	CgValue emit_continue();
 	void 	emit_call_begin(const CgValue& call_expr);

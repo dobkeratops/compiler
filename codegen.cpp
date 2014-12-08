@@ -7,7 +7,7 @@ inline void dbprintf_mangle(const char*,...){}
 #else
 inline void dbprintf_vcall(const char*,...){}
 #endif
-
+using std::function;
 void CodeGen::emit_struct_name(RegisterName dst ){emit_reg(dst);}
 Name next_reg_name(int *next_reg_index){
 	char tmp[64]; sprintf(tmp,"r%d",(*next_reg_index)++);
@@ -921,21 +921,19 @@ CgValue CodeGen::emit_continue(){
 	return this->flow_result[i];
 }
 
-
-
 Name CodeGen::gen_label(const char* label,int index){
 	auto i=index?index:this->m_next_reg++;
 	char tmp[256];sprintf(tmp,"%s%d",label,i);
 	return getStringIndex(tmp);
 }
 
-CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, Expr* cond, Expr* body, Expr* else_block){
+CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()> f_cond, std::function<CgValue()> f_compile_body, Expr* else_block){
 	// TODO: Collect phi-nodes for anything modified inside.
 	auto curr_fn=cg.curr_fn;
 	//auto ifn=this;
 	
 	RegisterName outname=cg.next_reg();
-	auto condition=cond->compile(cg,sc);
+	auto condition=f_cond();//cond->compile(cg,sc);
 	int index=cg.m_next_reg++;
 	auto label_if=cg.gen_label("if",index);
 	auto label_endif=cg.gen_label("endif",index);
@@ -943,7 +941,7 @@ CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, Expr* cond, Expr* body, 
 		auto label_else=cg.gen_label("else",index);
 		cg.emit_branch(condition,label_if,label_else);
 		cg.emit_label(label_if);
-		auto if_result=body->compile(cg,sc);
+		auto if_result=f_compile_body();//body->compile(cg,sc);
 		if (if_result.is_valid())if_result=if_result.load(cg,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_else);
@@ -967,15 +965,21 @@ CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, Expr* cond, Expr* body, 
 		/// TODO: ensure  if ... else if ... typechecks ok. 
 		cg.emit_branch(condition,label_if,label_endif);
 		cg.emit_label(label_if);
-		auto ifblock=body->compile(cg,sc);
+		auto ifblock=f_compile_body();//body->compile(cg,sc);
 		if (ifblock.is_valid()) ifblock=ifblock.load(cg);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		return CgValue();
 	}
 }
+
+CgValue CodeGen::emit_if_sub(Node* if_node, Scope* s, function<CgValue()> fcond, function<CgValue()> fbody, Expr* else_block){
+	return emit_if_llvm(*this,if_node,if_node->get_scope(), fcond,fbody,else_block);
+}
 CgValue CodeGen::emit_if(Node* if_node, Expr* cond, Expr* body, Expr* else_block){
-	return emit_if_llvm(*this,if_node,if_node->get_scope(), cond,body,else_block);
+	// this intermediate looks redundant but its' for swapping in C backend later..
+	auto sc=if_node->get_scope();
+	return this->emit_if_sub(if_node,sc , [&]()->CgValue{return cond->compile(*this,sc);}, [&]()->CgValue{return body->compile(*this,sc);}, else_block);
 }
 
 CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
@@ -1691,6 +1695,42 @@ int translate_llvm_string_constant(char* dst, int size, const char* src){
 	*d++=0;
 
 	return len;
+}
+
+CgValue compile_match_arm(CodeGen& cg, Scope* sc,Expr* match_expr, CgValue match_val, MatchArm* arm){
+	if (!arm->next){
+		// error check. we just ignore condition. error should assert its non exhaustive
+		arm->compile_bind(cg,sc,match_expr,match_val);
+		return arm->body->compile(cg,sc);
+	}
+	auto armsc=arm->get_scope();
+	return cg.emit_if_sub(
+				arm,
+				sc,
+				[&]{return arm->compile_check(cg,armsc, match_expr, match_val);},
+				[&]{arm->compile_bind(cg,armsc,match_expr,match_val);return arm->body->compile(cg,armsc);},
+				arm->next);
+}
+
+CgValue MatchArm::compile_check(CodeGen &cg, Scope *sc, Expr *match_expr, CgValue match_val){
+	// emit a condition to check if the runtime value 'match_val' fits this pattern.
+	ASSERT(0&&"TODO");
+	return CgValue();
+}
+CgValue MatchArm::compile_bind(CodeGen &cg, Scope *sc, Expr *match_expr, CgValue match_val)	{
+	// extract local variables from the pattern...
+	ASSERT(0&&"TODO");
+	return CgValue();
+}
+
+CgValue
+ExprMatch::compile(CodeGen& cg, Scope* sc){
+	// TODO - dedicated with one set of phi-nodes at the end.
+	// this is RETARDED!!!
+	// TODO - turn some cases into binary-chop (no 'if-guards' & single value test)
+	// TODO - turn some cases into vtable.
+	auto match_val = this->expr->compile(cg,sc);
+	return compile_match_arm(cg, sc, this->expr, match_val, this->arms);
 }
 
 CgValue Node::codegen(CodeGen& cg, bool just_contents) {
