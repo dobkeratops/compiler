@@ -82,33 +82,33 @@ fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 }
 
 fn map[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{
- if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
+	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
 }
 
 fn main(argc:int,argv:**char)->int{
     printf("example program ./hello.rpp compiled & run by default makefile\n");
 
-    // closure syntax stolen from Rust |args,..|{body...}
+	// closure syntax stolen from Rust |args,..|{body...}
 	captured_y:=0;
-    take_closure(|x|{printf("closure says x=%d y=%d\n",x,captured_y);})
+	take_closure(|x|{printf("closure says x=%d y=%d\n",x,captured_y);})
 
-    // LHS=:RHS is temporary syntax to init empty var with given type Union<int,float> 
-    //its a hack till we have let u:Union<int,float>.
-    // inspiration from rust is to avoid un-init vars altogether using expression syntax.
+	// LHS=:RHS is temporary syntax to init empty var with given type Union<int,float> 
+	//its a hack till we have let u:Union<int,float>.
+	// inspiration from rust is to avoid un-init vars altogether using expression syntax.
 	// the plan is to stick with rust 'let..', but keep 'go' like := in addition.
-    u=:Union[int,float]; 
+	u=:Union[int,float]; 
 
-    // calls to templated functions
-    setv(&u,2.0);
-    setv(&u,5);
+	// calls to templated functions
+	setv(&u,2.0);
+	setv(&u,5);
  
-    // demo of type inference with polymorphic lambdas
-    // we could overload 'match' to supply different combinations of types
-    z:=map(&u,
-        |x:&int|{printf("union was set to int %d\n",*x);15},
-        |x:&float|{printf("union was set to float %.3f\n",*x);17}
-    );
-    printf("map union returned z=%d\n",z);
+	// demo of type inference with polymorphic lambdas
+	// we could overload 'match' to supply different combinations of types
+	z:=map(&u,
+		|x:&int|{printf("union was set to int %d\n",*x);15},
+		|x:&float|{printf("union was set to float %.3f\n",*x);17}
+	);
+	printf("map union returned z=%d\n",z);
 
     // C-like for loops minus parens, compulsory {}
     // handles simple cases without needing a whole iterator library..
@@ -121,60 +121,61 @@ fn main(argc:int,argv:**char)->int{
 		printf("i,j=%d,%d,x=%d\n",i,j,x);
 		if i==5{break 55}
 	}else{
-        // for..else block called if no 'break'
+		// for..else block called if no 'break'
 		printf("loop exit fine\n"); 
 		44
 	}
 	printf("loop return value = %d\n",value);
 
 	// C++ equivalent doesn't seem to match all template args.
-    // as far as i've tried it. (of course C++ can do it other ways)
-    // eg
+	// as far as i've tried it. (of course C++ can do it other ways)
+	// eg
 	//template<typename X,typename Y>
 	//struct  Union1{int tag;X x; Y y;};
 	//template<typename X,typename Y,typename R>
-		//R match_union(Union1<X,Y>& u, std::function<R(X)>& fx, std::function<R(Y)>& fy){
+	//R match_union(Union1<X,Y>& u, std::function<R(X)>& fx, std::function<R(Y)>& fy){
 	//	if (u.tag==0) return fx(u.x);
 	//	return fy(u.y);
 	//}
 	//Union1<int,float> u;
 	//match_union(u, [](int x){printf("int\n");return 0;},[](float x){printf("float\n");return 1;});
 
+	// Struct initializers...
+
+	fv:=Foo{vx=13,vy=14,vz=15}; // initialize struct on stack, named fields
+	something_foo(&fv,&fv);
+	printf("fv.vx=%d\n",fv.vx);
+
+	fv2:=new Foo{vx=23,vy=24,vz=25}; // struct allocate & init
+	something_foo(fv2);
+
+	fv3:=new Foo{31,32,33}; // struct initializer, sequential
+	something_foo(fv3);
+
+	 // test arrays and ptrs work
 	xs=:array[int,512];   // like C++ array<int,512>
 	q:=xs[1]; p1:=&xs[1];
 	xs[2]=10;
 	xs[2]+=400;
 	*p1=30;
+	p1[3]=77;			// raw ptr offseting (&xs[1])[3] == xs[4]
 	z:=5;
 	y:=xs[1]+z+xs[2];
-	printf("test refs to array:%d %d\n",xs[2], *p1);
+	printf("test refs to array:%d %d %d\n",xs[2], *p1,xs[4]);
 
 
-	// Struct initializers...
-
-	fv:=Foo{vx=13,vy=14,vz=15}; // initialize struct on stack, named fields
-	something_foo(&fv,&fv);
-    printf("fv.vx=%d\n",fv.vx);
-
-	fv2:=new Foo{vx=23,vy=24,vz=25}; // struct allocate & init
-	something_foo(fv2);
-
-
-	fv3:=new Foo{31,32,33}; // struct initializer, sequential
-	something_foo(fv3);
-
-    // Expression syntax stolen from rust.
-    // if..else.. has a return value;more flexible than ternary op
-    // because it uses compound statements
-    // frees up '?' for other use, eg optional types..(TODO arbitrary operators)
-    // last expression in the compound blocks is return value from block
+	// Expression syntax stolen from rust.
+	// if..else.. has a return value;more flexible than ternary op
+	// because it uses compound statements
+	// frees up '?' for other use, eg optional types..(TODO arbitrary operators)
+	// last expression in the compound blocks is return value from block
 
 	x1:=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >2",argc);2};
 	printf("\nHello World %d %d\n", x1, y );
 
-    // Stolen from rust: last statement is a return value. 
-    // takes some getting used to but makes semicolons significant and
-    // interacts very well with expression syntax generally.
+	// Stolen from rust: last statement is a return value. 
+	// takes some getting used to but makes semicolons significant and
+	// interacts very well with expression syntax generally.
 
 	0
 }
