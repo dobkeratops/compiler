@@ -132,278 +132,262 @@ void CodeGen::emit_prelude(){
 	emit_txt(";\n");
 }
 
-struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
-	// TODO: this should be a tagged-union?
-	// these values aren't persistent so it doesn't matter too much.
-	RegisterName reg;
-	int elem=-1;     // if its a struct-in-reg
-	Type* type;
-	RegisterName addr;
-	Node*	val;		// which AST node it corresponds to
-	int ofs;
-	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
-	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
-	explicit CgValue(Node* n) {
-		// todo - unify with 'expr'
-		addr=0; reg=0; ofs=0;elem=-1;
-		val = n;
-		if (auto fd=dynamic_cast<ExprFnDef*>(n)){ // variable is a function pointer?
-			reg=0; // it needs to be loaded
-		}
-		if (auto v=dynamic_cast<Variable*>(n)){
-			if (v->reg_is_addr){
-				addr=v->reg_name;
-			}
-			else{
-				reg=v->reg_name;
-			};
-		}
-		this->type=n->type();
+CgValue::CgValue(Node* n) {
+	// todo - unify with 'expr'
+	addr=0; reg=0; ofs=0;elem=-1;
+	val = n;
+	if (auto fd=dynamic_cast<ExprFnDef*>(n)){ // variable is a function pointer?
+		reg=0; // it needs to be loaded
 	}
-	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
-//	bool is_fn()const{return reg==0 && val==0 && type->name==FN && val!=0 && val->as_fn_def()!=0;}
-	bool is_struct_elem()const{return elem>=0;}
-	bool is_valid()const{if (val) if (val->type()->name==VOID) return false;return val!=0||reg!=0||addr!=0;}
-	bool is_literal()const{return dynamic_cast<ExprLiteral*>(val)!=0;}
-	bool is_reg()const { return reg!=0;}
-	bool is_any()const{return is_literal()||is_reg();}
-	bool is_addr() const {return reg==0 && val==0;}
-	CgValue addr_op(CodeGen& cg,Type* t) { // take type calculated by sema
-		ASSERT(this->type);
-		if (!reg && (bool)addr) {	// we were given a *reference*, we make the vlaue the adress
-			ASSERT(t->name==PTR);
-			ASSERT(t->sub->eq(this->type));
-			return CgValue(addr,t,0);
-		} else if (auto v=this->val->as_variable()){
-			if (v->reg_is_addr){
-				return CgValue(v->reg_name, new Type(0,PTR,v->type()));
-			}
+	if (auto v=dynamic_cast<Variable*>(n)){
+		if (v->reg_is_addr){
+			addr=v->reg_name;
 		}
-		{
-			ASSERT(0 && "tryting to take adress of register");
-			return CgValue();
+		else{
+			reg=v->reg_name;
+		};
+	}
+	this->type=n->type();
+}
+CgValue CgValue::addr_op(CodeGen& cg,Type* t) { // take type calculated by sema
+	ASSERT(this->type);
+	if (!reg && (bool)addr) {	// we were given a *reference*, we make the vlaue the adress
+		ASSERT(t->name==PTR);
+		ASSERT(t->sub->eq(this->type));
+		return CgValue(addr,t,0);
+	} else if (auto v=this->val->as_variable()){
+		if (v->reg_is_addr){
+			return CgValue(v->reg_name, new Type(0,PTR,v->type()));
+		}
+	}
+	{
+		ASSERT(0 && "tryting to take adress of register");
+		return CgValue();
 //			return this->to_stack(cg).addr_op(cg,t);
+	}
+}
+CgValue CgValue::deref_op(CodeGen& cg, Type* t) {
+	ASSERT(this->type->name==PTR || this->type->name==REF);
+	if (!t) { t=this->type->sub;}
+	// todo type assertion 't' is the output type.
+	if (!addr) {		// the value we were given is now the *adress* - we return a reference, not a pointer.
+		return CgValue(0,t,reg);
+	} else {
+		// it its'  a reference type, we need to load that first.
+		auto ret=load(cg);
+		return CgValue(0,t,ret.reg); // ... and return it as another reference: eg given T&* p,  returning T& q=*p
+	}
+}
+
+CgValue CgValue::load(CodeGen& cg,Type* result_type) const{
+	//if (!this->is_valid()) return CgValue();
+	auto ofp=cg.ofp;
+	if (elem>=0){
+		// todo: why not 'addr' aswell?
+		if (this->type->is_pointer() || (addr &&!reg)) {
+			cg.emit_comment("dot reg=%s addr=%s index=%d",str(reg),str(addr),elem);
+			auto sub=this->get_elem_index(cg,elem,result_type);
+			return sub.load(cg);
+		} else{
+			// elem acess
+			auto r=cg.next_reg();
+			cg.emit_ins_begin(r,"extractelement");
+			cg.emit_type_reg(this->type,false,reg);
+			cg.emit_i32_lit(this->elem);
+			cg.emit_ins_end();
+			return CgValue(r,this->type->get_elem(elem));
 		}
 	}
-	CgValue deref_op(CodeGen& cg, Type* t) {
-		ASSERT(this->type->name==PTR || this->type->name==REF);
-		if (!t) { t=this->type->sub;}
-		// todo type assertion 't' is the output type.
-		if (!addr) {		// the value we were given is now the *adress* - we return a reference, not a pointer.
-			return CgValue(0,t,reg);
-		} else {
-			// it its'  a reference type, we need to load that first.
-			auto ret=load(cg);
-			return CgValue(0,t,ret.reg); // ... and return it as another reference: eg given T&* p,  returning T& q=*p
+	if(val) {
+		auto outr=cg.next_reg();
+		
+		if (auto lit=dynamic_cast<ExprLiteral*>(val)){
+			return cg.emit_make_literal(lit);
+			// todo: string literal, vector literals, bit formats
+		}
+		else if (auto fp=dynamic_cast<ExprFnDef*>(val)){
+			if (fp->is_closure()) {
+				// Build a pair. we would also build the Capture Object here.
+				// TODO: we're blocked from making a nice' emit_make_pair()' wrapper here
+				// because: fp->fn_type is interpretted as {ptr,env}, but we must manually
+				// tell it to build the first & second types.
+				commit_capture_vars_to_stack(cg,fp->my_capture);
+				auto r=cg.emit_ins_begin(cg.next_reg(),"insertvalue");
+				cg.emit_type(fp->fn_type); cg.emit_undef();
+				cg.emit_function_type(fp->fn_type);
+				cg.emit_fn(fp->get_mangled_name());
+				cg.emit_comma();
+				cg.emit_txt("0");
+				cg.emit_ins_end();
+				if (fp->my_capture){
+					auto closure_env=CgValue(fp->my_capture->reg_name,fp->my_capture->type());
+					auto closure_env_ptr_i8=cg.emit_cast_raw(closure_env,cg.i8ptr());
+
+					cg.emit_ins_begin(outr,"insertvalue");
+					cg.emit_type_reg(fp->fn_type,false,r);
+					cg.emit_type_operand(closure_env_ptr_i8);
+					cg.emit_comma();
+					cg.emit_txt("1");
+					cg.emit_ins_end();
+				} else {
+					outr=r;
+				}
+				return CgValue(outr,fp->fn_type);
+			} else {// raw function
+				cg.emit_ins_begin(outr,"load");
+				cg.emit_type(this->type,true);
+				cg.emit_fn_ptr(fp->get_mangled_name());
+				cg.emit_ins_end();
+				return CgValue(outr,fp->fn_type);
+			}
+		}
+		else if (auto v=dynamic_cast<Variable*>(val)){
+			if (v->reg_is_addr){
+				auto r= CgValue(0,v->type(),v->reg_name);
+				return r.load(cg);
+			} else
+				return *this;	//NOP - remember its' lazy, this is a valid case for reg-reg
+		}
+	}
+	if ((bool)addr) {
+		ASSERT(reg==0);
+		auto dstr=cg.next_reg();
+		cg.emit_ins_begin(dstr,"load");
+		cg.emit_type_reg(type, addr!=0,addr);// an extra pointer level if its' a reference
+		cg.emit_ins_end();
+		return CgValue(dstr,type);
+	}
+	ASSERT(reg && !addr);
+	return *this;
+}
+void CgValue::emit_operand_literal(CodeGen& cg,const ExprLiteral* lit)const{
+	auto &v=*this;
+	if (cg.comma){cg.emit_txt(",");} cg.comma=true;
+	auto ofp=cg.ofp;
+	switch (lit->type_id) {
+		case T_INT:
+			cg.emit_txt(" %d ",lit->u.val_int);
+			break;
+		case T_UINT:
+			cg.emit_txt(" %u ",lit->u.val_uint);
+			break;
+		case T_FLOAT:
+			cg.emit_txt(" 0x%x00000000 ",lit->u.val_uint);
+			break;
+		case T_CONST_STRING:
+			cg.emit_txt(" getelementptr inbounds([%d x i8]* @%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
+			break;
+		default:
+			cg.emit_txt(" @TODO_LITERAL_FORMAT %s", getString(lit->name));
+			break;
+		}
+}
+void CgValue::emit_operand(CodeGen& cg)const{
+	auto &v=*this;
+	auto ofp=cg.ofp;
+	if (v.reg!=0){
+		cg.emit_reg(v.reg);
+		return;
+	}
+	else if (v.addr!=0){
+		cg.emit_reg(v.addr);
+		return;
+	}
+	else if (v.val){
+		if (auto lit=dynamic_cast<ExprLiteral*>(v.val)) {
+			ASSERT(v.addr==0 && "check case above, incorrect assumptions")
+			emit_operand_literal(cg,lit);
+		}
+		return;
+	} else {
+		cg.emit_txt(" <?CgV?> ");
+		v.type->dump_if(0);
+		ASSERT(v.type);
+		ASSERT(0 && "missing register, value wasn't found in resolving");
+	}
+}
+CgValue CgValue::store(CodeGen& cg) const{// for read-modify-write
+	auto &dst=*this;
+	ASSERT(type);
+	if (!addr || !type)
+		return dst;
+	cg.emit_store(cg.next_reg(), type, addr);
+	return dst;
+}
+CgValue CgValue::store(CodeGen& cg,const CgValue& src) const{
+	auto &dst=*this;
+	auto src_in_reg=src.load(cg);
+	
+	if (elem>=0){
+		auto newreg=next_reg_name(&cg.m_next_reg);
+		if ( reg && !addr){
+			auto x=dst.get_elem_index(cg, elem);
+			return cg.emit_store(src_in_reg.reg,src.type, x.addr);
+		}else if (addr && !reg){
+			auto x=dst.get_elem_index(cg, elem);
+			return cg.emit_store(src_in_reg.reg,src.type, x.addr);
+
+		}else {
+			ASSERT(dst.type->name!=PTR);
+			cg.emit_ins_begin(newreg,"insertelement");
+			cg.emit_type_reg(dst.type,false,reg); cg.emit_comma();
+			auto elem_t=dst.type->get_elem(elem);
+			cg.emit_type_reg(elem_t,false,src_in_reg.reg);
+			cg.emit_i32_lit(dst.elem);
+			cg.emit_ins_end();
+			return CgValue(newreg, dst.type);
 		}
 	}
 	
-	CgValue load(CodeGen& cg,Type* result_type=0) const{
-		//if (!this->is_valid()) return CgValue();
-		auto ofp=cg.ofp;
-		if (elem>=0){
-			// todo: why not 'addr' aswell?
-			if (this->type->is_pointer() || (addr &&!reg)) {
-				cg.emit_comment("dot reg=%s addr=%s index=%d",str(reg),str(addr),elem);
-				auto sub=this->get_elem_index(cg,elem,result_type);
-				return sub.load(cg);
-			} else{
-				// elem acess
-				auto r=cg.next_reg();
-				cg.emit_ins_begin(r,"extractelement");
-				cg.emit_type_reg(this->type,false,reg);
-				cg.emit_i32_lit(this->elem);
-				cg.emit_ins_end();
-				return CgValue(r,this->type->get_elem(elem));
-			}
-		}
-		if(val) {
-			auto outr=cg.next_reg();
-			
-			if (auto lit=dynamic_cast<ExprLiteral*>(val)){
-				return cg.emit_literal(lit);
-				// todo: string literal, vector literals, bit formats
-			}
-			else if (auto fp=dynamic_cast<ExprFnDef*>(val)){
-				if (fp->is_closure()) {
-					// Build a pair. we would also build the Capture Object here.
-					// TODO: we're blocked from making a nice' emit_make_pair()' wrapper here
-					// because: fp->fn_type is interpretted as {ptr,env}, but we must manually
-					// tell it to build the first & second types.
-					commit_capture_vars_to_stack(cg,fp->my_capture);
-					auto r=cg.emit_ins_begin(cg.next_reg(),"insertvalue");
-					cg.emit_type(fp->fn_type); cg.emit_undef();
-					cg.emit_function_type(fp->fn_type);
-					cg.emit_fn(fp->get_mangled_name());
-					cg.emit_comma();
-					cg.emit_txt("0");
-					cg.emit_ins_end();
-					if (fp->my_capture){
-						auto closure_env=CgValue(fp->my_capture->reg_name,fp->my_capture->type());
-						auto closure_env_ptr_i8=cg.emit_cast_raw(closure_env,cg.i8ptr());
-
-						cg.emit_ins_begin(outr,"insertvalue");
-						cg.emit_type_reg(fp->fn_type,false,r);
-						cg.emit_type_operand(closure_env_ptr_i8);
-						cg.emit_comma();
-						cg.emit_txt("1");
-						cg.emit_ins_end();
-					} else {
-						outr=r;
-					}
-					return CgValue(outr,fp->fn_type);
-				} else {// raw function
-					cg.emit_ins_begin(outr,"load");
-					cg.emit_type(this->type,true);
-					cg.emit_fn_ptr(fp->get_mangled_name());
-					cg.emit_ins_end();
-					return CgValue(outr,fp->fn_type);
-				}
-			}
-			else if (auto v=dynamic_cast<Variable*>(val)){
-				if (v->reg_is_addr){
-					auto r= CgValue(0,v->type(),v->reg_name);
-					return r.load(cg);
-				} else
-					return *this;	//NOP - remember its' lazy, this is a valid case for reg-reg
-			}
-		}
-		if ((bool)addr) {
-			ASSERT(reg==0);
-			auto dstr=cg.next_reg();
-			cg.emit_ins_begin(dstr,"load");
-			cg.emit_type_reg(type, addr!=0,addr);// an extra pointer level if its' a reference
-			cg.emit_ins_end();
-			return CgValue(dstr,type);
-		}
-		ASSERT(reg && !addr);
-		return *this;
-	}
-	void emit_literal(CodeGen& cg,const ExprLiteral* lit)const{
-		if (cg.comma){cg.emit_txt(",");} cg.comma=true;
-		auto ofp=cg.ofp;
-		switch (lit->type_id) {
-			case T_INT:
-				cg.emit_txt(" %d ",lit->u.val_int);
-				break;
-			case T_UINT:
-				cg.emit_txt(" %u ",lit->u.val_uint);
-				break;
-			case T_FLOAT:
-				cg.emit_txt(" 0x%x00000000 ",lit->u.val_uint);
-				break;
-			case T_CONST_STRING:
-				cg.emit_txt(" getelementptr inbounds([%d x i8]* @%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
-				break;
-			default:
-				cg.emit_txt(" @TODO_LITERAL_FORMAT %s", getString(lit->name));
-				break;
-			}
-	}
-	void emit_operand(CodeGen& cg)const{
-		auto ofp=cg.ofp;
-		if (reg!=0){
-			cg.emit_reg(reg);
-			return;
-		}
-		else if (addr!=0){
-			cg.emit_reg(addr);
-			return;
-		}
-		else if (val){
-			if (auto lit=dynamic_cast<ExprLiteral*>(val)) {
-				ASSERT(addr==0 && "check case above, incorrect assumptions")
-				emit_literal(cg,lit);
-			}
-			return;
-		} else {
-			cg.emit_txt(" <?CgV?> ");
-			this->type->dump_if(0);
-			ASSERT(this->type);
-			ASSERT(0 && "missing register, value wasn't found in resolving");
-		}
-	}
-	CgValue store(CodeGen& cg) const{// for read-modify-write
-		ASSERT(type);
-		if (!addr || !type)
-			return *this;
-		cg.emit_store(cg.next_reg(), type, addr);
-		return *this;
-	}
-	CgValue store(CodeGen& cg,const CgValue& src) const{
-		auto src_in_reg=src.load(cg);
-		
-		if (elem>=0){
-			auto newreg=next_reg_name(&cg.m_next_reg);
-			if ( reg && !addr){
-				auto x=this->get_elem_index(cg, elem);
-				return cg.emit_store(src_in_reg.reg,src.type, x.addr);
-			}else if (addr && !reg){
-				auto x=this->get_elem_index(cg, elem);
-				return cg.emit_store(src_in_reg.reg,src.type, x.addr);
-
-			}else {
-				ASSERT(this->type->name!=PTR);
-				cg.emit_ins_begin(newreg,"insertelement");
-				cg.emit_type_reg(this->type,false,reg); cg.emit_comma();
-				auto elem_t=this->type->get_elem(elem);
-				cg.emit_type_reg(elem_t,false,src_in_reg.reg);
-				cg.emit_i32_lit(this->elem);
-				cg.emit_ins_end();
-				return CgValue(newreg, this->type);
-			}
-		}
-
-		
-		if (addr)
-			cg.emit_store(src_in_reg.reg, type, addr);
-		else if (reg) {
-			cg.emit_store(src_in_reg.reg, type, reg);
-		} else if (val) {
-			if (auto v=val->as_variable()) {
-				if (v->reg_is_addr && v->reg_name) {
+	if (addr)
+		cg.emit_store(src_in_reg.reg, type, addr);
+	else if (reg) {
+		cg.emit_store(src_in_reg.reg, type, reg);
+	} else if (val) {
+		if (auto v=val->as_variable()) {
+			if (v->reg_is_addr && v->reg_name) {
+				cg.emit_store(src_in_reg.reg, type, v->reg_name);
+				return CgValue(v);
+			} else if (!v->reg_name){
+				if (!v->on_stack) {
+					v->reg_name=src_in_reg.reg;
+				} else {
+					v->reg_name=cg.emit_alloca_type(v, type).addr;
+					v->reg_is_addr=true;
 					cg.emit_store(src_in_reg.reg, type, v->reg_name);
-					return CgValue(v);
-				} else if (!v->reg_name){
-					if (!v->on_stack) {
-						v->reg_name=src_in_reg.reg;
-					} else {
-						v->reg_name=cg.emit_alloca_type(v, type).addr;
-						v->reg_is_addr=true;
-						cg.emit_store(src_in_reg.reg, type, v->reg_name);
-					}
-					return CgValue(v);
 				}
+				return CgValue(v);
 			}
-			val->dump(0);
-			ASSERT(0 && "store case not handled, to var..");
 		}
-		return *this;
+		val->dump(0);
+		ASSERT(0 && "store case not handled, to var..");
 	}
-	CgValue get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const{	//calculates & returns adress
-		ASSERT(type );
-		auto sd=type->get_struct();
-		if (!sd) {type->dump(-1);error(field_name,"struct not resolved\n");}
-		int index=sd->field_index(field_name);
-		auto field=sd->find_field(field_name);
-		return get_elem_index(cg,index);
+	return *this;
+}
+CgValue CgValue::get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const{	//calculates & returns adress
+	ASSERT(type );
+	auto sd=type->get_struct();
+	if (!sd) {type->dump(-1);error(field_name,"struct not resolved\n");}
+	int index=sd->field_index(field_name);
+	auto field=sd->find_field(field_name);
+	return get_elem_index(cg,index);
+}
+CgValue CgValue::get_elem_index(CodeGen& cg, int field_index,Type *field_type) const{
+	if ((bool)reg && !addr && !(this->type->is_pointer())){
+		// lazy ref to inreg field index,
+		// 'load'/'store' will do 'insert'/'extract'
+		return CgValue(reg,type,0,field_index);
 	}
-	CgValue get_elem_index(CodeGen& cg, int field_index,Type *field_type=0) const{
-		if ((bool)reg && !addr && !(this->type->is_pointer())){
-			// lazy ref to inreg field index,
-			// 'load'/'store' will do 'insert'/'extract'
-			return CgValue(reg,type,0,field_index);
-		}
-		else {
-			auto numptr=this->type->num_pointers()+(this->addr?1:0);
-			ASSERT(numptr==1);
-			return cg.emit_getelementref(*this,0,field_index);
-		}
+	else {
+		auto numptr=this->type->num_pointers()+(this->addr?1:0);
+		ASSERT(numptr==1);
+		return cg.emit_getelementref(*this,0,field_index);
 	}
-	CgValue index(RegisterName index){ // calculates & returns adress
-		return CgValue();
-	}
-};
+}
+CgValue CgValue::index(RegisterName index){ // calculates & returns adress
+	return CgValue();
+}
+
 
 CgValue CodeGen::emit_getelementref(const CgValue &src, Name n){
 	auto i=src.type->deref_all()->struct_def->get_elem_index(n);
@@ -429,7 +413,7 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index)
 CgValue CodeGen::emit_assign(const CgValue& dst, const CgValue& src){
 	return dst.store(*this, src.load(*this));
 }
-CgValue CodeGen::emit_literal(ExprLiteral *lit){
+CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 	auto outr=this->next_reg();
 	auto ltn=lit->type()->name;
 	if (ltn==INT){

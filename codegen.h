@@ -16,6 +16,41 @@ struct Type; struct ExprFnDef;
 void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp);
 CgValue	CgValueVoid();
 
+
+struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
+	// TODO: this should be a tagged-union?
+	// these values aren't persistent so it doesn't matter too much.
+	RegisterName reg;
+	int elem=-1;     // if its a struct-in-reg
+	Type* type;
+	RegisterName addr;
+	Node*	val;		// which AST node it corresponds to
+	int ofs;
+	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
+	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
+	explicit CgValue(Node* n);
+	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
+	bool is_struct_elem()const{return elem>=0;}
+	bool is_valid()const{if (val) if (val->type()->name==VOID) return false;return val!=0||reg!=0||addr!=0;}
+	bool is_literal()const{return dynamic_cast<ExprLiteral*>(val)!=0;}
+	bool is_reg()const { return reg!=0;}
+	bool is_any()const{return is_literal()||is_reg();}
+	bool is_addr() const {return reg==0 && val==0;}
+	CgValue addr_op(CodeGen& cg,Type* t);
+	CgValue deref_op(CodeGen& cg, Type* t);
+	
+	CgValue load(CodeGen& cg,Type* result_type=0) const;
+	void emit_operand_literal(CodeGen& cg,const ExprLiteral* lit)const;
+	void emit_operand(CodeGen& cg)const;
+	CgValue store(CodeGen& cg) const;
+	CgValue store(CodeGen& cg,const CgValue& src) const;
+	CgValue get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const;
+	CgValue get_elem_index(CodeGen& cg, int field_index,Type *field_type=0) const;
+	CgValue index(RegisterName index);
+};
+
+
+
 class CodeGen {
 	/// TODO adapt interface till we can handle CodeGenLLVM CodeGenC
 	/// todo: move the external interface entirely to use wrapped CgValues,pass name hints for outputs
@@ -94,10 +129,15 @@ public:
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
 	void emit_i32_reg(Name reg);
-	CgValue emit_literal(ExprLiteral* l);
+	CgValue emit_make_literal(ExprLiteral* l);
 	RegisterName	emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index);
 	CgValue emit_store(RegisterName reg, Type* type, RegisterName addr);
 	CgValue 		emit_store_global(CgValue dst, Name globalvar);
+
+	// lazy load/store of abstract CgValue (ref or register)
+	CgValue store(const CgValue& dst, const CgValue& src){return dst.store(*this,src);};
+	CgValue store(const CgValue& dst){return dst.store(*this);};
+	void	emit_operand(const CgValue& val){val.emit_operand(*this);};
 
 	void emit_fn_ptr(Name n);
 	void emit_fn(Name n);
