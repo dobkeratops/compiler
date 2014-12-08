@@ -17,13 +17,13 @@ void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp);
 CgValue	CgValueVoid();
 
 class CodeGen {
-	/// TODO adapt interface to handle CodeGenLLVM CodeGenC
+	/// TODO adapt interface till we can handle CodeGenLLVM CodeGenC
 	/// todo: move the external interface entirely to use wrapped CgValues,pass name hints for outputs
 	/// codegen can depend on a subset of the ast concepts . Type,..
 	/// TODO: we might want CodeGen to actually know about C's for & C If-Then-Else
 	///   eg emit_forloop(Node* init,Node* cond,Node* incr, Node* body)// defer..
 	///   this might increase boilerplate for LLVM case, but facilitate generating readable C
-	/// we might need to rework AST to know about SSA, see the current awful hack for 'for'
+	/// for phi nodes we might need to rework AST to know about SSA, see the current awful hack for 'for'
 public:
 	typedef  Name JumpLabel;
 	FILE*	ofp;
@@ -87,8 +87,6 @@ public:
 	void emit_pointer_end();
 	void emit_phi_reg_label(Name reg, Name label);
 	JumpLabel	gen_label(const char* name,int index=0);
-	CgValue emit_call(CgValue fnc, CgValue arg);
-	CgValue emit_call(CgValue fnc, CgValue arg1,CgValue arg2);
 	void emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,CgValue src1);
 	CgValue emit_instruction(Name opname,Type* type,  Name outname,CgValue src1);
 	CgValue emit_instruction(Name opname,Type* type,  Name outname,CgValue src1,CgValue src2);
@@ -122,6 +120,7 @@ public:
 	// API refactoring
 	CgValue emit_getelementref(const CgValue& src, int i0, int field_index);
 	CgValue emit_getelementref(const CgValue& src, Name n);
+	CgValue emit_getelementref(const CgValue& src, const CgValue& index);
 	CgValue emit_loadelement(const CgValue& obj, Name field);
 	CgValue emit_storeelement(const CgValue& obj, Name field,const CgValue& data);
 	CgValue emit_extract(CgValue src, int index);
@@ -132,10 +131,20 @@ public:
 	CgValue emit_free( CgValue ptr,size_t count);
 	CgValue emit_free_array(Type* t, CgValue count);
 	CgValue emit_malloc_array( Type* t,CgValue count);
-	// abstract control-flow in codegen, so we can plug in LLVM or C backend.
+	
+	// IF,FOR are part of the codegen interface to swap C/LLVM backends
 	CgValue emit_for(ExprFor* f,Expr* init,Expr* cond, Expr* incr, Expr* body, Expr* else_block);
+	CgValue emit_if(Node* n, Expr* cond, Expr* body, Expr* else_block);
 	CgValue emit_break(CgValue v);
 	CgValue emit_continue();
+	void 	emit_call_begin(const CgValue& call_expr);
+	CgValue emit_call_end();
+	CgValue emit_call(const CgValue& fnc, const CgValue& arg);
+	CgValue emit_call(const CgValue& fnc, const CgValue& arg1,const CgValue& arg2);
+
+	// helper fn for simple cases eg implementing operator overload calls
+	// use this interface to allow emiting readable c
+	
 	EmitLoc get_pos(){return ftell(ofp);}
 	void set_pos(EmitLoc loc){fseek(ofp,loc,SEEK_SET);}
 	void set_pos_end(){fseek(ofp,0,SEEK_END);}

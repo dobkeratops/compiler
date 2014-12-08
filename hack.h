@@ -487,7 +487,7 @@ struct Type : Expr{
 	bool	is_void()const			{return !this || this->name==VOID;}
 	int		num_derefs()const		{if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
 	Type*	deref_all() const		{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
-	virtual void			translate_typeparams(const TypeParamXlat& tpx);
+	void			translate_typeparams(const TypeParamXlat& tpx) override;
 	virtual ResolvedType	resolve(Scope* s, const Type* desired,int flags);
 	virtual void verify();
 	CgValue	compile(CodeGen& cg, Scope* sc);
@@ -602,6 +602,7 @@ struct Capture : ExprDef{
 };
 
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
+	const char* kind_str()const{return "typedef";}
 	vector<TypeParam*> typeparams;
 };
 
@@ -629,6 +630,7 @@ struct ExprLiteral : ExprDef {
 	void translate_typeparams(const TypeParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc);
 };
+/// 'ArgDef' used for function arguments and struct-fields. both have ident:type=<default expr>
 struct ArgDef :ExprDef{
 	Scope*	owner=0;
 	void set_owner(Scope* s){
@@ -832,6 +834,10 @@ struct ExprFor :  ExprFlow {
 struct Call;
 struct FnName;
 
+/// 'StructDef' should handle everything for struct,trait,impl,vtable class,mod/namespace,
+/// specific types derived expose a subset as language sugar.
+/// a transpiler should handle conversions eg spot a 'struct' with pure virtuals -> trait, etc.
+
 struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
 	// but its' backwards.
@@ -913,12 +919,35 @@ inline Type* Type::get_elem(int index){
 }
 
 /// TODO - seperate 'core types(C like)' from 'sugar types' (eg enum,trait..)
+/// a Rust Enum is sugar for a struct holding values & derived variant structs.
 struct EnumDef  : ExprStructDef {
 //	void dump(int depth)const;
 //	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	Node* clone()const;
 	const char* kind_str()const{return "enum";}
-	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){}
+	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
+};
+
+/// a rust 'Trait' is a struct with only virtual functions
+struct TraitDef : ExprStructDef {
+	Node* clone()const;
+	const char* kind_str()const{return "trait";}
+	TraitDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
+};
+
+/// a rust 'Impl' extends a struct with functions implementations
+/// it could also represent a C++ namespace ... whihc would just add more definitions to a fieldless struct
+struct ImplDef : ExprStructDef {
+	Node* clone()const;
+	const char* kind_str()const{return "impl";}
+	ImplDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
+};
+/// a rust 'Mod' is just a struct with no fields, and just static functions
+/// generalize the concepts of C++ nested structs,C++ namespaces, & Mods.
+struct ModDef : ExprStructDef {
+	Node* clone()const;
+	const char* kind_str()const{return "mod";}
+	ModDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
 };
 
 // todo.. generic instantiation: typeparam logic, and adhoc mo

@@ -70,6 +70,7 @@ void CodeGen::emit_separator(const char* txt){
 	this->comma=0;
 }
 RegisterName  CodeGen::emit_ins_begin(RegisterName reg, const char* op){
+	/// TODO: return 'CgValue' from emit_call_end(), dont take 'RegisterName' param.
 	if (!reg) { emit_ins_begin_name(op);}
 	else {
 		emit_ins_begin_sub();
@@ -484,8 +485,6 @@ CgValue CodeGen::emit_store_global(CgValue dst,Name globalvar){
 	return dst;
 }
 
-
-
 CgValue Node::compile_if(CodeGen& cg, Scope* sc){
 	if (this)
 		return this->compile(cg,sc);
@@ -493,6 +492,22 @@ CgValue Node::compile_if(CodeGen& cg, Scope* sc){
 		return CgValueVoid();
 }
 
+
+CgValue  CodeGen::emit_call(const CgValue& call_expr, const CgValue& arg1)
+{
+	emit_call_begin(call_expr); emit_type_operand(arg1); return emit_call_end();
+}
+CgValue  CodeGen::emit_call(const CgValue& call_expr, const CgValue& arg1, const CgValue& arg2)
+{
+	emit_call_begin(call_expr); emit_type_operand(arg1); emit_type_operand(arg2); return emit_call_end();
+}
+void CodeGen::emit_call_begin(const CgValue& s){
+}
+CgValue CodeGen::emit_call_end(){
+	error(0,"todo"); error_end(0);
+	emit_ins_end();
+	return CgValue();
+}
 
 
 void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp){
@@ -914,25 +929,25 @@ Name CodeGen::gen_label(const char* label,int index){
 	return getStringIndex(tmp);
 }
 
-CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
-	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
-	auto curr_fn=cg.curr_fn;
-	auto ifn=this;
+CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, Expr* cond, Expr* body, Expr* else_block){
 	// TODO: Collect phi-nodes for anything modified inside.
+	auto curr_fn=cg.curr_fn;
+	//auto ifn=this;
+	
 	RegisterName outname=cg.next_reg();
-	auto condition=ifn->cond->compile(cg,sc);
+	auto condition=cond->compile(cg,sc);
 	int index=cg.m_next_reg++;
 	auto label_if=cg.gen_label("if",index);
 	auto label_endif=cg.gen_label("endif",index);
-	if (ifn->else_block){
+	if (else_block){
 		auto label_else=cg.gen_label("else",index);
 		cg.emit_branch(condition,label_if,label_else);
 		cg.emit_label(label_if);
-		auto if_result=ifn->body->compile(cg,sc);
+		auto if_result=body->compile(cg,sc);
 		if (if_result.is_valid())if_result=if_result.load(cg,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_else);
-		auto else_result=ifn->else_block->compile(cg,sc);
+		auto else_result=else_block->compile(cg,sc);
 		if (else_result.is_valid())else_result=else_result.load(cg,0);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
@@ -952,13 +967,22 @@ CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 		/// TODO: ensure  if ... else if ... typechecks ok. 
 		cg.emit_branch(condition,label_if,label_endif);
 		cg.emit_label(label_if);
-		auto ifblock=ifn->body->compile(cg,sc);
+		auto ifblock=body->compile(cg,sc);
 		if (ifblock.is_valid()) ifblock=ifblock.load(cg);
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		return CgValue();
 	}
 }
+CgValue CodeGen::emit_if(Node* if_node, Expr* cond, Expr* body, Expr* else_block){
+	return emit_if_llvm(*this,if_node,if_node->get_scope(), cond,body,else_block);
+}
+
+CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
+	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
+	return cg.emit_if(this, this->cond, this->body, this->else_block);
+}
+
 
 struct LoopPhiVar {
 	CgValue val;//todo

@@ -144,14 +144,13 @@ fn main(argc:int,argv:**char)->int{
 		44
 	}
 	printf("loop return value = %d\n",value);
-    something_foo(&fv);
-	something(&fv);
 
     // closure syntax stolen from Rust |args,..|{body...}
     take_closure(|x|{printf("closure says %d %d\n",x,y);})
 
 	fv:=Foo{vx=13,vy=14,vz=15}; // initialize struct on stack, named fields
 	something_foo(&fv,&fv);
+    printf("fv.vx=%d\n",fv.vx);
 
 	fv2:=new Foo{vx=23,vy=24,vz=25}; // struct allocate & init
 	something_foo(fv2);
