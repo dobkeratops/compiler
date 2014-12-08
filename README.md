@@ -25,6 +25,9 @@ dont have a name yet hence 'hack'..
  * limited C++-style internal vtables & single inheritance
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
+example source..
+https://github.com/dobkeratops/compiler/blob/master/example.rs
+
 Very early days, the compiler is a few weeks old.
 
 #### Long Term Goals:-

@@ -1,5 +1,5 @@
 // Uses .rs extention for syntax highlighting, but this is not Rust source.
-// omit function body to declare prototypes for external linking,"C" linkage optional`
+// omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types..
 fn"C" printf(s:str,...)->int;
 
 // stolen from rust: function syntax 'fn <function name>(args) optional return value {body}
