@@ -452,6 +452,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 			args->push_back(parse_type(src,OR,owner));
 			src.eat_if(COMMA);
 		}
+		src.expect(OR);
 		parse_ret_val(src,owner,ret);
 	}
 	else if (tok==OPEN_PAREN) {

@@ -30,7 +30,7 @@ const char* g_TestMemberFn=
 /*20*/  "}														\n";
 const char* g_TestClosure=
 /*1*/ 	"fn\"C\" printf(s:str,...)->int;  							\n"
-/*10*/	"fn take_closure(pfunc:(int)->void){ pfunc(5);}\n"
+/*10*/	"fn take_closure(pfunc:|int|->void){ pfunc(5);}\n"
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	y:=11;z:=12;w:=0; y+=10;w+=7;			\n"
 /*51*/	"	take_closure(|x|{printf(\"closure x=%d captured y=%d z=%d\\n\",x,y,z);});\n"
@@ -289,7 +289,7 @@ char g_TestPolyLambda[]= //
 const char* g_TestLetArray=
 /* 1*/	"fn main(argc:int, argv:**char)->int{		\n"
 /* 2*/	"	let xs:array[int,10];\n"
-/* 3*/	"	let ptr:={&xs[1]};\n"
+/* 3*/	"	let ptr={&xs[1]};\n"
 /* 4*/	"	ptr[1]=5;\n"
 /* 5*/	"	0\n"
 /* 6*/  "}			\n";
@@ -297,6 +297,7 @@ const char* g_TestLetArray=
 
 
 void run_tests(){
+	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret2=compile_source(g_TestLetArray,"g_TestLetArray","test2.ll",B_TYPES|B_RUN);
 
 	/// TODO , actually verify these produced the right output!
@@ -310,7 +311,6 @@ void run_tests(){
 	auto ret10=compile_source(g_TestIf,"g_TestIf","test10.ll",B_TYPES|B_RUN);
 	
 	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
-	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestStruct,"g_TestStruct","test1.ll",B_TYPES|B_RUN);
 	auto ret7=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test7.ll",B_TYPES|B_RUN);
 	auto ret8=compile_source(g_TestMemberFn,"g_TestMemberFn","test8.ll",B_DEFS| B_TYPES|B_RUN);

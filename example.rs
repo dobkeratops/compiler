@@ -23,7 +23,7 @@ fn lerp(a,b,f){(b-a)*f+a};
 //  raw C like functions are written fn(int)->void
 
 
-fn take_closure(funcp:(int)->void){
+fn take_closure(funcp:|int|){
     funcp(10);
 }
 
@@ -86,7 +86,7 @@ fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 	u.tag=0;
 }
 
-fn map[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{
+fn map[X,Y,R](u:&Union[X,Y], fx:|&X|->R,fy:|&Y|->R)->R{
 	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
 }
 
@@ -95,7 +95,7 @@ fn main(argc:int,argv:**char)->int{
 
 	// closure syntax stolen from Rust |args,..|{body...}
 	let captured_y=0;
-	take_closure(|x|{printf("closure says x=%d y=%d\n",x,captured_y);})
+	take_closure(|x|{printf("closure says x=%d y=%d\n",x,captured_y);});
 
 	let u:Union[int,float]; 
 
@@ -126,7 +126,7 @@ fn main(argc:int,argv:**char)->int{
 		acc+=i;
 
 		printf("i,j=%d,%d,x=%d\n",i,j,acc);
-		if i==5{break 55}
+		if i==5{printf("break\n");break 55}
 	}else{
 		// for..else block called if no 'break'
 		printf("loop exit fine\n"); 
