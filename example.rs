@@ -97,10 +97,6 @@ fn main(argc:int,argv:**char)->int{
 	let captured_y=0;
 	take_closure(|x|{printf("closure says x=%d y=%d\n",x,captured_y);})
 
-	// LHS=:RHS is temporary syntax to init empty var with given type Union<int,float> 
-	//its a hack till we have let u:Union<int,float>.
-	// inspiration from rust is to avoid un-init vars altogether using expression syntax.
-	// the plan is to stick with rust 'let..', but keep 'go' like := in addition.
 	let u:Union[int,float]; 
 
 	// calls to templated functions
@@ -123,7 +119,6 @@ fn main(argc:int,argv:**char)->int{
 	// handles simple cases without needing a whole iterator library..
 	// enhanced with expression syntax: break <expr> , else {expr}
 	// type of 'value' is infered from the break/else expressions
-	// inspired by Rusts nifty inference.
 
 	let acc=0;
 	let value=for i:=0,j:=0; i<10; i+=1,j+=10 {
