@@ -12,15 +12,19 @@ fn something(f:float){
 // eg
 // template<class A,class B,class F>
 //    auto lerp(A a,B b, F f){return (b-a)*f+a;}
+// more specific overloads are used in preference if given
 
-fn lerp(a,b,f){(b-a)*f+a};
-
+fn lerp(a,b,f)=(b-a)*f+a;
+//  expression sugar 
+fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
+	ofsx:=x-x0;dx:=x1-x0;dy:=y1-y0;
+};
 
 //  declare a function taking a closure:
 //  'funcp' is a variable of function type, 1arg 'int', result 'void'
 //  functions declared like this are assumed to be closures
 //  represented as a pair of pointers (function*, environment*)
-//  raw C like functions are written fn(int)->void
+//  raw C like functions are currently written fn(int)->void 
 
 
 fn take_closure(funcp:|int|){
@@ -60,8 +64,8 @@ fn something(f:float,x){
 
 // this isn't a union yet, its just  test to show the type-inference
 // can handle getting a 'tag' from methods matching type X or Y
-// we will probably introduce propper tagged unions like Rust, 
-// but we want the template engine able to handle rolling pleasant custom variants
+// will probably introduce propper tagged unions like Rust, 
+// but want the template engine able to handle rolling pleasant custom variants
 // (TODO: max[sizeof[X],sizeof[Y]] operators in template engine..)
 
 struct Union<X,Y>{
@@ -90,7 +94,12 @@ fn main(argc:int,argv:**char)->int{
 
 	// closure syntax stolen from Rust |args,..|{body...}
 	let captured_y=0;
-	take_closure(|x|{printf("closure says x=%d y=%d\n",x,captured_y);});
+	take_closure(|x|{printf("closure1 says x=%d y=%d\n",x,captured_y);});
+
+	// sugar for closure as last arg, foo(..)do x{...}  === foo(..,|x|{...})
+	take_closure() do x{
+		printf("closure2 says x=%d y=%d\n",x,captured_y);
+	}
 
 	let u:Union[int,float]; 
 
@@ -99,10 +108,10 @@ fn main(argc:int,argv:**char)->int{
 	setv(&u,5);
  
 	// type inference with polymorphic lambdas
-	// we could overload 'map' to supply different combinations of types
+	// could overload 'map' to supply different combinations of types
 	// C++ equivalent doesn't seem to match all template args.
 	// as far as i've tried it.. you always need to specify 
-	// more params manually
+	// a  parameter manually
 
 	let z=map(&u,
 		|x:&int|{printf("union was set to int %d\n",*x);15},
@@ -114,6 +123,7 @@ fn main(argc:int,argv:**char)->int{
 	// handles simple cases without needing a whole iterator library..
 	// enhanced with expression syntax: break <expr> , else {expr}
 	// type of 'value' is infered from the break/else expressions
+	// for-else completes rusts' "everything-is-an-expression" philosophy
 
 	let acc=0;
 	let value=for i:=0,j:=0; i<10; i+=1,j+=10 {
@@ -168,7 +178,7 @@ fn main(argc:int,argv:**char)->int{
 	let x1=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >2",argc);2};
 	printf("\nHello World %d %d\n", x1, y );
 
-	// Stolen from rust: last statement is a return value. 
+	// last statement is a return value. 
 	// takes some getting used to but makes semicolons significant and
 	// interacts very well with expression syntax generally.
 
@@ -181,7 +191,7 @@ fn do_something(p:*IBaz){
 
 // implementing vtable based 'classes', like C++
 // TODO handle rust-like trait-objects
-// instead of multiple-inheritance.
+// wont implement C++ multiple-inheritance.
 
 struct Qux : IBaz {
 	x:int;

@@ -45,11 +45,13 @@ struct Lexer {
 	static int close_of(int tok);
 	void advance_tok();
 	void advance_tok_sub();
+	void begin_lambda_bar();
 	Name eat_tok();
 	Name eat_if(Name a, Name b, Name c);
 	Name eat_if(Name a, Name b);
 	Name eat_if_not(Name i);
 	bool eat_if(Name i);
+	bool eat_if_lambda_bar(){if (eat_if(OR)){begin_lambda_bar();return true;}return false;}
 	bool is_placeholder()const;
 	Name eat_if_placeholder();
 	Name eat_ident();

@@ -1,5 +1,6 @@
 #include "compiler.h"
 #include "parser.h"
+#include "error.h"
 
 //#define pop(X) ASSERT(X.size()>0); pop_sub(X);
 
@@ -26,7 +27,7 @@ void pop_operator_call( vector<SrcOp>& operators,vector<Expr*>& operands) {
 	} else{
 		//						printf("\noperands:");dump(operands);
 		//						printf("operators");dump(operators);
-		error(0,"\nerror: %s arity %d, %lu operands given\n",str(op.op),arity(op.op),operands.size());
+		error(op.pos,"\nerror: %s arity %d, %lu operands given\n",str(op.op),arity(op.op),operands.size());
 	}
 	p->pos=p->lhs?p->lhs->pos:p->rhs->pos;
 	operands.push_back((Expr*)p);
@@ -37,6 +38,9 @@ void flush_op_stack(ExprBlock* block, vector<SrcOp>& ops,vector<Expr*>& vals) {
 	while (vals.size()) {
 		block->argls.push_back(pop(vals));
 	}
+}
+void flatten_stack(vector<SrcOp>& ops,vector<Expr*>& vals){
+	while (vals.size()&&ops.size()) pop_operator_call(ops,vals);
 }
 
 ExprBlock* parse_block(TokenStream&src,int close,int delim, Expr* op);
@@ -135,11 +139,23 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2=0){
 // no; crap idea.
 //
 //
+ExprFnDef* parse_fn_args(TokenStream& src,int close){
+	auto *fndef=new ExprFnDef(src.prev_pos);
+	fndef->m_closure=true;
+	Name tok;
+	while (src.peek_tok()!=close) {
+		auto arg=parse_arg(src,close);
+		fndef->args.push_back(arg);
+		src.eat_if(COMMA);
+	}
+	src.expect(close);
+	return fndef;
+}
 void parse_fn_args_ret(ExprFnDef* fndef,TokenStream& src,int close){
 	Name tok;
 	while ((tok=src.peek_tok())!=NONE) {
 		if (tok==ELIPSIS){
-			fndef->variadic=true; src.eat_tok(); src.expect(CLOSE_PAREN); break;
+			fndef->variadic=true; src.eat_tok(); src.expect(close); break;
 		}
 		if (src.eat_if(close)){break;}
 		auto arg=parse_arg(src,close);
@@ -155,6 +171,9 @@ void parse_fn_body(ExprFnDef* fndef, TokenStream& src){
 	// read function arguments
 	// implicit "progn" here..
 	auto tok=src.peek_tok();
+	if (src.eat_if(ASSIGN)){
+		fndef->body=parse_expr(src);
+	}else
 	if (src.eat_if(OPEN_BRACE)){
 		fndef->body = parse_block(src, CLOSE_BRACE, SEMICOLON, nullptr);
 	} else if (tok==SEMICOLON || tok==COMMA || tok==CLOSE_BRACE ){
@@ -197,7 +216,7 @@ ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner) {
 	parse_fn_body(fndef,src);
 	return fndef;
 }
-ExprFnDef* parse_closure(TokenStream&src) {// eg |x|x*2
+ExprFnDef* parse_closure(TokenStream&src,int close) {// eg |x|x*2
 	// we read | to get here
 	auto *fndef=new ExprFnDef(src.pos);
 	// read function name or blank
@@ -206,7 +225,7 @@ ExprFnDef* parse_closure(TokenStream&src) {// eg |x|x*2
 	fndef->name=getStringIndex(tmp);
 	fndef->m_closure=true;
 	
-	parse_fn_args_ret(fndef,src,OR);
+	parse_fn_args_ret(fndef,src,close);
 	parse_fn_body(fndef,src);
 	return fndef;
 }
@@ -231,8 +250,19 @@ ExprOp* parse_let(TokenStream& src) {
 	return nlet;
 }
 
-
-
+Expr* expect_pop(TokenStream& src,vector<Expr*>& ops){
+	if (!ops.size()){
+		error(src.pos,"expected operand first");
+		return nullptr;
+	}
+	auto p=ops.back(); ops.pop_back();
+	return p;
+}
+void expect(TokenStream& src,bool expr,const char* msg){
+	if (!expr){
+		error(src.pos,msg);
+	}
+}
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	// shunting yard expression parser+dispatch to other contexts
 	ExprBlock *node=new ExprBlock(src.pos); node->call_expr=op;
@@ -290,6 +320,28 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 			auto local_fn=parse_fn(src,nullptr);
 			operands.push_back(local_fn);
 		}
+		else if (src.eat_if(DO)){
+			// simple syntax sugar- do notation,parser hack
+			flatten_stack(operators,operands);
+			expect(src,operands.size()>=1,"need preceeding expression for 'do x{..}");
+			auto fndef=parse_fn_args( src, OPEN_BRACE);
+			fndef->body=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
+			auto prev=operands.back();
+			prev->as_block()->argls.push_back(fndef);
+			flush_op_stack(node,operators,operands);
+			was_operand=false;
+		}
+		else if (src.eat_if(WHERE)){
+			// simple syntax sugar,parser hack.
+			flatten_stack(operators,operands);
+			expect(src,operands.size()>=1,"need preceeding expression for 'where{..}");
+
+			//another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			auto b2=parse_block(src,0,0,nullptr);
+			ASSERT(b2->argls.size()<=1 && "remove when expr/block hack is fixed")
+			b2->argls.back()->as_block()->argls.push_back(expect_pop(src,operands));
+			operands.push_back(b2);
+		}
 		else if (src.eat_if(FOR)){
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_for(src));
@@ -343,8 +395,9 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		else{
 			auto tok=src.eat_tok();
 			if (!was_operand && tok==OR){
+				src.begin_lambda_bar();
 				another_operand_so_maybe_flush(was_operand,node,operators,operands);
-				operands.push_back(parse_closure(src));
+				operands.push_back(parse_closure(src,OR));
 			} else
 				if (is_operator(tok)) {
 					if (was_operand) tok=get_infix_operator(tok);
@@ -448,6 +501,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 	else if (tok==OR){ // closure |arg0,arg1,..|->ret
 		ret = new Type(owner,CLOSURE);
 		auto args=new Type(owner,TUPLE); ret->push_back(args);
+		src.begin_lambda_bar();
 		while ((src.peek_tok())!=OR){
 			args->push_back(parse_type(src,OR,owner));
 			src.eat_if(COMMA);
@@ -480,7 +534,8 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 					src.eat_if(COMMA);
 				}
 			}
-			// postfixes:  eg FOO|BAR|BAZ todo  FOO*BAR*BAZ   FOO&BAR&BAZ
+			// postfixes:  eg FOO|BAR|BAZ todo  FOO+BAR+BAZ  also FOO*BAR*BAZ like ml? not sure its' wise alongside pointer types.
+			// might not play well with pointers, but hell we have them in
 			if (src.peek_tok()==OR && close!=OR){
 				Type* sub=ret; ret=new Type(owner,VARIANT); ret->push_back(sub);
 				while (src.eat_if(OR)){

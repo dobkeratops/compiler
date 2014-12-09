@@ -11,7 +11,7 @@ Expr*		parse_expr(TokenStream&src);
 Type*		parse_type(TokenStream& src, int close,Node* owner);
 Pattern*	parse_pattern(TokenStream& src,int close, int close2);
 ExprFnDef*	parse_fn(TokenStream&src,ExprStructDef* owner);	// eg fn foo()
-ExprFnDef*	parse_closure(TokenStream&src);//eg |x|{expr..}
+ExprFnDef*	parse_closure(TokenStream&src,int close);//eg |x|{expr..} (x)->{}
 ExprFor*	parse_for(TokenStream&src);
 ExprIf*		parse_if(TokenStream&src);
 TypeDef*	parse_typedef(TokenStream&src);

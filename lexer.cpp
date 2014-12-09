@@ -1,5 +1,5 @@
 #include "lexer.h"
-
+#include "error.h"
 SrcPos g_srcpos;	// hack sorry,
 
 bool isSymbolStart(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_';}
@@ -191,10 +191,13 @@ Name Lexer::eat_tok() {
 			::error(pos, "too many close brackets");
 		auto close=close_of((int)open);
 		if (close!=(int)r ) {
-			::error(pos,"found %s expected %s",str(r),str(close));
+			::error_begin(pos,"found %s expected %s",str(r),str(close));
 			::error(bracket_pos[depth+1],"from here");
 			::error_end(0);
 		}
+	}
+	if (depth>0&&bracket[depth-1]==OR && r==OR){
+		depth--;
 	}
 #ifdef DEBUG2
 	if (!strcmp(getString(r),"debugme")){
@@ -204,6 +207,11 @@ Name Lexer::eat_tok() {
 	
 	return r;
 }
+void Lexer::begin_lambda_bar() {
+	/// needed to handle OR like bracket for lambda eg |x,y|; allows nesting error eg |x,) '|' expected.
+	bracket[depth++]=OR;ASSERT(depth<32);
+}
+
 Name Lexer::Lexer::eat_if(Name a, Name b, Name c){
 	auto t=peek_tok(); if (t==a || t==b || t==c) return eat_tok();
 	return 0;
@@ -225,7 +233,7 @@ Name Lexer::eat_if_placeholder(){if (is_placeholder()){advance_tok(); return PLA
 Name Lexer::Lexer::eat_ident() {
 	auto r=eat_tok();
 	if (r<IDENT) {
-		::error(pos,"expected ident found %s",getString(r));error_end(0);}
+		::error(pos,"expected ident found %s",getString(r));}
 	return r;
 }
 int Lexer::eat_int() {

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <cstdlib>
 #include "compiler.h"
+#include "error.h"
 
 bool g_error_on_newline=false;
 int g_num_errors=0;
@@ -76,6 +77,7 @@ void error(const SrcPos& pos, const char* str ,...){
 	if (strlen(txt)){
 		if (txt[strlen(txt)-1]!='\n'){g_error_on_newline=false;}
 	}
+	error_maybe_end(nullptr);
 }
 
 void error_begin(const Node* n, const char* str, ... ){
@@ -178,6 +180,22 @@ void error_srcpos(const SrcPos& p, const char* str, ...) {
 	error_print_line(str);
 	error_maybe_end(nullptr);
 }
+
+void error_begin(const SrcPos& p, const char* str, ...) {
+	g_error_depth++;
+	char buffer[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(buffer, str, arglist );
+	va_end( arglist );
+	error_newline();
+	error_srcpos(p);
+	error_print_line(str);
+	error_maybe_end(nullptr);
+}
+
+
+
 
 
 
