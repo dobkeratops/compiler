@@ -61,8 +61,7 @@ fn something(f:float,x){
 // this isn't a union yet, its just  test to show the type-inference
 // can handle getting a 'tag' from methods matching type X or Y
 // we will probably introduce propper tagged unions like Rust, 
-// but we want the template engine to handle
-// using rawpointers we could implement any tag/data scheme
+// but we want the template engine able to handle rolling pleasant custom variants
 // (TODO: max[sizeof[X],sizeof[Y]] operators in template engine..)
 
 struct Union<X,Y>{
