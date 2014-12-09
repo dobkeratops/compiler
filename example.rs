@@ -128,6 +128,7 @@ fn main(argc:int,argv:**char)->int{
 	acc:=0;
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		acc+=i;
+
 		printf("i,j=%d,%d,x=%d\n",i,j,acc);
 		if i==5{break 55}
 	}else{
@@ -136,7 +137,6 @@ fn main(argc:int,argv:**char)->int{
 		44
 	}
 	printf("loop return value = %d\n",value);
-
 
 	// Struct initializers...
 

@@ -5,29 +5,10 @@
 #include "lexer.h"
 #include "parser.h"
 #include "run_test.h"
+#include "error.h"
 
 const char** g_pp,*g_p;
 const char* g_filename=0;
-
-#if DEBUG>=2
-#define dbprintf_varscope dbprintf
-#define dbprintf_generic dbprintf
-#define dbprintf_lambdas dbprintf
-#define dbprintf_instancing dbprintf
-#define dbprintf_resolve dbprintf
-#define dbprintf_fnmatch dbprintf
-#define dbprintf_type dbprintf
-#define dbprintf_vtable dbprintf
-#else
-inline void dbprintf_fnmatch(const char*,...){}
-inline void dbprintf_varscope(const char*,...){}
-inline void dbprintf_generic(const char*,...){}
-inline void dbprintf_lambdas(const char*,...){}
-inline void dbprintf_instancing(const char*,...){}
-inline void dbprintf_resolve(const char*,...){}
-inline void dbprintf_type(const char*,...){}
-inline void dbprintf_vtable(const char*,...){}
-#endif
 
 const int g_debug_get_instance=false;
 struct VTablePtrs {
@@ -100,118 +81,6 @@ void dbprintf(Name& n){
 	dbprintf("%s",str(n));
 }
 void dbprintf(Node* n){n->dump(-1);}
-bool g_error_on_newline=false;
-int g_num_errors=0;
-void error_newline(){
-	if (!g_error_on_newline){
-		g_error_on_newline=true;printf("\n");}
-}
-void error_sub(const Node* n, const char* level, const char* txt ){
-	g_num_errors++;
-	error_newline();
-	if (n)
-		printf("%s:%d:%d:",g_filename,n->pos.line,n->pos.col);
-	if (level)printf("%s-",level);
-	printf("\t%s",txt);
-	if (strlen(txt)){
-		if (txt[strlen(txt)-1]!='\n'){g_error_on_newline=false;}
-	} else{
-		n->dump_if(-1);
-	}
-	if (n){
-		if (auto x=n->instanced_by()){
-			dbprintf("%p %p\n",n,x);
-			printf("%s:%d:%d: referenced here",g_filename,x->pos.line,x->pos.col);
-		}
-	}
-}
-void error(const SrcPos& pos, const char* str ,...){
-	char txt[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(txt, str, arglist );
-	va_end( arglist );
-	
-	g_num_errors++;
-	error_newline();
-	printf("%s:%d:%d:",g_filename,pos.line,pos.col);
-	printf("\t%s",txt);
-	if (strlen(txt)){
-		if (txt[strlen(txt)-1]!='\n'){g_error_on_newline=false;}
-	}
-}
-
-void error_begin(const Node* n, const char* str, ... ){
-	char buffer[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(buffer, str, arglist );
-	va_end( arglist );
-	error_sub(n,"error",buffer);
-}
-void warning(const Node* n, const char* str="", ... ){
-	char buffer[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(buffer, str, arglist );
-	va_end( arglist );
-	error_sub(n,"warning",buffer);
-}
-void info(const Node* n, const char* str="", ... ){
-	char buffer[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(buffer, str, arglist );
-	va_end( arglist );
-	error_sub(n,"",buffer);
-}
-void error_end(const Node* n){
-	error_newline();
-	if (g_num_errors>0){
-		exit(0);
-	}
-}
-
-void error(const Node* n,const Scope* s, const char* str, ... ){
-	char buffer[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(buffer, str, arglist );
-	va_end( arglist );
-	error_sub(n,"error",buffer);
-	error_newline();
-	info(s->owner_fn, "in scope %s\n",s->name());
-	error_end(n);
-}
-void error(const Node* n,const char* str, ... ){
-	char buffer[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(buffer, str, arglist );
-	va_end( arglist );
-	error_sub(n,"error",buffer);
-	error_end(n);
-}
-void error(const char* str, ... ){
-	char buffer[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(buffer, str, arglist );
-	va_end( arglist );
-	error_sub(nullptr,"error",buffer);
-	error_end(nullptr);
-}
-
-void error(const Node* n,const Node* n2, const char* str, ... ){
-	char buffer[1024];
-	va_list arglist;
-	va_start( arglist, str );
-	vsprintf(buffer, str, arglist );
-	va_end( arglist );
-	error_sub(n,"error",buffer);
-	warning(n2,"see %s",n2->name_str());
-	error_end(n);
-}
 
 ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
 
@@ -3244,7 +3113,7 @@ void ExprStructDef::roll_vtable() {
 		for (auto f:this->virtual_functions) {
 			// todo: static-virtual fields go here!
 			this->vtable->fields.push_back(
-										   new ArgDef(
+					new ArgDef(
 					this->pos,
 					f->name,
 					f->fn_type,

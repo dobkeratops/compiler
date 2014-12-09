@@ -1,19 +1,20 @@
 run: hack
 	./hack example.rs -tr
 
-SRC = main.cpp ast.cpp compiler.cpp  lexer.cpp parser.cpp codegen.cpp codegen_llvm.cpp run_test.cpp  repl.cpp
-HEADER = main.h ast.h compiler.h codegen.h lexer.h parser.h run_test.h  repl.h
+SRC = main.cpp ast.cpp compiler.cpp  lexer.cpp parser.cpp codegen.cpp codegen_llvm.cpp run_test.cpp  repl.cpp error.cpp
+HEADER = main.h ast.h compiler.h codegen.h lexer.h parser.h run_test.h  repl.h error.h
 hack: $(SRC) $(HEADER) foo
 	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG
 
 debug: hack
 	./hack example.rs -tr
 
-# 'DEBUG=3' switches on verbose debug trace , 
-# dumps of intermediate state during resolving
-debug3: $(SRC) $(HEADER)
-	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG=3
+# 'DEBUG=4' switches on ultra verbose debug trace , 
+# dumps of intermediate state during resolving 
+debug4: $(SRC) $(HEADER)
+	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG=4
 	./hack
+	./hack example.rs
 
 clean:
 	-rm ./hack

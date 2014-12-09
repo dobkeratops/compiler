@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "error.h"
 
 // TODO: properly abstract llvm instruction generation to move to llvm api.
 inline void dbprintf_mangle(const char*,...){}

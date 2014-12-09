@@ -224,6 +224,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
 	node->bracket_type=(close==CLOSE_BRACKET)?OPEN_BRACKET:close==CLOSE_PAREN?OPEN_PAREN:close==CLOSE_BRACE?OPEN_BRACE:0;
 	while (true) {
+		auto pos=src.pos;
 		if (src.peek_tok()==0) break;
 		if (src.peek_tok()==IN) break;
 		// parsing a single expression TODO split this into 'parse expr()', 'parse_compound'
@@ -350,18 +351,18 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 							was_operand=true;
 						} else if (tok==ASSIGN_COLON){ //x=:Type  ... creates a var of 'Type'.
 							Type *t=parse_type(src,0,nullptr);
-							operators.push_back(SrcOp{tok,src.pos});
+							operators.push_back(SrcOp{tok,pos});
 							operands.push_back(t);
 							was_operand=true;
 						}
 					
 						else{
-							operators.push_back(SrcOp{tok,src.pos});
+							operators.push_back(SrcOp{tok,pos});
 							was_operand=false;
 						}
 				} else {
 					another_operand_so_maybe_flush(was_operand,node,operators,operands);
-					operands.push_back(new ExprIdent(tok,src.pos));
+					operands.push_back(new ExprIdent(tok,pos));
 				}
 		}
 		//ASSERT(sub);

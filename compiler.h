@@ -22,6 +22,36 @@ extern "C" char* gets(char*);
 #define CRASH
 #endif
 
+// Debug Prints
+// on level 3 compiling is ultra verbose, level 4 adds line numbers
+
+#define dbprintf_loc() dbprintf("%s:%d:",__FILE__,__LINE__);
+#if DEBUG>=4
+#define DBLOC dbprintf_loc
+#else
+#define DBLOC
+#endif
+#if DEBUG>=3
+#define dbprintf_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbprintf_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbprintf_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbprintf_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbprintf_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbprintf_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbprintf_type(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbprintf_vtable(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#else
+inline void dbprintf_fnmatch(const char*,...){}
+inline void dbprintf_varscope(const char*,...){}
+inline void dbprintf_generic(const char*,...){}
+inline void dbprintf_lambdas(const char*,...){}
+inline void dbprintf_instancing(const char*,...){}
+inline void dbprintf_resolve(const char*,...){}
+inline void dbprintf_type(const char*,...){}
+inline void dbprintf_vtable(const char*,...){}
+#endif
+
+
 
 typedef int32_t OneBasedIndex;
 
