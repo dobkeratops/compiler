@@ -50,11 +50,11 @@ const char* g_TestAlloc=
 /*9*/	"	0\n"
 /*10*/  "}														\n";
 ;
-const char* g_TestBasic=
+const char* g_TestLet=
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
-/*  */	"	x:=2;\n"
+/*  */	"	let x=2;\n"
 "y:=3;\n"
-"z:=x+y;			\n"
+"let z=x+y;			\n"
 /*17*/	"	0\n"
 /*20*/  "}														\n";
 ;
@@ -62,14 +62,6 @@ const char* g_TestStruct=
 /*54*/ "	struct FooStruct{x:int,y:int};		\n"
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	x:=FooStruct{1,2};\n"
-/*17*/	"	0\n"
-/*20*/  "}														\n";
-;
-
-const char* g_TestArray=
-/*  */	"fn main(argc:int, argv:**char)->int{		\n"
-/*  */	"	xs=:array[int,10];\n"
-/*  */	"	xs[1]=5;\n"
 /*17*/	"	0\n"
 /*20*/  "}														\n";
 ;
@@ -294,9 +286,22 @@ char g_TestPolyLambda[]= //
 "}\n"
 ;
 
+const char* g_TestLetArray=
+/* 1*/	"fn main(argc:int, argv:**char)->int{		\n"
+/* 2*/	"	let xs:array[int,10];\n"
+/* 3*/	"	let ptr:={&xs[1]};\n"
+/* 4*/	"	ptr[1]=5;\n"
+/* 5*/	"	0\n"
+/* 6*/  "}			\n";
+;
+
 
 void run_tests(){
+	auto ret2=compile_source(g_TestLetArray,"g_TestLetArray","test2.ll",B_TYPES|B_RUN);
+
 	/// TODO , actually verify these produced the right output!
+	auto ret12=compile_source(g_TestLet,"g_TestLet","test12.ll",B_TYPES|B_RUN);
+
 	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);
 	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_TYPES|B_RUN);
 
@@ -306,8 +311,6 @@ void run_tests(){
 	
 	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
-	auto ret2=compile_source(g_TestArray,"g_TestArray","test2.ll",B_TYPES|B_RUN);
-	auto ret0=compile_source(g_TestBasic,"g_TestBasic","test0.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestStruct,"g_TestStruct","test1.ll",B_TYPES|B_RUN);
 	auto ret7=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test7.ll",B_TYPES|B_RUN);
 	auto ret8=compile_source(g_TestMemberFn,"g_TestMemberFn","test8.ll",B_DEFS| B_TYPES|B_RUN);

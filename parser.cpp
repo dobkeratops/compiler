@@ -211,6 +211,27 @@ ExprFnDef* parse_closure(TokenStream&src) {// eg |x|x*2
 	return fndef;
 }
 
+ExprOp* parse_let(TokenStream& src) {
+	// TODO: parse_pattern - we DO want all the tuple assignment goodness
+	auto nlet=new ExprOp(LET_ASSIGN,src.prev_pos);
+	auto ident=src.eat_ident();
+	Type * t=nullptr;
+	if (src.eat_if(COLON)){
+		t=parse_type(src,0,nullptr);
+	}
+	nlet->lhs=new ExprIdent(src.prev_pos,ident);
+	//nlet->lhs->set_type(t);// we dont need an operator, all nodes have type
+	if (src.eat_if(ASSIGN)){
+		nlet->rhs=parse_expr(src);
+	} else {
+		nlet->name=ASSIGN_COLON;
+		nlet->rhs=t;
+	}
+	//nlet->rhs->set_type
+	return nlet;
+}
+
+
 
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	// shunting yard expression parser+dispatch to other contexts
@@ -246,6 +267,10 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 			operands.push_back(ln);
 			was_operand=true;
 			continue;
+		}
+		else if (src.eat_if(LET)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			operands.push_back(parse_let(src));
 		}
 		else if (src.eat_if(STRUCT)){
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
@@ -372,7 +397,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		// final expression is also returnvalue,
 		flush_op_stack(node,operators,operands);
 	} else if (node->is_compound_expression()){
-		node->argls.push_back(new ExprLiteral(src.pos));
+		node->argls.push_back(new ExprLiteral(src.prev_pos));
 	}
 	verify(node->get_type());
 	node->verify();
@@ -383,10 +408,10 @@ ExprLiteral* parse_literal(TokenStream& src) {
 	ExprLiteral* ln=0;
 	if (src.is_next_number()) {
 		auto n=src.eat_number();
-		if (n.denom==1) {ln=new ExprLiteral(src.pos,n.num);}
+		if (n.denom==1) {ln=new ExprLiteral(src.prev_pos,n.num);}
 		else {ln=new ExprLiteral(src.pos, (float)n.num/(float)n.denom);}
 	} else if (src.is_next_string()) {
-		ln=new ExprLiteral(src.pos,src.eat_string_alloc());
+		ln=new ExprLiteral(src.prev_pos,src.eat_string_alloc());
 	} else {
 		error(0,"error parsing literal\n");
 		error_end(0);

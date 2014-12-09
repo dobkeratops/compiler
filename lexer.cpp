@@ -164,6 +164,7 @@ void Lexer::advance_tok_sub() {
 	typeparam_hack();
 }
 Name Lexer::eat_tok() {
+	prev_pos=pos;
 	prev_start=tok_start;
 	for (const char* c=tok_start; c!=tok_end;c++) {}
 	auto r=curr_tok;

@@ -94,14 +94,14 @@ fn main(argc:int,argv:**char)->int{
 	printf("example program ./hello.rpp compiled & run by default makefile\n");
 
 	// closure syntax stolen from Rust |args,..|{body...}
-	captured_y:=0;
+	let captured_y=0;
 	take_closure(|x|{printf("closure says x=%d y=%d\n",x,captured_y);})
 
 	// LHS=:RHS is temporary syntax to init empty var with given type Union<int,float> 
 	//its a hack till we have let u:Union<int,float>.
 	// inspiration from rust is to avoid un-init vars altogether using expression syntax.
 	// the plan is to stick with rust 'let..', but keep 'go' like := in addition.
-	u=:Union[int,float]; 
+	let u:Union[int,float]; 
 
 	// calls to templated functions
 	setv(&u,2.0);
@@ -113,7 +113,7 @@ fn main(argc:int,argv:**char)->int{
 	// as far as i've tried it.. you always need to specify 
 	// more params manually
 
-	z:=map(&u,
+	let z=map(&u,
 		|x:&int|{printf("union was set to int %d\n",*x);15},
 		|x:&float|{printf("union was set to float %.3f\n",*x);17}
 	);
@@ -125,8 +125,9 @@ fn main(argc:int,argv:**char)->int{
 	// type of 'value' is infered from the break/else expressions
 	// inspired by Rusts nifty inference.
 
-	acc:=0;
-	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
+	let acc=0;
+	let value=for i:=0,j:=0; i<10; i+=1,j+=10 {
+		// var:=expr is  a shortcut for 'let'
 		acc+=i;
 
 		printf("i,j=%d,%d,x=%d\n",i,j,acc);
@@ -140,29 +141,30 @@ fn main(argc:int,argv:**char)->int{
 
 	// Struct initializers...
 
-	fv:=Foo{vx=13,vy=14,vz=15}; // initialize struct on stack, named fields
+	let fv=Foo{vx=13,vy=14,vz=15}; // initialize struct on stack, named fields
 	something_foo(&fv,&fv);
 	printf("fv.vx=%d\n",fv.vx);
 
-	fv2:=new Foo{vx=23,vy=24,vz=25}; // struct allocate & init
+	let fv2=new Foo{vx=23,vy=24,vz=25}; // struct allocate & init
 	something_foo(fv2);
 
-	fv3:=new Foo{31,32,33}; // struct initializer, sequential
+	let fv3=new Foo{31,32,33}; // struct initializer, sequential
 	something_foo(fv3);
 
 	 // test arrays and ptrs work
-	xs=:array[int,512];   // like C++ array<int,512>
-	q:=xs[1]; p1:=&xs[1];
-	xs[2]=10;
-	xs[2]+=400;
+	let my_array:array[int,512];   // like C++ array<int,512>
+	let q=my_array[1];
+	my_array[2]=10;
+	my_array[2]+=400;
+	let p1=&my_array[1];
 	*p1=30;
 	p1[3]=77;			// raw ptr offseting (&xs[1])[3] == xs[4]
-	z:=5;
-	y:=xs[1]+z+xs[2];
-	printf("test refs to array:%d %d %d\n",xs[2], *p1,xs[4]);
+	let z=5;
+	let y=my_array[1]+z+my_array[2];
+	printf("test refs to array:%d %d %d\n",my_array[2], *p1,my_array[4]);
 
-	pbaz1:= new Qux{x=66};
-	pbaz2:= new Bar{y=77};
+	let pbaz1= new Qux{x=66};
+	let pbaz2= new Bar{y=77};
 
 	do_something(pbaz1 as*IBaz);//TODO autocoerce to base type
 	do_something(pbaz2 as*IBaz);
@@ -173,7 +175,7 @@ fn main(argc:int,argv:**char)->int{
 	// frees up '?' for other use, eg optional types..(TODO arbitrary operators)
 	// last expression in the compound blocks is return value from block
 
-	x1:=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >2",argc);2};
+	let x1=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >2",argc);2};
 	printf("\nHello World %d %d\n", x1, y );
 
 	// Stolen from rust: last statement is a return value. 

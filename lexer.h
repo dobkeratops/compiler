@@ -19,6 +19,7 @@ bool isOperator(char c);
 struct Lexer {
 	char filename[512];
 	SrcPos	pos;
+	SrcPos	prev_pos;	// needed to correctly locate nodes after eat_tok()
 	enum {MAX_DEPTH=32};
 	SrcPos	bracket_pos[MAX_DEPTH];
 	int		bracket[MAX_DEPTH];

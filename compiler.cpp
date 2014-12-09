@@ -2425,7 +2425,7 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 			this->argls.back()->dump_if(-1);
 			newline(0);
 #endif
-			return propogate_type(flags,this, ret);
+			return propogate_type(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
 		}
 		else {ASSERT(0);return ResolvedType();}
 	}

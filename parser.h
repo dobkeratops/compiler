@@ -17,6 +17,7 @@ ExprIf*		parse_if(TokenStream&src);
 TypeDef*	parse_typedef(TokenStream&src);
 ExprMatch*	parse_match(TokenStream& src);
 ExprOp*		parse_flow(TokenStream& src,Name flow);
+ExprOp*		parse_let(TokenStream& src);
 ExprMatch*	parse_match(TokenStream& src);
 Expr*		parse_match_arm(TokenStream& src);
 ArgDef*		parse_arg(TokenStream& src, int close);
