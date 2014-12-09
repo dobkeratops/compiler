@@ -38,11 +38,11 @@ Very early days, the compiler is a few weeks old.
  * features for parallelism, GPGPU programming
  * a subset should make a passable embedded dynamic language
 
-Basically trying to comine everything I like from C++ & Rust, plus what i've always missed.
+Basically trying to combine everything I like from C++ & Rust, dropping what I dont like, plus what i've always missed.
 
-This could all probably be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects (retrofitting 2way inference to C++? or retrofitting overloading to Rust? both againt the underlying design of either ..)
+This could all probably be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects (retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? both go against the underlying design of either ..)
 
-Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code; I beleive C++ can be 'fixed' and improved without straying so far.
+Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code; I beleive C++ can be 'fixed' and improved without straying so far. Also I value productivity & performance over safety.
 
 I beleive C++'s main 'curse' is the way headers & classes interact, and the asymetry between functions and methods has always been frustrating. Rust is too restrictive. Somewhere between the two is my perfect language.
 
