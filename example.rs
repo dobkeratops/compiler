@@ -33,6 +33,11 @@ struct Foo {
 	vx:int, vy:int, vz:int
 }
 
+// internal vtables
+struct IBaz {
+	virtual foo(){}
+}
+
 // open overloading like C++; most specific function is matched at callsite
 // f:&Foo means parameter 'f' , reference to Foo.. 
 
@@ -156,6 +161,11 @@ fn main(argc:int,argv:**char)->int{
 	y:=xs[1]+z+xs[2];
 	printf("test refs to array:%d %d %d\n",xs[2], *p1,xs[4]);
 
+	pbaz1:= new Qux{x=66};
+	pbaz2:= new Bar{y=77};
+
+	do_something(pbaz1 as*IBaz);//TODO autocoerce to base type
+	do_something(pbaz2 as*IBaz);
 
 	// Expression syntax stolen from rust.
 	// if..else.. has a return value;more flexible than ternary op
@@ -173,3 +183,24 @@ fn main(argc:int,argv:**char)->int{
 	0
 }
 
+fn do_something(p:*IBaz){
+	p.foo();
+}
+
+// implementing vtable based 'classes', like C++
+// TODO handle rust-like trait-objects
+// instead of multiple-inheritance.
+
+struct Qux : IBaz {
+	x:int;
+	fn foo(){
+		printf("hello from Qux.foo x=%d\n",x);
+	}
+}
+
+struct Bar : IBaz {
+	y:int;
+	fn foo(){
+		printf("hello from Bar.foo y=%d\n",y);
+	}
+}
