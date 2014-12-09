@@ -37,20 +37,20 @@ struct Foo {
 // f:&Foo means parameter 'f' , reference to Foo.. 
 
 fn something_foo(f:&Foo){
-    printf("something_foo with 1 arg overloaded\n");
+	printf("something_foo with 1 arg overloaded\n");
 	printf("f.x= %d\n", f.vx);
 }
 fn something_foo(f:&Foo,x:&Foo){
-    printf("something_foo with 2 args overloaded\n");
+	printf("something_foo with 2 args overloaded\n");
 	printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
 }
 fn something(f:&Foo){
-    printf("something overloaded with &Foo param\n");
+	printf("something overloaded with &Foo param\n");
 	printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
 }
 fn something(f:float,x){
-    printf("something overloaded with float param & templated param 'x'\n");
-    printf("something(float, auto)\n");
+	printf("something overloaded with float param & templated param 'x'\n");
+	printf("something(float, auto)\n");
 }
 
 // [X,Y] = typeparams like scala TODO we might want to accept both
@@ -65,20 +65,20 @@ fn something(f:float,x){
 // (TODO: max[sizeof[X],sizeof[Y]] operators in template engine..)
 
 struct Union[X,Y]{
- tag:int,
- x:X,y:Y,
+	tag:int,
+	x:X,y:Y,
 };
 
 fn setv[X,Y](u:&Union[X,Y],y:Y)->void{
- printf("setv Y\n");
- u.y=y;
- u.tag=1;
+	printf("setv Y\n");
+	u.y=y;
+	u.tag=1;
 }
 
 fn setv[X,Y](u:&Union[X,Y],x:X)->void{
- printf("setv X\n");
- u.x=x;
- u.tag=0;
+	printf("setv X\n");
+	u.x=x;
+	u.tag=0;
 }
 
 fn map[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{
@@ -86,7 +86,7 @@ fn map[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{
 }
 
 fn main(argc:int,argv:**char)->int{
-    printf("example program ./hello.rpp compiled & run by default makefile\n");
+	printf("example program ./hello.rpp compiled & run by default makefile\n");
 
 	// closure syntax stolen from Rust |args,..|{body...}
 	captured_y:=0;
@@ -102,23 +102,28 @@ fn main(argc:int,argv:**char)->int{
 	setv(&u,2.0);
 	setv(&u,5);
  
-	// demo of type inference with polymorphic lambdas
-	// we could overload 'match' to supply different combinations of types
+	// type inference with polymorphic lambdas
+	// we could overload 'map' to supply different combinations of types
+	// C++ equivalent doesn't seem to match all template args.
+	// as far as i've tried it.. you always need to specify 
+	// more params manually
+
 	z:=map(&u,
 		|x:&int|{printf("union was set to int %d\n",*x);15},
 		|x:&float|{printf("union was set to float %.3f\n",*x);17}
 	);
 	printf("map union returned z=%d\n",z);
 
-    // C-like for loops minus parens, compulsory {}
-    // handles simple cases without needing a whole iterator library..
+	// C-like for loops minus parens, compulsory {}
+	// handles simple cases without needing a whole iterator library..
 	// enhanced with expression syntax: break <expr> , else {expr}
 	// type of 'value' is infered from the break/else expressions
+	// inspired by Rusts nifty inference.
 
-	x:=0;
+	acc:=0;
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
-		x+=i;
-		printf("i,j=%d,%d,x=%d\n",i,j,x);
+		acc+=i;
+		printf("i,j=%d,%d,x=%d\n",i,j,acc);
 		if i==5{break 55}
 	}else{
 		// for..else block called if no 'break'
@@ -127,18 +132,6 @@ fn main(argc:int,argv:**char)->int{
 	}
 	printf("loop return value = %d\n",value);
 
-	// C++ equivalent doesn't seem to match all template args.
-	// as far as i've tried it. (of course C++ can do it other ways)
-	// eg
-	//template<typename X,typename Y>
-	//struct  Union1{int tag;X x; Y y;};
-	//template<typename X,typename Y,typename R>
-	//R match_union(Union1<X,Y>& u, std::function<R(X)>& fx, std::function<R(Y)>& fy){
-	//	if (u.tag==0) return fx(u.x);
-	//	return fy(u.y);
-	//}
-	//Union1<int,float> u;
-	//match_union(u, [](int x){printf("int\n");return 0;},[](float x){printf("float\n");return 1;});
 
 	// Struct initializers...
 
