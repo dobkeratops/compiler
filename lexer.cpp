@@ -1,5 +1,7 @@
 #include "lexer.h"
 
+SrcPos g_srcpos;	// hack sorry,
+
 bool isSymbolStart(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_';}
 bool isSymbolCont(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || (c>='0' && c<='9');}
 bool isNumStart(char c){return (c>='0'&&c<='9');};
@@ -7,6 +9,14 @@ bool isNum(char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c=='e')||(c=='x')
 bool isWhitespace(char c){return  c==' '||c=='\n'||c=='\a'||c=='\t';};
 bool isOperator(char c){return c=='+'||c=='-'||c=='*'||c=='/'||c=='.'||c=='='||c=='>'||c=='<'||c=='&'||c=='|'||c=='~'||c=='%'||c=='^'||c=='+';}
 
+int close_of(int open){
+	if (open==LT) return GT;
+	else if (open==OPEN_BRACKET) return CLOSE_BRACKET;
+	else if (open==OPEN_BRACE) return CLOSE_BRACE;
+	else if (open==OPEN_PAREN) return CLOSE_PAREN;
+	else if (open==OR) return OR;
+	error(g_srcpos,"not closeable %s",str(open));return 0;
+}
 
 
 void Lexer::error(const char* str,...){
@@ -135,6 +145,8 @@ int Lexer::close_of(int tok){
 	if (tok==OPEN_BRACE)return CLOSE_BRACE;
 	if (tok==OPEN_BRACKET)return CLOSE_BRACKET;
 	if (tok==OPEN_PAREN)return CLOSE_PAREN;
+	if (tok==LT)return GT;
+	if (tok==OR)return OR;
 	return 0;
 }
 void Lexer::advance_tok() {
@@ -164,6 +176,7 @@ void Lexer::advance_tok_sub() {
 	typeparam_hack();
 }
 Name Lexer::eat_tok() {
+	g_srcpos=pos;
 	prev_pos=pos;
 	prev_start=tok_start;
 	for (const char* c=tok_start; c!=tok_end;c++) {}
@@ -196,7 +209,7 @@ Name Lexer::Lexer::eat_if(Name a, Name b, Name c){
 	return 0;
 }
 Name Lexer::eat_if(Name a, Name b){
-	auto t=peek_tok(); if (t==a || t==b) return (int)t;
+	auto t=peek_tok(); if (t==a || t==b) return eat_tok();
 	return 0;
 }
 Name Lexer::eat_if_not(Name i) {

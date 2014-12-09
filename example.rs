@@ -58,35 +58,31 @@ fn something(f:float,x){
 	printf("something(float, auto)\n");
 }
 
-// [X,Y] = typeparams like scala TODO we might want to accept both
-// for familiarity. 
-// [] reads better especially nested, nesting but < > are more widespread
-//
 // this isn't a union yet, its just  test to show the type-inference
 // can handle getting a 'tag' from methods matching type X or Y
 // we will probably introduce propper tagged unions like Rust, 
-// but also want to use improved inference/templates to implement 'variant' better.
+// but we want the template engine to handle
 // using rawpointers we could implement any tag/data scheme
 // (TODO: max[sizeof[X],sizeof[Y]] operators in template engine..)
 
-struct Union[X,Y]{
+struct Union<X,Y>{
 	tag:int,
 	x:X,y:Y,
 };
 
-fn setv[X,Y](u:&Union[X,Y],y:Y)->void{
+fn setv<X,Y>(u:&Union<X,Y>,y:Y)->void{
 	printf("setv Y\n");
 	u.y=y;
 	u.tag=1;
 }
 
-fn setv[X,Y](u:&Union[X,Y],x:X)->void{
+fn setv<X,Y>(u:&Union<X,Y>,x:X)->void{
 	printf("setv X\n");
 	u.x=x;
 	u.tag=0;
 }
 
-fn map[X,Y,R](u:&Union[X,Y], fx:|&X|->R,fy:|&Y|->R)->R{
+fn map<X,Y,R>(u:&Union<X,Y>, fx:|&X|->R,fy:|&Y|->R)->R{
 	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
 }
 
@@ -147,7 +143,7 @@ fn main(argc:int,argv:**char)->int{
 	something_foo(fv3);
 
 	 // test arrays and ptrs work
-	let my_array:array[int,512];   // like C++ array<int,512>
+	let my_array:array<int,512>;   // like C++ array<int,512>
 	let q=my_array[1];
 	my_array[2]=10;
 	my_array[2]+=400;
@@ -201,3 +197,7 @@ struct Bar : IBaz {
 		printf("hello from Bar.foo y=%d\n",y);
 	}
 }
+
+
+
+

@@ -136,7 +136,7 @@ const char* g_TestVTable=
 ;
 
 const char* g_TestTyparamInference=
-/* 1*/ "struct Union[A,B]{a:A,b:B, tag:int};		\n"
+/* 1*/ "struct Union<A,B>{a:A,b:B, tag:int};		\n"
 /* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
 /* 3*/ "	u.a=v; u.tag=0; 						\n"
 /* 4*/ "}											\n"

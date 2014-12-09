@@ -21,7 +21,7 @@ ExprOp*		parse_let(TokenStream& src);
 ExprMatch*	parse_match(TokenStream& src);
 Expr*		parse_match_arm(TokenStream& src);
 ArgDef*		parse_arg(TokenStream& src, int close);
-void		parse_typeparams(TokenStream& src,vector<TypeParam*>& out);
+void		parse_typeparams(TokenStream& src,vector<TypeParam*>& out,int close);
 ExprStructDef*	parse_struct(TokenStream& src);
 EnumDef*	parse_enum(TokenStream& src);
 TraitDef*	parse_trait(TokenStream& src);

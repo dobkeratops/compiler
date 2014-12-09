@@ -8,13 +8,15 @@ T& operator<<(T& dst, const Bar& src) { dst<<src.name<<src.x;return dst;};
 template<typename T>
 T& operator<<(T& dst, const Foo& src) { dst<<src.bar; dst<<src.indices;return dst;};
 */
-
+extern SrcPos g_srcpos;	// hack sorry,
 bool isSymbolStart(char c);
 bool isSymbolCont(char c);
 bool isNumStart(char c);
 bool isNum(char c);
 bool isWhitespace(char c);
 bool isOperator(char c);
+int	close_of(int open);
+inline int	close_of(Name open){return close_of((int)open);}
 
 struct Lexer {
 	char filename[512];
