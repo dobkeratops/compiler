@@ -93,7 +93,7 @@ fn main(argc:int,argv:**char)->int{
 	printf("example program ./hello.rpp compiled & run by default makefile\n");
 
 	// closure syntax stolen from Rust |args,..|{body...}
-	let captured_y=0;
+	let captured_y=15;
 	take_closure(|x|{printf("closure1 says x=%d y=%d\n",x,captured_y);});
 
 	// sugar for closure as last arg, foo(..)do x{...}  === foo(..,|x|{...})

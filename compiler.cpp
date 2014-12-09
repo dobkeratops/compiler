@@ -3268,7 +3268,7 @@ void ExprIf::dump(int depth) const {
 	newline(depth);dbprintf("{\n");
 	body->dump(depth+1);
 	if (else_block)	{
-		indent(depth);dbprintf("}else{\n");
+		newline(depth);dbprintf("}else{\n");
 		else_block->dump(depth+1);
 	}
 	newline(depth);dbprintf("}\n");

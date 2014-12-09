@@ -47,8 +47,20 @@ ExprBlock* parse_block(TokenStream&src,int close,int delim, Expr* op);
 
 /// parse_expr - parse a single expression
 /// TODO - refactor 'parse_block', this is backwards!
+vector<Expr*> g_exprpool;
 Expr* parse_expr(TokenStream&src) {
-	return parse_block(src,0,0,nullptr);
+	auto b= parse_block(src,0,0,nullptr);
+	while (b->argls.size()==1 && !b->call_expr && b->is_compound_expression()){
+		// silly hack to fix the fact we got expr&block backwards
+		auto e=b->argls.back();
+		b->argls.pop_back();
+		ASSERT(b->argls.size()==0);
+		g_exprpool.push_back(b);
+		if (0==(b=e->as_block())){
+			return e;
+		}
+	}
+	return b;
 }
 
 void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
@@ -265,7 +277,11 @@ void expect(TokenStream& src,bool expr,const char* msg){
 }
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	// shunting yard expression parser+dispatch to other contexts
-	ExprBlock *node=new ExprBlock(src.pos); node->call_expr=op;
+	ExprBlock *node;
+	// todo - 'g_exprpool'=temp hack for stupid expr / block conflation
+	if (g_exprpool.size()){node=g_exprpool.back()->as_block(); g_exprpool.pop_back();}
+	else node=new ExprBlock(src.pos);
+	node->call_expr=op;
 	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
 	vector<SrcOp> operators;
