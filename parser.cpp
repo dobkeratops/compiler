@@ -48,8 +48,7 @@ ExprBlock* parse_block(TokenStream&src,int close,int delim, Expr* op);
 /// parse_expr - parse a single expression
 /// TODO - refactor 'parse_block', this is backwards!
 vector<Expr*> g_exprpool;
-Expr* parse_expr(TokenStream&src) {
-	auto b= parse_block(src,0,0,nullptr);
+Expr* remove_extraneous_layers(ExprBlock* b){
 	while (b->argls.size()==1 && !b->call_expr && b->is_compound_expression()){
 		// silly hack to fix the fact we got expr&block backwards
 		auto e=b->argls.back();
@@ -61,6 +60,11 @@ Expr* parse_expr(TokenStream&src) {
 		}
 	}
 	return b;
+}
+
+Expr* parse_expr(TokenStream&src) {
+	auto b= parse_block(src,0,0,nullptr);
+	return remove_extraneous_layers(b);
 }
 
 void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
@@ -275,12 +279,17 @@ void expect(TokenStream& src,bool expr,const char* msg){
 		error(src.pos,msg);
 	}
 }
+ExprBlock* ExprBlock_alloc(SrcPos& pos){
+	// todo - 'g_exprpool'=temp hack for stupid expr / block conflation
+	// we free these up when parse_block() allocates extraneously for "parse_expr()"
+	// parse_block & parse expr are backwards.
+	if (g_exprpool.size()){auto node=g_exprpool.back()->as_block(); g_exprpool.pop_back(); return node;}
+	else return new ExprBlock(pos);
+}
+
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	// shunting yard expression parser+dispatch to other contexts
-	ExprBlock *node;
-	// todo - 'g_exprpool'=temp hack for stupid expr / block conflation
-	if (g_exprpool.size()){node=g_exprpool.back()->as_block(); g_exprpool.pop_back();}
-	else node=new ExprBlock(src.pos);
+	ExprBlock *node=ExprBlock_alloc(src.pos);
 	node->call_expr=op;
 	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
