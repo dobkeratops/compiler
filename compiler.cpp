@@ -935,7 +935,7 @@ Type* Type::get_bool(){
 }
 Type* Type::get_void(){
 	if (g_void)return g_void;
-	return (g_bool=new Type(nullptr,VOID));
+	return (g_void=new Type(nullptr,VOID));
 }
 
 bool Type::is_struct()const{
@@ -2462,6 +2462,8 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 		// last expression - type bounce. The final expression is a return value, use 'desired';
 		// we then propogate backwards. some variables will have been set, eg return value accumulator..
 		if (this->argls.size()) {
+			desired->dump_if(-1);newline(0);
+			this->type()->dump_if(-1);newline(0);
 			propogate_type_fwd(flags,this, desired);
 			auto ret=this->argls[n]->resolve(sc,desired,flags);
 			// reverse pass too
@@ -2820,6 +2822,8 @@ void Capture::coalesce_with(Capture *other){
 }
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
+	dbprintf("DEBUG YADA");
+	this->dump_if(-1);
 	init->resolve_if(sc,0,flags);
 	cond->resolve_if(sc,Type::get_bool(),flags);
 	incr->resolve_if(sc,0,flags);

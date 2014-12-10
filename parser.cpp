@@ -283,8 +283,10 @@ ExprBlock* ExprBlock_alloc(SrcPos& pos){
 	// todo - 'g_exprpool'=temp hack for stupid expr / block conflation
 	// we free these up when parse_block() allocates extraneously for "parse_expr()"
 	// parse_block & parse expr are backwards.
-	if (g_exprpool.size()){auto node=g_exprpool.back()->as_block(); g_exprpool.pop_back(); return node;}
-	else return new ExprBlock(pos);
+	
+//	if (g_exprpool.size()){auto node=g_exprpool.back()->as_block(); g_exprpool.pop_back(); return node;}
+//	else
+		return new ExprBlock(pos);
 }
 
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {

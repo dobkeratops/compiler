@@ -213,6 +213,13 @@ const char* g_TestProg2=
 ;
 
 char g_TestPolyLambda[]= //
+"fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{\n"
+"	let result=init();\n"
+"	for index:=0; index<src.size(); index+=1 {\n"
+"		push_back(&result, f(get(&src,index)));\n"
+"	}\n"
+"	result \n"
+"}\n"
 "fn\"C\" printf(s:str,...)->int;\n"
 /*1*/ "fn debugme[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{\n"
 /*2*/ " if u.tag==0 { fx(&u.x)}\n"
@@ -311,6 +318,7 @@ const char* g_TestHKT=
 
 void run_tests(){
 	// TODO - make a propper "test_run_source" taking expected output
+	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_TYPES|B_RUN);
 	auto ret13=compile_source(g_TestHKT,"g_TestHKT","test13.ll",B_TYPES);
 	auto ret14=compile_source(g_TestHKT,"g_TestHKT","test13.ll",B_TYPES|B_RUN);
 
@@ -321,7 +329,6 @@ void run_tests(){
 	auto ret12=compile_source(g_TestLet,"g_TestLet","test12.ll",B_TYPES|B_RUN);
 
 	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);
-	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_TYPES|B_RUN);
 
 	auto ret11=compile_source(g_TestVTable,"g_TestVTable","test11.ll", B_TYPES|B_RUN);
 	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);

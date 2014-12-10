@@ -15,21 +15,30 @@ fn something(f:float){
 // more specific overloads are used in preference if given
 
 fn lerp(a,b,f)=(b-a)*f+a;
-//  expression sugar 
-fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
-	ofsx:=x-x0;dx:=x1-x0;dy:=y1-y0;
-};
+
+// HKT-HigherKindedTypes, 'template-template parameters' 
+// - adhoc synax is less verbose than C++ .. does the use in the parameter list say enough?
+
+fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{
+	let result=V{};
+	for index:=0; index<src.size(); index+=1 {
+		push_back(&result, f(get(&src,index)));
+	}
+	result
+}
 
 //  declare a function taking a closure:
-//  'funcp' is a variable of function type, 1arg 'int', result 'void'
-//  functions declared like this are assumed to be closures
 //  represented as a pair of pointers (function*, environment*)
 //  raw C like functions are currently written fn(int)->void 
-
 
 fn take_closure(funcp:|int|){
     funcp(10);
 }
+
+//  expression sugar 
+fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
+	ofsx:=x-x0;dx:=x1-x0;dy:=y1-y0;
+};
 
 // struct declarations like Rust.  fieldname:Type,...
 
