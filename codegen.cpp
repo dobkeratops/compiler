@@ -2,11 +2,11 @@
 #include "error.h"
 
 // TODO: properly abstract llvm instruction generation to move to llvm api.
-inline void dbprintf_mangle(const char*,...){}
+inline void dbg_mangle(const char*,...){}
 #if DEBUG>=2
-#define dbprintf_vcall dbprintf
+#define dbg_vcall dbprintf
 #else
-inline void dbprintf_vcall(const char*,...){}
+inline void dbg_vcall(const char*,...){}
 #endif
 using std::function;
 
@@ -32,7 +32,7 @@ CgValue CgValue::addr_op(CodeGen& cg,Type* t) { // take type calculated by sema
 	ASSERT(this->type);
 	if (!reg && (bool)addr) {	// we were given a *reference*, we make the vlaue the adress
 		ASSERT(t->name==PTR);
-		ASSERT(t->sub->eq(this->type));
+		ASSERT(t->sub->is_equal(this->type));
 		return CgValue(addr,t,0);
 	} else if (auto v=this->val->as_variable()){
 		if (v->reg_is_addr){
@@ -314,12 +314,12 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			if (vtf) {
 				vts=vtf->type()->get_struct();
 			}
-			dbprintf_vcall("receiver: %s %s .%s\n",str(receiver->name),str(receiver->type()->name), str(e->call_expr->name));
-			dbprintf_vcall("vtbl=%p\n",vtf);
-			dbprintf_vcall("vtable struct=%p\n",vts);
+			dbg_vcall("receiver: %s %s .%s\n",str(receiver->name),str(receiver->type()->name), str(e->call_expr->name));
+			dbg_vcall("vtbl=%p\n",vtf);
+			dbg_vcall("vtable struct=%p\n",vts);
 		}
 		if (vts) {
-			dbprintf_vcall("looks like a vcall %s\n",vts, str(vts->name));
+			dbg_vcall("looks like a vcall %s\n",vts, str(vts->name));
 			vtable_fn=vts->try_find_field(fn_name);
 		}
 		if (vtable_fn) {
@@ -769,7 +769,7 @@ void name_mangle_append_type(char* dst,int size, const Type* t){
 	else if (auto sd=t->get_struct()){
 		name_mangle_append_segment(dst,size,str(sd->get_mangled_name()));
 		for (auto& it:sd->instanced_types){
-			dbprintf_mangle(" %s\n",it->name_str());
+			dbg_mangle(" %s\n",it->name_str());
 			name_mangle_append_type(dst,size,it);
 		}
 	}

@@ -376,7 +376,7 @@ void Node::dump_top() const {
 	dbprintf("%s ", getString(name));
 }
 
-int get_typeparam_index(const vector<TypeParam*>& tps, Name name) {
+int get_typeparam_index(const vector<TypeParamDef*>& tps, Name name) {
 	for (int i=(int)(tps.size()-1); i>=0; i--) {
 		if (tps[i]->name==name)
 			return i;
@@ -392,10 +392,10 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 	// TODO: variadic args shouldn't get here:
 	if (a->name==ELIPSIS||b->name==ELIPSIS)
 		return ResolvedType(a,ResolvedType::COMPLETE);
-	if (!a->eq(b)){
+	if (!a->is_equal(b)){
 		if (!(flags & R_FINAL))
 			return ResolvedType(0,ResolvedType::INCOMPLETE);
-
+		
 		n->dump(0);
 		error_begin(n," type mismatch\n");
 		warning(a->get_origin(),"from here:");
@@ -736,9 +736,9 @@ ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 	if (!this->struct_def && this->name>=IDENT && !is_number(this->name)){
 		if (auto sd=sc->find_struct_named(this->name)){
 			this->struct_def =sd->get_instance(sc,this);
-			dbprintf_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->struct_def,this);
+			dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->struct_def,this);
 		}else{
-			dbprintf_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name());
+			dbg_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name());
 		}
 	}
 	auto ds=desired?desired->sub:nullptr;
@@ -748,7 +748,7 @@ ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 	return ResolvedType(this,ResolvedType::COMPLETE);
 }
 ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
-	dbprintf_resolve("resolving arg %s\n",this->name_str());
+	dbg_resolve("resolving arg %s\n",this->name_str());
 	propogate_type_fwd(flags,this,desired,this->type_ref());
 	if (this->type()){
 		this->type()->resolve(sc,desired,flags);
@@ -801,16 +801,16 @@ ExprStructDef* Type::struct_def_noderef()const { // without autoderef
 };
 
 
-bool Type::eq(const Type* other,bool coerce) const{
+bool Type::is_equal(const Type* other,bool coerce) const{
 	/// TODO factor out common logic, is_coercible(),eq(),eq(,xlat)
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
 	if (this &&this->name==AUTO){
-		if (this->sub && other) return this->sub->eq(other->sub,coerce);
+		if (this->sub && other) return this->sub->is_equal(other->sub,coerce);
 		else return true;
 	}
 	if (other && other->name==AUTO){
-		if (other->sub && this) return other->sub->eq(this->sub,coerce);
+		if (other->sub && this) return other->sub->is_equal(this->sub,coerce);
 		else return true;
 	}
 	if (!(this && other)) return false;
@@ -831,33 +831,33 @@ bool Type::eq(const Type* other,bool coerce) const{
 	auto p=this->sub,o=other->sub;
 		
 	for (; p && o; p=p->next,o=o->next) {
-		if (!p->eq(o,coerce)) return false;
+		if (!p->is_equal(o,coerce)) return false;
 	}
 	if (o || p) return false; // didnt reach both..
 	return true;
 }
 
-bool Type::eq(const Type* other,const TypeParamXlat& xlat) const{
+bool Type::is_equal(const Type* other,const TypeParamXlat& xlat) const{
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
 	if (this &&this->name==AUTO){
-		if (this->sub && other) return this->sub->eq(other->sub,xlat);
+		if (this->sub && other) return this->sub->is_equal(other->sub,xlat);
 		else return true;
 	}
 	if (other && other->name==AUTO){
-		if (other->sub && this) return other->sub->eq(this->sub,xlat);
+		if (other->sub && this) return other->sub->is_equal(this->sub,xlat);
 		else return true;
 	}
 	if (!(this && other)) return false;
 	// TODO: might be more subtle than this for HKT
 	auto ti=xlat.typeparam_index(other->name);
-	dbprintf_type("%s %s\n",str(this->name),str(other->name));
+	dbg_type("%s %s\n",str(this->name),str(other->name));
 	if (ti>=0){
-		return this->eq(xlat.given_types[ti],xlat);
+		return this->is_equal(xlat.given_types[ti],xlat);
 	}
 	ti=xlat.typeparam_index(this->name);
 	if (ti>=0){
-		return xlat.given_types[ti]->eq(other,xlat);
+		return xlat.given_types[ti]->is_equal(other,xlat);
 	}
 
 	if (this->name!=other->name)return false;
@@ -868,7 +868,7 @@ bool Type::eq(const Type* other,const TypeParamXlat& xlat) const{
 	auto p=this->sub,o=other->sub;
 	
 	for (; p && o; p=p->next,o=o->next) {
-		if (!p->eq(o,xlat)) return false;
+		if (!p->is_equal(o,xlat)) return false;
 	}
 	if (o || p) return false; // didnt reach both..
 	return true;
@@ -1114,7 +1114,7 @@ ExprLiteral::~ExprLiteral(){
 		free((void*)u.val_str);
 	}
 }
-void dump_typeparams(const vector<TypeParam*>& ts) {
+void dump_typeparams(const vector<TypeParamDef*>& ts) {
 	bool a=false;
 	if (ts.size()==0) return;
 	dbprintf("[");
@@ -1141,11 +1141,11 @@ void ArgDef::dump(int depth) const {
 	if (this->type()) {dbprintf(":");type()->dump(-1);}
 	if (default_expr) {dbprintf("=");default_expr->dump(-1);}
 }
-Node*	TypeParam::clone() const
-{	return new TypeParam(this->name, (Type*) (this->defaultv?this->defaultv->clone():nullptr));
+Node*	TypeParamDef::clone() const
+{	return new TypeParamDef(this->name, (Type*) (this->defaultv?this->defaultv->clone():nullptr));
 }
 
-void TypeParam::dump(int depth) const {
+void TypeParamDef::dump(int depth) const {
 	newline(depth);dbprintf("%s",str(name));
 	if (defaultv) {dbprintf("=");defaultv->dump(-1);}
 }
@@ -1275,7 +1275,7 @@ void ExprFnDef::dump_signature()const{
 }
 ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
 	verify_all();
-	dbprintf_generic("instantiating %s %d for call %s %d\n",str(name),srcfn->pos.line, callsite->name_str(),callsite->pos.line);
+	dbg_generic("instantiating %s %d for call %s %d\n",str(name),srcfn->pos.line, callsite->name_str(),callsite->pos.line);
 	if (srcfn->type_parameter_index(srcfn->name)>=0){
 		dbprintf("WARNING instantiated templated NAME function for %s, as no function of the right name was found.. experiment aimed at implementing OOP thru generics.. eg fn METHOD[OBJ,METHOD,ARG0,ARG1](o:OBJ,a0:ARG0,a1:ARG1){ o.vtable.METHOD(o,a0,a1)}", str(name));
 	}
@@ -1318,17 +1318,17 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	//	new_fn->dump(0);
 	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
 #if DEBUG >=2
-	dbprintf_fnmatch("%s return type=\n",new_fn->name_str());
+	dbg_fnmatch("%s return type=\n",new_fn->name_str());
 	srcfn->type()->dump_if(-1);
-	dbprintf_fnmatch(" from ");
+	dbg_fnmatch(" from ");
 	new_fn->type()->dump_if(-1);
-	dbprintf_fnmatch("\n");
+	dbg_fnmatch("\n");
 	new_fn->fn_type->dump_if(-1);
-	dbprintf_fnmatch("\nlast expression:");
+	dbg_fnmatch("\nlast expression:");
 	new_fn->body->as_block()->argls.back()->dump(0);
-	dbprintf_fnmatch("\nlast expression type:");
+	dbg_fnmatch("\nlast expression type:");
 	new_fn->body->as_block()->argls.back()->type()->dump(0);
-	dbprintf_fnmatch("\n");
+	dbg_fnmatch("\n");
 #endif
 	
 	verify_all();
@@ -1355,7 +1355,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		}
 		// fn[(args..),ret]
 		if (auto args_ret=desired->sub){
-			dbprintf_lambdas("infering polymorphic function types");
+			dbg_lambdas("infering polymorphic function types");
 			int i=0;
 			for (auto desired_arg=args_ret->sub; desired_arg && i<this->args.size(); desired_arg=desired_arg->next,i++){
 				auto arg=this->args[i];
@@ -1578,11 +1578,11 @@ int num_known_arg_types(vector<Expr*>& args) {
 	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
 }
 
-//void match_generic_type_param_sub(const vector<TypeParam>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
+//void match_generic_type_param_sub(const vector<TypeParamDef>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
 	
 //}
 
-int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam*>& fn_tps,  const Type* fn_arg, const Type* given_arg)
+int match_typeparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TypeParamDef*>& fn_tps,  const Type* fn_arg, const Type* given_arg)
 {
 	int ret_score=0;
 //	if (!fn_arg && !given_arg) return 0;
@@ -1591,13 +1591,13 @@ int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam
 	if (!fn_arg) return 0;
 	if (!given_arg) return 0;
 	
-	dbprintf_fnmatch("%s/s ",str(fn_arg->name),str(given_arg->name));
+	dbg_fnmatch("%s/s ",str(fn_arg->name),str(given_arg->name));
 	if (fn_arg->sub || given_arg->sub) {
-		dbprintf_fnmatch("[");
+		dbg_fnmatch("[");
 		for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->	next,sub2=sub2->next) {
 			ret_score+=match_typeparams_from_arg(matched_tps,fn_tps, sub1, sub2);
 		}
-		dbprintf_fnmatch("]");
+		dbg_fnmatch("]");
 	}
 	// if either is 'AUTO' - consider it ok.
 	if (fn_arg->name==AUTO) return ret_score;
@@ -1610,8 +1610,8 @@ int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam
 			matched_tps[ti]=(Type*)given_arg;
 			return ret_score+1;
 		}
-		else if (!(matched_tps[ti]->eq(given_arg))) {// or we already found it - match..
-//			dbprintf_fnmatch("match %s !=%s\n",str(fn_arg->name),str(given_arg->name));
+		else if (!(matched_tps[ti]->is_equal(given_arg))) {// or we already found it - match..
+//			dbg_fnmatch("match %s !=%s\n",str(fn_arg->name),str(given_arg->name));
 #if DEBUG>=3
 			matched_tps[ti]->dump(-1);
 			given_arg->dump(-1);
@@ -1621,14 +1621,14 @@ int match_typeparams_from_arg(vector<Type*>& matched_tps, const vector<TypeParam
 	} else {
 		// concrete types - compare absolutely
 		if (fn_arg->name != given_arg->name) {
-			dbprintf_fnmatch("\nmatch %s !=%s\n",str(fn_arg->name),str(given_arg->name));
+			dbg_fnmatch("\nmatch %s !=%s\n",str(fn_arg->name),str(given_arg->name));
 			return ret_score-1000;	// mismatch is instant fail for this candidate.
 		}
 	}
 	return ret_score;
 }
 
-int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite){
+int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const ExprBlock* callsite){
 	// TODO: allow the types to feedback in the math
 	matched.resize(f->typeparams.size());
 	int score=0;
@@ -1644,7 +1644,7 @@ int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock
 		score+=match_typeparams_from_arg(matched,f->typeparams, f->args[i]->type(), callsite->argls[i]->type());
 	}
 	score+=match_typeparams_from_arg(matched, f->typeparams, f->ret_type, callsite->type());
-	dbprintf_fnmatch("score matching gets %d\n",score);
+	dbg_fnmatch("score matching gets %d\n",score);
 	return score;
 }
 
@@ -1698,7 +1698,7 @@ void FindFunction::insert_candidate(ExprFnDef* f,int score){
 }
 
 void FindFunction::consider_candidate(ExprFnDef* f) {
-	dbprintf_fnmatch("consider candidate %d %s\n",f->pos.line,str(f->name));
+	dbg_fnmatch("consider candidate %d %s\n",f->pos.line,str(f->name));
 	verify_all();
 	for (auto& c:this->candidates){
 		if (c.f==f)
@@ -1723,7 +1723,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 		auto at=args[i]->get_type(); if (!at) continue;
 		for (int jj=i; jj<f->args.size(); jj++) {
 			auto j=jj%args.size();
-			if (f->args[j]->get_type()->eq(at)){
+			if (f->args[j]->get_type()->is_equal(at)){
 				if (j==i) score+=(1+args.size()-i); // args in right pos score higher
 				score++;
 				break;
@@ -1747,7 +1747,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			score++; //1 point for an 'any' arg on either side
 		} else{
 			// both args are given:
-			if (f->args[i]->get_type()->eq(args[i]->get_type())) {
+			if (f->args[i]->get_type()->is_equal(args[i]->get_type())) {
 				score+=10;// 1 exact match worth more than any number of anys
 			} else{
 				//if (!is_generic_type(f->typeparams,f->args[i]->get_type())
@@ -1765,29 +1765,29 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	// find generic typeparams..
 	if (f->typeparams.size()){
 #if DEBUG>=2
-		dbprintf_fnmatch("%s score=%d; before typaram match\n",str(f->name),score);
-		dbprintf_fnmatch("callsite:\n");
+		dbg_fnmatch("%s score=%d; before typaram match\n",str(f->name),score);
+		dbg_fnmatch("callsite:\n");
 		for (int i=0; i<callsite->as_block()->argls.size();i++) {
-			dbprintf_fnmatch("arg %s:",  str(args[i]->name));
+			dbg_fnmatch("arg %s:",  str(args[i]->name));
 			callsite->as_block()->argls[i]->type()->dump_if(-1);
-			dbprintf_fnmatch("\tvs\t");
+			dbg_fnmatch("\tvs\t");
 			f->args[i]->type()->dump_if(-1);
-			dbprintf_fnmatch("\n");
+			dbg_fnmatch("\n");
 		}
-		dbprintf_fnmatch("\n");
+		dbg_fnmatch("\n");
 #endif
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
 			score+=match_typeparams_from_arg(matched_type_params,f->typeparams, f->args[i]->get_type(), args[i]->get_type());
 		}
 		score+=match_typeparams_from_arg(matched_type_params, f->typeparams,f->ret_type,ret_type);
-		dbprintf_fnmatch("typaram matcher for %s\n",f->name_str());
-		dbprintf_fnmatch("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
-		dbprintf_fnmatch("%s score=%d; matched typeparams{:-\n",str(f->name),score);
+		dbg_fnmatch("typaram matcher for %s\n",f->name_str());
+		dbg_fnmatch("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
+		dbg_fnmatch("%s score=%d; matched typeparams{:-\n",str(f->name),score);
 		for (auto i=0; i<f->typeparams.size(); i++){
-			dbprintf_fnmatch("[%d]%s = %s;\n", i,str(f->typeparams[i]->name),matched_type_params[i]?str(matched_type_params[i]->name):"" );
+			dbg_fnmatch("[%d]%s = %s;\n", i,str(f->typeparams[i]->name),matched_type_params[i]?str(matched_type_params[i]->name):"" );
 			}
-		dbprintf_fnmatch("}\n");
-		dbprintf_fnmatch("\n");
+		dbg_fnmatch("}\n");
+		dbg_fnmatch("\n");
 		
 	}
 	verify_all();
@@ -1795,7 +1795,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 
 	// consider return type in call.
 	if (ret_type)
-		if (f->get_type()->eq(ret_type)) score+=100;
+		if (f->get_type()->is_equal(ret_type)) score+=100;
 
 	if (f->name==name) score*=100; // 'named' functions always win over un-named forms eg F[F,X](a:X),we may use unnamed to implement OOP..
 	// insert candidate
@@ -1811,11 +1811,11 @@ void FindFunction::find_fn_sub(Expr* src) {
 		}
 	} else if (auto f=dynamic_cast<ExprFnDef*>(src)){
 		if (verbose)
-			dbprintf_fnmatch("consider %s %d for %s %d\n",f->name_str(),f->pos.line, this->callsite->name_str(),this->callsite->pos.line);
+			dbg_fnmatch("consider %s %d for %s %d\n",f->name_str(),f->pos.line, this->callsite->name_str(),this->callsite->pos.line);
 		consider_candidate(f);
 		int i=0;
 		for (auto ins=f->instances; ins; ins=ins->next_instance,i++) {
-			dbprintf_fnmatch("%s ins=%d\n",f->name_str(),i);
+			dbg_fnmatch("%s ins=%d\n",f->name_str(),i);
 			consider_candidate(ins);
 		}
 	}
@@ -1919,7 +1919,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 			auto tpxlat=TypeParamXlat{best.f->typeparams,callsite_tys};
 			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
 
-				if (!args[i]->type()->eq(best.f->args[i]->type(),tpxlat)){
+				if (!args[i]->type()->is_equal(best.f->args[i]->type(),tpxlat)){
 					info(best.f->args[i],"maybe arg %d should be ",i); best.f->args[i]->type()->dump_if(-1);
 					info(args[i],"was given "); args[i]->type()->dump_if(-1);newline(0);
 					tpxlat.dump();
@@ -2019,7 +2019,7 @@ void Scope::add_fn(ExprFnDef* fnd){
 	ni->fn_defs=fnd;
 }
 void Scope::add_struct(ExprStructDef* sd){
-	dbprintf_instancing("adding struct %p %s ins of %p to %s\n",sd,sd->name_str(),sd->instance_of,this->name());
+	dbg_instancing("adding struct %p %s ins of %p to %s\n",sd,sd->name_str(),sd->instance_of,this->name());
 	if (sd->name_ptr)
 		return;
 	if (sd->instance_of){
@@ -2037,7 +2037,7 @@ Variable* Scope::find_scope_variable(Name name){
 	return nullptr;
 }
 Variable* Scope::find_variable_rec(Name name){
-	dbprintf_varscope("find variable %s in %s\n",str(name),this->name());
+	dbg_varscope("find variable %s in %s\n",str(name),this->name());
 	for (auto sc=this; sc;sc=sc->parent_within_fn())
 		if (auto v=sc->find_scope_variable(name))
 			return v;
@@ -2053,24 +2053,24 @@ Variable* Scope::find_variable_rec(Name name){
 Variable* Scope::try_capture_var(Name name) {
 	for (auto v=capture_from->vars;v; v=v->next_of_capture){
 		if (v->name==name &&v->capture_in){
-			dbprintf_varscope("Found Captured Var %s in %s %s\n",str(name),this->name(),str(v->capture_in->name));
+			dbg_varscope("Found Captured Var %s in %s %s\n",str(name),this->name(),str(v->capture_in->name));
 			return v;
 		}
 	}
-	dbprintf_varscope("Trying to capture %s in %s\n",str(name),this->name());
-	dbprintf_varscope(" from %s\n",this->capture_from->name());
+	dbg_varscope("Trying to capture %s in %s\n",str(name),this->name());
+	dbg_varscope(" from %s\n",this->capture_from->name());
 	if (auto ofn=dynamic_cast<ExprFnDef*>(this->owner_fn)){
 		auto v=capture_from->find_variable_rec(name);
 		if (v) {
-			dbprintf_varscope("capture: found %s in %s\n",str(name),this->capture_from->name());
+			dbg_varscope("capture: found %s in %s\n",str(name),this->capture_from->name());
 			auto cp=ofn->get_or_create_capture(this->capture_from->owner_fn->as_fn_def());
 			if (v->capture_in==0){
 				v->capture_in=cp; v->next_of_capture=cp->vars; cp->vars=v;
-				dbprintf_varscope("%s captured by %s from %s\n",str(name),this->name(),capture_from->name());
+				dbg_varscope("%s captured by %s from %s\n",str(name),this->name(),capture_from->name());
 				return v;
 			}
 			else if (v->capture_in!=cp) {
-				dbprintf_varscope("var %s already captured by %s, coalesce with %s\n",str(name),str(v->capture_in->capture_by->name),this->name());
+				dbg_varscope("var %s already captured by %s, coalesce with %s\n",str(name),str(v->capture_in->capture_by->name),this->name());
 				cp->coalesce_with(v->capture_in);
 				return v;
 //			error(v,ofn,"can't capture variable twice yet- TODO, coalesce capture blocks");
@@ -2408,7 +2408,7 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 				this->argls[n]->resolve(sc,0,flags);
 			}
 			if ((flags & R_FINAL) &&ret.type && desired  &&this->argls.back()->type()){
-				if (!ret.type->eq(desired)){
+				if (!ret.type->is_equal(desired)){
 					newline(0);
 					dbprintf("mismattched types..\n",n);
 				ret.type->dump(-1); newline(0); desired->dump(-1);newline(0);
@@ -2488,7 +2488,7 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 			// propogate types we have into argument expressions
 			for (auto a=fn_type->fn_args(); arg_index<argls.size() && a; arg_index++,a=a->next)  {
 				if (a->name==FN){
-					dbprintf_lambdas("resolving fn type into function argument %s\n", argls[arg_index]->name_str());
+					dbg_lambdas("resolving fn type into function argument %s\n", argls[arg_index]->name_str());
 				}
 				argls[arg_index]->resolve(sc,a,flags);
 			}
@@ -2993,13 +2993,13 @@ instantiate tree<vector,int>
 }
 bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b) {
 	if (a.size()!=b.size()) return false;
-	for (int i=0; i<a.size(); i++) { if (!a[i]->eq(b[i])) return false;}
+	for (int i=0; i<a.size(); i++) { if (!a[i]->is_equal(b[i])) return false;}
 	return true;
 }
 bool type_params_eq(const vector<Type*>& a, const Type* tp){
 	for (auto
 		 i=0; i<a.size() && tp;i++,tp=tp->next){
-		if (!a[i]->eq(tp))
+		if (!a[i]->is_equal(tp))
 			return false;
 	}
 	// TODO- defaults.
@@ -3017,9 +3017,9 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 			break;
 	}
 	if (!ins) {
-		dbprintf_instancing("instantiating %s with[",this->name_str());
-		for (auto t=type->sub;t;t=t->next)dbprintf_instancing("%s,",t->name_str());
-		dbprintf_instancing("]\n");
+		dbg_instancing("instantiating %s with[",this->name_str());
+		for (auto t=type->sub;t;t=t->next)dbg_instancing("%s,",t->name_str());
+		dbg_instancing("]\n");
 		// TODO: store a tree of partial instantiations eg by each type..
 		vector<Type*> ty_params;
 		int i=0;
@@ -3086,7 +3086,7 @@ void ExprStructDef::roll_vtable() {
 	if (this->is_vtable_built()){// ToDO: && is-class. and differentiate virtual functions. For the
 		return;
 	}
-	dbprintf_vtable("rolling vtable for %s,inherits %s\n",str(this->name),this->inherits?str(this->inherits->name):"void");
+	dbg_vtable("rolling vtable for %s,inherits %s\n",str(this->name),this->inherits?str(this->inherits->name):"void");
 	if (this->vtable){ return;} // done already
 	if (this->inherits) {this->inherits->roll_vtable();}
 

@@ -587,7 +587,7 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	}
 	return a;
 }
-void parse_typeparams(TokenStream& src,vector<TypeParam*>& out,int close) {
+void parse_typeparams(TokenStream& src,vector<TypeParamDef*>& out,int close) {
 	while (!src.eat_if(close)){
 		//		if (src.eat_if(CLOSE_BRACKET)) break;
 		auto name=src.eat_tok();
@@ -595,7 +595,7 @@ void parse_typeparams(TokenStream& src,vector<TypeParam*>& out,int close) {
 		//		if (src.eat_if(ASSIGN)) {
 		//			int d=src.eat_tok();
 		//		}
-		out.push_back(new TypeParam{name,src.eat_if(ASSIGN)?parse_type(src,0,nullptr):0});
+		out.push_back(new TypeParamDef{name,src.eat_if(ASSIGN)?parse_type(src,0,nullptr):0});
 		src.eat_if(COMMA);
 	}
 }

@@ -101,7 +101,7 @@ fn main(argc:int,argv:**char)->int{
 		printf("closure2 says x=%d y=%d\n",x,captured_y);
 	}
 
-	let u:Union[int,float]; 
+	let u:Union<int,float>; 
 
 	// calls to templated functions
 	setv(&u,2.0);

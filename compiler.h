@@ -25,30 +25,30 @@ extern "C" char* gets(char*);
 // Debug Prints
 // on level 3 compiling is ultra verbose, level 4 adds line numbers
 
-#define dbprintf_loc() dbprintf("%s:%d:",__FILE__,__LINE__);
+#define dbg_loc() dbprintf("%s:%d:",__FILE__,__LINE__);
 #if DEBUG>=4
-#define DBLOC dbprintf_loc
+#define DBLOC dbg_loc
 #else
 #define DBLOC
 #endif
 #if DEBUG>=3
-#define dbprintf_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbprintf_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbprintf_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbprintf_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbprintf_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbprintf_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbprintf_type(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbprintf_vtable(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_type(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_vtable(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #else
-inline void dbprintf_fnmatch(const char*,...){}
-inline void dbprintf_varscope(const char*,...){}
-inline void dbprintf_generic(const char*,...){}
-inline void dbprintf_lambdas(const char*,...){}
-inline void dbprintf_instancing(const char*,...){}
-inline void dbprintf_resolve(const char*,...){}
-inline void dbprintf_type(const char*,...){}
-inline void dbprintf_vtable(const char*,...){}
+inline void dbg_fnmatch(const char*,...){}
+inline void dbg_varscope(const char*,...){}
+inline void dbg_generic(const char*,...){}
+inline void dbg_lambdas(const char*,...){}
+inline void dbg_instancing(const char*,...){}
+inline void dbg_resolve(const char*,...){}
+inline void dbg_type(const char*,...){}
+inline void dbg_vtable(const char*,...){}
 #endif
 
 
@@ -439,14 +439,14 @@ public:
 	void dump_top()const;
 };
 
-struct TypeParam: Node{
+struct TypeParamDef: Node{
 	Type* bound=0;	// eg traits/concepts
 	Type* defaultv=0;
-	TypeParam(){};
-	TypeParam(Name n, Type* dv){name=n;defaultv=dv;};
+	TypeParamDef(){};
+	TypeParamDef(Name n, Type* dv){name=n;defaultv=dv;};
 	void dump(int depth)const;
 	Node* clone() const override;
-	const char* kind_str()const{return "TypeParam";}
+	const char* kind_str()const{return "TypeParamDef";}
 };
 
 struct Expr : public Node{					// anything yielding a value
@@ -454,8 +454,12 @@ public:
 	int visited;					// anti-recursion flag.
 };
 
+/// TODO-Anything matchable by the template engine eg Type, Constants, Ident.. (how far do we go unifying templates & macros..)
+
+typedef Type TParamVal;
+;
 struct Type : Expr{
-	vector<TypeParam*> typeparams;
+	vector<TypeParamDef*> typeparams;
 	ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
@@ -517,9 +521,9 @@ struct Type : Expr{
 	int			num_pointers_and_arrays()const;
 	ExprStructDef*	struct_def_noderef()const;
 	ExprStructDef*	get_struct() const; // with autoderef
-	bool			is_coercible(const Type* other) const{return eq(other,true);};
-	bool			eq(const Type* other,bool coerce=false) const;
-	bool			eq(const Type* other, const TypeParamXlat& xlat )const;
+	bool			is_coercible(const Type* other) const{return is_equal(other,true);};
+	bool			is_equal(const Type* other,bool coerce=false) const;
+	bool			is_equal(const Type* other, const TypeParamXlat& xlat )const;
 	void			dump_sub()const;
 	void			dump(int depth)const;
 	static Type*	get_bool() ;
@@ -690,7 +694,7 @@ struct Capture : ExprDef{
 
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
 	const char* kind_str()const{return "typedef";}
-	vector<TypeParam*> typeparams;
+	vector<TypeParamDef*> typeparams;
 };
 
 struct ExprLiteral : ExprDef {
@@ -927,7 +931,7 @@ struct ExprStructDef: ExprDef {
 	bool is_compiled=false;
 	bool is_enum_=false;
 	bool is_enum() { return is_enum_;}
-	vector<TypeParam*>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
+	vector<TypeParamDef*>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	vector<Type*>		instanced_types;
 	vector<ArgDef*>			fields;
 	vector<ArgDef*>			static_virtual;
@@ -1051,7 +1055,7 @@ struct  ExprFnDef : ExprDef {
 	bool resolved;
 
 	Name mangled_name=0;
-	vector<TypeParam*> typeparams;
+	vector<TypeParamDef*> typeparams;
 	vector<ArgDef*> args;
 	bool variadic;
 	bool c_linkage=false;
@@ -1136,9 +1140,9 @@ struct ExprIdent :Expr{
 };
 
 struct TypeParamXlat{
-	const vector<TypeParam*>& typeparams; const vector<Type*>& given_types;
+	const vector<TypeParamDef*>& typeparams; const vector<TParamVal*>& given_types;
 	TypeParamXlat();
-	TypeParamXlat(	const vector<TypeParam*>& t, const vector<Type*>& g):typeparams(t),given_types(g){}
+	TypeParamXlat(	const vector<TypeParamDef*>& t, const vector<TParamVal*>& g):typeparams(t),given_types(g){}
 	bool typeparams_all_set()const{
 		for (int i=0; i<given_types.size(); i++) {
 			if (given_types[i]==0) return false;

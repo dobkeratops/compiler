@@ -8,6 +8,7 @@ void repl() {
 		getline(&text,&len,stdin);
 		printf("%s",text);
 		free(text);
+		ASSERT(0&&"TODO");
 	}
 }
 
