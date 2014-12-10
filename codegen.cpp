@@ -189,6 +189,18 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 	} else {
 		cg.emit_comment("instance %s of %s in %s %p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st);
 
+		for (auto fi: st->fields){
+			if (!fi->type())
+				return CgValue();
+			if (fi->type()->is_typeparam(sc))
+				return CgValue();
+			if (fi->type()->name>=IDENT){
+				if (!fi->type()->struct_def){
+					cg.emit_comment("not compiling %s, it shouldn't have been instanced-see issue of partially resolving generic functions for better type-inference, we're getting these bugs: phantom initiated structs. must figure out how to mark them properly",str(this->get_mangled_name()));
+					return CgValue();
+				}
+			}
+		};
 		// instantiate the vtable
 		// todo: step back thru the hrc to find ov[i]errides
 		if (this->vtable)
@@ -478,6 +490,11 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			return CgValue();
 		}
 	} else if (e->lhs && !e->rhs) {
+		if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
+			auto lhs_v=sc->find_scope_variable(e->lhs->name);
+			return  CgValue(lhs_v);
+		}
+
 		error(e,"postfix operators not implemented yet.");
 		return CgValue();
 	} else

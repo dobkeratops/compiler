@@ -27,7 +27,7 @@ extern "C" char* gets(char*);
 
 #define dbg_loc() dbprintf("%s:%d:",__FILE__,__LINE__);
 #if DEBUG>=4
-	#define DBLOC() dbg_loc
+	#define DBLOC() dbg_loc()
 #else
 	#define DBLOC()
 #endif
@@ -41,8 +41,7 @@ extern "C" char* gets(char*);
 	#define dbg_vtable(...) {DBLOC();dbprintf(__VA_ARGS__);}
 	#define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #else
-	#define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
-	//inline void dbg_generic(const char*,...){}
+	inline void dbg_generic(const char*,...){}
 	inline void dbg_fnmatch(const char*,...){}
 	inline void dbg_varscope(const char*,...){}
 	inline void dbg_lambdas(const char*,...){}
@@ -80,6 +79,7 @@ extern void verify_all_sub();
 struct Node;
 struct Name;
 struct TypeParam;
+struct TParamDef;
 struct ExprType;
 struct ExprOp;
 struct  ExprFnDef;
@@ -383,6 +383,7 @@ public:
 	RegisterName get_reg_named(Name baseName, int* new_index, bool force_new);
 	RegisterName get_reg_named_new(Name baseName, int* new_index);
 	RegisterName get_reg_existing();
+	virtual	vector<TParamDef*>*			get_typeparams(){ return nullptr;}
 	Node*	parent()					{return this->m_parent;}
 	void	set_parent(Node* p)			{this->m_parent=p;}
 	virtual CgValue codegen(CodeGen& cg,bool contents);
@@ -406,10 +407,11 @@ public:
 	virtual CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_if(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
-	virtual ExprIdent* as_ident() {return nullptr;}
-	virtual ExprFor* as_for() {return nullptr;}
-	virtual ExprFnDef* as_fn_def() {return nullptr;}
-	virtual ExprBlock* as_block() {return nullptr;}
+	virtual ExprIdent*	as_ident() {return nullptr;}
+	virtual ExprFor* 	as_for() {return nullptr;}
+	virtual ExprFnDef*	as_fn_def() {return nullptr;}
+	virtual ExprBlock*	as_block() {return nullptr;}
+	virtual TParamDef*	as_tparam_def() {return nullptr;}
 	ExprBlock* as_block() const{return const_cast<Node*>(this)->as_block();}
 	virtual ArgDef* as_arg_def() {return nullptr;}
 	virtual Variable* as_variable() {return nullptr;}
@@ -442,16 +444,6 @@ public:
 
 typedef Type TParamVal;
 // Type Parameter, actually Template Parameter as we generalize it.
-struct TParamDef: Node{
-	TParamVal* bound=0;	// eg traits/concepts
-	TParamVal* defaultv=0;
-	TParamDef(){};
-	TParamDef(SrcPos sp,Name n, TParamVal* dv,TParamVal* bound_=0, TParamVal*defaultv_=0){pos=sp;name=n;defaultv=dv;bound=bound_;defaultv=defaultv_;};
-	void dump(int depth)const;
-	Node* clone() const override;
-	const char* kind_str()const{return "TParamDef";}
-};
-
 struct Expr : public Node{					// anything yielding a value
 public:
 	int visited;					// anti-recursion flag.
@@ -459,12 +451,18 @@ public:
 
 /// TODO-Anything matchable by the template engine eg Type, Constants, Ident.. (how far do we go unifying templates & macros..)
 
+
+
 struct Type : Expr{
 	vector<TParamDef*> typeparams;
 	ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
 	Node* 	m_origin=0;				// where it comes from
+	bool	tparam_index=-1;
+	bool	is_generic(){return tparam_index>=0;}
+	bool	has_non_instanced_typeparams()const;
+	
 	void set_origin(Node* t){m_origin=t;}
 	Node* get_origin()const {return m_origin;}
 	void push_back(Type* t);
@@ -516,6 +514,8 @@ struct Type : Expr{
 //	bool	is_ptr_to(const Type* other){return ((this->type==PTR) && this->sub->eq(other));}
 //	bool	is_void_ptr()const	{if (this->type==VOIDPTR)return true;if(this->type==PTR && this->sub){if(this->type->sub==VOID) return true;}return false;};
 	
+	bool		has_typeparam(Scope* sc);
+	bool 		is_typeparam(Scope* sc) const;
 	const Type*	get_elem(int index) const;
 	Type*		get_elem(int index);
 	int			num_pointers()const;
@@ -676,6 +676,17 @@ struct ExprDef :Expr{
 	virtual ExprStructDef* member_of()const{return nullptr;}
 };
 
+struct TParamDef: ExprDef{
+	TParamVal* bound=0;	// eg traits/concepts
+	TParamVal* defaultv=0;
+	TParamDef(){};
+	TParamDef(SrcPos sp,Name n, TParamVal* dv,TParamVal* bound_=0, TParamVal*defaultv_=0){pos=sp;name=n;defaultv=dv;bound=bound_;defaultv=defaultv_;};
+	void dump(int depth)const;
+	Node* clone() const override;
+	TParamDef*	as_tparam_def() override{return this;}
+	const char* kind_str()const{return "TParamDef";}
+};
+
 /// Capture of local variables for a lambda function
 struct Capture : ExprDef{
 	Name			tyname(){return name;};
@@ -787,6 +798,7 @@ struct Variable : ExprDef{
 	Variable*	as_variable() {return this;}
 	void dump(int depth) const;
 };
+
 /// 'Scope'-
 /// scopes are created when resolving, held on some node types.
 /// blocks which can add locals or named entities have them.
@@ -812,6 +824,10 @@ private:
 public:
 	Scope(Scope* p){ASSERT(p==0);named_items=0; owner_fn=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
 	void visit_calls();
+	vector<TParamDef*>* get_tparams(){return owner_fn?owner_fn->get_typeparams():nullptr; // TODO: actually need to cascade them.
+	}
+	TParamDef*	get_typeparam_for(Type *t);
+	bool		is_typeparam(Type* t) {return get_typeparam_for(t)!=nullptr;}
 	ExprStructDef*	get_receiver();
 	Variable*	try_capture_var(Name ident);	//sets up the capture block ptr.
 	Variable*	find_fn_variable(Name ident,ExprFnDef* f);
@@ -989,6 +1005,7 @@ struct ExprStructDef: ExprDef {
 	int				vtable_size();
 	int				vtable_base_index();
 	ExprStructDef*	root_class();
+	vector<TParamDef*>*			get_typeparams() override { return &typeparams;}
 	int				get_elem_count(){return this->fields.size();}
 	bool			is_vtable_built(){return this->vtable_name!=0;}
 	const ExprFnDef*		find_function_for_vtable(Name n, const Type* fn_type);
@@ -1093,6 +1110,7 @@ struct  ExprFnDef : ExprDef {
 	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);
 	Capture*		get_or_create_capture(ExprFnDef* src);
 	void			translate_typeparams(const TypeParamXlat& tpx)override;
+	vector<TParamDef*>* get_typeparams() override{return &this->typeparams;}
 	Expr*			last_expr()const{
 		if (auto b=body->as_block()) return b->argls.back();
 		else return body;

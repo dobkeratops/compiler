@@ -85,7 +85,11 @@ fn setv<X,Y>(u:&Union<X,Y>,x:X)->void{
 	u.tag=0;
 }
 
-fn map<X,Y,R>(u:&Union<X,Y>, fx:|&X|->R,fy:|&Y|->R)->R{
+fn map<X,Y,R>(
+	u:&Union<X,Y>,
+	fx:|&X|->R,
+	fy:|&Y|->R)
+	->R{
 	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
 }
 

@@ -304,7 +304,7 @@ const char* g_TestHKT=
 "struct Vec[T]{data:*T,num:int}"
 "fn main(argc:int, argv:**char)->int{			\n"
 "	let vec:Vec[int];\n"
-"	let vec2=map(vec,|x|->float{0.0});\n"
+"	let vec2=map(vec,|x|{0.0});\n"
 "	0		\n"
 "}			\n";
 ;

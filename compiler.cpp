@@ -730,15 +730,37 @@ const char* Scope::name() const {
 // type Mul[float,float]->float
 // type Foo[a]->tuple[a.node,a.foo] // accessors for associated types?
 
+bool  Type::has_typeparam(Scope* sc){
+	if (this->def) {if (this->def->as_tparam_def()) return true;}
+	else
+	{
+		if (auto tpd=sc->get_typeparam_for(this)){
+			this->set_def(tpd);
+			return true;
+		}
+	}
+
+	for (auto s=this->sub; s; s=s->next){
+		if (s->has_typeparam(sc))
+			return true;
+	}
+	return false;
+}
 ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 {
 	if(!this)return ResolvedType();
 	if (!this->struct_def && this->name>=IDENT && !is_number(this->name)){
-		if (auto sd=sc->find_struct_named(this->name)){
-			this->struct_def =sd->get_instance(sc,this);
-			dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->struct_def,this);
-		}else{
-			dbg_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name());
+		if (!strcmp(str(name),"Union")){
+			sc->owner_fn->dump_if(0);
+			this->dump(-1);newline(0);
+		}
+		if (!this->has_typeparam(sc)){
+			if (auto sd=sc->find_struct_named(this->name)){
+				this->struct_def =sd->get_instance(sc,this);
+				dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->	struct_def,this);
+			}else{
+				dbg_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name());
+			}
 		}
 	}
 	auto ds=desired?desired->sub:nullptr;
@@ -1249,7 +1271,6 @@ ExprFnDef::clone() const{
 	r->m_receiver=m_receiver;
 	r->num_receivers=num_receivers;
 	r->ret_type=(Type*)ret_type->clone_if();
-	r->ret_type->dump_if(-1);dbg_generic("<<< return type\n");
 	r->args.resize(this->args.size());
 	for (int i=0; i<this->args.size(); i++) {
 		r->args[i]=(ArgDef*)this->args[i]->clone();
@@ -1387,12 +1408,13 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		for (auto ins=this->instances; ins;ins=ins->next_instance){
 			ins->resolve(scope,nullptr,flags);
 		}
-		return ResolvedType();
+		//return ResolvedType();
+		flags=0; // dont throw type error here
 	}
 	
-	if (!this->is_generic()){
+	if (true ||!this->is_generic()){
 		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
-			this->args[i]->resolve(definer_scope, nullptr, flags); // todo: call with defaultparams & init-expr
+			this->args[i]->resolve(this->scope, nullptr, flags); // todo: call with defaultparams & init-expr
 			auto arg=this->args[i];
 			auto v=sc->find_scope_variable(arg->name);
 			if (!v){v=sc->create_variable(arg,arg->name,VkArg);}
@@ -1421,7 +1443,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		}
 	}
 	
-	if (!this->fn_type) {
+	if (true|| !this->fn_type) {
 		this->fn_type=new Type(this,this->is_closure()?CLOSURE:FN);
 		auto arglist=new Type(this,TUPLE);
 		//		if (recs){arglist->push_back(new Type(PTR,recs));}
@@ -1435,7 +1457,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		this->fn_type->set_fn_details(arglist,ret_t,recs);
 		this->set_type(this->fn_type);
 	}
-	if (!this->is_generic()){
+	if (true|| !this->is_generic()){
 		this->fn_type->resolve_if(scope,nullptr,flags);
 		this->return_type()->resolve_if(scope,nullptr,flags);
 	}
@@ -1479,7 +1501,29 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags)
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
 	return propogate_type(flags,this, rt,this->ret_type); // todo: hide FnDef->type. its too confusing
 }
+bool Type::is_typeparam(Scope* sc)const{
+	return sc->get_typeparam_for(const_cast<Type*>(this))!=0;
+}
 
+TParamDef*	Scope::get_typeparam_for(Type* t) {
+	if (t->def){
+		if (auto tp=t->def->as_tparam_def())
+			return tp;
+	}
+	for (auto s=this; s; s=s->parent){
+		if (s->owner_fn){
+			if (auto tpds=s->owner_fn->get_typeparams()){
+				for (auto tpd:*tpds){
+					if (tpd->name==t->name){
+						t->set_def(tpd);
+						return tpd;
+					}
+				}
+			}
+		}
+	}
+	return nullptr;
+}
 
 NamedItems* Scope::get_named_items_local(Name name){
 	if (auto ni=find_named_items_local(name))
@@ -1562,6 +1606,7 @@ Type::clone() const{
 	if (!this) return nullptr;
 	auto r= new Type(this->get_origin(),this->name);
 	r->struct_def=this->struct_def;
+	r->def=0;		// def must be re-resolved.
 	auto *src=this->sub;
 	Type** p=&r->sub;
 	while (src) {
@@ -1970,6 +2015,8 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	}
 	return nullptr;
 }
+bool Type::has_non_instanced_typeparams()const{ if (!def) return true; if (def->as_tparam_def()) return false; return true;}
+
 Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 	// todo: This Pointer?
 	if (this->owner_fn!=f) return nullptr;
@@ -1986,6 +2033,8 @@ Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 	return nullptr;
 }
 ExprStructDef* Scope::find_struct_sub(Scope* original,const Type* t){
+	if (!t->has_non_instanced_typeparams())
+		return nullptr;
 	if (auto fn=this->find_named_items_local(t->name)){
 		for (auto st=fn->structs; st;st=st->next_of_name){
 			if (st->name==t->name) {
@@ -2614,6 +2663,12 @@ ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scop
 		block->argls[i]->resolve(scope,nullptr,flags);
 		if (block->argls[i]->type()) num_resolved_args++;
 	}
+#if DEBUG>4
+	for (int i=0; i<block->argls.size(); i++) {
+		dbprintf("arg[i]=",i);
+		block->argls[i]->dump_if(-1);newline(0);
+	}
+#endif
 	if (receiver){
 		receiver->resolve(scope,nullptr,flags); if (receiver->type()) num_resolved_args++;
 	}
@@ -2854,6 +2909,7 @@ void ExprIf::translate_typeparams(const TypeParamXlat& tpx){
 	this->cond->translate_typeparams_if(tpx);
 	this->body->translate_typeparams_if(tpx);
 	this->else_block->translate_typeparams_if(tpx);
+	this->type()->translate_typeparams_if(tpx);
 }
 void ExprFor::translate_typeparams(const TypeParamXlat& tpx)
 {
@@ -2863,6 +2919,7 @@ void ExprFor::translate_typeparams(const TypeParamXlat& tpx)
 	this->pattern->translate_typeparams_if(tpx);
 	this->body->translate_typeparams_if(tpx);
 	this->else_block->translate_typeparams_if(tpx);
+	this->type()->translate_typeparams_if(tpx);
 }
 
 void Name::translate_typeparams(const TypeParamXlat& tpx)
@@ -2878,7 +2935,7 @@ void ExprIdent::translate_typeparams(const TypeParamXlat& tpx)
 	// templated idents?
 	// TODO - these could be expresions - "concat[T,X]"
 	this->name.translate_typeparams(tpx);
-	
+	this->type()->translate_typeparams_if(tpx);
 }
 
 void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
@@ -2886,22 +2943,21 @@ void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
 	for (auto e:argls){
 		e->translate_typeparams(tpx);
 	}
+	this->type()->translate_typeparams_if(tpx);
 }
 
 void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
 	lhs->translate_typeparams_if(tpx);
 	rhs->translate_typeparams_if(tpx);
+	this->type()->translate_typeparams_if(tpx);
 }
 
 void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 	dbg_generic("translate typeparams for fn %s\n",this->name_str());
-	this->dump(0);
 	for (auto &a:args) a->translate_typeparams(tpx);
 
 	
-	this->ret_type->dump_if(-1);newline(0);
 	this->ret_type->translate_typeparams_if(tpx);
-	this->ret_type->dump_if(-1);newline(0);
 	this->body->translate_typeparams_if(tpx);
 	
 	if (tpx.typeparams_all_set())
@@ -2914,6 +2970,7 @@ ArgDef*	ExprStructDef::find_field(const Node* rhs)const{
 	auto fi= this->try_find_field(rhs->as_name());
 	if (!fi)
 		error(rhs,this,"no field %s in ",str(name),str(this->name));
+
 	return fi;
 }
 ArgDef* ExprStructDef::try_find_field(const Name name)const{
@@ -2923,11 +2980,16 @@ ArgDef* ExprStructDef::try_find_field(const Name name)const{
 
 void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)
 {
-	for (auto a:this->fields)a->translate_typeparams(tpx);
-	for (auto f:functions)f->translate_typeparams(tpx);
-	for (auto s:structs)s->translate_typeparams(tpx);
+	for (auto a:this->fields)		a->translate_typeparams(tpx);
+	for (auto f:functions)			f->translate_typeparams(tpx);
+	for (auto f:virtual_functions)	f->translate_typeparams(tpx);
+	for (auto f:static_functions)	f->translate_typeparams(tpx);
+	for (auto f:static_fields)		f->translate_typeparams(tpx);
+	for (auto f:static_virtual)		f->translate_typeparams(tpx);
+	for (auto s:structs)			s->translate_typeparams(tpx);
 	if (tpx.typeparams_all_set())
 		this->typeparams.resize(0);
+	this->type()->translate_typeparams_if(tpx);
 }
 ExprStructDef* ArgDef::member_of()	{ // todo, implement for 'Variable' aswell, unify capture & member-object.
 	if (owner) return owner->get_receiver();
@@ -3081,9 +3143,11 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 			break;
 	}
 	if (!ins) {
-		dbg_instancing("instantiating %s with[",this->name_str());
+#if DEBUG>=2
+		dbg_instancing("instantiating struct %s[",this->name_str());
 		for (auto t=type->sub;t;t=t->next)dbg_instancing("%s,",t->name_str());
 		dbg_instancing("]\n");
+#endif
 		// TODO: store a tree of partial instantiations eg by each type..
 		vector<Type*> ty_params;
 		int i=0;
@@ -3120,6 +3184,10 @@ Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
 //	for (auto t:this->typeparams) {d->typeparams.push_back(t->clone());}
 	d->typeparams = this->typeparams;
 	for (auto f:this->functions){d->functions.push_back((ExprFnDef*)f->clone());}
+	for (auto f:this->virtual_functions){d->virtual_functions.push_back((ExprFnDef*)f->clone());}
+	for (auto f:this->static_functions){d->static_functions.push_back((ExprFnDef*)f->clone());}
+	for (auto f:this->static_fields){d->static_fields.push_back((ArgDef*)f->clone());}
+	for (auto f:this->static_virtual){d->static_virtual.push_back((ArgDef*)f->clone());}
 	for (auto s:this->structs){d->structs.push_back((ExprStructDef*)s->clone());}
 	for (auto l:this->literals){d->literals.push_back((ExprLiteral*)l->clone());}
 	return d;
