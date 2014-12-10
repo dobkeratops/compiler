@@ -587,15 +587,16 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	}
 	return a;
 }
-void parse_typeparams(TokenStream& src,vector<TypeParamDef*>& out,int close) {
+void parse_typeparams(TokenStream& src,vector<TParamDef*>& out,int close) {
 	while (!src.eat_if(close)){
 		//		if (src.eat_if(CLOSE_BRACKET)) break;
-		auto name=src.eat_tok();
-		//		int d=0;
-		//		if (src.eat_if(ASSIGN)) {
-		//			int d=src.eat_tok();
-		//		}
-		out.push_back(new TypeParamDef{name,src.eat_if(ASSIGN)?parse_type(src,0,nullptr):0});
+		out.push_back(
+			new TParamDef(
+				src.prev_pos,
+				src.eat_tok(),
+				src.eat_if(COLON)?parse_type(src,0,nullptr):nullptr,
+				src.eat_if(ASSIGN)?parse_type(src,0,nullptr):nullptr
+				));
 		src.eat_if(COMMA);
 	}
 }

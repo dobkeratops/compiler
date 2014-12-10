@@ -376,7 +376,7 @@ void Node::dump_top() const {
 	dbprintf("%s ", getString(name));
 }
 
-int get_typeparam_index(const vector<TypeParamDef*>& tps, Name name) {
+int get_typeparam_index(const vector<TParamDef*>& tps, Name name) {
 	for (int i=(int)(tps.size()-1); i>=0; i--) {
 		if (tps[i]->name==name)
 			return i;
@@ -885,7 +885,7 @@ void Type::dump_sub()const{
 		dbprintf(")");
 	} else{
 		dbprintf("%s",getString(name));
-#if DEBUG>=2
+#if DEBUG>=4
 		if (this->struct_def)
 			dbprintf(" %s", str(this->struct_def->get_mangled_name()));
 #endif
@@ -1114,7 +1114,7 @@ ExprLiteral::~ExprLiteral(){
 		free((void*)u.val_str);
 	}
 }
-void dump_typeparams(const vector<TypeParamDef*>& ts) {
+void dump_typeparams(const vector<TParamDef*>& ts) {
 	bool a=false;
 	if (ts.size()==0) return;
 	dbprintf("[");
@@ -1141,11 +1141,11 @@ void ArgDef::dump(int depth) const {
 	if (this->type()) {dbprintf(":");type()->dump(-1);}
 	if (default_expr) {dbprintf("=");default_expr->dump(-1);}
 }
-Node*	TypeParamDef::clone() const
-{	return new TypeParamDef(this->name, (Type*) (this->defaultv?this->defaultv->clone():nullptr));
+Node*	TParamDef::clone() const
+{	return new TParamDef(this->pos,this->name, (TParamVal*) (this->bound->clone_if()),(TParamVal*) (this->defaultv->clone_if()));
 }
 
-void TypeParamDef::dump(int depth) const {
+void TParamDef::dump(int depth) const {
 	newline(depth);dbprintf("%s",str(name));
 	if (defaultv) {dbprintf("=");defaultv->dump(-1);}
 }
@@ -1242,9 +1242,14 @@ Node*
 ExprFnDef::clone() const{
 	if (!this) return nullptr;
 	auto r=new ExprFnDef(this->pos);
+	r->m_closure=m_closure;
 	r->name=this->name;
 	r->c_linkage=false; //generic instance is not extern C.
 	r->body=(ExprBlock*)(this->body?this->body->clone():nullptr);
+	r->m_receiver=m_receiver;
+	r->num_receivers=num_receivers;
+	r->ret_type=(Type*)ret_type->clone_if();
+	r->ret_type->dump_if(-1);dbg_generic("<<< return type\n");
 	r->args.resize(this->args.size());
 	for (int i=0; i<this->args.size(); i++) {
 		r->args[i]=(ArgDef*)this->args[i]->clone();
@@ -1325,9 +1330,9 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	dbg_fnmatch("\n");
 	new_fn->fn_type->dump_if(-1);
 	dbg_fnmatch("\nlast expression:");
-	new_fn->body->as_block()->argls.back()->dump(0);
+	new_fn->last_expr()->dump_if(0);
 	dbg_fnmatch("\nlast expression type:");
-	new_fn->body->as_block()->argls.back()->type()->dump(0);
+	new_fn->last_expr()->type()->dump_if(0);
 	dbg_fnmatch("\n");
 #endif
 	
@@ -1578,11 +1583,11 @@ int num_known_arg_types(vector<Expr*>& args) {
 	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
 }
 
-//void match_generic_type_param_sub(const vector<TypeParamDef>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
+//void match_generic_type_param_sub(const vector<TParamDef>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
 	
 //}
 
-int match_typeparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TypeParamDef*>& fn_tps,  const Type* fn_arg, const Type* given_arg)
+int match_typeparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* fn_arg, const Type* given_arg)
 {
 	int ret_score=0;
 //	if (!fn_arg && !given_arg) return 0;
@@ -1922,7 +1927,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 				if (!args[i]->type()->is_equal(best.f->args[i]->type(),tpxlat)){
 					info(best.f->args[i],"maybe arg %d should be ",i); best.f->args[i]->type()->dump_if(-1);
 					info(args[i],"was given "); args[i]->type()->dump_if(-1);newline(0);
-					tpxlat.dump();
+					tpxlat.dump(0);
 					info(args[i],"\n");
 					break;
 				}
@@ -2171,9 +2176,9 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
-		ASSERT(this->lhs && this->rhs);
-		auto rhs_t=rhs->resolve(sc,desired,flags);
 		if (op_ident==LET_ASSIGN){
+			ASSERT(this->lhs && this->rhs);
+			rhs->resolve(sc,desired,flags);
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			if (desired) {
 				desired->dump(-1);
@@ -2191,13 +2196,19 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			// todo: get this in the main parser
 			auto lhsi=expect_cast<ExprIdent>(lhs);
-			auto rhst=expect_cast<Type>(rhs);
 			//			auto v=sc->find_variable_rec(this->argls[0]->name);
 			auto v=sc->get_or_create_scope_variable(this,lhsi->name,Local);
-			v->set_type(rhst);
+			auto t=v->get_type();
+			if (rhs){
+				rhs->resolve(sc,desired,flags);
+				t=expect_cast<Type>(rhs);
+				v->set_type(t);
+			}
 			lhs->set_def(v);
-			if (rhst->name>=IDENT && !rhst->sub) {
-				rhst->struct_def = sc->find_struct(rhst);
+			if (t){
+				if (t->name>=IDENT && !t->sub) {
+					t->struct_def = sc->find_struct(t);
+				}
 			}
 			if (auto t=v->get_type()) {
 				sc->try_find_struct(t);// instantiate
@@ -2205,6 +2216,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			return propogate_type(flags, this, v->type_ref(),type_ref());
 		}
 		else if (op_ident==ASSIGN){
+			ASSERT(this->lhs && this->rhs);
 			propogate_type_fwd(flags,this, desired, type_ref());
 			auto rhs_t=rhs->resolve(sc,desired,flags);
 			auto lhs_t=lhs->resolve(sc,desired,flags);		// might assign to struct-field, ...
@@ -2882,9 +2894,14 @@ void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
 }
 
 void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
+	dbg_generic("translate typeparams for fn %s\n",this->name_str());
+	this->dump(0);
 	for (auto &a:args) a->translate_typeparams(tpx);
 
+	
+	this->ret_type->dump_if(-1);newline(0);
 	this->ret_type->translate_typeparams_if(tpx);
+	this->ret_type->dump_if(-1);newline(0);
 	this->body->translate_typeparams_if(tpx);
 	
 	if (tpx.typeparams_all_set())
@@ -2933,7 +2950,7 @@ int TypeParamXlat::typeparam_index(const Name& n) const{
 	}
 	return -1;
 }
-void TypeParamXlat::dump(){
+void TypeParamXlat::dump(int depth)const{
 	dbprintf("[");
 	for (auto i=0; i<this->typeparams.size();i++){
 		if (i)dbprintf(",");
@@ -2942,8 +2959,11 @@ void TypeParamXlat::dump(){
 	}
 	dbprintf("]");
 }
-
 void Type::translate_typeparams(const TypeParamXlat& tpx){
+	this->translate_typeparams_sub(tpx,nullptr);
+}
+void Type::translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_replace){
+	// todo: replace wih 'instantiate' typparams, given complex cases
 /*
  example:
  struct vector<T,N=int> {
@@ -2973,8 +2993,15 @@ instantiate tree<vector,int>
 	Type* new_type=0;
 	if (this->struct_def) this->struct_def=0;
 	int param_index=tpx.typeparam_index(this->name);
+	if (this->name==PLACEHOLDER || this->name==AUTO && inherit_replace){
+		this->name=inherit_replace->name;
+		if (!this->sub && inherit_replace->sub){
+			error(this,"TODO - replace an auto typeparam with complex given typeparam ");
+		}
+	}
 	if (param_index>=0){
-		auto src_ty=tpx.given_types[param_index];
+		auto pi=param_index;
+		auto src_ty=tpx.given_types[pi];
 		if (!src_ty){error(this,"typaram not given,partial instance?");}
 		if (!src_ty->sub) {
 			this->name=src_ty->name;
@@ -2984,11 +3011,48 @@ instantiate tree<vector,int>
 				this->push_back((Type*)s->clone());
 			};
 		}
-		else error(this,"trying to instantiate complex typeparameter into non-root of another complex typeparameter,we dont support this yet");
+		else {
+			#if DEBUG>=2
+			tpx.dump(0);
+			tpx.typeparams[pi]->dump(-1);
+			dbg_generic(" replace with ");
+			tpx.given_types[pi]->dump(-1);newline(0);
+			newline(0);
+			dbg_generic("substituting in:");
+			this->dump(-1);
+			newline(0);
+			#endif
+			//error_begin(this,"param index %d %s trying to instantiate complex typeparameter into non-root of another complex typeparameter,we dont support this yet\n",param_index, tpx.typeparams[pi]->name_str());
+			
+			//error_end(this);
+			this->name=src_ty->name;
+			auto inherit_sub=inherit_replace?inherit_replace->sub:nullptr;
+			auto* pps=&this->sub;
+			for (auto s=this->sub; s; pps=&s,s=s->next){
+				s->translate_typeparams_sub(tpx,inherit_sub);
+				inherit_sub=inherit_sub?inherit_sub->next:nullptr;
+			}
+
+			#if DEBUG>=2
+			dbg_generic("result:");
+			this->dump(-1);
+			newline(0);
+			#endif
+		}
 	}
 	//this->struct_def=tpx.
-	for (auto sub=this->sub; sub; sub=sub->next) {
-		sub->translate_typeparams(tpx);
+	// translate child elems.
+	auto inherit_sub=inherit_replace?inherit_replace->sub:nullptr;
+	auto* pps=&this->sub;
+	for (auto sub=this->sub; sub; pps=&sub->next,sub=*pps) {
+		sub->translate_typeparams_sub(tpx,inherit_sub);
+		inherit_sub=inherit_sub?inherit_sub->next:nullptr;
+	}
+	// replace any not give with inherit..
+	while (inherit_sub){
+		*pps = (Type*)inherit_sub->clone();
+		inherit_sub=inherit_sub->next;
+		pps=&((*pps)->next);
 	}
 }
 bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b) {

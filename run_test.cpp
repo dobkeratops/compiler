@@ -295,8 +295,25 @@ const char* g_TestLetArray=
 /* 6*/  "}			\n";
 ;
 
+const char* g_TestHKT=
+"fn map[C,T,Y](src:C[T],f:|T|->Y)->C[Y]{		\n"
+"	let result;								\n"
+"	result										\n"
+"}												\n"
+"												\n"
+"struct Vec[T]{data:*T,num:int}"
+"fn main(argc:int, argv:**char)->int{			\n"
+"	let vec:Vec[int];\n"
+"	let vec2=map(vec,|x|->float{0.0});\n"
+"	0		\n"
+"}			\n";
+;
 
 void run_tests(){
+	// TODO - make a propper "test_run_source" taking expected output
+	auto ret13=compile_source(g_TestHKT,"g_TestHKT","test13.ll",B_TYPES);
+	auto ret14=compile_source(g_TestHKT,"g_TestHKT","test13.ll",B_TYPES|B_RUN);
+
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
 	auto ret2=compile_source(g_TestLetArray,"g_TestLetArray","test2.ll",B_TYPES|B_RUN);
 

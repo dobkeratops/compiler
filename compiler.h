@@ -27,28 +27,29 @@ extern "C" char* gets(char*);
 
 #define dbg_loc() dbprintf("%s:%d:",__FILE__,__LINE__);
 #if DEBUG>=4
-#define DBLOC dbg_loc
+	#define DBLOC() dbg_loc
 #else
-#define DBLOC
+	#define DBLOC()
 #endif
-#if DEBUG>=3
-#define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbg_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbg_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbg_type(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbg_vtable(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#if DEBUG>=3
+	#define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#define dbg_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#define dbg_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#define dbg_type(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#define dbg_vtable(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #else
-inline void dbg_fnmatch(const char*,...){}
-inline void dbg_varscope(const char*,...){}
-inline void dbg_generic(const char*,...){}
-inline void dbg_lambdas(const char*,...){}
-inline void dbg_instancing(const char*,...){}
-inline void dbg_resolve(const char*,...){}
-inline void dbg_type(const char*,...){}
-inline void dbg_vtable(const char*,...){}
+	#define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	//inline void dbg_generic(const char*,...){}
+	inline void dbg_fnmatch(const char*,...){}
+	inline void dbg_varscope(const char*,...){}
+	inline void dbg_lambdas(const char*,...){}
+	inline void dbg_instancing(const char*,...){}
+	inline void dbg_resolve(const char*,...){}
+	inline void dbg_type(const char*,...){}
+	inline void dbg_vtable(const char*,...){}
 #endif
 
 
@@ -439,14 +440,16 @@ public:
 	void dump_top()const;
 };
 
-struct TypeParamDef: Node{
-	Type* bound=0;	// eg traits/concepts
-	Type* defaultv=0;
-	TypeParamDef(){};
-	TypeParamDef(Name n, Type* dv){name=n;defaultv=dv;};
+typedef Type TParamVal;
+// Type Parameter, actually Template Parameter as we generalize it.
+struct TParamDef: Node{
+	TParamVal* bound=0;	// eg traits/concepts
+	TParamVal* defaultv=0;
+	TParamDef(){};
+	TParamDef(SrcPos sp,Name n, TParamVal* dv,TParamVal* bound_=0, TParamVal*defaultv_=0){pos=sp;name=n;defaultv=dv;bound=bound_;defaultv=defaultv_;};
 	void dump(int depth)const;
 	Node* clone() const override;
-	const char* kind_str()const{return "TypeParamDef";}
+	const char* kind_str()const{return "TParamDef";}
 };
 
 struct Expr : public Node{					// anything yielding a value
@@ -456,10 +459,8 @@ public:
 
 /// TODO-Anything matchable by the template engine eg Type, Constants, Ident.. (how far do we go unifying templates & macros..)
 
-typedef Type TParamVal;
-;
 struct Type : Expr{
-	vector<TypeParamDef*> typeparams;
+	vector<TParamDef*> typeparams;
 	ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
@@ -539,6 +540,8 @@ struct Type : Expr{
 	bool	is_void()const			{return !this || this->name==VOID;}
 	int		num_derefs()const		{if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
 	Type*	deref_all() const		{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
+	void translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_replace);
+
 	void			translate_typeparams(const TypeParamXlat& tpx) override;
 	virtual ResolvedType	resolve(Scope* s, const Type* desired,int flags);
 	virtual void verify();
@@ -694,7 +697,7 @@ struct Capture : ExprDef{
 
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
 	const char* kind_str()const{return "typedef";}
-	vector<TypeParamDef*> typeparams;
+	vector<TParamDef*> typeparams;
 };
 
 struct ExprLiteral : ExprDef {
@@ -931,7 +934,7 @@ struct ExprStructDef: ExprDef {
 	bool is_compiled=false;
 	bool is_enum_=false;
 	bool is_enum() { return is_enum_;}
-	vector<TypeParamDef*>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
+	vector<TParamDef*>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	vector<Type*>		instanced_types;
 	vector<ArgDef*>			fields;
 	vector<ArgDef*>			static_virtual;
@@ -1055,7 +1058,7 @@ struct  ExprFnDef : ExprDef {
 	bool resolved;
 
 	Name mangled_name=0;
-	vector<TypeParamDef*> typeparams;
+	vector<TParamDef*> typeparams;
 	vector<ArgDef*> args;
 	bool variadic;
 	bool c_linkage=false;
@@ -1090,6 +1093,10 @@ struct  ExprFnDef : ExprDef {
 	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);
 	Capture*		get_or_create_capture(ExprFnDef* src);
 	void			translate_typeparams(const TypeParamXlat& tpx)override;
+	Expr*			last_expr()const{
+		if (auto b=body->as_block()) return b->argls.back();
+		else return body;
+	}
 	Expr*			get_return_value() const;
 	Type*				return_type()const {
 		auto x=get_return_value(); if (auto xt=x->get_type()) return xt;
@@ -1140,9 +1147,9 @@ struct ExprIdent :Expr{
 };
 
 struct TypeParamXlat{
-	const vector<TypeParamDef*>& typeparams; const vector<TParamVal*>& given_types;
+	const vector<TParamDef*>& typeparams; const vector<TParamVal*>& given_types;
 	TypeParamXlat();
-	TypeParamXlat(	const vector<TypeParamDef*>& t, const vector<TParamVal*>& g):typeparams(t),given_types(g){}
+	TypeParamXlat(	const vector<TParamDef*>& t, const vector<TParamVal*>& g):typeparams(t),given_types(g){}
 	bool typeparams_all_set()const{
 		for (int i=0; i<given_types.size(); i++) {
 			if (given_types[i]==0) return false;
@@ -1150,7 +1157,7 @@ struct TypeParamXlat{
 		return true;
 	}
 	int typeparam_index(const Name& n) const;
-	void dump();
+	void dump(int depth)const;
 };
 
 

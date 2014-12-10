@@ -18,7 +18,7 @@ ExprOp*		parse_flow(TokenStream& src,Name flow);
 ExprOp*		parse_let(TokenStream& src);
 Expr*		parse_match_arm(TokenStream& src);
 ArgDef*		parse_arg(TokenStream& src, int close);
-void		parse_typeparams(TokenStream& src,vector<TypeParamDef*>& out,int close);
+void		parse_typeparams(TokenStream& src,vector<TParamDef*>& out,int close);
 ExprStructDef*	parse_struct(TokenStream& src);
 ExprLiteral*	parse_literal(TokenStream& src);
 /// TODO - rust features..
