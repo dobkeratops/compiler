@@ -21,6 +21,7 @@ dont have a name yet hence 'hack'..
  * stack-based closures
  * C for loops + break/else expressions
  * templated functions & structs
+ * HKT (template-template parameters)
  * new/delete ,and a ordered or named struct field initializer
  * limited C++-style internal vtables & single inheritance
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.

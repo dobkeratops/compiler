@@ -46,7 +46,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	bool is_addr() const {return reg==0 && val==0;}
 	CgValue addr_op(CodeGen& cg,Type* t);
 	CgValue deref_op(CodeGen& cg, Type* t);
-
+	inline CgValue to_rvalue(CodeGen& cg)const;
 	inline CgValue load(CodeGen& cg)const;
 	inline CgValue store(CodeGen& cg) const;
 	inline CgValue store(CodeGen& cg,const CgValue& src) const;
@@ -56,9 +56,13 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 };
 
 
-
 class CodeGen {
-	/// TODO adapt interface till we can handle CodeGenLLVM CodeGenC
+	/// CodeGen interface, decouples compile() methods from back end details
+	/// at the same time, expressing codegen in terms of an interface
+	/// keeps the ast from needing desugaring.
+	/// - compile methods can deal this details of hidden pointers etc.
+	///
+	/// TODO adapt interface till we can handle CodeGenLLVM CodeGenCPP
 	/// todo: move the external interface entirely to use wrapped CgValues,pass name hints for outputs
 	/// codegen can depend on a subset of the ast concepts . Type,..
 	/// TODO: we might want CodeGen to actually know about C's for & C If-Then-Else
@@ -72,6 +76,7 @@ public:
 	int		m_next_reg;
 	Type*	m_i8ptr=0;
 	Type*	m_ptr=0;
+	int		m_struct_align=0;
 	char	comma;
 	int		depth;
 	bool	commas[32];
@@ -123,9 +128,12 @@ public:
 	void emit_nest_end(const char* str);
 	void emit_args_begin();
 	void emit_args_end();
-	void emit_struct_begin();
+	void emit_struct_def_begin(Name n);// eg struct n {...}
+	void emit_struct_def_end();
+	void emit_struct_begin(int align=0);//for use in operands
 	void emit_struct_end();
 	void emit_struct_ptr(Name n);
+	void emit_global_begin(Name n);
 	void emit_pointer_begin();
 	void emit_pointer_end();
 	void emit_phi_reg_label(Name reg, Name label);
@@ -143,6 +151,7 @@ public:
 	CgValue	emit_extractvalue(CgValue& src , int index);
 	CgValue emit_store(RegisterName reg, Type* type, RegisterName addr);
 	CgValue 		emit_store_global(CgValue dst, Name globalvar);
+	void emit_alloca_array_type(Name n, Type* t, Name count,int align);
 
 	// lazy load/store of abstract CgValue (ref or register)
 	CgValue store(const CgValue& dst, const CgValue& src);//{return dst.store(*this,src);};
@@ -169,6 +178,7 @@ public:
 	// API refactoring
 	CgValue emit_getelementref(const CgValue& src, int i0, int field_index,const Type* elem_t=0);
 	inline CgValue emit_getelementval(const CgValue& src, int i0, int field_index,const Type* elem_t=0);
+	CgValue	emit_get_array_elem_ref(const CgValue& array, const CgValue& index);
 	CgValue emit_getelementref(const CgValue& src, Name n,const Type* elem_t=0);
 //	inline CgValue emit_getelementval(const CgValue& src, Name n);
 	inline CgValue emit_getelementval(const CgValue& src, Name n,const Type* elem_t=0);
@@ -184,6 +194,9 @@ public:
 	CgValue emit_free_array(Type* t, CgValue count);
 	CgValue emit_malloc_array( Type* t,CgValue count);
 	
+	void emit_global_fn_ptr(const Type* t, Name n);
+	int emit_global_string_literal(Name n, const char* s);
+
 	// IF,FOR are part of the codegen interface to swap C/LLVM backends
 	CgValue emit_for(ExprFor* f,Expr* init,Expr* cond, Expr* incr, Expr* body, Expr* else_block);
 	CgValue emit_if(Node* n, Expr* cond, Expr* body, Expr* else_block);
@@ -196,10 +209,14 @@ public:
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg1,const CgValue& arg2);
 
 	CgValue load(const CgValue& v,Type* result_type=0);
+	CgValue to_rvalue(const CgValue& lvalue_or_rvalue){
+		// TODO - check its' an addr.
+		return lvalue_or_rvalue.load(*this);
+	}
 
 	// helper fn for simple cases eg implementing operator overload calls
 	// use this interface to allow emiting readable c
-	
+
 	EmitLoc get_pos(){return ftell(ofp);}
 	void set_pos(EmitLoc loc){fseek(ofp,loc,SEEK_SET);}
 	void set_pos_end(){fseek(ofp,0,SEEK_END);}
@@ -225,4 +242,5 @@ inline CgValue CodeGen::emit_getelementval(const CgValue& src, Name n,const Type
 inline CgValue CodeGen::emit_getelementval(const CgValue& src, int ar_i,int field_index,const Type* elem_t){
 	return emit_getelementref(src, ar_i, field_index,elem_t).load(*this);
 }
+inline CgValue CgValue::to_rvalue(CodeGen& cg)const{return cg.to_rvalue(*this);}
 

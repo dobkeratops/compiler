@@ -103,7 +103,7 @@ void CodeGen::emit_operand_literal(const CgValue& v, const ExprLiteral* lit) {
 			cg.emit_txt(" getelementptr inbounds([%d x i8]* @%s, i32 0, i32 0) ", lit->llvm_strlen, getString(lit->name));
 			break;
 		default:
-			cg.emit_txt(" @TODO_LITERAL_FORMAT %s", getString(lit->name));
+			error(lit,"TODO literal format");
 			break;
 		}
 }
@@ -166,7 +166,7 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 			return CgValue(newreg, dst.type);
 		}
 	}
-	
+
 	if (dst.addr)
 		cg.emit_store(src_in_reg.reg, dst.type, dst.addr);
 	else if (dst.reg) {
@@ -263,7 +263,7 @@ CgValue CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
 	emit_reg(reg);
 	emit_type(type,1);
 	emit_reg(addr);
-	emit_txt(", align 4");
+	emit_txt(", align 4"); // todo.. align of type surely
 	emit_ins_end();
 	return CgValue(0,type,addr);
 }
@@ -317,7 +317,7 @@ void CodeGen::emit_array_type(const Type* t, int count, bool ref) { // should be
 }
 void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method.
 	emit_comma(); // type always starts new operand
-	if (!t) { emit_txt("<type_expected>");return;}
+	if (!t) { emit_txt("<type expected>");return;}
 	if (ref) emit_pointer_begin();
 	if (t->is_pointer()){
 //		dbprintf("THIS IS SUSPECT, REF ISn'T NEEDED TWICE");
@@ -493,6 +493,32 @@ RegisterName CodeGen::next_reg(Name name){
 	return getStringIndex(rname);
 }
 
+CgValue CodeGen::emit_get_array_elem_ref(const CgValue& src_array, const CgValue& index)
+{
+	auto &cg=*this;
+	auto dstreg = cg.next_reg();
+	auto array=src_array;
+	if (src_array.type->num_pointers()+(src_array.addr?1:0) > 1){
+		array=cg.load(src_array);
+	}
+	auto index_reg=cg.load(index);
+
+	Type* rett=0;
+	cg.emit_ins_begin(dstreg,"getelementptr inbounds");
+	cg.emit_type_reg(array.type,array.addr!=0,array.addr?array.addr:array.reg);//!expr.reg);
+	// TODO: pointer-to-pointer will defeat this.
+	if (array.type->deref_all()->name==ARRAY){
+		cg.emit_i32_lit(0);
+		rett=array.type->deref_all()->sub;
+	} else
+		rett = array.type->sub;
+	cg.emit_type_operand(index_reg);
+	cg.emit_ins_end();
+	return CgValue(0,rett,dstreg);
+}
+
+
+
 void CodeGen::emit_fn_cast_global(Name n,const Type* srct, const Type *dstt){
 	auto&cg=*this;
 	
@@ -507,8 +533,8 @@ void CodeGen::emit_fn_cast_global(Name n,const Type* srct, const Type *dstt){
 	cg.emit_function_type(dstt);
 	cg.emit_nest_end(")");
 	cg.emit_nest_end("");
-	
 }
+
 CgValue CodeGen::emit_alloca_type(Expr* holder, Type* t) {
 	if (t->is_void()){
 		emit_comment("void value not allocated for %d",holder->pos.line);
@@ -887,10 +913,23 @@ void CodeGen::emit_txt(const char* str,...){// catch all, just spit out given st
 }
 void CodeGen::emit_args_begin()	{emit_nest_begin("(");}
 void CodeGen::emit_args_end()		{emit_nest_end(")");}
-void CodeGen::emit_struct_begin()	{emit_nest_begin("{");}
-void CodeGen::emit_struct_end()	{emit_nest_end("}");}
+void CodeGen::emit_struct_begin(int align)	{ASSERT(!m_struct_align && "TODO nested struct alignment");emit_nest_begin("{");m_struct_align=align;}
+void CodeGen::emit_struct_end()	{emit_nest_end("}"); if (m_struct_align){	this->emit_txt(", align 16");
+}; m_struct_align=0;  }
 void CodeGen::emit_pointer_begin()	{emit_nest_begin("");};
 void CodeGen::emit_pointer_end()	{emit_nest_end("*");};
+
+void CodeGen::emit_struct_def_begin(Name n){
+	this->emit_struct_name(n);
+	this->emit_ins_name("type");
+	this->emit_struct_begin();
+}
+void CodeGen::emit_struct_def_end(){
+	this->emit_struct_end();
+	this->emit_ins_end();
+}
+
+
 
 void CodeGen::emit_comma(){
 	if (this->comma==1){emit_txt(",");}
@@ -929,7 +968,9 @@ CgValue CodeGen::emit_call_end(){
 
 RegisterName  CodeGen::emit_ins_begin(RegisterName reg, const char* op){
 	/// TODO: return 'CgValue' from emit_call_end(), dont take 'RegisterName' param.
-	if (!reg) { emit_ins_begin_name(op);}
+	if (!reg) {
+		emit_ins_begin_name(op);
+	}
 	else {
 		emit_ins_begin_sub();
 		emit_reg(reg);
@@ -937,15 +978,18 @@ RegisterName  CodeGen::emit_ins_begin(RegisterName reg, const char* op){
 	}
 	return reg;
 }
+
 void CodeGen::emit_i32_lit(int index) {
 	emit_comma();
 	emit_txt("i32 %d",index);
 }
+
 void CodeGen::emit_i32_reg(Name reg) {
 	emit_comma();
 	emit_txt("i32 ");
 	emit_reg(reg);
 }
+
 RegisterName	CodeGen::emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index){
 	emit_ins_begin(dst,"extractvalue");
 	emit_type(type);
@@ -955,6 +999,47 @@ RegisterName	CodeGen::emit_extractvalue(RegisterName dst,Type* type,RegisterName
 	emit_ins_end();
 	return dst;
 }
+
+
+// extern function; - just use the function name, and mangle arguments given at the callsite.
+// this is the default assumed for unfound symbols?
+// extern "C" function; - a function with C linkage.
+char hexdigit(char c){if (c<10) return c+'0'; else return 'A'+(c-10);}
+int translate_llvm_string_constant(char* dst, int size, const char* src){
+	const char* s=src;
+	char*d=dst;
+	int len=0;
+	for (; *s && size>2; size--){
+		*d++=*s++; len++;
+		// Do what C does..
+		if (s[-1]!='\\') {
+			continue;
+		}
+		char c=*s++;
+		if (c=='n') c=0xa; else if (c=='t') c=0x9; else if (c=='f') c=0xc; else if(c=='r') c=0xd; else if(c=='a') c=0x7;  else if(c=='b') c=0x8;else if(c=='v') c=0xb;else c=0;
+		
+		*d++=hexdigit((c>>4) & 0xf);
+		*d++=hexdigit(c & 0xf);
+	}
+	*d++=0;
+	
+	return len;
+}
+
+void CodeGen::emit_global_begin(Name n){
+	this->emit_txt("@%s = ",str(n));
+	this->emit_ins_begin_name("global");
+}
+
+
+int CodeGen::emit_global_string_literal(Name n, const char* s){
+	char buffer[512];
+	int llvm_strlen=translate_llvm_string_constant(buffer,512, s)+1;
+	this->emit_global(n);
+	this->emit_txt("= private unnamed_addr constant [%d x i8] c\"%s\\00\"\n", llvm_strlen, buffer);
+	return llvm_strlen;
+}
+
 
 void CodeGen::emit_global(Name n){
 	emit_txt("@%s ",str(n));
@@ -1017,3 +1102,44 @@ void CodeGen::emit_nest_end(const char* str){
 	comma=commas[depth];
 	emit_txt(str);
 }
+
+void CodeGen::emit_global_fn_ptr(const Type* t, Name n){
+	auto &cg=*this;
+	cg.emit_nest_begin("");
+	cg.emit_fn_ptr(n);
+	cg.emit_ins_name("global");
+	cg.emit_function_type(t);
+	cg.emit_global(n);
+	cg.emit_nest_end("");
+}
+
+void CodeGen::emit_alloca_array_type(Name r, Type* t, Name count,int align)
+{
+	auto &cg=*this;
+	cg.emit_txt("\t");
+	cg.emit_reg(r);
+	cg.emit_txt(" = alloca [%s x %s] , align %zu\n",str(count),get_llvm_type_str(t->name),align);
+}
+
+
+void compile_raw_vtable(CodeGen& cg, ExprStructDef* sd){
+	// raw vtable looks more like what clang spits out, but we want static fields & more metadata
+	cg.emit_txt("@%s = private unnamed_addr",str(sd->vtable_name));
+	cg.emit_ins_begin_name("constant");
+	cg.emit_array_type(cg.i8ptr(), (int)sd->virtual_functions.size());
+	/// todo: this is wrong, we should have vtable_index
+	cg.emit_nest_begin("[");
+	for (auto vf:sd->virtual_functions){
+		cg.emit_type(cg.i8ptr());
+		cg.emit_txt("bitcast");
+		cg.emit_nest_begin("(");
+		cg.emit_function_type(vf->fn_type);
+		cg.emit_global(vf->name);
+		cg.emit_separator(" to ");
+		cg.emit_type(cg.i8ptr());
+		cg.emit_nest_end(")");
+	}
+	cg.emit_nest_end("]");
+	cg.emit_ins_end();
+}
+

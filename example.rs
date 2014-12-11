@@ -1,6 +1,7 @@
 // Uses .rs extention for syntax highlighting, but this is not Rust source.
-// omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types..
-fn"C" printf(s:str,...)->int;
+// omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types.
+
+fn "C" printf(s:str,...)->int;
 
 // stolen from rust: function syntax 'fn <function name>(args) optional return value {body}
 // however ommitting return value means infer it, not 'void' 
@@ -16,17 +17,6 @@ fn something(f:float){
 
 fn lerp(a,b,f)=(b-a)*f+a;
 
-// HKT-HigherKindedTypes, 'template-template parameters' 
-// - adhoc synax is less verbose than C++ .. does the use in the parameter list say enough?
-
-fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{
-	let result=V{};
-	for index:=0; index<src.size(); index+=1 {
-		push_back(&result, f(get(&src,index)));
-	}
-	result
-}
-
 //  declare a function taking a closure:
 //  represented as a pair of pointers (function*, environment*)
 //  raw C like functions are currently written fn(int)->void 
@@ -39,6 +29,21 @@ fn take_closure(funcp:|int|){
 fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
 	ofsx:=x-x0;dx:=x1-x0;dy:=y1-y0;
 };
+
+
+// HKT-HigherKindedTypes, 'template-template parameters' 
+// - adhoc synax is less verbose than C++ .. 
+// might want more specific declaration but
+// does the use in the parameter list say enough?
+
+fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{
+	let result=V{};
+	for index:=0; index<src.size(); index+=1 {
+		push_back(&result, f(get(&src,index)));
+	}
+	result
+}
+
 
 // struct declarations like Rust.  fieldname:Type,...
 
@@ -209,16 +214,18 @@ fn do_something(p:*IBaz){
 struct Qux : IBaz {
 	x:int;
 	fn foo(){
-		printf("hello from Qux.foo x=%d\n",x);
+		printf("hello from Qux.foo this=%p this.x=%d\n",this,x);
 	}
 }
 
 struct Bar : IBaz {
 	y:int;
 	fn foo(){
-		printf("hello from Bar.foo y=%d\n",y);
+		printf("hello from Bar.foo this.y=%d\n",y);
 	}
 }
+
+
 
 
 

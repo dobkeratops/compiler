@@ -208,7 +208,7 @@ enum Token {
 	AND,OR,XOR,MOD,SHL,SHR,OR_ELSE,MAX,MIN,
 	LT,GT,LE,GE,EQ,NE,
 	LOG_AND,LOG_OR,
-	ASSIGN,LET_ASSIGN,ASSIGN_COLON,PATTERN_BIND,
+	ASSIGN,LET_ASSIGN,DECLARE_WITH_TYPE,PATTERN_BIND,
 	ADD_ASSIGN,SUB_ASSIGN,MUL_ASSSIGN,DIV_ASSIGN,AND_ASSIGN,OR_ASSIGN,XOR_ASSIGN,MOD_ASSIGN,SHL_ASSIGN,SHR_ASSIGN,
 	DOT_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
@@ -688,6 +688,7 @@ struct TParamDef: ExprDef{
 };
 
 /// Capture of local variables for a lambda function
+/// hidden entity created in resolve. compile to 'C' might roll these manually?
 struct Capture : ExprDef{
 	Name			tyname(){return name;};
 	ExprFnDef*		capture_from=0;
@@ -697,6 +698,7 @@ struct Capture : ExprDef{
 	ExprStructDef*	the_struct=0;
 	void 			coalesce_with(Capture* other);
 	ExprStructDef*	get_struct();
+	CgValue			compile(CodeGen& cg, Scope* outer);
 	Node* clone() const override{
 		dbprintf("warning todo template instatntiation of captures\n");
 		return nullptr;
@@ -737,7 +739,7 @@ struct ExprLiteral : ExprDef {
 };
 
 /// 'ArgDef' used for function arguments and struct-fields.
-/// both have ident:type=<default expr>
+/// both have form ident:type=<default expr>
 struct ArgDef :ExprDef{
 	Scope*	owner=0;
 	void set_owner(Scope* s){
@@ -752,9 +754,9 @@ struct ArgDef :ExprDef{
 	//Type*& type_ref(){return type;}
 	ArgDef(SrcPos p,Name n, Type* t=nullptr,Expr* d=nullptr){pos=p; name=n;set_type(t);default_expr=d; owner=0;}
 	void dump(int depth) const;
-	virtual const char* kind_str()const;
+	const char* kind_str()const override;
 	~ArgDef(){}
-	Node*	clone() const;
+	Node*	clone() const override;
 	Name	as_name()const				{return this->name;}
 	size_t	size()const					{return this->type()?this->type()->size():0;}
 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..

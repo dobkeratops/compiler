@@ -125,7 +125,7 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2=0){
 		}
 		// todo - range ".."
 		// todo - slice patterns
-		else if (t==LET_ASSIGN || t==ASSIGN_COLON || t== ASSIGN ||t==PATTERN_BIND){ // todo its @ in scala,rust
+		else if (t==LET_ASSIGN || t==DECLARE_WITH_TYPE || t== ASSIGN ||t==PATTERN_BIND){ // todo its @ in scala,rust
 			auto np=new Pattern;
 			np->name=PATTERN_BIND;
 			np->sub = p;
@@ -259,7 +259,7 @@ ExprOp* parse_let(TokenStream& src) {
 	if (src.eat_if(ASSIGN)){
 		nlet->rhs=parse_expr(src);
 	} else {
-		nlet->name=ASSIGN_COLON;
+		nlet->name=DECLARE_WITH_TYPE;
 		nlet->rhs=t;
 	}
 	//nlet->rhs->set_type
@@ -454,7 +454,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 							auto lhs=operands.back();
 							lhs->set_type(t);
 							was_operand=true;
-						} else if (tok==ASSIGN_COLON){ //x=:Type  ... creates a var of 'Type'.
+						} else if (tok==DECLARE_WITH_TYPE){ //x=:Type ==let x:Type  (creates a var of 'Type').
 							Type *t=parse_type(src,0,nullptr);
 							operators.push_back(SrcOp{tok,pos});
 							operands.push_back(t);

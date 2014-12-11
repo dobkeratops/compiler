@@ -2224,7 +2224,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		return propogate_type_fwd(flags, this, desired, this->type_ref());
 	}
 
-	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==ASSIGN_COLON) {
+	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==DECLARE_WITH_TYPE) {
 		if (op_ident==LET_ASSIGN){
 			ASSERT(this->lhs && this->rhs);
 			rhs->resolve(sc,desired,flags);
@@ -2241,7 +2241,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			propogate_type_fwd(flags, this, desired, lhs->type_ref());
 			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 		}
-		else if (op_ident==ASSIGN_COLON){ // create a var, of given type.
+		else if (op_ident==DECLARE_WITH_TYPE){ // create a var, of given type,like let lhs:rhs;
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			// todo: get this in the main parser
 			auto lhsi=expect_cast<ExprIdent>(lhs);
@@ -2462,8 +2462,6 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 		// last expression - type bounce. The final expression is a return value, use 'desired';
 		// we then propogate backwards. some variables will have been set, eg return value accumulator..
 		if (this->argls.size()) {
-			desired->dump_if(-1);newline(0);
-			this->type()->dump_if(-1);newline(0);
 			propogate_type_fwd(flags,this, desired);
 			auto ret=this->argls[n]->resolve(sc,desired,flags);
 			// reverse pass too
@@ -2822,8 +2820,6 @@ void Capture::coalesce_with(Capture *other){
 }
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
-	dbprintf("DEBUG YADA");
-	this->dump_if(-1);
 	init->resolve_if(sc,0,flags);
 	cond->resolve_if(sc,Type::get_bool(),flags);
 	incr->resolve_if(sc,0,flags);

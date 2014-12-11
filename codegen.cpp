@@ -123,26 +123,6 @@ void dump_locals(Scope* s){
 		}
 	}
 }
-void compile_raw_vtable(CodeGen& cg, ExprStructDef* sd){
-	// raw vtable looks more like what clang spits out, but we want static fields & more metadata
-	cg.emit_txt("@%s = private unnamed_addr",str(sd->vtable_name));
-	cg.emit_ins_begin_name("constant");
-	cg.emit_array_type(cg.i8ptr(), (int)sd->virtual_functions.size());
-	/// todo: this is wrong, we should have vtable_index
-	cg.emit_nest_begin("[");
-	for (auto vf:sd->virtual_functions){
-		cg.emit_type(cg.i8ptr());
-		cg.emit_txt("bitcast");
-		cg.emit_nest_begin("(");
-		cg.emit_function_type(vf->fn_type);
-		cg.emit_global(vf->name);
-		cg.emit_separator(" to ");
-		cg.emit_type(cg.i8ptr());
-		cg.emit_nest_end(")");
-	}
-	cg.emit_nest_end("]");
-	cg.emit_ins_end();
-}
 
 void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef* vtable_layout){
 	// compile formatted vtable with additional data..
@@ -151,15 +131,12 @@ void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef
 		vtable_layout->compile(cg,sc);
 		vtable_layout->is_compiled=true;
 	}
-	cg.emit_txt("@%s = ",str(sd->vtable_name));
-	cg.emit_ins_begin_name("global");
+	
+	cg.emit_global_begin(sd->vtable_name);
 	cg.emit_typename(str(vtable_layout->mangled_name));
-	cg.emit_struct_begin();
+	cg.emit_struct_begin(16);
 
 	for (auto a:vtable_layout->fields){
-//		cg.emit_type(a->type(),false);
-//		cg.emit_comma();
-		cg.emit_txt(" ");
 		auto* s=sd;
 		for (;s;s=s->inherits){
 			if (auto f=s->find_function_for_vtable(a->name, a->type())){
@@ -173,7 +150,6 @@ void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef
 	}
 	
 	cg.emit_struct_end();
-	cg.emit_txt(", align 16");
 	cg.emit_ins_end();
 }
 
@@ -206,14 +182,11 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 		if (this->vtable)
 			compile_vtable_data(cg, this,sc, this->vtable);
 
-		cg.emit_struct_name(st->get_mangled_name());
-		cg.emit_ins_name("type");
-		cg.emit_struct_begin();
+		cg.emit_struct_def_begin(st->get_mangled_name());
 		for (auto fi: st->fields){
 			cg.emit_type(fi->type(), false);
 		};
-		cg.emit_struct_end();
-		cg.emit_ins_end();
+		cg.emit_struct_def_end();
 	}
 	return CgValue();	// todo: could return symbol? or its' constructor-function?
 }
@@ -242,7 +215,7 @@ void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 		} else if (vt->is_array()){
 			auto t=vt->sub;
 			if (!t || !t->next){error(v,"array type needs 2 args");}
-			cg.emit_txt("\t"); cg.emit_reg(r); cg.emit_txt(" = alloca [%s x %s] , align %zu\n",str(t->next->name),get_llvm_type_str(t->name),vt->alignment());
+			cg.emit_alloca_array_type(r, t, t->next->name,vt->alignment());
 			v->reg_is_addr=true;
 		} else	if (vt->is_pointer() || vt->is_function()){
 			continue;
@@ -408,7 +381,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		auto lhs_v=sc->find_variable_rec(e->lhs->name);
 		auto outname=lhs_v?lhs_v->name:opname;
 		
-		if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
+		if (opname==DECLARE_WITH_TYPE){ // do nothing-it was sema'sjob to create a variable.
 			ASSERT(sc->find_scope_variable(e->lhs->name));
 			return  CgValue(lhs_v);
 		}
@@ -490,7 +463,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			return CgValue();
 		}
 	} else if (e->lhs && !e->rhs) {
-		if (opname==ASSIGN_COLON){ // do nothing-it was sema'sjob to create a variable.
+		if (opname==DECLARE_WITH_TYPE){ // do nothing-it was sema'sjob to create a variable.
 			auto lhs_v=sc->find_scope_variable(e->lhs->name);
 			return  CgValue(lhs_v);
 		}
@@ -542,25 +515,9 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 	else if (auto ar=n->is_subscript()){
 		auto expr=ar->call_expr->compile(cg,sc);// expression[index]
 		auto index=ar->argls[0]->compile(cg,sc);
-		auto array_type=expr.type;
-		auto inner_type=array_type->sub;
-		auto dstreg=cg.next_reg();
-		if (!n->reg_name){n->reg_name=expr.reg;}
-
 		/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
-		if (expr.type->num_pointers()+(expr.addr?1:0) > 1){
-			expr=cg.load(expr);
-		}
-		auto index_reg=cg.load(index);
 		// TODO: abstract this into codegen -getelementref(CgValue ptr,CgValue index);
-		cg.emit_ins_begin(dstreg,"getelementptr inbounds");
-		cg.emit_type_reg(array_type,expr.addr!=0,expr.addr?expr.addr:expr.reg);//!expr.reg);
-		if (array_type->deref_all()->name==ARRAY){
-			cg.emit_i32_lit(0);
-		}
-		cg.emit_type_operand(index_reg);
-		cg.emit_ins_end();
-		return CgValue(0,n->type(),dstreg);
+		return cg.emit_get_array_elem_ref(expr, index);
 	}
 	//[3] FUNCTION CALL (no receiver)
 	else if (e->is_function_call()){
@@ -601,20 +558,20 @@ CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc) {
 }
 
 CgValue Type::compile(CodeGen& cg, Scope* sc){
-	return CgValue(0,this,0);	// TODO - not sure this makes sense, probably not.
+	return CgValue(0,this,0);	// propogate a type into compiler interface
 }
-void compile_capture(Capture* cp, CodeGen& cg){
-	cg.emit_ins_begin(cp->tyname(), "type");
-	cg.emit_struct_begin();
+CgValue Capture::compile(CodeGen& cg, Scope* outer_scope){
+	auto cp=this;
+	cg.emit_struct_def_begin(cp->tyname());
 	decltype(cp->vars->capture_index) i=0;
 	for (auto v=cp->vars;v;v=v->next_of_capture,i++){
 		cg.emit_type(v->type());
 		v->capture_index=i;
 	}
-	cg.emit_struct_end();
-	cg.emit_ins_end();
+	cg.emit_struct_def_end();
 	cp->type() = new Type(cp->capture_by, PTR,cp->tyname());
 	cp->type()->sub->struct_def = (ExprStructDef*) cp;
+	return CgValue(this);
 }
 CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 	auto fn_node = this;
@@ -643,15 +600,10 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 		cg.curr_fn=this;
 	}
 	for (auto cp=this->captures; cp;cp=cp->next_of_from){
-		compile_capture(cp, cg);
+		cp->compile(cg,outer_scope);
 	}
 
-	cg.emit_nest_begin("");
-	cg.emit_fn_ptr(fn_node->get_mangled_name());
-	cg.emit_ins_name("global");
-	cg.emit_function_type(fn_node->type());
-	cg.emit_global(fn_node->get_mangled_name());
-	cg.emit_nest_end("");
+	cg.emit_global_fn_ptr(fn_node->type(),fn_node->get_mangled_name());
 	if (!fn_node->get_type() && fn_node->fn_type && fn_node->scope ){
 		error(fn_node,"function name %s %s %p %p %p %p", str(fn_node->name),str(fn_node->get_mangled_name()), fn_node->instance_of, fn_node->get_type(), fn_node->fn_type, fn_node->scope);
 		ASSERT(0 && "function must be resolved to compile it");
@@ -662,7 +614,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 	auto scope=fn_node->scope;
 	
 	cg.emit_function_signature(fn_node,EmitDefinition);
- 	cg.emit_txt("{\n");
+ 	cg.emit_nest_begin("{\n");
 	if (fn_node->instance_of!=nullptr){
 		cg.emit_comment("compiling generic fn body");
 	}
@@ -678,7 +630,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 	}
 
 	cg.emit_return(fn_node->body->compile(cg,scope));
-	cg.emit_txt("}\n");
+	cg.emit_nest_end("}\n");
 	cg.curr_fn=0;
 	return CgValue(fn_node);
 }
@@ -688,31 +640,6 @@ CgValue Node::compile(CodeGen& cg, Scope* sc){
 	return CgValue();
 }
 
-
-// extern function; - just use the function name, and mangle arguments given at the callsite.
-// this is the default assumed for unfound symbols?
-// extern "C" function; - a function with C linkage.
-char hexdigit(char c){if (c<10) return c+'0'; else return 'A'+(c-10);}
-int translate_llvm_string_constant(char* dst, int size, const char* src){
-	const char* s=src;
-	char*d=dst;
-	int len=0;
-	for (; *s && size>2; size--){
-		*d++=*s++; len++;
-		// Do what C does..
-		if (s[-1]!='\\') {
-			continue;
-		}
-		char c=*s++;
-		if (c=='n') c=0xa; else if (c=='t') c=0x9; else if (c=='f') c=0xc; else if(c=='r') c=0xd; else if(c=='a') c=0x7;  else if(c=='b') c=0x8;else if(c=='v') c=0xb;else c=0;
-		
-		*d++=hexdigit((c>>4) & 0xf);
-		*d++=hexdigit(c & 0xf);
-	}
-	*d++=0;
-
-	return len;
-}
 
 CgValue EnumDef::compile(CodeGen &cg, Scope *sc){
 	return CgValue();
@@ -831,11 +758,8 @@ void output_code(FILE* ofp, Scope* scope, int depth) {
 	// literals first, because we setup llvm_strlen. TODO , more solid design pls.
 	for (auto l=scope->literals; l; l=l->next_of_scope) {
 		if (l->type_id==T_CONST_STRING){
-		const char* name=getString(l->name);
-			char buffer[512];
-			l->llvm_strlen=translate_llvm_string_constant(buffer,512, l->as_str())+1;
-			cg.emit_global(l->name);
-			cg.emit_txt("= private unnamed_addr constant [%d x i8] c\"%s\\00\"\n", l->llvm_strlen, buffer);
+//			const char* name=getString(l->name);
+			l->llvm_strlen=cg.emit_global_string_literal(l->name, l->as_str());
 		}
 	}
 	for (auto n=scope->named_items;n;n=n->next) {
