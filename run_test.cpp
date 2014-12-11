@@ -84,7 +84,7 @@ const char* g_TestBasicSyntax=
 ;
 
 const char* g_TestIf=
-/*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
+/*1*/	"extern \"C\" fn printf(s:str,...)->int;				\n"
 /*2*/	"fn main(argc:int, argv:**char)->int{	\n"
 "  x:=if argc<3{4} else{3};\n"
 /*14*/	"	0									\n"
@@ -318,8 +318,10 @@ const char* g_TestHKT=
 
 void run_tests(){
 	// TODO - make a propper "test_run_source" taking expected output
+	auto ret10=compile_source(g_TestIf,"g_TestIf","test10.ll",B_TYPES|B_RUN);
+
 	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_TYPES|B_RUN);
-	auto ret13=compile_source(g_TestHKT,"g_TestHKT","test13.ll",B_TYPES);
+
 	auto ret14=compile_source(g_TestHKT,"g_TestHKT","test13.ll",B_TYPES|B_RUN);
 
 	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
@@ -332,7 +334,6 @@ void run_tests(){
 
 	auto ret11=compile_source(g_TestVTable,"g_TestVTable","test11.ll", B_TYPES|B_RUN);
 	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);
-	auto ret10=compile_source(g_TestIf,"g_TestIf","test10.ll",B_TYPES|B_RUN);
 	
 	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
 	auto ret1=compile_source(g_TestStruct,"g_TestStruct","test1.ll",B_TYPES|B_RUN);

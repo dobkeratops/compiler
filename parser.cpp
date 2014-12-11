@@ -341,6 +341,15 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_match(src));
 		}
+		else if (src.eat_if(EXTERN)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			/// TODO local functions should be sugar for rolling a closure bound to a variable.
+			auto abi=src.eat_if_string();
+			auto fnp=src.eat_if(FN);
+			auto local_fn=parse_fn(src,nullptr);
+			if (abi==EXTERN_C) local_fn->c_linkage=true;
+			operands.push_back(local_fn);
+		}
 		else if (src.eat_if(FN)) {
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			/// TODO local functions should be sugar for rolling a closure bound to a variable.
@@ -611,6 +620,15 @@ ExprStructDef* parse_struct(TokenStream& src) {
 	return parse_struct_body(src,pos,sname,nullptr);
 }
 // TODO: are struct,trait,enum actually all the same thing with a different 'default'
+ExprStructDef* parse_tuple_struct_body_sub(TokenStream& src, ExprStructDef* sd){
+	Name tok;
+	while ((tok=src.peek_tok())!=NONE){
+		if (tok==CLOSE_PAREN){src.eat_tok(); break;}
+		sd->fields.push_back(new ArgDef(src.prev_pos,0,parse_type(src,0,sd)));
+		src.eat_if(COMMA); src.eat_if(SEMICOLON);
+	}
+	return sd;
+}
 
 ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* force_inherit){
 	auto sd=new ExprStructDef(pos,name);
@@ -623,7 +641,13 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	} else {
 		sd->inherits_type = force_inherit; // enum is sugar rolling a number of classes from base
 	}
-	if (!src.eat_if(OPEN_BRACE))
+	// todo - tuple struct..
+	vector<ArgDef*> default_construct_args;
+	if (src.eat_if(OPEN_BRACKET)){
+		return parse_tuple_struct_body_sub(src,sd);
+		// todo: if open brace follows, we actually have a default constructor & struct body combo.
+	}
+	if (!src.eat_if(OPEN_BRACE))	// empty struct.
 		return sd;
 	// todo: type-params.
 	Name tok;
@@ -661,15 +685,8 @@ ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
 	}
 	if (!src.eat_if(OPEN_PAREN))
 		return sd;
-	
-	while ((tok=src.peek_tok())!=NONE){
-		if (tok==CLOSE_PAREN){src.eat_tok(); break;}
-		sd->fields.push_back(new ArgDef(pos,0,parse_type(src,0,sd)));
-		src.eat_if(COMMA); src.eat_if(SEMICOLON);
-	}
-	return sd;
+	return parse_tuple_struct_body_sub(src,sd);
 }
-
 EnumDef* parse_enum(TokenStream& src) {
 	auto pos=src.pos;
 	auto tok=src.eat_ident();

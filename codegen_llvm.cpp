@@ -322,7 +322,10 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 	if (t->is_pointer()){
 //		dbprintf("THIS IS SUSPECT, REF ISn'T NEEDED TWICE");
 		emit_pointer_begin();
-		emit_type(t->sub,false);
+		if (t->sub->name==VOID)
+			emit_txt("i8");
+		else
+			emit_type(t->sub,false);
 		emit_pointer_end();
 	}else if (t->is_array()) {
 		emit_nest_begin("[");

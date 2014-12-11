@@ -1,7 +1,12 @@
 // Uses .rs extention for syntax highlighting, but this is not Rust source.
 // omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types.
-
-fn "C" printf(s:str,...)->int;
+// TODO extern"C" methods with simplified mangle.
+struct FILE;
+extern"C"fn printf(s:str,...)->int;
+extern"C"fn fopen(d:*char,z:*char)->*FILE;
+extern"C"fn fclose(d:*FILE)->int;
+extern"C"fn fread(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
+extern"C"fn fwrite(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 
 // stolen from rust: function syntax 'fn <function name>(args) optional return value {body}
 // however ommitting return value means infer it, not 'void' 
@@ -13,9 +18,12 @@ fn something(f:float){
 // eg
 // template<class A,class B,class F>
 //    auto lerp(A a,B b, F f){return (b-a)*f+a;}
-// more specific overloads are used in preference if given
+// more specific overloads are always used in preference if given
 
-fn lerp(a,b,f)=(b-a)*f+a;
+fn lerp(a,b,f){(b-a)*f+a;}
+
+//  single expression fn sugar '='
+fn invlerp(x0,x1,x)=(x-a)/(x1-x0);
 
 //  declare a function taking a closure:
 //  represented as a pair of pointers (function*, environment*)
@@ -25,7 +33,7 @@ fn take_closure(funcp:|int|){
     funcp(10);
 }
 
-//  expression sugar 
+// more expression sugar ..sort salient info on one line
 fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
 	ofsx:=x-x0;dx:=x1-x0;dy:=y1-y0;
 };
@@ -37,7 +45,7 @@ fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
 // does the use in the parameter list say enough?
 
 fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{
-	let result=V{};
+	let result=reserve(src.size());
 	for index:=0; index<src.size(); index+=1 {
 		push_back(&result, f(get(&src,index)));
 	}
@@ -81,13 +89,15 @@ fn something(f:float,x){
 // will probably introduce propper tagged unions like Rust, 
 // but want the template engine able to handle rolling pleasant custom variants
 // (TODO: max[sizeof[X],sizeof[Y]] operators in template engine..)
+//
+// raw pointers could implement anything
 
-struct Union<X,Y>{
+struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is convention
 	tag:int,
 	x:X,y:Y,
 };
 
-fn setv<X,Y>(u:&Union<X,Y>,y:Y)->void{
+fn setv[X,Y](u:&Union[X,Y],y:Y)->void{
 	printf("setv Y\n");
 	u.y=y;
 	u.tag=1;
@@ -193,7 +203,7 @@ fn main(argc:int,argv:**char)->int{
 	// frees up '?' for other use, eg optional types..(TODO arbitrary operators)
 	// last expression in the compound blocks is return value from block
 
-	let x1=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >2",argc);2};
+	let x1=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >=2",argc);2};
 	printf("\nHello World %d %d\n", x1, y );
 
 	// last statement is a return value. 

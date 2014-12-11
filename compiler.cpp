@@ -128,7 +128,7 @@ const char* g_token_str[]={
 	"half","float","double","float4","char","str","void","voidptr","one","zero","auto",
 	"pTr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
-	"print___","fn","struct","class","trait","virtual","static","enum","array","vector","union","variant","with","match","where","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
+	"print___","fn","struct","class","trait","virtual","static","extern", "enum","array","vector","union","variant","with","match","where","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
 	"let","var",
 	"const","mut","volatile",
 	"while","if","else","do","for","in","return","break","continue",
@@ -162,7 +162,7 @@ int g_tok_info[]={
 	0,0,0,0,0,0,0,0,0,0,0,0,0,// int types
 	0,0,0,0,0,0,0,0,0,0,0,	// float types
 	0,0,0,0,0,0,			// type modifiers
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
 	0,0,			// let,var
 	0,0,0,			// modifiers const,mut,volatile
 	0,0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break
@@ -649,7 +649,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 void ExprIdent::dump(int depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("%s ",getString(name));
-	if (this->def) {dbprintf("%d",this->def->pos.line);}
+//	if (this->def) {dbprintf("(%s %d)",this->def->pos.line);}
 	if (auto t=this->get_type()) {dbprintf(":");t->dump(-1);}
 }
 
@@ -670,6 +670,7 @@ void ExprBlock::dump(int depth) const {
 	if (!this) return;
 	newline(depth);
 	auto b=(this->bracket_type==OPEN_PAREN)?"(\0)\0":"{\0}\0";
+	dbprintf(b+0);
 	if (this->call_expr){
 		dbprintf(this->is_subscript()?"subscript: ":this->is_struct_initializer()?"struct_init":"call ");
 		this->call_expr->dump(-100);
@@ -677,7 +678,6 @@ void ExprBlock::dump(int depth) const {
 	} else{
 		dbprintf(this->is_array_initializer()?"array_init ":this->is_tuple()?"tuple ":"");
 	}
-	dbprintf(b+0);
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
@@ -3395,7 +3395,7 @@ Node* ExprIf::clone()const {
 }
 void ExprIf::dump(int depth) const {
 	::verify(cond->get_type());
-	newline(depth);dbprintf("if\n");
+	newline(depth);dbprintf("(if\n");
 	cond->dump(depth+1);
 	newline(depth);dbprintf("{\n");
 	body->dump(depth+1);
@@ -3403,7 +3403,7 @@ void ExprIf::dump(int depth) const {
 		newline(depth);dbprintf("}else{\n");
 		else_block->dump(depth+1);
 	}
-	newline(depth);dbprintf("}\n");
+	newline(depth);dbprintf("})\n");
 };
 
 void ExprOp::verify() {
@@ -3450,7 +3450,7 @@ ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 }
 
 void ExprFor::dump(int d) const {
-	newline(d);dbprintf("for ");
+	newline(d);dbprintf("(for ");
 	if (this->is_c_for()) {
 		this->init->dump(d+1); newline(d);dbprintf(";");
 		this->cond->dump(d+1); newline(d);dbprintf(";");
@@ -3467,6 +3467,7 @@ void ExprFor::dump(int d) const {
 		this->else_block->dump_if(d+1);
 		newline(d);dbprintf("}");
 	}
+	newline(d);dbprintf(")");
 	if(this->type()){
 		dbprintf(":");
 		this->type()->dump_if(d);
