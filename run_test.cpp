@@ -53,7 +53,7 @@ CompilerTest g_Tests[]={
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	y:=11;z:=12;w:=0; y+=10;w+=7;			\n"
 /*51*/	"	take_closure()do x{printf(\"closure x=%d captured y=%d z=%d\\n\",x,y,z);}\n"
-"printf(\" y=%d z=%d w=%d\\n\",y+=90,z,w);\n"
+"printf(\"y=%d z=%d w=%d\\n\",y+=90,z,w);\n"
 /*17*/	"	0\n"
 /*20*/  "}														\n"
 	,
