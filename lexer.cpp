@@ -72,7 +72,9 @@ void Lexer::advance_string(char quote) {
 		tok_end++; // step past last quote.
 }
 bool Lexer::is_comment(const char* c){
-	if (*c && c[0]=='/'){if(c[1]=='/') return true;} return false;
+	if (*c && c[0]=='/'){if(c[1]=='/') return true;}
+	if (*c && c[0]=='#'){if(c[1]=='!') return true;}
+	return false;
 }
 void Lexer::skip_whitespace(){
 	bool newline=false;

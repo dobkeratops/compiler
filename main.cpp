@@ -3,12 +3,15 @@
 #include "parser.h"
 #include "codegen.h"
 #include "run_test.h"
+#include <unistd.h>
 
 void filename_change_ext(char* dst,const char* src,const char* new_ext){
 	strcpy(dst,src);
-	char* s=dst;
-	for (s=dst;*s;s++){
-		if (*s=='.') break;
+	char* ss=dst;
+	char *s=nullptr;
+	bool dirs=false;
+	for (ss=dst;*ss;ss++){
+		if (*ss=='.') s=ss;
 	}
 	if (!*s) { strcat(dst, ".out");}
 	else
@@ -48,14 +51,21 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 			if (flags & (B_EXECUTABLE|B_RUN)) {
 				
 				char exename[256];
+				char wdir[512];getcwd(wdir,512);
 				filename_change_ext(exename,outname,"");
+#if DEBUG>=3
+				printf("invocation: f=%s o=%s\n e=%s\n",filename, outname,exename);
+#endif
 				char compile_cmd[512]; sprintf(compile_cmd,"clang %s -o %s", outname, exename);
 				if (flags & B_VERBOSE)printf("\nllvm src=%s\n executable=%s\nflags %x\n",outname,exename, flags);
 				if (flags & B_VERBOSE)printf("\n%s\n",compile_cmd);
 				auto ret= system(compile_cmd);
 				if (!ret && (flags & B_RUN)) {
 					if (flags & B_VERBOSE)printf("compiled ok, running executable %s \n", exename);
-					char invoke[512];sprintf(invoke,"./%s",exename);
+					char invoke[512];snprintf(invoke,512,"%s",exename);
+#if DEBUG>=3
+					printf("invocation: %s\npwd=%s\n",invoke,wdir);
+#endif
 					return system(invoke);
 					return 0;
 				}
@@ -72,6 +82,9 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 int compile_source_file(const char* filename, int options) {
 	char outname[256];
 	filename_change_ext(outname,filename,"ll");
+#if DEBUG
+	options|=B_VERBOSE;
+#endif
 	if (options & B_VERBOSE)printf("compiling %s\n -> %s\n",filename,outname);
 	auto fp=fopen(filename,"rb");
 	if (fp){

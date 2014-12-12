@@ -1,3 +1,4 @@
+#!hack -r
 // Uses .rs extention for syntax highlighting, but this is not Rust source.
 // omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types.
 // TODO extern"C" methods with simplified mangle.
@@ -61,7 +62,8 @@ struct Foo {
 
 // internal vtables
 struct IBaz {
-	virtual foo(){}
+	// sugar: with other qualifiers, 'fn' is optional,assumed
+	virtual foo(){}  
 }
 
 // open overloading like C++; most specific function is matched at callsite
