@@ -1,34 +1,53 @@
 #include "run_test.h"
 
-extern int compile_source(const char *buffer, const char* filename, const char* outname, int flags);
+extern int compile_and_run(const char *buffer, const char* filename, const char* outname, int flags,char** capture_output);
+
+// todo: we also need tests that *can't* compile, eg type errors
+struct CompilerTest {
+	const char* name;
+	const char* file;int line;
+	const char* source;
+	const char* expected_result;
+};
 
 // every file is an implicitly a function aswell taking no args
 // when imported, a module inserts a call to that function.
 // that sets up global stuff for it.
-const char* g_TestMemberFn=
+
+CompilerTest g_Tests[]={
+{	"member functions",__FILE__,__LINE__,
+	// SOURCECODE
 /*1*/  "fn\"C\" printf(s:str,...)->int;  							\n"
 /*2*/  "struct Foo{												\n"
 /*3*/  "	q:int,												\n"
 /*4*/  "	fn method()->float{										\n"
-/*5*/  "		printf(\"Foo method says q=%d this=%p\\n\",q,this);2.0	\n"
+/*5*/  "		printf(\"Foo.q=%d\\n\",q);2.0		\n"
 /*6*/  "	}													\n"
 /*7*/  "}														\n"
 /*8*/  "struct Bar{												\n"
 /*9*/  "	w:int,												\n"
 /*10*/ "	fn method()->float{										\n"
-/*11*/ "		printf(\"Bar method says w=%d this=%p\\n\",w,this);2.0	\n"
+/*11*/ "		printf(\"Bar.w=%d\\n\",w);2.0		\n"
 /*12*/ "	}													\n"
 /*13*/ "}														\n"
-/*14*/ "fn func1(f:*Foo){printf(\" func1 says q=%d f=%p\\n\",f.q,f);}	\n"
-/*14*/ "fn main(){												\n"
+/*14*/ "fn func1(f:*Foo){printf(\"func1 says q=%d\\n\",f.q);}	\n"
+/*14*/ "fn main()->int{							\n"
 /*15*/ "	x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;\n"
-/*16*/ "	printf(\"member function test.. %d\\n\",x.q);				\n"
+/*16*/ "	printf(\"member function test..\n\",x.q);				\n"
 /*17*/	"	px.func1();	\n"
 /*18*/	"	px.method();	\n"
 /*19*/	"	py.method();	\n"
-/*20*/	"		\n"
-/*20*/  "}														\n";
-const char* g_TestClosure=
+/*20*/	"	0\n"
+/*20*/  "}														\n"
+	,
+	// RESULT
+"member function test..\n"
+"func1 says q=5\n"
+"Foo.q=5\n"
+"Bar.w=17\n"
+},
+{
+		"closures",__FILE__,__LINE__,
 /*1*/ 	"fn\"C\" printf(s:str,...)->int;  							\n"
 /*10*/	"fn take_closure(pfunc:|int|->void){ pfunc(5);}\n"
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
@@ -36,9 +55,14 @@ const char* g_TestClosure=
 /*51*/	"	take_closure()do x{printf(\"closure x=%d captured y=%d z=%d\\n\",x,y,z);}\n"
 "printf(\" y=%d z=%d w=%d\\n\",y+=90,z,w);\n"
 /*17*/	"	0\n"
-/*20*/  "}														\n";
-;
-const char* g_TestAlloc=
+/*20*/  "}														\n"
+	,
+// Result
+"closure x=5 captured y=21 z=12\n"
+"y=111 z=12 w=7\n"
+},
+{
+	"allocation",__FILE__,__LINE__,
 /*1*/ 	"fn\"C\" printf(s:str,...)->int;  			\n"
 /*2*/	"struct Foo{x:int,y:int};				\n"
 /*3*/	"fn main(argc:int, argv:**char)->int{	\n"
@@ -48,49 +72,39 @@ const char* g_TestAlloc=
 /*7*/	"	printf(\"new foo %p x,y=%d,%d array alloc=%p\\n\",pfoo,pfoo.x,pfoo.y,pfoos);			\n"
 /*8*/	"	delete pfoo;					\n"
 /*9*/	"	0\n"
-/*10*/  "}														\n";
-;
-const char* g_TestLet=
+/*10*/  "}														\n",
+	nullptr
+},
+{
+	"let",__FILE__,__LINE__,
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	let x=2;\n"
 "y:=3;\n"
 "let z=x+y;			\n"
 /*17*/	"	0\n"
-/*20*/  "}														\n";
-;
-const char* g_TestStruct=
+/*20*/  "}														\n",
+	nullptr
+},
+{
+	"struct",__FILE__,__LINE__,
 /*54*/ "	struct FooStruct{x:int,y:int};		\n"
 /*  */	"fn main(argc:int, argv:**char)->int{		\n"
 /*  */	"	x:=FooStruct{1,2};\n"
 /*17*/	"	0\n"
-/*20*/  "}														\n";
-;
-
-const char* g_TestBasicSyntax=
-/* 1*/ "*++x=*--y e+r:int foo(e,r);\n"
-/* 2*/ "self.pos+self.vel*dt;\n"
-/* 3*/ "future.pos=self.pos+self.vel*dt;\n"
-/* 4*/ "x=y=z=3; x+y+z=0;\n"
-/* 5*/ "p=&self.pos;\n"
-/* 6*/ "*d++=s;\n"
-/* 7*/ "q=(++10+*p);\n"
-/* 8*/ "fn do_they_float(){set(tfl, 1.0); do_they_int();};\n"
-/* 9*/ "fn min(a,b){if(a<b,a,b)}\n"
-/*10*/ "fn max(a,b){if(a>b,a,b)}\n"
-/*11*/ "fn clamp(a,b,f){ min(b,max(a,f)) }\n"
-/*12*/ "fn lerp(a:float,b:float,f:float){(b-a)*f+a}\n"
-/*13*/ "fn mad(a:float,b:float,f:float){a+b*f}\n"
-/*14*/ "fn main(){printf(\"lerp = %.3f ;\",lerp(0.0,10.0,0.5));}\n"
-;
-
-const char* g_TestIf=
+/*20*/  "}														\n",
+	nullptr
+},
+{
+	"if expression",__FILE__,__LINE__,
 /*1*/	"extern \"C\" fn printf(s:str,...)->int;				\n"
 /*2*/	"fn main(argc:int, argv:**char)->int{	\n"
 "  x:=if argc<3{4} else{3};\n"
 /*14*/	"	0									\n"
-/*15*/	"}\n"
-;
-const char* g_TestLoop=
+/*15*/	"}\n",
+	nullptr
+},
+{
+	"for  else loop",__FILE__,__LINE__,
 /*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
 /*2*/	"fn main(argc:int, argv:**char)->int{	\n"
 /*3*/	"	i:=5; b:=argc<9;						\n"
@@ -105,22 +119,23 @@ const char* g_TestLoop=
 /*12*/	"	}									\n"
 /*13*/	"	printf(\"loop ret=%d; outer scope i=%d\\n\",v,i);	\n"
 /*14*/	"	0									\n"
-/*15*/	"}\n"
-;
-
-const char* g_TestVTable=
-/*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
+/*15*/	"}\n",
+	nullptr
+},
+{
+	"internal vtable",__FILE__,__LINE__,
+"fn\"C\" printf(s:str,...)->int;				\n"
 "struct Foo {									\n"
 "	x:int,y:int,								\n"
-"	virtual foo(){printf(\"hello from Foo.foo x=%d\\n\",x);},		\n"
-"	virtual bar(){printf(\"hello from Foo.bar\\n\");},		\n"
-"	virtual baz(){printf(\"hello from Foo.baz\\n\");},		\n"
+"	virtual foo(){printf(\"Foo.foo x=%d\\n\",x);},		\n"
+"	virtual bar(){printf(\"Foo.bar\\n\");},		\n"
+"	virtual baz(){printf(\"Foo.baz\\n\");},		\n"
 "}\n"
 "struct Bar : Foo{									\n"
 "	x:int,y:int,								\n"
-"	fn foo(){printf(\"hello from Bar.foo x=%d\\n\",x);},		\n"
-"	fn bar(){printf(\"hello from Bar.bar\\n\");},		\n"
-"	fn baz(){printf(\"hello from Bar.baz\\n\");},		\n"
+"	fn foo(){printf(\"Bar.foo x=%d\\n\",x);},		\n"
+"	fn bar(){printf(\"Bar.bar\\n\");},		\n"
+"	fn baz(){printf(\"Bar.baz\\n\");},		\n"
 "}\n"
 "fn main(argc:int, argv:**char)->int{	\n"
 "	x1:= new Foo{x=10,y=0};						\n"
@@ -133,9 +148,10 @@ const char* g_TestVTable=
 "fn take_interface(pf:*Foo){\n"
 "   pf.foo()\n"
 "}\n"
-;
-
-const char* g_TestTyparamInference=
+,nullptr
+},
+{
+	"type parameter inference",__FILE__,__LINE__,
 /* 1*/ "struct Union<A,B>{a:A,b:B, tag:int};		\n"
 /* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
 /* 3*/ "	u.a=v; u.tag=0; 						\n"
@@ -151,9 +167,14 @@ const char* g_TestTyparamInference=
 /*13*/ " printf(\"u.tag=%d\\n\",u.tag);				\n"
 /*14*/ "	0}										\n"
 /*15*/ "fn\"C\" printf(s:str,...)->int;					\n"
-;
-const char* g_TestProg2=
+,
+// expected result
+"u.tag=0\n"
+"u.tag=1\n"
 
+},
+{
+	"multi feature test 1",__FILE__,__LINE__,
 /* 1*/ "enum FooBar{Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
 /* 2*/ "struct Union[A,B]{a:A,b:B, tag:int};\n"
 /* 3*/ "fn setv[A,B](u:&Union[A,B], v:A){\n"
@@ -210,9 +231,11 @@ const char* g_TestProg2=
 /*52*/ "	bar(1,2,3);							\n"
 /*53*/ "	retval}								\n"
 /*54*/ "	struct FooStruct{x:int,y:int};		\n"
-;
+,
+	nullptr
+},
+{"multi feature test 2",__FILE__,__LINE__,
 
-char g_TestPolyLambda[]= //
 "fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{\n"
 "	let result=init();\n"
 "	for index:=0; index<src.size(); index+=1 {\n"
@@ -221,19 +244,19 @@ char g_TestPolyLambda[]= //
 "	result \n"
 "}\n"
 "fn\"C\" printf(s:str,...)->int;\n"
-/*1*/ "fn debugme[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{\n"
-/*2*/ " if u.tag==0 { fx(&u.x)}\n"
-/*3*/ " else { fy(&u.y)}\n"
-/*4*/ "}\n"
-/*5*/ "fn main(argc:int,argv:**char)->int{\n"
-/*6*/ "fv:=Foo{vx=13,vy=14,vz=15};\n"
-/*7*/ " u=:Union[int,float];\n"
-/*8*/ " setv(&u,0.0);\n"
-/*9*/ " setv(&u,0);\n"
-/*10*/ " z:=debugme(&u,											\n"
-/*11*/ "	|x:&int|{printf(\"union was set to int\\n\");10},	\n"
-/*12*/ "	|x:&float|{printf(\"union was set to float\\n\");12}	\n"
-/*13*/ "	);												\n"
+"fn debugme[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{\n"
+" if u.tag==0 { fx(&u.x)}\n"
+" else { fy(&u.y)}\n"
+"}\n"
+"fn main(argc:int,argv:**char)->int{\n"
+"fv:=Foo{vx=13,vy=14,vz=15};\n"
+" u=:Union[int,float];\n"
+" setv(&u,0.0);\n"
+" setv(&u,0);\n"
+" z:=debugme(&u,											\n"
+"	|x:&int|{printf(\"union was set to int\\n\");10},	\n"
+"	|x:&float|{printf(\"union was set to float\\n\");12}	\n"
+"	);												\n"
 "printf(\"map union returns %d\\n\", z);						\n"
 "	xs=:array[int,512];\n"
 "q:=xs[1]; p1:=&xs[1];\n"
@@ -291,20 +314,23 @@ char g_TestPolyLambda[]= //
 "fn setv[X,Y](u:&Union[X,Y],x:X)->void{\n"
 " printf(\"setv X\\n\");\n"
 "}\n"
-;
-
-const char* g_TestLetArray=
-/* 1*/	"fn main(argc:int, argv:**char)->int{		\n"
-/* 2*/	"	let xs:array[int,10];\n"
-/* 3*/	"	let ptr={&xs[1]};\n"
-/* 4*/	"	ptr[1]=5;\n"
-/* 5*/	"	0\n"
-/* 6*/  "}			\n";
-;
-
-const char* g_TestHKT=
+,
+nullptr
+},
+{
+	"let array",__FILE__,__LINE__,
+"fn main(argc:int, argv:**char)->int{		\n"
+"	let xs:array[int,10];\n"
+"	let ptr={&xs[1]};\n"
+"	ptr[1]=5;\n"
+"	0\n"
+"}			\n",
+	nullptr
+},
+{
+	"HKT (template template parameters)",__FILE__,__LINE__,
 "fn map[C,T,Y](src:C[T],f:|T|->Y)->C[Y]{		\n"
-"	let result;								\n"
+"	let result;									\n"
 "	result										\n"
 "}												\n"
 "												\n"
@@ -313,30 +339,35 @@ const char* g_TestHKT=
 "	let vec:Vec[int];\n"
 "	let vec2=map(vec,|x|{0.0});\n"
 "	0		\n"
-"}			\n";
-;
+"}			\n",
+	nullptr
+},
+{
+	nullptr,nullptr,0,nullptr,nullptr
+}
+};
+
 
 void run_tests(){
-	// TODO - make a propper "test_run_source" taking expected output
-	auto ret10=compile_source(g_TestIf,"g_TestIf","test10.ll",B_TYPES|B_RUN);
-
-	auto ret9=compile_source(g_TestPolyLambda,"g_TestPolyLambda","test9.ll",B_TYPES|B_RUN);
-
-	auto ret14=compile_source(g_TestHKT,"g_TestHKT","test13.ll",B_TYPES|B_RUN);
-
-	auto ret4=compile_source(g_TestClosure,"g_TestClosure","test4.ll",B_TYPES|B_RUN);
-	auto ret2=compile_source(g_TestLetArray,"g_TestLetArray","test2.ll",B_TYPES|B_RUN);
-
-	/// TODO , actually verify these produced the right output!
-	auto ret12=compile_source(g_TestLet,"g_TestLet","test12.ll",B_TYPES|B_RUN);
-
-	auto ret5=compile_source(g_TestProg2,"g_TestProg","test5.ll",B_TYPES|B_RUN);
-
-	auto ret11=compile_source(g_TestVTable,"g_TestVTable","test11.ll", B_TYPES|B_RUN);
-	auto ret3=compile_source(g_TestLoop,"g_TestLoop","test3.ll",B_TYPES|B_RUN);
-	
-	auto ret6=compile_source(g_TestAlloc,"g_TestAlloc","test6.ll",B_TYPES|B_RUN);
-	auto ret1=compile_source(g_TestStruct,"g_TestStruct","test1.ll",B_TYPES|B_RUN);
-	auto ret7=compile_source(g_TestTyparamInference,"g_TestTyparamInference","test7.ll",B_TYPES|B_RUN);
-	auto ret8=compile_source(g_TestMemberFn,"g_TestMemberFn","test8.ll",B_DEFS| B_TYPES|B_RUN);
+	int index=0;
+	for (auto t=g_Tests; t->name; t++,index++){
+		char tmp[256]; sprintf(tmp,"test_%d.ll",index);
+		printf("\nRunning Test[%d]: %s\n\n",index,t->name);
+		char* output=0;
+		auto ret=
+		compile_and_run(t->source,t->name, tmp,B_TYPES|B_RUN, t->expected_result?&output:nullptr);
+		if (ret!=0) {
+			printf("\n%s test %s failed\n", t->name);
+			exit(-1);
+		}
+		if (output){
+			if (strcmp(output, t->expected_result)){
+				printf("\n%s:%d: Test[%d]\"%s\" gave incorrect output, expected:-\n",t->file,t->line,index,t->name);
+				dbprintf("[length=%d]\n%s\n",strlen(t->expected_result),t->expected_result);
+				dbprintf("[length=%d]\n%s\n",strlen(output),output);
+				exit(-1);
+			}
+			free(output);
+		}
+	}
 }

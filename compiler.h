@@ -11,7 +11,7 @@ extern "C" char* gets(char*);
 #include <cstdio>
 
 #ifdef DEBUG
-#define CRASH {*(volatile long*)0=0;exit(0);}
+#define CRASH {exit(-1);}
 #define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );CRASH}
 #define WARN(x) if (!(x)) {printf("warning %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );}
 #define TRACE printf("%s:%d: %s\n",__FILE__,__LINE__,__FUNCTION__);
@@ -40,6 +40,7 @@ extern "C" char* gets(char*);
 	#define dbg_type(...) {DBLOC();dbprintf(__VA_ARGS__);}
 	#define dbg_vtable(...) {DBLOC();dbprintf(__VA_ARGS__);}
 	#define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
+	#define dbg_strings(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #else
 	inline void dbg_generic(const char*,...){}
 	inline void dbg_fnmatch(const char*,...){}
@@ -49,6 +50,7 @@ extern "C" char* gets(char*);
 	inline void dbg_resolve(const char*,...){}
 	inline void dbg_type(const char*,...){}
 	inline void dbg_vtable(const char*,...){}
+	inline void dbg_strings(const char*,...){}
 #endif
 
 
@@ -188,7 +190,7 @@ enum Token {
 	// top level structs & keywords. one,zero are coercible types..
 	RAW_TYPES,INT=RAW_TYPES,UINT,SIZE_T,I8,I16,I32,I64,U8,U16,U32,U64,U128,BOOL,	// int types
 	HALF,FLOAT,DOUBLE,FLOAT4,CHAR,STR,VOID,VOIDPTR,ONE,ZERO,AUTO,	// float types,ptrs
-	PTR,REF,NUM_RAW_TYPES=REF,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
+	PTR,REF,SELF_T,NUM_RAW_TYPES=SELF_T,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
 	
 	PRINT,FN,STRUCT,CLASS,TRAIT,VIRTUAL,STATIC,EXTERN, ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, WHERE, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,THIS,SELF,SUPER,VTABLEOF,CLOSURE,
 	LET,VAR,

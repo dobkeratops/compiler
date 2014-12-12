@@ -25,7 +25,7 @@ void error_maybe_end(const Node* n){
 	if (!g_error_depth) {
 		error_newline();
 		if (g_num_errors>0){
-			exit(0);
+			exit(-1);
 		}
 	}
 }

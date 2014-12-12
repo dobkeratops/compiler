@@ -120,13 +120,14 @@ int g_raw_types[]={
 	0|0,
 	0|0,
 	0|0,
-	0|0
+	0|0,
+	0|0,
 };
 const char* g_token_str[]={
 	"",
 	"int","uint","size_t","i8","i16","i32","i64","u8","u16","u32","u64","u128","bool",
 	"half","float","double","float4","char","str","void","voidptr","one","zero","auto",
-	"pTr","ref","tuple","__NUMBER__","__TYPE__","__IDNAME__",
+	"pTr","ref","Self","tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
 	"print___","fn","struct","class","trait","virtual","static","extern", "enum","array","vector","union","variant","with","match","where","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
 	"let","var",
@@ -160,7 +161,7 @@ const char* g_token_str[]={
 int g_tok_info[]={
 	0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,// int types
-	0,0,0,0,0,0,0,0,0,0,0,	// float types
+	0,0,0,0,0,0,0,0,0,0,0,0,	// float types
 	0,0,0,0,0,0,			// type modifiers
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
 	0,0,			// let,var

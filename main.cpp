@@ -13,12 +13,20 @@ void filename_change_ext(char* dst,const char* src,const char* new_ext){
 	for (ss=dst;*ss;ss++){
 		if (*ss=='.') s=ss;
 	}
-	if (!*s) { strcat(dst, ".out");}
+	if (!s) {s=dst+strlen(dst);strcat(s,".");}
+	if (!strlen(new_ext)) {
+		s[0]=0;}
 	else
-		if (!strlen(new_ext)) { s[0]=0;}
-		else strcpy(s+1,new_ext);
+		strcpy(s+1,new_ext);
 }
-int compile_source(const char *buffer, const char* filename, const char* outname, int flags){
+bool has_dir(const char* fn){
+	for (const char*s=fn; *s; s++){
+		if (*s=='/'||*s=='\\')
+			return true;
+	}
+	return false;
+}
+int compile_and_run(const char *buffer, const char* filename, const char* outname, int flags,char** capture_output){
 	
 	Lexer	src(buffer,filename);
 	
@@ -53,8 +61,8 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 				char exename[256];
 				char wdir[512];getcwd(wdir,512);
 				filename_change_ext(exename,outname,"");
-#if DEBUG>=3
-				printf("invocation: f=%s o=%s\n e=%s\n",filename, outname,exename);
+#if DEBUG>=2
+				printf("invocation: wd=%s f=%s o=%s\n e=%s\n",wdir, filename, outname,exename);
 #endif
 				char compile_cmd[512]; sprintf(compile_cmd,"clang %s -o %s", outname, exename);
 				if (flags & B_VERBOSE)printf("\nllvm src=%s\n executable=%s\nflags %x\n",outname,exename, flags);
@@ -62,11 +70,31 @@ int compile_source(const char *buffer, const char* filename, const char* outname
 				auto ret= system(compile_cmd);
 				if (!ret && (flags & B_RUN)) {
 					if (flags & B_VERBOSE)printf("compiled ok, running executable %s \n", exename);
-					char invoke[512];snprintf(invoke,512,"%s",exename);
-#if DEBUG>=3
+					char invoke[512];snprintf(invoke,512,"%s%s",has_dir(exename)?"":"./",exename);
+#if DEBUG>=2
 					printf("invocation: %s\npwd=%s\n",invoke,wdir);
 #endif
-					return system(invoke);
+					if (!capture_output){
+						return system(invoke);
+					} else{
+						auto fp=popen(invoke,"r");
+						int max_len=1024;
+						int i=0;
+						*capture_output=(char*)malloc(max_len);
+						char* dst=*capture_output;
+						int c;
+						while (c=getc(fp)){
+							if(c==EOF) break;
+							ASSERT(i<max_len-1);
+							i++;
+							putc(c,stdout);
+							*dst++=(char)c;
+						}
+						*dst++=0;
+						pclose(fp);
+						return 0;
+						
+					}
 					return 0;
 				}
 				return ret;
@@ -93,7 +121,7 @@ int compile_source_file(const char* filename, int options) {
 		fread((void*)buffer,1,sz,fp);
 		buffer[sz]=0;
 		fclose(fp);
-		int ret=compile_source(buffer,filename,outname,options);
+		int ret=compile_and_run(buffer,filename,outname,options,nullptr);
 		free((void*)buffer);
 		return ret;
 	} else{
@@ -146,7 +174,8 @@ int main(int argc, const char** argv) {
 #if DEBUG>=2
 	printf("compiled with debug level=%d\n", DEBUG);
 #endif
-	//	dbprintf("precedences: ->%d *%d +%d &%d \n", precedence(ARROW),precedence(MUL),precedence(ADD),precedence(AND));
+	ASSERT(!strcmp(str(OPEN_PAREN),"(") && !strcmp(str(ASSIGN),"=")  && !strcmp(str(UNDERSCORE),"_")&& "string table alignment?")
+	dbg_strings("paren=%s %s\nprecedences: ->%d *%d +%d &%d \n", str(OPEN_PAREN),str(CLOSE_PAREN),precedence(ARROW),precedence(MUL),precedence(ADD),precedence(AND));
 	//	compile_source_file("~/hack/test_hack/prog.rs",0xf);
 	int options=0,given_opts=0;
 	for (auto i=1; i<argc; i++) {

@@ -65,6 +65,10 @@ struct IBaz {
 	// sugar: with other qualifiers, 'fn' is optional,assumed
 	virtual foo(){}  
 }
+// in a 'trait', functions default to 'virtual'.
+//struct IBar {
+//	fn bar(selfptr){}     
+//}
 
 // open overloading like C++; most specific function is matched at callsite
 // f:&Foo means parameter 'f' , reference to Foo.. 
