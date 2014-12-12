@@ -274,6 +274,24 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 	auto call_fn=e->get_fn_call();
 	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
 	
+	// [3.3] argument conversions..
+	auto coerce_args=[&](Type* fn_type){
+		// todo - should not be needed
+	fn_type->resolve(sc, nullptr, 0);
+	auto ai=0;
+#if DEBUG>=2
+	fn_type->dump(-1);newline(0);
+#endif
+	auto fn_arg=fn_type->fn_args_first();
+	for (auto i=0; fn_arg; i++,fn_arg=fn_arg->next){
+#if DEBUG>=2
+		dbprintf("arg %d \n", i);fn_arg->dump(-1);newline(0);
+#endif
+		auto r=cg.emit_conversion(l_args[i], fn_arg,sc);
+		l_args[i]=r;
+	}
+	};
+	
 	auto l_emit_arg_list=[&](CgValue env_ptr){
 		cg.emit_args_begin();
 		if(env_ptr.is_valid()){
@@ -285,7 +303,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		cg.emit_args_end();
 	};
 	
-	//[3.3] make the call..
+	//[3.4] make the call..
 	if (e->call_expr->is_function_name()) {
 		auto fn_name=e->call_expr->name;
 		ExprStructDef* vts=nullptr;
@@ -312,12 +330,14 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			// load the vtable
 			auto vtbl=cg.emit_getelementref(recvp,__VTABLE_PTR);
 			auto function_ptr=cg.emit_getelementval(vtbl,fn_name);
+			coerce_args(function_ptr.type);
 			cg.emit_call_begin(function_ptr);
 			l_emit_arg_list(CgValue());
 			return cg.emit_call_end();
 
 		} else {
 			//[3.3.1] Direct Call
+			coerce_args(call_fn->type());
 			cg.emit_call_begin(CgValue(call_fn));
 			l_emit_arg_list(CgValue());
 			return cg.emit_call_end();
@@ -326,6 +346,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		//[3.3.2] Indirect Call... Function Object
 		auto fn_obj = e->call_expr->compile(cg, sc);
 		auto call_t=e->call_expr->type();
+		coerce_args(call_t);
 		if (fn_obj.type->is_closure()){
 			//[.1] ..call Closure (function,environment*)
 			auto fn_ptr=cg.emit_getelementval(fn_obj,0,0,call_t);
@@ -394,7 +415,8 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			return lhs.store(cg,rhs);
 		}
 		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
-			return lhs.store(cg,rhs);
+			auto r=cg.emit_conversion(rhs, e->type(),sc);
+			return lhs.store(cg,r);
 		}
 		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
 			auto result=cg.emit_instruction(opname,t?t:rhs.type, 0,lhs,rhs);
@@ -507,7 +529,10 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		}
 		// TODO: CLARIFY WHY... alloca returns 'ref' whilst struct-initializer gives a 'ptr'?
 		// eliminate this, its' messy. 'force_dst' should be a CgValue.
-		if (force_dst) { struct_val.reg=force_dst; struct_val.addr=0;}
+		if (force_dst) {
+			struct_val.reg=force_dst;
+			struct_val.addr=0;
+		}
 		return struct_val;
 	}
 	// [2] Operator
@@ -552,11 +577,9 @@ CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc){
 	}
 	return CgValue(var);
 }
-
 CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc) {
 	return CgValue(this);
 }
-
 CgValue Type::compile(CodeGen& cg, Scope* sc){
 	return CgValue(0,this,0);	// propogate a type into compiler interface
 }
@@ -734,7 +757,6 @@ void name_mangle(char* dst, int size, const ExprFnDef* src) {
 		name_mangle_append_type(dst,size, a->type());
 	}
 }
-
 void name_mangle(char* dst, int size, const ExprStructDef* src) {
 	dst[0]=0;
 	// TODO - prefix scopes. Now, Overloading is the priority.
@@ -746,7 +768,6 @@ void name_mangle(char* dst, int size, const ExprStructDef* src) {
 		name_mangle_append_type(dst,size,it);
 	}
 }
-
 void output_code(FILE* ofp, Scope* scope, int depth) {
 	verify_all();
 	auto cg=CodeGen(ofp,0);

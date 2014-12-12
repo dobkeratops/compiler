@@ -165,14 +165,14 @@ public:
 	void emit_branch( Name l);
 	void emit_return(CgValue val);
 	void emit_branch(CgValue cond, Name label_then, Name label_else);
-	CgValue emit_cast_raw(CgValue&lhsv, Type* rhse);
-	CgValue emit_cast(CgValue&lhsv, Expr* rhse);
-	CgValue emit_cast_sub(CgValue&lhs_val, Type* rhst);
-	CgValue emit_cast_to_i8ptr(CgValue& val);
-	CgValue emit_cast_from_i8ptr(CgValue& val,Type* totype);
-	CgValue emit_cast_to_i8ptr(RegisterName src, Type* srctype);
-	CgValue emit_cast_from_i8ptr(RegisterName src, Type* totype, RegisterName dst=0);
-	CgValue emit_cast_reg(RegisterName src_reg, Type*src_type, Type* dst_type);
+	CgValue emit_cast_raw(const CgValue&lhsv, const Type* rhse);
+	CgValue emit_cast(const CgValue&lhsv, Expr* rhse);
+	CgValue emit_cast_to_type(const CgValue&lhs_val, const Type* rhst);
+	CgValue emit_cast_to_i8ptr(const CgValue& val);
+	CgValue emit_cast_from_i8ptr(const CgValue& val,const Type* totype);
+	CgValue emit_cast_to_i8ptr(RegisterName src,const Type* srctype);
+	CgValue emit_cast_from_i8ptr(RegisterName src, const Type* totype, RegisterName dst=0);
+	CgValue emit_cast_reg(RegisterName src_reg, const Type*src_type, const Type* dst_type);
 	void emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode);
 	Type* i8ptr();
 	// API refactoring
@@ -207,6 +207,7 @@ public:
 	CgValue emit_call_end();
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg);
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg1,const CgValue& arg2);
+	CgValue emit_conversion(const CgValue& src, const Type* to_type, const Scope* sc);
 
 	CgValue load(const CgValue& v,Type* result_type=0);
 	CgValue to_rvalue(const CgValue& lvalue_or_rvalue){

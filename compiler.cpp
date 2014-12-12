@@ -394,6 +394,9 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 	if (a->name==ELIPSIS||b->name==ELIPSIS)
 		return ResolvedType(a,ResolvedType::COMPLETE);
 	if (!a->is_equal(b)){
+		if (a->is_coercible(b)){
+			return ResolvedType(0,ResolvedType::COMPLETE);
+		}
 		if (!(flags & R_FINAL))
 			return ResolvedType(0,ResolvedType::INCOMPLETE);
 		
@@ -581,7 +584,6 @@ void ExprOp::find_vars_written(Scope* s, set<Variable *> &vs) const{
 		}	
 	}
 }
-
 void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const{
 	this->call_expr->find_vars_written_if(s, vars);
 	for (auto a:argls)
@@ -641,6 +643,28 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 //				g_pRoot->as_block()->scope->dump(0);
 //			}
 			scope->find_variable_rec(this->name); // look for scope variable..
+#if DEBUG >=2
+			scope->dump(0);
+#endif
+			auto thisptr=scope->find_variable_rec(THIS);
+			if (thisptr){
+				auto recv=scope->get_receiver();
+				thisptr->dump(0);
+				scope->dump(0);
+				if (!recv){
+					dbprintf("warning 'this' but no receiver found via scope\n");
+					dbprintf("warning 'this' but no receiver in s=%p owner=%p\n",scope,scope->owner_fn);
+					if (scope->owner_fn){
+						dbprintf("warning 'this' but no receiver in %s %s\n",scope->owner_fn->kind_str(),scope->name());
+						auto fnd=scope->owner_fn->as_fn_def();
+						auto p=scope->owner_fn->parent();
+						dbprintf("warning 'this' but no receiver in %s %s\n",scope->owner_fn->kind_str(),scope->name());
+						
+						dbprintf("recv=%p\n",fnd->m_receiver);
+						scope->owner_fn->dump(0);
+					}
+				}
+			}
 			error(this,scope,"\'%s\' undeclared identifier",str(this->name));
 		}
 		return ResolvedType();
@@ -758,12 +782,19 @@ ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 		if (!this->has_typeparam(sc)){
 			if (auto sd=sc->find_struct_named(this->name)){
 				this->struct_def =sd->get_instance(sc,this);
-				dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->	struct_def,this);
+				dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->struct_def,this);
 			}else{
 				dbg_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name());
+#if DEBUG >=2
+				sd=sc->find_struct_named(this->name);
+				sc->dump(0);
+#endif
 			}
 		}
 	}
+#if DEBUG >=2
+	dbprintf("%s structdef=%p def= %p\n",this->name_str(),this->struct_def,this->def);
+#endif
 	auto ds=desired?desired->sub:nullptr;
 	for (auto s=this->sub;s;s=s->next,ds=ds?ds->next:nullptr)
 		s->resolve(sc,ds,flags);
@@ -817,13 +848,41 @@ bool type_compare(const Type* t,int a0, int a1){
 					return true;
 	return false;
 }
-
 ExprStructDef* Type::struct_def_noderef()const { // without autoderef
 	if (struct_def) return struct_def->as_struct_def();
 	else return nullptr;
 };
+void Node::set_type(const Type* t)
+{	::verify(t);
+	if (this->m_type){
+		if (this->m_type->is_equal(t))
+			return ;
+#if DEBUG>=2
+		dbprintf("changing type?\n");
+		this->m_type->dump(-1);newline(0);
+		dbprintf("to..\n");
+		t->dump(-1);
+		newline(0);
+#endif
+		//ASSERT(this->m_type==0);
+	}
+	this->m_type=(Type*)t;
+};
 
-
+bool is_coercible_ptr(const Type* a,const Type* other,bool coerce){
+	// void pointers auto-coerce like they should, thats what they're there for, legacy C
+	if (a->is_pointer_not_ref() && other->is_pointer_not_ref() && coerce){
+		if (a->is_void_ptr() || other->is_void_ptr())
+			return true;
+	}
+	auto s1=a->struct_def_noderef();
+	auto s2= other->struct_def_noderef();
+	if (s1&&s2 && coerce){
+		if (!s1->has_base_class(s2))
+			return true;
+	}
+	return false;
+}
 bool Type::is_equal(const Type* other,bool coerce) const{
 	/// TODO factor out common logic, is_coercible(),eq(),eq(,xlat)
 	if ((!this) && (!other)) return true;
@@ -838,12 +897,8 @@ bool Type::is_equal(const Type* other,bool coerce) const{
 	}
 	if (!(this && other)) return false;
 	
-	auto s1=this->struct_def_noderef();
-	auto s2= other->struct_def_noderef();
-	if (s1&&s2){
-		if (!s1->has_base_class(s2))
-			return false;
-	}
+	if (is_coercible_ptr(this,other,coerce))
+		return true;
 	else
 		if (this->name!=other->name)return false;
 
@@ -859,7 +914,6 @@ bool Type::is_equal(const Type* other,bool coerce) const{
 	if (o || p) return false; // didnt reach both..
 	return true;
 }
-
 bool Type::is_equal(const Type* other,const TypeParamXlat& xlat) const{
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
@@ -871,7 +925,9 @@ bool Type::is_equal(const Type* other,const TypeParamXlat& xlat) const{
 		if (other->sub && this) return other->sub->is_equal(this->sub,xlat);
 		else return true;
 	}
-	if (!(this && other)) return false;
+	if (!(this && other))
+		return false;
+
 	// TODO: might be more subtle than this for HKT
 	auto ti=xlat.typeparam_index(other->name);
 	dbg_type("%s %s\n",str(this->name),str(other->name));
@@ -888,6 +944,9 @@ bool Type::is_equal(const Type* other,const TypeParamXlat& xlat) const{
 	if (other->name==STR && type_compare(this,PTR,CHAR)) return true;
 	if (this->name==STR && type_compare(other,PTR,CHAR)) return true;
 	
+	if (is_coercible_ptr(this,other,true))
+		return true;
+
 	auto p=this->sub,o=other->sub;
 	
 	for (; p && o; p=p->next,o=o->next) {
@@ -897,25 +956,27 @@ bool Type::is_equal(const Type* other,const TypeParamXlat& xlat) const{
 	return true;
 }
 
-void Type::dump_sub()const{
+void Type::dump_sub(int flags)const{
 	if (!this) return;
 	if (this->name==TUPLE) {
 		dbprintf("(");
 		for (auto t=sub; t; t=t->next){
-			t->dump_sub();
+			t->dump_sub(flags);
 			if(t->next)dbprintf(",");
 		};
 		dbprintf(")");
 	} else{
 		dbprintf("%s",getString(name));
-#if DEBUG>=4
+#if DEBUG>=2
 		if (this->struct_def)
-			dbprintf(" %s", str(this->struct_def->get_mangled_name()));
+			dbprintf("( struct_def=%s )", str(this->struct_def->get_mangled_name()));
+		if (this->def)
+			dbprintf("( def=%s )", str(this->def->get_mangled_name()));
 #endif
 		if (sub){
 			dbprintf("[");
 			for (auto t=sub; t; t=t->next){
-				t->dump_sub();
+				t->dump_sub(flags);
 				if(t->next)dbprintf(",");
 			};
 			dbprintf("]");
@@ -928,7 +989,8 @@ bool Type::is_complex()const{
 	if (this->is_struct()||this->name==ARRAY||this->name==VARIANT) return true;
 	return false;
 }
-Type* g_bool,*g_void;
+// todo table of each 'intrinsic type', and pointer to it
+Type* g_bool,*g_void,*g_void_ptr,*g_int;
 Type* Type::get_bool(){
 	/// todo type hash on inbuilt indices
 	if (g_bool)return g_bool;
@@ -937,6 +999,14 @@ Type* Type::get_bool(){
 Type* Type::get_void(){
 	if (g_void)return g_void;
 	return (g_void=new Type(nullptr,VOID));
+}
+Type* Type::get_int(){
+	if (g_int)return g_int;
+	return (g_int=new Type(nullptr,INT));
+}
+Type* Type::get_void_ptr(){
+	if (g_void_ptr)return g_void_ptr;
+	return (g_void_ptr=new Type(nullptr,PTR,VOID));
 }
 
 bool Type::is_struct()const{
@@ -1034,7 +1104,7 @@ size_t ExprStructDef::size()const{
 }
 void Type::dump(int depth)const{
 	if (!this) return;
-	newline(depth);dump_sub();
+	newline(depth);dump_sub(depth);
 }
 Type::Type(ExprStructDef* sd)
 {	struct_def=sd; name=sd->name; sub=0; next=0;
@@ -1044,7 +1114,6 @@ Type::Type(Name outer_name,ExprStructDef* sd)
 	name=outer_name;
 	push_back(new Type(sd));
 }
-
 
 void ExprLiteral::dump(int depth) const{
 	if (!this) return;
@@ -1206,7 +1275,7 @@ bool ExprFnDef::is_generic() const {
 	return false;
 }
 
-void ExprFnDef::set_receiver(ExprStructDef* r){
+void ExprFnDef::set_receiver_if_unset(ExprStructDef* r){
 	///TODO: ambiguity between special receiver and '1st parameter'.
 	/// we started coding a 'special receiver'
 	/// however UFCS means a generalized '1st parameter' makes more sense,
@@ -1214,7 +1283,9 @@ void ExprFnDef::set_receiver(ExprStructDef* r){
 	/// we might also try 'multiple receivers' for nested classes?
 	/// eg struct Scene { struct Model{  methods of model get Scene*, Model*... }}
 	/// .. and we want to implement lambdas as sugar for callable objects much like c++/rust trait reform
-	this->m_receiver=r;
+	if (!this->m_receiver){
+		this->m_receiver=r;
+	}
 }
 
 
@@ -1336,7 +1407,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	// todo: translate return type. for the minute we discard it..
 	new_fn->set_def(srcfn);
 	//	new_fn->ret_type=nullptr;
-	new_fn->body->set_type(nullptr);// todo, inference upward..
+	new_fn->body->clear_type();// todo, inference upward..
 	new_fn->next_instance = srcfn->instances;
 	srcfn->instances=new_fn;
 	new_fn->instance_of = srcfn;
@@ -1344,11 +1415,12 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type ininstantiation too
 	//	new_fn->dump(0);
 	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
+	new_fn->fn_type->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
 #if DEBUG >=2
 	dbg_fnmatch("%s return type=\n",new_fn->name_str());
 	srcfn->type()->dump_if(-1);
 	dbg_fnmatch(" from ");
-	new_fn->type()->dump_if(-1);
+	new_fn->type()->dump_if(-1000);
 	dbg_fnmatch("\n");
 	new_fn->fn_type->dump_if(-1);
 	dbg_fnmatch("\nlast expression:");
@@ -1356,6 +1428,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	dbg_fnmatch("\nlast expression type:");
 	new_fn->last_expr()->type()->dump_if(0);
 	dbg_fnmatch("\n");
+	new_fn->fn_type->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
 #endif
 	
 	verify_all();
@@ -1395,8 +1468,8 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 	}
 	
 	definer_scope->add_fn(this);
+	this->set_receiver_if_unset(recs);
 	auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
-	this->set_receiver(recs);
 	if (definer_scope->capture_from){
 		sc->capture_from=definer_scope->capture_from; // this is an 'inner function' (lambda, or local)
 	}
@@ -1443,22 +1516,45 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 			propogate_type(flags, (const Node*)this, ret,this->ret_type);
 		}
 	}
-	
-	if (true|| !this->fn_type) {
+
+	if (this->fn_type){
+		if (this->ret_type && this->ret_type->name!=AUTO && this->fn_type->fn_return() && this->fn_type->name==AUTO){
+			dbprintf("fn ret type updated\n");
+			this->fn_type->sub=0;
+		}
+		auto a=this->fn_type->fn_args_first();
+		for (int i=0; i<this->args.size(); i++,a=a->next){
+			auto ad=this->args[i];
+			if (a->name==AUTO && ad->type() && ad->type()->name!=AUTO){
+				dbprintf("fn type updated\n");
+				this->fn_type->sub=0;
+				//memleak! but we're going to keep these owned permanently-type-pools
+				break;
+			}
+		}
+	}
+
+	if (!this->fn_type) {
 		this->fn_type=new Type(this,this->is_closure()?CLOSURE:FN);
-		auto arglist=new Type(this,TUPLE);
 		//		if (recs){arglist->push_back(new Type(PTR,recs));}
+	}
+	if (!this->fn_type->sub){
+		auto arglist=new Type(this,TUPLE);
 		for (auto a:this->args) {
 			arglist->push_back(a->type()?((Type*)a->type()->clone()):new Type(this,AUTO));
 		}
 		// TODO - type inference needs to know about elipsis, as 'endless auto'
 		//if (this->variadic){arglist->push_back(new Type(this,ELIPSIS));}
-		auto ret_t=this->ret_type?(Type*)(this->ret_type->clone()):new Type(this,AUTO);
-		
-		this->fn_type->set_fn_details(arglist,ret_t,recs);
 		this->set_type(this->fn_type);
+
+		auto ret_t=this->ret_type?(Type*)(this->ret_type->clone()):new Type(this,AUTO);
+		this->fn_type->set_fn_details(arglist,ret_t,recs);
 	}
+	// update any 'fn_type args' that were newly resolved.. corner case we found!
+	
+
 	if (true|| !this->is_generic()){
+		
 		this->fn_type->resolve_if(scope,nullptr,flags);
 		this->return_type()->resolve_if(scope,nullptr,flags);
 	}
@@ -1505,6 +1601,26 @@ ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags)
 bool Type::is_typeparam(Scope* sc)const{
 	return sc->get_typeparam_for(const_cast<Type*>(this))!=0;
 }
+Scope* Scope::make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner)
+{
+	if (!*pp_scope){
+		auto sc=new Scope;
+#if DEBUG>=2
+		if (auto ofd=owner->as_fn_def()){
+			dbprintf("create scope in %p %s recv=%p\n",sc,ofd->name_str(),ofd->m_receiver);
+		}else{
+			dbprintf("create scope in %p %s \n",sc,owner->name_str());
+		}
+#endif
+		push_child(sc);
+		sc->owner_fn=owner;
+		*pp_scope=sc;
+		ASSERT(sc->node==0);
+		if(!sc->node){sc->node=sub_owner;}
+	}
+	
+	return *pp_scope;
+};
 
 TParamDef*	Scope::get_typeparam_for(Type* t) {
 	if (t->def){
@@ -1901,6 +2017,7 @@ void dbprint_find(const vector<ArgDef*>& args){
 	for (int i=0; i<args.size(); i++) {dbprintf(" %d:",i);dbprintf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
 	dbprintf(")\n");
 }
+
 ExprFnDef* Scope::find_unique_fn_named(const Node* name_node,int flags, const Type* fn_type){
 	auto name=name_node->as_name();
 	auto sc=this;
@@ -2057,7 +2174,8 @@ ExprStructDef* Scope::find_struct_named(Name name){
 			}
 		}
 	}
-	if (auto p=parent_or_global()) return p->find_struct_named(name);
+	if (auto p=parent_or_global())
+		return p->find_struct_named(name);
 	else return nullptr;
 }
 
@@ -2084,6 +2202,10 @@ void Scope::add_struct(ExprStructDef* sd){
 	sd->name_ptr=ni;
 	sd->next_of_name=ni->structs;
 	ni->structs=sd;
+#if DEBUG>=2
+	dbprintf("scope is now:-\n");
+	this->dump(0);
+#endif
 }
 Variable* Scope::find_scope_variable(Name name){
 	for (auto v=this->vars; v;v=v->next_of_scope){
@@ -2163,7 +2285,10 @@ Variable* Scope::get_or_create_scope_variable(Node* creator,Name name,VarKind k)
 	return v;
 }
 void Scope::dump(int depth)const {
-	newline(depth);dbprintf("scope: %s {",  this->name());
+	newline(depth);dbprintf("scope: %s",this->name());
+	if (this->parent)
+		dbprintf("(of %s)", this->parent);
+	dbprintf("{",this->name());
 	for (auto v=this->vars; v; v=v->next_of_scope) {
 		newline(depth+1); dbprintf("var %d %s:",index(v->name), getString(v->name));
 		if (auto t=v->get_type()) t->dump(-1);
@@ -2172,6 +2297,9 @@ void Scope::dump(int depth)const {
 		newline(depth+1); dbprintf("name %s:",getString(ni->name));
 		for (auto fnd=ni->fn_defs; fnd;fnd=fnd->next_of_name){
 			newline(depth+1);dbprintf("fn %s\n",getString(fnd->name));
+		}
+		for (auto fnd=ni->structs; fnd;fnd=fnd->next_of_name){
+			newline(depth+1);dbprintf("struct %s\n",getString(fnd->name));
 		}
 	}
 	for (auto s=this->child; s; s=s->next){
@@ -2236,7 +2364,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			auto rhs_t = rhs->get_type();
 			auto new_var=sc->create_variable(this,vname,Local);
 			lhs->set_def(new_var);
-			new_var->set_type(rhs_t);
+			new_var->force_type_todo_verify(rhs_t);
 			lhs->set_type(rhs_t);
 			this->set_type(rhs_t);
 			propogate_type_fwd(flags, this, desired, lhs->type_ref());
@@ -2445,10 +2573,13 @@ ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
 	verify_all();
 	if (this->type()) this->type()->resolve(sc,nullptr,flags);
+	this->def->resolve_if(sc, nullptr, flags);
+	
 
 	/// loose end? if this is a method-call, we dont resolve the symbol here,
 	/// in other contexts we do
-	if (this->call_expr &&!receiver) this->call_expr->resolve(sc,nullptr,flags);
+	if (this->call_expr &&!receiver)
+		this->call_expr->resolve(sc,nullptr,flags);
 	::verify(this->get_type());
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->get_type()) this->set_type(new Type(this,VOID));
@@ -2548,7 +2679,7 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 		int arg_index=0;
 		if (fn_type) {
 			// propogate types we have into argument expressions
-			for (auto a=fn_type->fn_args(); arg_index<argls.size() && a; arg_index++,a=a->next)  {
+			for (auto a=fn_type->fn_args_first(); arg_index<argls.size() && a; arg_index++,a=a->next)  {
 				if (a->name==FN){
 					dbg_lambdas("resolving fn type into function argument %s\n", argls[arg_index]->name_str());
 				}
@@ -3056,7 +3187,7 @@ instantiate tree<vector,int>
 	Type* new_type=0;
 	if (this->struct_def) this->struct_def=0;
 	int param_index=tpx.typeparam_index(this->name);
-	if (this->name==PLACEHOLDER || this->name==AUTO && inherit_replace){
+	if ((this->name==PLACEHOLDER || this->name==AUTO) && inherit_replace){
 		this->name=inherit_replace->name;
 		if (!this->sub && inherit_replace->sub){
 			error(this,"TODO - replace an auto typeparam with complex given typeparam ");

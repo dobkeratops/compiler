@@ -37,6 +37,9 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 		node->dump(0);
 	}
 	
+	if (flags & B_DEFS){
+		global.dump(0);
+	}
 	node->verify();
 	node->resolve(&global,nullptr,0);
 	if (flags & B_DEFS){

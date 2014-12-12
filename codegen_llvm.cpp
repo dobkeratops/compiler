@@ -84,7 +84,6 @@ CgValue CodeGen::load(const CgValue& v,Type* result_type) {
 	ASSERT(v.reg && !v.addr);
 	return v;
 }
-
 void CodeGen::emit_operand_literal(const CgValue& v, const ExprLiteral* lit) {
 	auto &cg=*this;
 	if (cg.comma){cg.emit_txt(",");} cg.comma=true;
@@ -192,13 +191,10 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 	}
 	return dst;
 }
-
-
 CgValue CodeGen::emit_getelementref(const CgValue &src, Name n,const Type* t){
 	auto i=src.type->deref_all()->struct_def->get_elem_index(n);
 	return emit_getelementref(src.load(*this), 0, i,t);
 }
-
 CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,const Type* override_type){
 
 	auto numptr=src.type->num_pointers()+(src.addr?1:0);
@@ -256,7 +252,6 @@ CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 	return CgValue(outr,lit->type());
 }
 
-
 CgValue CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
 	emit_ins_begin_name("store");
 	emit_type(type,0);
@@ -267,6 +262,7 @@ CgValue CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
 	emit_ins_end();
 	return CgValue(0,type,addr);
 }
+
 CgValue CodeGen::emit_store_global(CgValue dst,Name globalvar){
 	auto r=next_reg();
 	ASSERT(dst.addr && "store requires a reference destination");
@@ -279,11 +275,11 @@ CgValue CodeGen::emit_store_global(CgValue dst,Name globalvar){
 	return dst;
 }
 
-
 CgValue  CodeGen::emit_call(const CgValue& call_expr, const CgValue& arg1)
 {
 	emit_call_begin(call_expr); emit_type_operand(arg1); return emit_call_end();
 }
+
 CgValue  CodeGen::emit_call(const CgValue& call_expr, const CgValue& arg1, const CgValue& arg2)
 {
 	emit_call_begin(call_expr); emit_type_operand(arg1); emit_type_operand(arg2); return emit_call_end();
@@ -319,6 +315,10 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 	emit_comma(); // type always starts new operand
 	if (!t) { emit_txt("<type expected>");return;}
 	if (ref) emit_pointer_begin();
+	if (t->name==AUTO){
+		error(t->m_origin,"'auto' type not converted in instantiation \n");
+	}
+	else
 	if (t->is_pointer()){
 //		dbprintf("THIS IS SUSPECT, REF ISn'T NEEDED TWICE");
 		emit_pointer_begin();
@@ -345,10 +345,18 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 	} else if (t->is_struct()){
 		auto sd=t->get_struct();
 		if (!sd) {
+			if (t->def)
 			/// TODO we quieted this error because closure objs dont make a struct
-			emit_reg(t->name);
+				emit_reg(t->def->get_mangled_name());
+			else {
+				//if (strcmp("closure_51main",t->name_str())){
+				//	error(t->m_origin,"unresolved type, has no definition %s",str(t->name));
+				//}
+				emit_reg(t->name);
+			}
 		}else
-		if (sd->name) emit_struct_name(sd->get_mangled_name());
+		if (sd->name)
+			emit_struct_name(sd->get_mangled_name());
 		else {
 			// LLVM does allow listing an anonymous struct
 			emit_struct_begin();
@@ -695,26 +703,26 @@ void CodeGen::emit_return(CgValue ret){
 	}
 }
 
-CgValue CodeGen::emit_cast_to_i8ptr(CgValue& val) {
+CgValue CodeGen::emit_cast_to_i8ptr(const CgValue& val) {
 	return emit_cast_reg(val.reg, val.type, i8ptr());
 }
-CgValue CodeGen::emit_cast_from_i8ptr(CgValue& val, Type* totype) {
-	return emit_cast_reg(val.reg, i8ptr(), totype);
+CgValue CodeGen::emit_cast_from_i8ptr(const CgValue& val, const Type* to_type) {
+	return emit_cast_reg(val.reg, i8ptr(), to_type);
 }
 
 
-CgValue CodeGen::emit_cast_raw(CgValue&src_val, Type* to_type){
-	return emit_cast_sub(src_val,to_type);
+CgValue CodeGen::emit_cast_raw(const CgValue&src_val, const Type* to_type){
+	return emit_cast_to_type(src_val,to_type);
 }
-CgValue CodeGen::emit_cast(CgValue&src_val, Expr* rhs_type_expr){
-	return emit_cast_sub(src_val,rhs_type_expr->type());
+CgValue CodeGen::emit_cast(const CgValue&src_val, Expr* rhs_type_expr){
+	return emit_cast_to_type(src_val,rhs_type_expr->type());
 }
-CgValue CodeGen::emit_cast_sub(CgValue&lhs_val, Type* rhst){
+CgValue CodeGen::emit_cast_to_type(const CgValue&lhs_val, const Type* rhst){
 	auto lhs_reg=this->load(lhs_val);
 //	auto lhst=lhs_val.type;
 	return emit_cast_reg(lhs_reg.reg, lhs_val.type, rhst);
 }
-CgValue CodeGen::emit_cast_reg(RegisterName srcr, Type* lhst, Type* rhst)
+CgValue CodeGen::emit_cast_reg(RegisterName srcr,const  Type* lhst, const Type* rhst)
 {
 	auto dstr=next_reg();
 	const char* ins="nop";
@@ -932,8 +940,6 @@ void CodeGen::emit_struct_def_end(){
 	this->emit_ins_end();
 }
 
-
-
 void CodeGen::emit_comma(){
 	if (this->comma==1){emit_txt(",");}
 	this->comma=1;
@@ -1122,6 +1128,35 @@ void CodeGen::emit_alloca_array_type(Name r, Type* t, Name count,int align)
 	cg.emit_txt("\t");
 	cg.emit_reg(r);
 	cg.emit_txt(" = alloca [%s x %s] , align %zu\n",str(count),get_llvm_type_str(t->name),align);
+}
+
+CgValue CodeGen::emit_conversion(const CgValue& src, const Type* to_type,const Scope* sc) {
+	/// TODO: make it clear, this is a helper, not overloaded per back-end
+	// no need to convert..
+#if DEBUG>=2
+	dbprintf("\nconv \n");
+	src.type->dump(-1);dbprintf(" to \n");
+	to_type->dump(-1);dbprintf("\n");
+#endif
+	if (src.type->is_equal(to_type,false))
+		return src;
+	// We must convert..
+	// is it a trivial pointer conversion?
+	if (src.type->is_pointer_not_ref() && to_type->is_pointer_not_ref()){
+		if ((to_type->sub->name>=IDENT) && !to_type->sub->def){
+#if DEBUG>=2
+			dbprintf("\n warning type %s not defined?]\n",to_type->sub->name_str());
+#endif
+			newline(0);
+		}
+
+		return this->emit_cast_to_type(src,to_type);
+	} else {
+		to_type->dump(-1);newline(0);
+		src.type->dump(-1);
+		error("TODO need conversion operators\n");
+		return CgValue();
+	}
 }
 
 

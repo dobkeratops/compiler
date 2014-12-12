@@ -586,7 +586,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 	return ret;
 }
 ArgDef* parse_arg(TokenStream& src, int close) {
-	auto argname=src.eat_ident();
+	auto argname=(src.peek_tok()==COLON)?PLACEHOLDER:src.eat_ident();
 	if (argname==close) return nullptr;
 	auto a=new ArgDef(src.pos,argname);
 	a->pos=src.pos;

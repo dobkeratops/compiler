@@ -11,7 +11,7 @@ extern "C" char* gets(char*);
 #include <cstdio>
 
 #ifdef DEBUG
-#define CRASH {exit(-1);}
+#define CRASH {*(long*)0=-1;exit(-1);}
 #define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );CRASH}
 #define WARN(x) if (!(x)) {printf("warning %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );}
 #define TRACE printf("%s:%d: %s\n",__FILE__,__LINE__,__FUNCTION__);
@@ -31,7 +31,7 @@ extern "C" char* gets(char*);
 #else
 	#define DBLOC()
 #endif
-	#if DEBUG>=3
+	#if DEBUG>=2
 	#define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
 	#define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
 	#define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
@@ -439,7 +439,9 @@ public:
 	Type*& type()				{::verify(this->m_type);return this->m_type;}
 	const Type* type()const		{::verify(this->m_type);return this->m_type;}
 	void type(const Type* t)	{::verify(t);this->m_type=(Type*)t;}
-	void set_type(const Type* t){::verify(t);this->m_type=(Type*)t;};
+	void set_type(const Type* t);
+	void clear_type(){m_type=0;};
+	void force_type_todo_verify(const Type* t){ m_type=const_cast<Type*>(t);}
 	Type*& type_ref()			{return this->m_type;}
 	void dump_top()const;
 };
@@ -452,8 +454,6 @@ public:
 };
 
 /// TODO-Anything matchable by the template engine eg Type, Constants, Ident.. (how far do we go unifying templates & macros..)
-
-
 
 struct Type : Expr{
 	vector<TParamDef*> typeparams;
@@ -527,19 +527,28 @@ struct Type : Expr{
 	bool			is_coercible(const Type* other) const{return is_equal(other,true);};
 	bool			is_equal(const Type* other,bool coerce=false) const;
 	bool			is_equal(const Type* other, const TypeParamXlat& xlat )const;
-	void			dump_sub()const;
+	// todo 'is_equal' rename to iscompatible, is_equal/coercible call it with flags
+	bool			is_compatible(const Type* other,bool coerce=false) const;
+	void			dump_sub(int f
+							 )const;
 	void			dump(int depth)const;
-	static Type*	get_bool() ;
-	static Type*	get_void() ;
+	static Type*	get_bool();
+	static Type*	get_void();
+	static Type*	get_void_ptr();
+	static Type*	get_int();
 	Node*	clone() const;
+	void	set_struct_def(ExprStructDef* sd);
 	bool	is_array()const		{return name==ARRAY;}
 	bool	is_template()const	{ return sub!=0;}
 	bool	is_function() const	{ return name==FN;}
 	bool	is_closure() const	{ return name==CLOSURE;}
 	Type*	fn_return() const	{ if (is_callable()) return sub->next; else return nullptr;}
-	Type*	fn_args() const		{ return sub->sub;} 	void	clear_reg()			{reg_name=0;};
-	bool	is_pointer()const		{return (this && this->name==PTR) || (this->name==REF);}
+	Type*	fn_args_first() const		{ return sub->sub;} 	void	clear_reg()			{reg_name=0;};
+	bool	is_pointer_or_ref()const		{return (this && this->name==PTR) || (this->name==REF);}
+	bool	is_pointer()const		{return this->is_pointer_or_ref();}//TODO deprecate, must be specific since pointers & references have subtle differences.
+	bool 	is_pointer_not_ref()const	{return this && this->name==PTR;}
 	bool	is_void()const			{return !this || this->name==VOID;}
+	bool	is_void_ptr()const		{return this->is_pointer_not_ref() && this->sub && this->sub->name==VOID;}
 	int		num_derefs()const		{if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
 	Type*	deref_all() const		{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
 	void translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_replace);
@@ -871,18 +880,7 @@ public:
 	Scope* parent_or_global()const{
 		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
 	}
-	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner){
-		if (!*pp_scope){
-			auto sc=new Scope;
-			push_child(sc);
-			sc->owner_fn=owner;
-			*pp_scope=sc;
-			ASSERT(sc->node==0);
-			if(!sc->node){sc->node=sub_owner;}
-		}
-		
-		return *pp_scope;
-	};
+	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner);
 };
 
 ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block,Scope* scope,const Type* desired);
@@ -1092,7 +1090,7 @@ struct  ExprFnDef : ExprDef {
 	Expr* body=0;
 	ExprFnDef(){};
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
-	void			set_receiver(ExprStructDef* sd); // not sure if it'll be arbitrary type
+	void			set_receiver_if_unset(ExprStructDef* sd); // not sure if it'll be arbitrary type
 	ExprStructDef*	get_receiver();
 	int		get_name()const {return index(name);}
 	Name	get_mangled_name()const;
