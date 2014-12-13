@@ -430,13 +430,20 @@ void	ExprDef::remove_ref(Node* ref){
 	ref->def=0;
 }
 
-
+void Node::clear_def(){
+	if (def)
+		def->remove_ref(this);
+	def=nullptr;;
+}
 void Node::set_def(ExprDef *d){
+	if (!d && !def)
+		return;
 	if (!def) {
 		this->next_of_def=d->refs; d->refs=this;
 		def=d;
 	}
 	else {
+		if (d==0 && this->def){ ASSERT("use clear_def(), not set_def(0)");}
 		if (d!=this->def){
 			dbprintf("WARNING!!-was %d %s now %d %s\n",def->pos.line,def->name_str(), d->pos.line,d->name_str());
 //			ASSERT(d==this->def);
@@ -778,15 +785,15 @@ bool  Type::has_typeparam(Scope* sc){
 ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 {
 	if(!this)return ResolvedType();
-	if (!this->struct_def && this->name>=IDENT && !is_number(this->name)){
+	if (!this->struct_def() && this->name>=IDENT && !is_number(this->name)){
 		if (!strcmp(str(name),"Union")){
 			sc->owner_fn->dump_if(0);
 			this->dump(-1);newline(0);
 		}
 		if (!this->has_typeparam(sc)){
 			if (auto sd=sc->find_struct_named(this->name)){
-				this->struct_def =sd->get_instance(sc,this);
-				dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->struct_def,this);
+				this->set_struct_def(sd->get_instance(sc,this));
+				dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->struct_def(),this);
 			}else{
 				dbg_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name());
 #if DEBUG >=2
@@ -797,7 +804,7 @@ ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 		}
 	}
 #if DEBUG >=2
-	dbprintf("%s structdef=%p def= %p\n",this->name_str(),this->struct_def,this->def);
+	dbprintf("%s structdef=%p def= %p\n",this->name_str(),this->struct_def(),this->def);
 #endif
 	auto ds=desired?desired->sub:nullptr;
 	for (auto s=this->sub;s;s=s->next,ds=ds?ds->next:nullptr)
@@ -814,7 +821,12 @@ ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
 	return ResolvedType(this->type(), ResolvedType::COMPLETE);
 }
-
+void Type::clear_struct_def(){
+	this->clear_def();
+}
+void Type::set_struct_def(ExprStructDef* sd){
+	this->set_def(sd);
+}
 void Type::push_back(Type* t) {
 	if (!sub) sub=t;
 	else {
@@ -830,14 +842,12 @@ const char* Node::get_name_str() const{
 const char* Type::kind_str()const{return"type";}
 Type::Type(Name i,SrcPos sp){
 	pos=sp;
-	struct_def=0;
 	sub=0;
 	next=0;
 	name=i; //todo: resolve-type should happen here.
 }
 Type::Type(Node* origin,Name i){
 	this->set_origin(origin);
-	struct_def=0;
 	sub=0;
 	next=0;
 	name=i; //todo: resolve-type should happen here.
@@ -852,9 +862,17 @@ bool type_compare(const Type* t,int a0, int a1){
 					return true;
 	return false;
 }
+ExprStructDef*	Type::struct_def(){
+	return this->def?this->def->as_struct_def():nullptr;
+}
+ExprStructDef*	Type::struct_def() const{
+	return const_cast<Type*>(this)->def?this->def->as_struct_def():nullptr;
+}
+
 ExprStructDef* Type::struct_def_noderef()const { // without autoderef
-	if (struct_def) return struct_def->as_struct_def();
-	else return nullptr;
+//	if (struct_def) return struct_def->as_struct_def();
+//	else return nullptr;
+	return struct_def();
 };
 void Node::set_type(const Type* t)
 {	::verify(t);
@@ -998,8 +1016,8 @@ void Type::dump_sub(int flags)const{
 	} else{
 		dbprintf("%s",getString(name));
 #if DEBUG>=2
-		if (this->struct_def)
-			dbprintf("( struct_def=%s )", str(this->struct_def->get_mangled_name()));
+		if (this->struct_def())
+			dbprintf("( struct_def=%s )", str(this->struct_def()->get_mangled_name()));
 		if (this->def)
 			dbprintf("( def=%s )", str(this->def->get_mangled_name()));
 #endif
@@ -1040,7 +1058,7 @@ Type* Type::get_void_ptr(){
 }
 
 bool Type::is_struct()const{
-	return struct_def!=0 || name>=IDENT; //TODO .. it might be a typedef.
+	return struct_def()!=0 || name>=IDENT; //TODO .. it might be a typedef.
 }
 int Type::num_pointers() const {
 	if (!this) return 0;
@@ -1062,8 +1080,8 @@ size_t Type::alignment() const{
 	for (auto s=this->sub;s;s=s->next){
 		if (auto sz=s->size()>align){align=sz;};
 	}
-	if (this->struct_def){
-		return this->struct_def->alignment();
+	if (this->struct_def()){
+		return this->struct_def()->alignment();
 	}
 	return align?align:4;
 }
@@ -1093,8 +1111,8 @@ size_t Type::size() const{
 		}
 		return size;
 	}
-	if (this->struct_def){
-		return struct_def->as_struct_def()->size();
+	if (this->struct_def()){
+		return struct_def()->size();
 	}
 	return 0;
 }
@@ -1106,22 +1124,20 @@ ExprStructDef::has_base_class(ExprStructDef* other)const{
 	return false;
 }
 
-ExprStructDef* Type::get_struct()const{
+ExprStructDef* Type::get_struct_autoderef()const{
 	auto p=this;
-	while (p && !p->is_struct()){
+//	while (p && !p->is_struct()){
+	while (p->is_qualifier_or_ptr_or_ref()){
 		p=p->sub;
 	}
-	if (!p) return nullptr;
-	auto sd=p->struct_def;
-	if (!sd) return nullptr;
-	return sd->as_struct_def();
+	return p->struct_def();
 }
 ExprStructDef* Type::get_receiver()const
 {
 	if (this->sub)
 		if (this->sub->next)
 			if (this->sub->next->next)
-				return this->sub->next->next->struct_def->as_struct_def();
+				return this->sub->next->next->struct_def();
 	return nullptr;
 }
 
@@ -1137,7 +1153,7 @@ void Type::dump(int depth)const{
 	newline(depth);dump_sub(depth);
 }
 Type::Type(ExprStructDef* sd)
-{	struct_def=sd; name=sd->name; sub=0; next=0;
+{	set_struct_def(sd); name=sd->name; sub=0; next=0;
 }
 Type::Type(Name outer_name,ExprStructDef* sd)
 {
@@ -1755,8 +1771,7 @@ Node*
 Type::clone() const{
 	if (!this) return nullptr;
 	auto r= new Type(this->get_origin(),this->name);
-	r->struct_def=this->struct_def;
-	r->def=0;		// def must be re-resolved.
+	r->set_struct_def(this->struct_def());
 	auto *src=this->sub;
 	Type** p=&r->sub;
 	while (src) {
@@ -2090,7 +2105,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 	if (args.size()>0){
 		if (auto rt=args[0]->type()){
 			auto rec_t=rt->deref_all();
-			if (auto sd=rec_t->get_struct()){
+			if (auto sd=rec_t->get_struct_autoderef()){
 				rec_scope=sd->scope;
 				if (rec_scope){
 					ff.find_fn_from_scopes(rec_scope,nullptr);
@@ -2418,7 +2433,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			lhs->set_def(v);
 			if (t){
 				if (t->name>=IDENT && !t->sub) {
-					t->struct_def = sc->find_struct(t);
+					t->set_struct_def(sc->find_struct(t));
 				}
 			}
 			if (auto t=v->get_type()) {
@@ -3165,7 +3180,7 @@ ExprStructDef* ArgDef::member_of()	{ // todo, implement for 'Variable' aswell, u
 void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
 	this->name.translate_typeparams(tpx);
 	if (this->get_type()){
-		this->get_type()->struct_def=0; // needs resolving again
+		this->get_type()->set_struct_def(nullptr); // needs resolving again
 		this->get_type()->translate_typeparams(tpx);
 	}
 	if (this->default_expr){
@@ -3219,7 +3234,7 @@ instantiate tree<vector,int>
 	// TODO: assert there is no shadowing in this types' own definitions
 
 	Type* new_type=0;
-	if (this->struct_def) this->struct_def=0;
+	this->clear_struct_def();
 	int param_index=tpx.typeparam_index(this->name);
 	if ((this->name==PLACEHOLDER || this->name==AUTO) && inherit_replace){
 		this->name=inherit_replace->name;
@@ -3336,7 +3351,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 				dbprintf(ins->instanced_types[i]->name_str());
 		ins->translate_typeparams(TypeParamXlat(this->typeparams, ins->instanced_types));
 	}
-	if (!type->struct_def) { const_cast<Type*>(type)->struct_def=ins;}
+	if (!type->struct_def()) { const_cast<Type*>(type)->set_struct_def(ins);}
 //	else { ASSERT(type->struct_def==ins && "instantiated type should be unique")};
 	
 	return ins;

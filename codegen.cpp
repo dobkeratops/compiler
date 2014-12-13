@@ -60,8 +60,11 @@ CgValue CgValue::deref_op(CodeGen& cg, Type* t) {
 
 CgValue CgValue::get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const{	//calculates & returns adress
 	ASSERT(type );
-	auto sd=type->get_struct();
-	if (!sd) {type->dump(-1);error(field_name,"struct not resolved\n");}
+	auto sd=type->get_struct_autoderef();
+	if (!sd) {
+		type->dump(-1);
+		error(field_name,"struct not resolved\n");
+	}
 	int index=sd->field_index(field_name);
 	auto field=sd->find_field(field_name);
 	return get_elem_index(cg,index);
@@ -171,7 +174,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 			if (fi->type()->is_typeparam(sc))
 				return CgValue();
 			if (fi->type()->name>=IDENT){
-				if (!fi->type()->struct_def){
+				if (!fi->type()->struct_def()){
 					cg.emit_comment("not compiling %s, it shouldn't have been instanced-see issue of partially resolving generic functions for better type-inference, we're getting these bugs: phantom initiated structs. must figure out how to mark them properly",str(this->get_mangled_name()));
 					return CgValue();
 				}
@@ -287,7 +290,8 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 #if DEBUG>=2
 		dbprintf("arg %d \n", i);fn_arg->dump(-1);newline(0);
 #endif
-		auto r=cg.emit_conversion(l_args[i], fn_arg,sc);
+		auto ae=i==0&&receiver?receiver:e->argls[i-(receiver?1:0)];
+		auto r=cg.emit_conversion(ae,l_args[i], fn_arg,sc);
 		l_args[i]=r;
 	}
 	};
@@ -313,9 +317,9 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			// lookup types to see if we have a vcall.
 			ASSERT(recvp.type->is_pointer() && "haven't got auto-ref yet for receiver in a.foo(b) style call\n");
 			//receiver->dump(-1); newline(0);
-			auto vtf=recvp.type->get_struct()->try_find_field(__VTABLE_PTR);
+			auto vtf=recvp.type->get_struct_autoderef()->try_find_field(__VTABLE_PTR);
 			if (vtf) {
-				vts=vtf->type()->get_struct();
+				vts=vtf->type()->get_struct_autoderef();
 			}
 			dbg_vcall("receiver: %s %s .%s\n",str(receiver->name),str(receiver->type()->name), str(e->call_expr->name));
 			dbg_vcall("vtbl=%p\n",vtf);
@@ -411,12 +415,11 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			return cg.emit_cast(lhs,e);
 		}
 		else
-		if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
-			auto r=cg.emit_conversion(rhs, e->type(),sc);
-			return lhs.store(cg,r);
+		if (opname==LET_ASSIGN){// := Let-Assign *must* create a new variable,infer type.
+			return lhs.store(cg,rhs);
 		}
 		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
-			auto r=cg.emit_conversion(rhs, e->type(),sc);
+			auto r=cg.emit_conversion(e, rhs, e->type(),sc);
 			return lhs.store(cg,r);
 		}
 		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
@@ -444,7 +447,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			if (auto b=rhs->as_block()){
 				if (b->is_struct_initializer()){
 					auto reg=cg.emit_malloc(this->type(),1);
-					auto st=b->call_expr->type()->get_struct();
+					auto st=b->call_expr->type()->get_struct_autoderef();
 					if (st->vtable){
 						auto vtref=cg.emit_getelementref(reg,__VTABLE_PTR);
 						cg.emit_store_global(vtref, st->vtable_name );
@@ -594,7 +597,7 @@ CgValue Capture::compile(CodeGen& cg, Scope* outer_scope){
 	}
 	cg.emit_struct_def_end();
 	cp->type() = new Type(cp->capture_by, PTR,cp->tyname());
-	cp->type()->sub->struct_def = (ExprStructDef*) cp;
+	cp->type()->sub->set_struct_def((ExprStructDef*) cp);
 	return CgValue(this);
 }
 CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
@@ -734,7 +737,7 @@ void name_mangle_append_type(char* dst,int size, const Type* t){
 	else if (n>=RAW_TYPES && n<=VOIDPTR) {
 		strcat(dst,g_mangle_type[(int)n-RAW_TYPES]);
 	}
-	else if (auto sd=t->get_struct()){
+	else if (auto sd=t->get_struct_autoderef()){
 		name_mangle_append_segment(dst,size,str(sd->get_mangled_name()));
 		for (auto& it:sd->instanced_types){
 			dbg_mangle(" %s\n",it->name_str());

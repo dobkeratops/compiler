@@ -192,7 +192,7 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 	return dst;
 }
 CgValue CodeGen::emit_getelementref(const CgValue &src, Name n,const Type* t){
-	auto i=src.type->deref_all()->struct_def->get_elem_index(n);
+	auto i=src.type->deref_all()->struct_def()->get_elem_index(n);
 	return emit_getelementref(src.load(*this), 0, i,t);
 }
 CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,const Type* override_type){
@@ -205,7 +205,7 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,
 	}
 	ASSERT(numptr==1);
 	
-	auto sd=src.type->deref_all()->struct_def;
+	auto sd=src.type->deref_all()->def;//struct_def();
 	auto field_type=sd->get_elem_type(field_index);//fields[field_index]->type();
 	auto areg=this->next_reg();
 	this->emit_ins_begin(areg, "getelementptr inbounds  ");
@@ -363,7 +363,7 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 		}
 		emit_struct_end();
 	} else if (t->is_struct()){
-		auto sd=t->get_struct();
+		auto sd=t->get_struct_autoderef();
 		if (!sd) {
 			if (t->def)
 			/// TODO we quieted this error because closure objs dont make a struct
@@ -744,10 +744,12 @@ CgValue CodeGen::emit_cast_to_type(const CgValue&lhs_val, const Type* rhst){
 }
 CgValue CodeGen::emit_cast_reg(RegisterName srcr,const  Type* lhst, const Type* rhst)
 {
+	if (lhst->type()->is_equal(rhst))
+		return CgValue(srcr,rhst);
 	auto &cg=*this;
 	auto dstr=next_reg();
 	const char* ins="nop";
-	if (rhst->is_bool()){
+	if (lhst->is_pointer() && rhst->is_bool()){
 		// example..
 		//%15 = icmp ne i8** %14, null, !dbg !130
   		//%16 = zext i1 %15 to i8, !dbg !130
@@ -777,6 +779,14 @@ CgValue CodeGen::emit_cast_reg(RegisterName srcr,const  Type* lhst, const Type* 
 	}
 	else if (lhst->is_float() && rhst->is_int()){
 		ins=lhst->is_signed()?"fptosi":"fptoui";
+	}
+	else if (lhst->is_int()&&!lhst->is_bool() && rhst->is_bool()){
+		emit_ins_begin(dstr, "icmp ne");
+		emit_type_reg(lhst,0,srcr);
+		emit_comma();
+		emit_txt("0");//int_lit(lhst,0);
+		emit_ins_end();
+		return CgValue(dstr,rhst);
 	}
 	else if (lhst->size()>rhst->size()){
 		if (lhst->is_int() && rhst->is_int()){
@@ -1035,6 +1045,11 @@ void CodeGen::emit_int_lit(Name type, int value) {
 	emit_txt(get_llvm_type_str(type));
 	emit_txt(" %d",value);
 }
+void CodeGen::emit_int_lit(const Type* t, int value) {
+	emit_comma();
+	emit_txt(get_llvm_type_str(t->name));
+	emit_txt(" %d",value);
+}
 
 void CodeGen::emit_i32_lit(int index) {
 	emit_comma();
@@ -1178,7 +1193,7 @@ void CodeGen::emit_alloca_array_type(Name r, Type* t, Name count,int align)
 	cg.emit_txt(" = alloca [%s x %s] , align %zu\n",str(count),get_llvm_type_str(t->name),align);
 }
 
-CgValue CodeGen::emit_conversion(const CgValue& src, const Type* to_type,const Scope* sc) {
+CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src, const Type* to_type,const Scope* sc) {
 	/// TODO: make it clear, this is a helper, not overloaded per back-end
 	// no need to convert..
 #if DEBUG>=2
@@ -1201,8 +1216,9 @@ CgValue CodeGen::emit_conversion(const CgValue& src, const Type* to_type,const S
 		return this->emit_cast_to_type(src,to_type);
 	} else {
 		to_type->dump(-1);newline(0);
-		src.type->dump(-1);
-		error("TODO need conversion operators\n");
+		src.type->dump(-1);newline(0);
+
+		error(n,"TODO need conversion operators\n");
 		return CgValue();
 	}
 }

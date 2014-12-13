@@ -287,7 +287,7 @@ ExprOp* parse_let(TokenStream& src) {
 		auto nlet=new ExprOp(DECLARE_WITH_TYPE,src.prev_pos);
 		nlet->lhs=id;
 		nlet->rhs=nullptr;//new Type(AUTO);
-		error(nlet,"TODO - let <var with no type or init expr>\ntype inference should handle it but we must double check ..");
+		//error(nlet,"TODO - let <var with no type or init expr>\ntype inference should handle it but we must double check ..");
 		return nlet;
 	}
 }
@@ -584,7 +584,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 		ret->push_back(parse_tuple(src,owner));// args
 		parse_ret_val(src,owner,ret);
 	}
-	else if (tok==OR){ // closure |arg0,arg1,..|->ret
+	else if (tok==OR){ // rust-style closure |arg0,arg1,..|->ret
 		ret = new Type(owner,CLOSURE);
 		auto args=new Type(owner,TUPLE); ret->push_back(args);
 		src.begin_lambda_bar_arglist();
@@ -605,7 +605,6 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 			fn_type->push_back(fn_ret);
 			return fn_type;
 		}
-		
 	} else {
 		// prefixes in typegrammar..
 		if (tok==MUL || tok==AND) {

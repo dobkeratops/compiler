@@ -11,7 +11,7 @@ extern "C" char* gets(char*);
 #include <cstdio>
 
 #ifdef DEBUG
-#define CRASH {*(long*)0=-1;exit(-1);}
+#define CRASH {*(volatile long*)0=-1;exit(-1);}
 #define ASSERT(x) if (!(x)) {printf("error %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );CRASH}
 #define WARN(x) if (!(x)) {printf("warning %s:%d: %s, %s\n",__FILE__,__LINE__, __FUNCTION__, #x );}
 #define TRACE printf("%s:%d: %s\n",__FILE__,__LINE__,__FUNCTION__);
@@ -366,6 +366,7 @@ public:
 	ExprDef*	def=0;		// definition of the entity here. (function call, struct,type,field);
 	Node*		next_of_def=0;
 	void set_def(ExprDef* d);
+	void clear_def();
 	virtual void dump(int depth=0) const;
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
 	ResolvedType resolve_if(Scope* scope, const Type* desired,int flags){
@@ -459,7 +460,7 @@ public:
 
 struct Type : Expr{
 	vector<TParamDef*> typeparams;
-	ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
+	//ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
 	Node* 	m_origin=0;				// where it comes from
@@ -480,7 +481,7 @@ struct Type : Expr{
 	Type(Name outer, ExprStructDef* inner);
 	Type(Node* origin,Name i);
 	Type(Name i,SrcPos sp);
-	Type() { name=0;sub=0;next=0; struct_def=0;}
+	Type() { name=0;sub=0;next=0;}
 	size_t	alignment() const;
 	size_t	size() const;
 	int	raw_type_flags()const	{int i=index(name)-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
@@ -492,6 +493,8 @@ struct Type : Expr{
 	bool	is_struct()const;
 	bool	is_bool()const		{return name==BOOL;}
 	bool	is_callable()const	{return name==FN||name==CLOSURE;}
+	bool	is_qualifier()const	{return name==CONST||name==MUT;}
+	bool	is_qualifier_or_ptr_or_ref()const{return is_qualifier()||is_pointer_or_ref();}
 	struct FnInfo{ Type* args; Type* ret;Type* receiver;};
 	FnInfo	get_fn_info(){
 		if (!is_callable()) return FnInfo{nullptr,nullptr,nullptr};
@@ -526,7 +529,7 @@ struct Type : Expr{
 	int			num_pointers()const;
 	int			num_pointers_and_arrays()const;
 	ExprStructDef*	struct_def_noderef()const;
-	ExprStructDef*	get_struct() const; // with autoderef
+	ExprStructDef*	get_struct_autoderef() const; // with autoderef
 	bool			is_coercible(const Type* other) const{return is_equal(other,true);};
 	bool			is_equal(const Type* other,bool coerce=false) const;
 	bool			is_equal(const Type* other, const TypeParamXlat& xlat )const;
@@ -542,23 +545,35 @@ struct Type : Expr{
 	static Type*	get_int();
 	Node*	clone() const;
 	void	set_struct_def(ExprStructDef* sd);
+	void	clear_struct_def();
 	bool	is_array()const		{return name==ARRAY;}
 	bool	is_template()const	{ return sub!=0;}
 	bool	is_function() const	{ return name==FN;}
 	bool	is_closure() const	{ return name==CLOSURE;}
 	Type*	fn_return() const	{ if (is_callable()) return sub->next; else return nullptr;}
 	Type*	fn_args_first() const		{ return sub->sub;} 	void	clear_reg()			{reg_name=0;};
-	bool	is_pointer_or_ref()const		{return (this && this->name==PTR) || (this->name==REF);}
-	bool	is_pointer()const		{return this->is_pointer_or_ref();}//TODO deprecate, must be specific since pointers & references have subtle differences.
-	bool 	is_pointer_not_ref()const	{return this && this->name==PTR;}
+	const Type*	strip_qualifiers()const{
+		auto p=this;
+		if(!p) return nullptr;
+		while (p->is_qualifier()){p=p->sub;}
+		return p;
+	};
+	bool	is_name(int n1)	const{return this->name==n1;}
+	bool	is_name(int n1, int n2)const{return this->name==n1||this->name==n2;}
+	bool	is_name(int n1, int n2,int n3)const	{return this->name==n1||this->name==n2||this->name==n3;}
+	bool	is_pointer_or_ref()const		{return this->strip_qualifiers()->is_name(PTR,REF);}
+	bool	is_pointer()const		{return this->strip_qualifiers()->is_pointer_or_ref();}//TODO deprecate, must be specific since pointers & references have subtle differences.
+	bool 	is_pointer_not_ref()const	{if (!this) return false; return this->strip_qualifiers()->name==PTR;}
 	bool	is_void()const			{return !this || this->name==VOID;}
 	bool	is_void_ptr()const		{return this->is_pointer_not_ref() && this->sub && this->sub->name==VOID;}
 	int		num_derefs()const		{if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
-	Type*	deref_all() const		{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
+	Type*	deref_all() const		{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()||this->is_qualifier()){p=p->sub;}; return (Type*)p;}
 	void translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_replace);
 	Name as_name()const override{
 		return this->name;
 	}
+	ExprStructDef*	struct_def();
+	ExprStructDef*	struct_def() const;
 	
 
 	void			translate_typeparams(const TypeParamXlat& tpx) override;
@@ -1023,8 +1038,8 @@ struct ExprStructDef: ExprDef {
 };
 
 inline Type* Type::get_elem(int index){
-	if (this->struct_def)
-		return this->struct_def->get_elem_type(index);
+	if (this->struct_def())
+		return this->struct_def()->get_elem_type(index);
 	ASSERT(index>=0);
 	auto s=sub;
 	for (;s&&index>0;s=s->next,--index){};

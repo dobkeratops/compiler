@@ -146,6 +146,7 @@ public:
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
 	void emit_int_lit(Name type, int value);
+	void emit_int_lit(const Type* type, int value);
 	void emit_i32_reg(Name reg);
 	void emit_operand_literal(const CgValue& cg,const ExprLiteral* lit);
 	CgValue emit_make_literal(ExprLiteral* l);
@@ -209,7 +210,7 @@ public:
 	CgValue emit_call_end();
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg);
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg1,const CgValue& arg2);
-	CgValue emit_conversion(const CgValue& src, const Type* to_type, const Scope* sc);
+	CgValue emit_conversion(const Node* n, const CgValue& src, const Type* to_type, const Scope* sc);
 
 	CgValue load(const CgValue& v,Type* result_type=0);
 	CgValue to_rvalue(const CgValue& lvalue_or_rvalue){

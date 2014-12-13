@@ -15,11 +15,43 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
+	{
+		"member function+ufcs",__FILE__,__LINE__,
+		// SOURCECODE
+		/*1*/  "fn\"C\" printf(s:str,...)->int;  			\n"
+		/*2*/  "struct Foo{									\n"
+		/*3*/  "	q:int,									\n"
+		/*4*/  "	fn method()->float{						\n"
+		/*5*/  "		printf(\"Foo.q=%d\\n\",q);2.0		\n"
+		/*6*/  "	}										\n"
+		/*7*/  "}											\n"
+		/*9*/ "fn main()->int{											\n"
+		/*10*/ "	x:=Foo{5}; px:=&x;				\n"
+		/*11*/ "	printf(\"member function test..\n\",x.q);			\n"
+		/*12*/	"	px.func1();											\n"
+		/*13*/	"	px.method();										\n"
+		/*14*/	"	0													\n"
+		/*15*/  "}														\n"
+		/*8*/ "fn func1(f:*Foo){printf(\"func1 says q=%d\\n\",f.q);}	\n"
+		,
+		nullptr
+	},
+
+	{
+		"struct new",__FILE__,__LINE__,
+		/* 2*/ "	struct FooStruct{x:int,y:int};			\n"
+		/* 3*/	"fn main(argc:int, argv:**char)->int{		\n"
+		/* 4*/	"	x:=new FooStruct{1,2};\n"
+		/* 5*/	"	0\n"
+		/* 6*/  "}											\n",
+		nullptr
+	},
+
 	{	"pointer to bool ",__FILE__,__LINE__,
 		"fn\"C\" printf(s:str,...)->int;		\n"
 		"fn main(argc:int,argv:**char)->int{	\n"
 		"	let bool_from_ptr1:bool	= argv;		\n"
-		"	printf(\"bool val %d ptr = %p cmp=%d\\n\",bool_from_ptr1, argv, argc==3);"
+		"	printf(\"bool val %d\\n\",bool_from_ptr1);"
 		"  0}										\n"
 	},
 	{	"bool values ",__FILE__,__LINE__,
