@@ -15,12 +15,20 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
+	{	"pointer to bool ",__FILE__,__LINE__,
+		"fn\"C\" printf(s:str,...)->int;		\n"
+		"fn main(argc:int,argv:**char)->int{	\n"
+		"	let bool_from_ptr1:bool	= argv;		\n"
+		"	printf(\"bool val %d ptr = %p cmp=%d\\n\",bool_from_ptr1, argv, argc==3);"
+		"  0}										\n"
+	},
 	{	"bool values ",__FILE__,__LINE__,
 		"fn main(argc:int,argv:**char)->int{	\n"
 		"	let bool_val:bool=argc>4;			\n"
 		"  0}									\n"
 	},
-	{	"coersions ",__FILE__,__LINE__,
+
+	{	"bool coersions ",__FILE__,__LINE__,
 		"fn\"C\" printf(s:str,...)->int;		\n"
 		"fn main(argc:int,argv:**char)->int{	\n"
 		"	let zeroi32:int=0;					\n"
@@ -28,6 +36,7 @@ CompilerTest g_Tests[]={
 		"	let vali64:int=vali32;				\n"
 		"	let valbool1:bool=vali32;			\n"
 		"	let valbool2:bool=zeroi32;			\n"
+		"	let valbool2:bool=argv;			\n"
 		"	let my_ptr:*int	= nullptr;			\n"
 		"	let bool_from_ptr1:bool	= nullptr;		\n"
 		"	let bool_from_ptr2:bool	= &vali32;		\n"

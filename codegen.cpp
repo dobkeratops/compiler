@@ -412,7 +412,8 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		}
 		else
 		if (opname==LET_ASSIGN){// Let-Assign *must* create a new variable.
-			return lhs.store(cg,rhs);
+			auto r=cg.emit_conversion(rhs, e->type(),sc);
+			return lhs.store(cg,r);
 		}
 		else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
 			auto r=cg.emit_conversion(rhs, e->type(),sc);

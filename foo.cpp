@@ -58,6 +58,7 @@ int main(int argc, const char** argv) {
 	double d=x;
 	bool b1=true;
 	bool b2=argc>2;
+	bool b3 = argv;
 	printf("%p",fp);
 	char* nullpt_test=1+(char*)nullptr;
 	struct Foo* ptr=(struct Foo*) malloc(sizeof(struct Foo));

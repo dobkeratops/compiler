@@ -248,22 +248,48 @@ ExprFnDef* parse_closure(TokenStream&src,int close) {// eg |x|x*2
 
 ExprOp* parse_let(TokenStream& src) {
 	// TODO: parse_pattern - we DO want all the tuple assignment goodness
-	auto nlet=new ExprOp(LET_ASSIGN,src.prev_pos);
 	auto ident=src.eat_ident();
+	auto id=new ExprIdent(src.prev_pos,ident);
 	Type * t=nullptr;
+	Expr* init=nullptr;
 	if (src.eat_if(COLON)){
 		t=parse_type(src,0,nullptr);
 	}
-	nlet->lhs=new ExprIdent(src.prev_pos,ident);
 	//nlet->lhs->set_type(t);// we dont need an operator, all nodes have type
+	
 	if (src.eat_if(ASSIGN)){
-		nlet->rhs=parse_expr(src);
-	} else {
-		nlet->name=DECLARE_WITH_TYPE;
-		nlet->rhs=t;
+		init=parse_expr(src);
 	}
-	//nlet->rhs->set_type
-	return nlet;
+// cases..
+	if (!t && init){
+		auto nlet=new ExprOp(LET_ASSIGN,src.prev_pos);
+		nlet->lhs=id;
+		nlet->rhs=init;
+		return nlet;
+	}
+	else if (t){
+		if (!init){
+			auto nlet=new ExprOp(DECLARE_WITH_TYPE,src.prev_pos);
+			nlet->lhs=id;
+			nlet->rhs=t;
+			return nlet;
+		}
+		else{
+			auto nassign=new ExprOp(LET_ASSIGN,src.prev_pos);
+			nassign->lhs=id;
+			nassign->rhs=new ExprOp(AS, src.prev_pos, init, Type::get_bool());
+			nassign->rhs->set_type(Type::get_bool());
+			return nassign;
+		}
+	
+	}
+	else{
+		auto nlet=new ExprOp(DECLARE_WITH_TYPE,src.prev_pos);
+		nlet->lhs=id;
+		nlet->rhs=nullptr;//new Type(AUTO);
+		error(nlet,"TODO - let <var with no type or init expr>\ntype inference should handle it but we must double check ..");
+		return nlet;
+	}
 }
 
 Expr* expect_pop(TokenStream& src,vector<Expr*>& ops){

@@ -744,8 +744,31 @@ CgValue CodeGen::emit_cast_to_type(const CgValue&lhs_val, const Type* rhst){
 }
 CgValue CodeGen::emit_cast_reg(RegisterName srcr,const  Type* lhst, const Type* rhst)
 {
+	auto &cg=*this;
 	auto dstr=next_reg();
 	const char* ins="nop";
+	if (rhst->is_bool()){
+		// example..
+		//%15 = icmp ne i8** %14, null, !dbg !130
+  		//%16 = zext i1 %15 to i8, !dbg !130
+
+//		if (lhst->is_pointer())
+		//auto cmp=emit_instruction("icmp ne",CgValue(srcr,lhst), )
+		cg.emit_nest_begin("");
+		cg.emit_reg(dstr);
+		cg.emit_txt("=icmp ne ");
+		cg.emit_type(lhst);
+		cg.emit_reg(srcr);
+		cg.emit_comma();
+		cg.emit_txt("null;\n");
+		cg.emit_nest_end("");
+		// 2nd part of conversion done below.
+		// oh this is retarded.
+		// we need a real 'i1' bool.
+		// out bools in memory are not the same at all.
+		//... resolve this in load bool, store bool. bools in registers will be i1
+		return CgValue(dstr,rhst);
+	}else
 	if (rhst->is_pointer() || rhst->is_pointer()){
 		ins="bitcast";
 	}else

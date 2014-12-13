@@ -2457,7 +2457,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			this->set_type(desired);
 			return ResolvedType(this->type(),ResolvedType::COMPLETE);
 		} else {
-			this->set_type(this->rhs->type());
+			if (auto t=this->rhs->type())
+				this->set_type(t);
 			return propogate_type_fwd(flags,this,desired);
 		}
 	}
