@@ -94,6 +94,7 @@ void Lexer::skip_whitespace(){
 }
 
 void Lexer::typeparam_hack(){
+	return;
 	if (typaram_depth){
 		if (curr_tok==GT){
 			typaram_depth--;
@@ -147,6 +148,7 @@ int Lexer::close_of(int tok){
 	if (tok==OPEN_BRACE)return CLOSE_BRACE;
 	if (tok==OPEN_BRACKET)return CLOSE_BRACKET;
 	if (tok==OPEN_PAREN)return CLOSE_PAREN;
+//	if (tok==OPEN_TYPARAM)return CLOSE_PAREN;
 	if (tok==LT)return GT;
 	if (tok==OR)return OR;
 	return 0;
@@ -209,7 +211,7 @@ Name Lexer::eat_tok() {
 	
 	return r;
 }
-void Lexer::begin_lambda_bar() {
+void Lexer::begin_lambda_bar_arglist() {
 	/// needed to handle OR like bracket for lambda eg |x,y|; allows nesting error eg |x,) '|' expected.
 	bracket[depth++]=OR;ASSERT(depth<32);
 }
@@ -307,15 +309,23 @@ bool Lexer::is_next_string() const {
 bool Lexer::is_next_char() const {
 	return *tok_start=='\'';
 }
-
-Name Lexer::peek_tok(){
+bool Lexer::is_next(Name n1)const{
+	return peek_tok()==n1;
+}
+Name Lexer::peek_tok()const{
 	return curr_tok;
 }
 void Lexer::reverse(){
 	ASSERT(tok_start!=prev_start);tok_end=tok_start;tok_start=prev_start;
 }
 Name Lexer::expect(Name t, const char* err){
-	decltype(t) x;if (!(t==(x=eat_tok()))) {error(0,"expected %s found %s;%s\n",str(t), str(x),err);} return x;
+	decltype(t) x;
+	if (!(t==(x=eat_tok()))) {
+		const char*ex =str(t);
+		const char*found =str(x);
+		::error(pos,"expected %s found %s; %s\n",ex, found,err);
+	}
+	return x;
 }
 Name Lexer::expect(Name a,Name b, const char* err){
 	auto x=eat_tok();if (!(a==x || b==x)) {error(0,"expected %s or %s found %s;%s\n",str(a),str(b), str(x),err);} return x;

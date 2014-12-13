@@ -1,4 +1,5 @@
 #!hack -r
+
 // Uses .rs extention for syntax highlighting, but this is not Rust source.
 // omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types.
 // TODO extern"C" methods with simplified mangle.
@@ -21,7 +22,7 @@ fn something(f:float){
 //    auto lerp(A a,B b, F f){return (b-a)*f+a;}
 // more specific overloads are always used in preference if given
 
-fn lerp(a,b,f){(b-a)*f+a;}
+fn lerp(a,b,f)=(b-a)*f+a;
 
 //  single expression fn sugar '='
 fn invlerp(x0,x1,x)=(x-a)/(x1-x0);
@@ -103,25 +104,26 @@ struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is conventio
 	x:X,y:Y,
 };
 
+fn map[X,Y,R](
+	u:&Union[X,Y],
+	fx:|&X|->R,
+	fy:|&Y|->R)
+	->R{
+	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
+}
+
 fn setv[X,Y](u:&Union[X,Y],y:Y)->void{
 	printf("setv Y\n");
 	u.y=y;
 	u.tag=1;
 }
 
-fn setv<X,Y>(u:&Union<X,Y>,x:X)->void{
+fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 	printf("setv X\n");
 	u.x=x;
 	u.tag=0;
 }
 
-fn map<X,Y,R>(
-	u:&Union<X,Y>,
-	fx:|&X|->R,
-	fy:|&Y|->R)
-	->R{
-	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
-}
 
 fn main(argc:int,argv:**char)->int{
 	printf("example program ./hello.rpp compiled & run by default makefile\n");
@@ -210,7 +212,7 @@ fn main(argc:int,argv:**char)->int{
 	// last expression in the compound blocks is return value from block
 
 	let x1=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >=2",argc);2};
-	printf("\nHello World %d %d\n", x1, y );
+	printf("\n**Hello World** %d %d\n", x1, y );
 
 	// last statement is a return value. 
 	// takes some getting used to but makes semicolons significant and

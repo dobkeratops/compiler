@@ -106,6 +106,7 @@ public:
 	void emit_struct_name(RegisterName dst );
 	void emit_reg(RegisterName dst );
 	void emit_ins_end();
+	const char* size_t_str(){return "i64";}
 	void emit_txt(const char* str,...);
 	void emit_typename(Name n ,bool is_ref=false);
 	void emit_array_type(const Type* t, int count, bool ref=false);
@@ -144,6 +145,7 @@ public:
 	CgValue emit_instruction_reg_i32(Name opname,Type* type,  Name outname,CgValue src1,int val);
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
+	void emit_int_lit(Name type, int value);
 	void emit_i32_reg(Name reg);
 	void emit_operand_literal(const CgValue& cg,const ExprLiteral* lit);
 	CgValue emit_make_literal(ExprLiteral* l);

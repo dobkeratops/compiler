@@ -56,13 +56,16 @@ int main(int argc, const char** argv) {
 	float x=10.0f,y=20.0f,z;
 	void (*fp)(int) = foo;
 	double d=x;
+	bool b1=true;
+	bool b2=argc>2;
 	printf("%p",fp);
+	char* nullpt_test=1+(char*)nullptr;
 	struct Foo* ptr=(struct Foo*) malloc(sizeof(struct Foo));
 	float* ptr2=(float*)ptr;
 	y+=5.2346f;
 	x=0.035+0.0f;
 	if (argc < 2){
-		printf("hello world %.3f %.3f %d\n",y,100.0f,tmp[10]);
+		printf("hello world %.3f %.3f %d %d\n",y,100.0f,tmp[10],b2?1:2);
 	}
 		printf("<2");
 	return 0;

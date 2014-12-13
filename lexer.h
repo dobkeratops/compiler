@@ -45,13 +45,14 @@ struct Lexer {
 	static int close_of(int tok);
 	void advance_tok();
 	void advance_tok_sub();
-	void begin_lambda_bar();
+	void begin_lambda_bar_arglist();
 	Name eat_tok();
-	Name eat_if(Name a, Name b, Name c);
+	Name eat_if(Name a, Name b, Name c,Name d){if (is_next(a,b,c,d)) return eat_tok(); else return 0;}
+	Name eat_if(Name a, Name b,Name c);
 	Name eat_if(Name a, Name b);
 	Name eat_if_not(Name i);
 	bool eat_if(Name i);
-	bool eat_if_lambda_bar(){if (eat_if(OR)){begin_lambda_bar();return true;}return false;}
+	bool eat_if_lambda_bar(){if (eat_if(OR)){begin_lambda_bar_arglist();return true;}return false;}
 	bool is_placeholder()const;
 	Name eat_if_placeholder();
 	Name eat_ident();
@@ -64,8 +65,12 @@ struct Lexer {
 	bool is_next_literal() const;
 	bool is_next_string() const;
 	bool is_next_char() const;
+	bool is_next(Name n) const;
+	bool is_next(Name a, Name b){return is_next(a)||is_next(b);}
+	bool is_next(Name a, Name b, Name c){return is_next(a)||is_next(b,c);}
+	bool is_next(Name a, Name b, Name c,Name d){return is_next(a,b)||is_next(c,d);}
 	
-	Name peek_tok();
+	Name peek_tok() const;
 	void reverse();
 	Name expect(Name t, const char* err="");
 	Name expect(Name a,Name b, const char* err="");

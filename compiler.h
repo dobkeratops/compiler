@@ -189,8 +189,10 @@ enum Token {
 	NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
 	RAW_TYPES,INT=RAW_TYPES,UINT,SIZE_T,I8,I16,I32,I64,U8,U16,U32,U64,U128,BOOL,	// int types
-	HALF,FLOAT,DOUBLE,FLOAT4,CHAR,STR,VOID,VOIDPTR,ONE,ZERO,AUTO,	// float types,ptrs
-	PTR,REF,SELF_T,NUM_RAW_TYPES=SELF_T,TUPLE,NUMBER,TYPE,NAME,	// type modifiers
+	HALF,FLOAT,DOUBLE,FLOAT4,// floats
+	CHAR,STR,VOID,VOIDPTR,ONE,ZERO,NULLPTR,BOOL_TRUE,BOOL_FALSE,
+	AUTO,PTR,REF,SELF_T,NUM_RAW_TYPES=SELF_T,
+	TUPLE,NUMBER,TYPE,NAME,	// type modifiers
 	
 	PRINT,FN,STRUCT,CLASS,TRAIT,VIRTUAL,STATIC,EXTERN, ENUM,ARRAY,VECTOR,UNION,VARIANT,WITH,MATCH, WHERE, SIZEOF, TYPEOF, NAMEOF,OFFSETOF,THIS,SELF,SUPER,VTABLEOF,CLOSURE,
 	LET,VAR,
@@ -397,7 +399,7 @@ public:
 	virtual void translate_typeparams(const TypeParamXlat& tpx){ error(this,"not handled for %s",this->kind_str()); };
 	virtual ExprOp* as_op()const			{error(this,"expected op, found %s:%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name as_name()const {
-		error(this,"expected ident %s",str(this->name));
+		error(this,"expected named item at node %s kind=%s",str(this->name),this->kind_str());
 		return PLACEHOLDER;
 	};
 	bool is_ident()const;
@@ -488,6 +490,7 @@ struct Type : Expr{
 	bool	is_register()const	{return !is_complex();}
 	bool	is_complex()const;
 	bool	is_struct()const;
+	bool	is_bool()const		{return name==BOOL;}
 	bool	is_callable()const	{return name==FN||name==CLOSURE;}
 	struct FnInfo{ Type* args; Type* ret;Type* receiver;};
 	FnInfo	get_fn_info(){
@@ -529,6 +532,7 @@ struct Type : Expr{
 	bool			is_equal(const Type* other, const TypeParamXlat& xlat )const;
 	// todo 'is_equal' rename to iscompatible, is_equal/coercible call it with flags
 	bool			is_compatible(const Type* other,bool coerce=false) const;
+	bool			is_auto(){return !this || this->name==AUTO;}
 	void			dump_sub(int f
 							 )const;
 	void			dump(int depth)const;
@@ -552,6 +556,10 @@ struct Type : Expr{
 	int		num_derefs()const		{if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
 	Type*	deref_all() const		{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()){p=p->sub;}; return (Type*)p;}
 	void translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_replace);
+	Name as_name()const override{
+		return this->name;
+	}
+	
 
 	void			translate_typeparams(const TypeParamXlat& tpx) override;
 	virtual ResolvedType	resolve(Scope* s, const Type* desired,int flags);
@@ -668,10 +676,10 @@ struct MatchArm : ExprScopeBlock {
 };
 
 enum TypeId{
-//	T_AUTO,T_KEYWORD,T_VOID,T_INT,T_FLOAT,T_CONST_STRING,T_CHAR,T_PTR,T_STRUCT,T_FN
+	// TODO: just equate these to the master token enum. avoid future confusion
 	T_NONE,
-	T_INT,T_UINT,T_FLOAT,T_CONST_STRING,T_VOID,T_AUTO,T_ONE,T_ZERO,T_VOIDPTR,
-	T_WRONG_PRINT,T_FN,T_STRUCT,T_TUPLE,T_VARIANT,T_NUM_TYPES,
+	T_BOOL,T_INT,T_UINT,T_FLOAT,T_CONST_STRING,T_VOID,T_AUTO,T_ONE,T_ZERO,T_VOIDPTR,T_NULLPTR,
+	T_WRONG_PRINT,T_FN,T_STRUCT,T_TUPLE,T_VARIANT,T_KEYWORD,T_NUM_TYPES,
 };
 bool is_type(int tok);
 extern bool g_lisp_mode;
@@ -730,7 +738,7 @@ struct ExprLiteral : ExprDef {
 	Scope* owner_scope=0;
 	int llvm_strlen;
 	
-	union  {int val_int; int val_uint; float val_float; const char* val_str;int val_keyword;} u;
+	union  {int val_int; int val_uint; float val_float; void* val_ptr;bool val_bool; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
 	void dump(int depth) const;
 	ExprLiteral(const SrcPos&s);
@@ -1070,23 +1078,20 @@ struct  ExprFnDef : ExprDef {
 	Capture*	captures=0;			//
 	Capture*	my_capture=0;			// for closures- hidden param,environment struct passed in
 	ExprStructDef* m_receiver=0;
-	int				vtable_index=-1;
+	int8_t		vtable_index=-1;
+	int8_t		vtable_param=0;		// which parameter dispatches
+	int8_t		num_prefix_args=0;	// 0- foo(a,b,c) 1- a.foo(b,c)
+	bool variadic;
+	bool c_linkage=false;
+	bool m_closure=false;
+	bool resolved;
 	
 	Type* ret_type=0;
 	Type* fn_type=0;				// eg (args)->return
-	bool resolved;
 
 	Name mangled_name=0;
 	vector<TParamDef*> typeparams;
 	vector<ArgDef*> args;
-	bool variadic;
-	bool c_linkage=false;
-	bool m_closure=false;
-	// num_receivers =number of prefix 'arguments'
-	// eg a::foo(b,c)  has 3 args, 1 receiver.   foo(a,b,c) has 3 args, 0 receiver.
-	// its possible closures can desugar as methods?
-	// makes UFCS easier; in matcher, simply prioritize candidates with correct count
-	char num_receivers=0;
 	Expr* body=0;
 	ExprFnDef(){};
 	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}

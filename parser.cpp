@@ -319,7 +319,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 				break;
 		}
 		
-		if (src.is_next_literal()) {
+		if (src.is_next_literal()||src.is_next(BOOL_TRUE,BOOL_FALSE,NULLPTR,VOID)) {
 			auto ln=parse_literal(src);
 			operands.push_back(ln);
 			was_operand=true;
@@ -431,7 +431,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		else{
 			auto tok=src.eat_tok();
 			if (!was_operand && tok==OR){
-				src.begin_lambda_bar();
+				src.begin_lambda_bar_arglist();
 				another_operand_so_maybe_flush(was_operand,node,operators,operands);
 				operands.push_back(parse_closure(src,OR));
 			} else
@@ -492,16 +492,40 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	node->verify();
 	return node;
 }
+ExprOp* parse_flow(TokenStream& src,Name flow_statement){
+	// break is an operator. label,return.
+	Expr* expr=nullptr;
+	if (!(src.peek_tok()==CLOSE_BRACE || src.peek_tok()==SEMICOLON)){
+		dbprintf("%s\n",str(src.peek_tok()));
+		expr=parse_expr(src);
+	}
+	return new ExprOp(flow_statement, src.pos,nullptr,expr);
+}
 
 ExprLiteral* parse_literal(TokenStream& src) {
-	ExprLiteral* ln=0;
-	if (src.is_next_number()) {
+	ExprLiteral* ln=nullptr;
+	if (auto tok=src.eat_if(BOOL_TRUE,BOOL_FALSE,NULLPTR,VOID)){// special
+		ln=new ExprLiteral(src.prev_pos);
+		ln->name=tok;
+		if (tok==VOID){
+			ln->type_id=T_VOID;
+			ln->set_type(Type::get_bool());
+		}
+		if (tok==NULLPTR){	// nullptr is a void*, autocoerce to all others.
+			ln->u.val_ptr=nullptr;ln->type_id=T_NULLPTR;
+			ln->set_type(Type::get_void_ptr());
+		} else {
+			ln->u.val_bool=tok==BOOL_TRUE?true:false;ln->type_id=T_BOOL;
+			ln->set_type(Type::get_bool());
+		}
+	}else if (src.is_next_number()) {
 		auto n=src.eat_number();
 		if (n.denom==1) {ln=new ExprLiteral(src.prev_pos,n.num);}
 		else {ln=new ExprLiteral(src.pos, (float)n.num/(float)n.denom);}
 	} else if (src.is_next_string()) {
 		ln=new ExprLiteral(src.prev_pos,src.eat_string_alloc());
-	} else {
+	}
+	else{
 		error(0,"error parsing literal\n");
 		error_end(0);
 	}
@@ -537,7 +561,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 	else if (tok==OR){ // closure |arg0,arg1,..|->ret
 		ret = new Type(owner,CLOSURE);
 		auto args=new Type(owner,TUPLE); ret->push_back(args);
-		src.begin_lambda_bar();
+		src.begin_lambda_bar_arglist();
 		while ((src.peek_tok())!=OR){
 			args->push_back(parse_type(src,OR,owner));
 			src.eat_if(COMMA);
@@ -564,7 +588,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 		}else {
 			// main: something[typeparams]..
 			ret = new Type(owner,tok);
-			if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
+			if (auto open=src.eat_if(OPEN_BRACKET,LT,OPEN_TYPARAM)) {
 				while (auto sub=parse_type(src, close_of(open),owner)){
 					ret->push_back(sub);
 					src.eat_if(COMMA);

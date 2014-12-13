@@ -220,19 +220,41 @@ CgValue CodeGen::emit_assign(const CgValue& dst, const CgValue& src){
 	return dst.store(*this, this->load(src));
 }
 CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
-	auto outr=this->next_reg();
 	auto ltn=lit->type()->name;
+	auto outr=this->next_reg();
+
+	if (ltn==PTR){ // any literal pointer is void* 0? no
+		//ASSERT(lit->u.val_ptr==nullptr && "TODO non null literal pointers")
+		emit_reg(outr);
+		emit_txt("=getelementptr inbounds i8* null, %s %zu\n",size_t_str(),(size_t)lit->u.val_ptr);
+		return CgValue(outr,lit->type());
+	}
+	else if (ltn==VOID){
+		emit_reg(outr);
+		emit_txt("=undef\n");
+		return CgValue(outr,lit->type());
+	}
+
+
+	if (ltn==BOOL){
+		emit_ins_begin(outr,"or");
+		emit_int_lit(I8,ltn==BOOL_TRUE?1:0);
+		emit_comma();
+		emit_txt("%d",lit->u.val_bool?1:0);
+	}
 	if (ltn==INT){
 		emit_ins_begin(outr,"or");
 		emit_i32_lit(0);
 		emit_comma();
 		emit_txt("%d",lit->u.val_int);
-	} else if(ltn==FLOAT){
+	}
+	else if(ltn==FLOAT){
 		// todo, i guess we're goint to have t make a global constants table
 		emit_ins_begin(outr,"fadd");
 		emit_txt("float 0.0, ");
 		emit_txt(" 0x%x00000000",lit->u.val_int);
-	} else if (ltn==STR){
+	}
+	else if (ltn==STR){
 		emit_ins_begin(outr,"getelementptr inbounds");
 		emit_comma();
 		emit_txt("[%d x i8]* @%s",lit->llvm_strlen, getString(lit->name));
@@ -241,9 +263,7 @@ CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 		emit_i32_lit(0);
 		ASSERT(lit->llvm_strlen);
 	}
-	else if (ltn==VOID){
-		return CgValue();
-	} else {
+	else {
 		lit->type()->dump_if(-1);
 		error(lit,"literal type not handled yet");
 		error_end(lit);
@@ -986,6 +1006,11 @@ RegisterName  CodeGen::emit_ins_begin(RegisterName reg, const char* op){
 		emit_ins_name(op);
 	}
 	return reg;
+}
+void CodeGen::emit_int_lit(Name type, int value) {
+	emit_comma();
+	emit_txt(get_llvm_type_str(type));
+	emit_txt(" %d",value);
 }
 
 void CodeGen::emit_i32_lit(int index) {

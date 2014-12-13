@@ -177,7 +177,7 @@ int main(int argc, const char** argv) {
 #if DEBUG>=2
 	printf("compiled with debug level=%d\n", DEBUG);
 #endif
-	ASSERT(!strcmp(str(OPEN_PAREN),"(") && !strcmp(str(ASSIGN),"=")  && !strcmp(str(UNDERSCORE),"_")&& "string table alignment?")
+	ASSERT(!strcmp(str(OPEN_PAREN),"(") && !strcmp(str(ASSIGN),"=")&& !strcmp(str(UNDERSCORE),"_")  && !strcmp(str(OPEN_TYPARAM),"<[")&& "string table alignment?")
 	dbg_strings("paren=%s %s\nprecedences: ->%d *%d +%d &%d \n", str(OPEN_PAREN),str(CLOSE_PAREN),precedence(ARROW),precedence(MUL),precedence(ADD),precedence(AND));
 	//	compile_source_file("~/hack/test_hack/prog.rs",0xf);
 	int options=0,given_opts=0;

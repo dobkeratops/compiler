@@ -126,8 +126,10 @@ int g_raw_types[]={
 const char* g_token_str[]={
 	"",
 	"int","uint","size_t","i8","i16","i32","i64","u8","u16","u32","u64","u128","bool",
-	"half","float","double","float4","char","str","void","voidptr","one","zero","auto",
-	"pTr","ref","Self","tuple","__NUMBER__","__TYPE__","__IDNAME__",
+	"half","float","double","float4",
+	"char","str","void","voidptr","one","zero","nullptr","true","false",
+	"auto","pTr","ref","Self",
+	"tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
 	"print___","fn","struct","class","trait","virtual","static","extern", "enum","array","vector","union","variant","with","match","where","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
 	"let","var",
@@ -147,10 +149,10 @@ const char* g_token_str[]={
 	"&&","||",		//logical
 	"=",":=","=:","@",
 	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
-	".=",	// linklist follow
+	".=",	// linklist follow ptr.=next
 	"++","--","++","--", //inc/dec
 	"-","*","&","!","~", // unary ops
-	"*?","*!","&?","~[]","[]","&[]", // special pointers
+	"*?","*!","&?","~[]","[]","&[]", // special pointers?
 	",",";",";;",
 	"...","..",
 	"_","",
@@ -161,8 +163,10 @@ const char* g_token_str[]={
 int g_tok_info[]={
 	0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,// int types
-	0,0,0,0,0,0,0,0,0,0,0,0,	// float types
-	0,0,0,0,0,0,			// type modifiers
+	0,0,0,0,  //floats
+	0,0,0,0,0,0,0,0,0,
+	0,0,0,0,
+	0,0,0,0,			// type modifiers
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
 	0,0,			// let,var
 	0,0,0,			// modifiers const,mut,volatile
@@ -869,16 +873,42 @@ void Node::set_type(const Type* t)
 	this->m_type=(Type*)t;
 };
 
-bool is_coercible_ptr(const Type* a,const Type* other,bool coerce){
-	// void pointers auto-coerce like they should, thats what they're there for, legacy C
-	if (a->is_pointer_not_ref() && other->is_pointer_not_ref() && coerce){
-		if (a->is_void_ptr() || other->is_void_ptr())
+bool type_is_coercible(const Type* from,const Type* to,bool coerce){
+	// void pointers auto-coerce like they should,
+	// thats what they're there for, legacy C
+	// modern code just doesn't use void*
+	
+	if (from->is_pointer_not_ref() && to->is_pointer_not_ref() && coerce){
+		if (from->is_void_ptr() || to->is_void_ptr())
 			return true;
 	}
-	auto s1=a->struct_def_noderef();
-	auto s2= other->struct_def_noderef();
+	// coercible struct-pointers with inheritance
+	auto s1=from->struct_def_noderef();
+	auto s2= to->struct_def_noderef();
 	if (s1&&s2 && coerce){
 		if (!s1->has_base_class(s2))
+			return true;
+	}
+
+	// TODO: 'intersection type' component coercion ?
+	// int coercions
+	// float
+
+	if ((from->is_pointer_not_ref() || from->is_int()) && to->is_bool())
+		return true;
+	if (to->size() >= from->size()) {
+		if (from->is_float() && to->is_float()){
+			return true;
+		}
+		if (from->is_int() && to->is_int()){
+			if (from->is_signed() && to->is_signed())
+				return true;
+			if (!(from->is_signed() || to->is_signed()))
+				return true;
+		}
+	}
+	if (to->size() > from->size()) {
+		if (from->is_int() && to->is_int())
 			return true;
 	}
 	return false;
@@ -887,7 +917,7 @@ bool Type::is_equal(const Type* other,bool coerce) const{
 	/// TODO factor out common logic, is_coercible(),eq(),eq(,xlat)
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
-	if (this &&this->name==AUTO){
+	if (this&&this->name==AUTO){
 		if (this->sub && other) return this->sub->is_equal(other->sub,coerce);
 		else return true;
 	}
@@ -897,7 +927,7 @@ bool Type::is_equal(const Type* other,bool coerce) const{
 	}
 	if (!(this && other)) return false;
 	
-	if (is_coercible_ptr(this,other,coerce))
+	if (type_is_coercible(this,other,coerce))
 		return true;
 	else
 		if (this->name!=other->name)return false;
@@ -944,7 +974,7 @@ bool Type::is_equal(const Type* other,const TypeParamXlat& xlat) const{
 	if (other->name==STR && type_compare(this,PTR,CHAR)) return true;
 	if (this->name==STR && type_compare(other,PTR,CHAR)) return true;
 	
-	if (is_coercible_ptr(this,other,true))
+	if (type_is_coercible(this,other,true))
 		return true;
 
 	auto p=this->sub,o=other->sub;
@@ -1118,9 +1148,12 @@ Type::Type(Name outer_name,ExprStructDef* sd)
 void ExprLiteral::dump(int depth) const{
 	if (!this) return;
 	newline(depth);
+	if (type_id==T_VOIDPTR){dbprintf("%p:*void",u.val_ptr);}
+	if (type_id==T_BOOL){dbprintf(u.val_bool?"true":"false");}
 	if (type_id==T_VOID){dbprintf("void");}
 	if (type_id==T_INT){dbprintf("%d",u.val_int);}
 	if (type_id==T_FLOAT){dbprintf("%.7f",u.val_float);}
+	if (type_id==T_KEYWORD){dbprintf("%s",str(u.val_keyword));}
 	if (type_id==T_CONST_STRING){
 		dbprintf("\"%s\"",u.val_str);
 	}
@@ -1341,7 +1374,7 @@ ExprFnDef::clone() const{
 	r->c_linkage=false; //generic instance is not extern C.
 	r->body=(ExprBlock*)(this->body?this->body->clone():nullptr);
 	r->m_receiver=m_receiver;
-	r->num_receivers=num_receivers;
+	r->num_prefix_args=num_prefix_args;
 	r->ret_type=(Type*)ret_type->clone_if();
 	r->args.resize(this->args.size());
 	for (int i=0; i<this->args.size(); i++) {
@@ -1518,14 +1551,14 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 	}
 
 	if (this->fn_type){
-		if (this->ret_type && this->ret_type->name!=AUTO && this->fn_type->fn_return() && this->fn_type->name==AUTO){
+		if (!this->ret_type->is_auto() && this->fn_type->fn_return()->is_auto()){
 			dbprintf("fn ret type updated\n");
 			this->fn_type->sub=0;
 		}
 		auto a=this->fn_type->fn_args_first();
 		for (int i=0; i<this->args.size(); i++,a=a->next){
 			auto ad=this->args[i];
-			if (a->name==AUTO && ad->type() && ad->type()->name!=AUTO){
+			if (a->name==AUTO && !ad->type()->is_auto()){
 				dbprintf("fn type updated\n");
 				this->fn_type->sub=0;
 				//memleak! but we're going to keep these owned permanently-type-pools
@@ -3469,9 +3502,9 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 
 	if (!this->is_generic()){
 		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
-		for (auto m:fields){m->resolve(sc,nullptr,flags);}
-		for (auto m:static_fields){m->resolve(sc,nullptr,flags);}
-		for (auto m:static_virtual){m->resolve(sc,nullptr,flags);}
+		for (auto m:fields)			{m->resolve(sc,nullptr,flags);}
+		for (auto m:static_fields)	{m->resolve(sc,nullptr,flags);}
+		for (auto m:static_virtual)	{m->resolve(sc,nullptr,flags);}
 		for (auto s:structs){
 			s->resolve(sc,nullptr,flags);
 		}
@@ -3507,15 +3540,6 @@ Node* ExprFor::clone()const{
 	n->body=(Expr*)cond->clone_if();
 	n->else_block=(Expr*)cond->clone_if();
 	return n;
-}
-ExprOp* parse_flow(TokenStream& src,Name flow_statement){
-	// break is an operator. label,return.
-	Expr* expr=nullptr;
-	if (!(src.peek_tok()==CLOSE_BRACE || src.peek_tok()==SEMICOLON)){
-		dbprintf("%s\n",str(src.peek_tok()));
-		expr=parse_expr(src);
-	}
-	return new ExprOp(flow_statement, src.pos,nullptr,expr);
 }
 Node* ExprIf::clone()const {
 	auto p=new ExprIf(this->pos);

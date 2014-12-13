@@ -28,5 +28,5 @@ test_llvm: hack
 
 #foo.c for investigating LLVM format
 foo: foo.cpp
-	clang++ foo.cpp -S -emit-llvm -g3
+	clang++ foo.cpp -S -emit-llvm -std=c++1y -g3
 	clang++ foo.ll -o foo
