@@ -29,3 +29,15 @@ void error(const Node* n);	// dumbest error possible -just the source location
 void error_begin(const SrcPos& p,const char* str, ... );
 void error(const SrcPos& p,const char* str, ... );
 
+template<typename T>
+T* expect_cast(Node* n){
+	auto r=dynamic_cast<T*>(n);
+	if (!r) {
+		T t;
+		error(n, "expected %s to be %s not %s", str(n->name),t.kind_str(), n->kind_str());
+		n->dump(-1);
+	}
+	return r;
+}
+
+

@@ -113,6 +113,7 @@ struct TypeParamXlat;
 struct VarDecl;
 struct NamedItems;
 struct ExprMatch;
+struct CaptureVars;
 
 class CodeGen;
 class CgValue;
@@ -319,6 +320,11 @@ struct LLVMOp {
 	const char* op_signed;
 	const char* op_unsigned;
 };
+struct LLVMType {
+	Name name;
+	bool is_pointer;
+};
+
 
 const LLVMOp* get_op_llvm(Name opname,Name tyname); // for tokens with 1:1 llvm mapping
 const char* get_llvm_type_str(Name tname);
@@ -347,6 +353,7 @@ void indent(int depth);
 inline const char* str(const Name& n){return getString(n);}
 inline const char* str(int i){return i?g_Names.index_to_name[i].c_str():"";}
 int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite);
+void print_tok(Name n);
 
 enum TypeId{
 	// TODO: just equate these to the master token enum. avoid future confusion

@@ -392,5 +392,11 @@ ExprStructDef* Scope::get_receiver() {
 			return f->get_receiver();
 	return nullptr;
 }
+const char* Scope::name() const {
+	if (owner_fn) return str(owner_fn->name);
+	if (!parent){
+		return"<global>";
+	}  else return "<anon>";
+}
 
 

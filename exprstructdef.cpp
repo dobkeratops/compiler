@@ -258,4 +258,10 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 }
 
 
+Node* EnumDef::clone()const {
+	return this->clone_sub(new EnumDef(this->pos,this->name));
+}
+
+
+
 
