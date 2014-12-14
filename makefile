@@ -1,8 +1,8 @@
 run: hack
 	./hack example.rs -tr
 
-SRC = main.cpp ast.cpp compiler.cpp  lexer.cpp parser.cpp codegen.cpp codegen_llvm.cpp run_test.cpp  repl.cpp error.cpp
-HEADER = main.h ast.h compiler.h codegen.h lexer.h parser.h run_test.h  repl.h error.h
+SRC = main.cpp ast.cpp semantics.cpp compile.cpp  lexer.cpp parser.cpp codegen.cpp  run_test.cpp  repl.cpp error.cpp
+HEADER = main.h ast.h semantics.h compile.h codegen.h lexer.h parser.h run_test.h  repl.h error.h
 hack: $(SRC) $(HEADER) foo
 	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG
 

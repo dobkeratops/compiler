@@ -2127,7 +2127,10 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 		if (flags & 1){
 		no_match_error:
 			auto best=ff.candidates.back();
-			error_begin(callsite,(name!=PLACEHOLDER)?"unmatched call %s":"possible calls for %s",str(name));
+			error_begin(callsite,"call: %s(",str(name));
+			for (auto i=0; i<args.size(); i++){	if (i)dbprintf(",");dbprintf("",i); args[i]->type()->dump(-1); }
+			dbprintf(")");
+
 			// For the best match, say what you'd have to do to fix, then show all matches
 			if (args.size()<best.f->min_args()){info(best.f,"maybe requires %d args, %d given",best.f->min_args(),args.size());}
 			vector<Type*> callsite_tys;
@@ -2136,22 +2139,20 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
 
 				if (!args[i]->type()->is_equal(best.f->args[i]->type(),tpxlat)){
-					info(best.f->args[i],"maybe arg %d should be ",i); best.f->args[i]->type()->dump_if(-1);
-					info(args[i],"was given "); args[i]->type()->dump_if(-1);newline(0);
-					tpxlat.dump(0);
-					info(args[i],"\n");
+					info(best.f->args[i],"want[%d]: ",i); best.f->args[i]->type()->dump_if(-1);
+					dbprintf("; given:"); args[i]->type()->dump_if(-1);newline(0);
+//					tpxlat.dump(0);
 					break;
 				}
 			}       
-			info(callsite,"%s(",str(name));
-			for (auto i=0; i<args.size(); i++){	if (i)dbprintf(",");dbprintf("",i); args[i]->type()->dump(-1); }
-			dbprintf(")");
-			if (candidates.size()>1)info(callsite,"see candidates:-");
-			for (auto i=(int)ff.candidates.size()-1; i>=0; i--) {
+//			if (candidates.size()>1)info(callsite,"other candidates:-");
+			int imax=(int)ff.candidates.size()-2;
+			int imin=imax-5; if (imin<0)imin=0;
+			for (auto i=imin; i<=imax; i++) {
 				auto &c=ff.candidates[i];
-				info(c.f," ");c.f->dump_signature();
-				
+				info(c.f,"or: ",i);c.f->dump_signature();				
 			}
+
 			error_end(callsite);
 			return nullptr;
 		}
@@ -2754,11 +2755,16 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 			}
 		} else if (auto fnc=this->get_fn_call()){ // static call
 			int ofs=(receiver)?1:0;
-			if (receiver)
+			if (receiver) {
+#if DEBUG>=2
+				dbprintf("receiver+ %d args; call %s with %d args\n",argls.size(), fnc->name_str(), fnc->args.size());
+#endif
 				receiver->resolve(sc,fnc->args[0]->type(),flags);
-			for (auto srci=0; srci<argls.size(); srci++)  {
-				int i=srci+ofs;
-				auto fnarg=i<fnc->args.size()?fnc->args[i]:nullptr;
+			}
+			for (auto i=0; i<(argls.size()); i++)  {
+				//int i=srci+ofs;
+				auto ii=i+ofs;
+				auto fnarg=ii<fnc->args.size()?fnc->args[ii]:nullptr;
 				argls[i]->resolve(sc,fnarg?fnarg->type():nullptr ,flags);
 			}
 			return propogate_type_fwd(flags,this, desired,this->get_fn_call()->ret_type);

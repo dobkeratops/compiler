@@ -30,10 +30,12 @@ CompilerTest g_Tests[]={
 		/*10*/ "	x:=Foo{5}; px:=&x;				\n"
 		/*11*/ "	printf(\"member function test..\n\",x.q);			\n"
 		/*12*/	"	px.func1();											\n"
+		/*12*/	"	px.func1(5);											\n"
 		/*13*/	"	px.method();										\n"
 		/*14*/	"	0													\n"
 		/*15*/  "}														\n"
 		/*8*/ "fn func1(f:*Foo){printf(\"func1 says q=%d\\n\",f.q);}	\n"
+		/*8*/ "fn func1(f:*Foo,x:int){printf(\"func1 says q=%d x=%d\\n\",f.q,x);}	\n"
 		,
 		nullptr
 	},

@@ -187,6 +187,11 @@ fn main(argc:int,argv:**char)->int{
 	let fv3=new Foo{31,32,33}; // struct initializer, sequential
 	something_foo(fv3);
 
+	// Test UFCS+overloading
+	foo_bar(fv3,0.4);
+	fv3.foo_bar(fv3,77);
+	fv3.foo_bar(fv3,fv3);
+
 	 // test arrays and ptrs work
 	let my_array:array<int,512>;   // like C++ array<int,512>
 	let q=my_array[1];
@@ -243,8 +248,19 @@ struct Bar : IBaz {
 	}
 }
 
-
-
+fn foo_bar(i:int){
+}
+fn foo_bar(p:*void){
+}
+fn foo_bar(p:*Foo,f:float){
+	printf("2arg foo_bar %p %f\n",p,f);
+}
+fn foo_bar(p:*Foo,q:*Foo,i:int){
+	printf("3arg foo_bar %p %d\n",p,i);
+}
+fn foo_bar(p:*Foo,q:*Foo,w:*Foo){
+	printf("3ptr foo_bar %p %p\n",p,w);
+}
 
 
 

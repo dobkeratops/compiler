@@ -1,15 +1,8 @@
-#include "codegen.h"
-#include "error.h"
+#include "compile.h"
 
 /// compile methods from various types.
 
 // TODO: properly abstract llvm instruction generation to move to llvm api.
-inline void dbg_mangle(const char*,...){}
-#if DEBUG>=2
-#define dbg_vcall dbprintf
-#else
-inline void dbg_vcall(const char*,...){}
-#endif
 using std::function;
 
 
