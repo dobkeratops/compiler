@@ -55,7 +55,7 @@ void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef
 		vtable_layout->compile(cg,sc);
 		vtable_layout->is_compiled=true;
 	}
-	
+	dbg_vtable("compiling vtable for %s\n",sd->name_str());
 	cg.emit_global_begin(sd->vtable_name);
 	cg.emit_typename(str(vtable_layout->mangled_name));
 	cg.emit_struct_begin(16);
@@ -239,7 +239,9 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			// lookup types to see if we have a vcall.
 			ASSERT(recvp.type->is_pointer() && "haven't got auto-ref yet for receiver in a.foo(b) style call\n");
 			//receiver->dump(-1); newline(0);
-			auto vtf=recvp.type->get_struct_autoderef()->try_find_field(__VTABLE_PTR);
+			auto vtable_name=__VTABLE_PTR;
+			auto structdef=recvp.type->get_struct_autoderef();
+			auto vtf=structdef->try_find_field(vtable_name);
 			if (vtf) {
 				vts=vtf->type()->get_struct_autoderef();
 			}
@@ -254,6 +256,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		if (vtable_fn) {
 			// we have a vcall, so now emit it..
 			// load the vtable
+			dbg_vcall("emit vcall %p %s.%s\n",vts, str(vts->name),str(vtable_fn->name_str()));
 			auto vtbl=cg.emit_getelementref(recvp,__VTABLE_PTR);
 			auto function_ptr=cg.emit_getelementval(vtbl,fn_name);
 			coerce_args(function_ptr.type);

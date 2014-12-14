@@ -17,6 +17,35 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	{
+		"internal vtable",__FILE__,__LINE__,
+		"fn\"C\" printf(s:str,...)->int;				\n"
+		"struct Foo {									\n"
+		"	x:int,y:int,								\n"
+		"	virtual v_foo(){printf(\"Foo.foo x=%d %p\\n\",x,*(this as**void));},		\n"
+		"	virtual bar(){printf(\"Foo.bar\\n\");},		\n"
+		"	virtual baz(){printf(\"Foo.baz\\n\");},		\n"
+		"}\n"
+		"struct Bar : Foo{									\n"
+		"	x:int,y:int,								\n"
+		"	fn v_foo(){printf(\"Bar.foo x=%d\\n\",x);},		\n"
+		"	fn bar(){printf(\"Bar.bar\\n\");},		\n"
+		"	fn baz(){printf(\"Bar.baz\\n\");},		\n"
+		"}\n"
+		"fn main(argc:int, argv:**char)->int{	\n"
+		"	x1:= new Foo{x=10,y=0};				\n"
+		"	x2:= new Bar{x=20,y=0};				\n"
+		"	take_interface(x2 as*Foo);					\n"
+		"	x1.v_foo();							\n"
+		"	take_interface(x1);					\n"
+		"	0									\n"
+		"}\n"
+		"fn take_interface(pf:*Foo){\n"
+		"   pf.v_foo()\n"
+		"}\n"
+		,nullptr
+	},
+
+	{
 		"member function+ufcs",__FILE__,__LINE__,
 		// SOURCECODE
 		/*1*/  "fn\"C\" printf(s:str,...)->int;  			\n"
@@ -119,34 +148,6 @@ CompilerTest g_Tests[]={
 		"fn lerp(a,b,f)->float{(b-a)*f+a};		\n"
 		"fn main(argc:int,argv:**char)->int{	\n"
 		"  0}"
-	},
-	{
-		"internal vtable",__FILE__,__LINE__,
-		"fn\"C\" printf(s:str,...)->int;				\n"
-		"struct Foo {									\n"
-		"	x:int,y:int,								\n"
-		"	virtual v_foo(){printf(\"Foo.foo x=%d\\n\",x);},		\n"
-		"	virtual bar(){printf(\"Foo.bar\\n\");},		\n"
-		"	virtual baz(){printf(\"Foo.baz\\n\");},		\n"
-		"}\n"
-		"struct Bar : Foo{									\n"
-		"	x:int,y:int,								\n"
-		"	fn v_foo(){printf(\"Bar.foo x=%d\\n\",x);},		\n"
-		"	fn bar(){printf(\"Bar.bar\\n\");},		\n"
-		"	fn baz(){printf(\"Bar.baz\\n\");},		\n"
-		"}\n"
-		"fn main(argc:int, argv:**char)->int{	\n"
-		"	x1:= new Foo{x=10,y=0};				\n"
-		"	x2:= new Bar{x=20,y=0};				\n"
-		"	x1.v_foo();							\n"
-		"	take_interface(x1);					\n"
-		"	take_interface(x2);					\n"
-		"	0									\n"
-		"}\n"
-		"fn take_interface(pf:*Foo){\n"
-		"   pf.v_foo()\n"
-		"}\n"
-		,nullptr
 	},
 	{
 		"let array",__FILE__,__LINE__,

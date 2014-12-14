@@ -97,7 +97,7 @@ void Lexer::skip_whitespace(){
 		pos.col=tok_end-line_start;
 		tok_end++;
 	}
-	// significant whitespace mode:-
+	// significant whitespace mode:- TODO, needs to do the check at the first nonbrace char
 	if (newline){
 		curr_indent=il;
 		if (m_indent[depth].is_unset())
@@ -107,6 +107,7 @@ void Lexer::skip_whitespace(){
 					  curr_indent.spaces,curr_indent.tabs, m_indent[depth].spaces,m_indent[depth].tabs);
 		}
 	}
+	//dbprintf("depth=%d,tab=%d\n",depth,m_indent[depth].tabs);
 	
 }
 

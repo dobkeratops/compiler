@@ -199,7 +199,7 @@ void parse_fn_body(ExprFnDef* fndef, TokenStream& src){
 	}
 }
 
-ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner) {
+ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,bool is_virtual) {
 	auto *fndef=new ExprFnDef(src.pos);
 	// read function name or blank
 
@@ -710,7 +710,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 			if (sd->inherits_type){
 				error(sd,"limited vtables - currently this can only describe the vtable layout in the base class.\nTODO - this is just a temporary simplification,  other priorities eg rust-style traits, ADTs, static-virtuals, reflection..\n");
 			}
-			sd->virtual_functions.push_back(parse_fn(src,sd));
+			sd->virtual_functions.push_back(parse_fn(src,sd,true));
 		} else if (auto cmd=src.eat_if(STATIC)){
 			auto arg=parse_arg(src,CLOSE_PAREN);
 			if (src.eat_if(VIRTUAL)){

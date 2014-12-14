@@ -87,7 +87,7 @@ struct Type : Expr{
 	ExprStructDef*	struct_def_noderef()const;
 	ExprStructDef*	get_struct_autoderef() const; // with autoderef
 	bool			is_coercible(const Type* other) const{return is_equal(other,true);};
-	bool			is_equal(const Type* other,bool coerce=false) const;
+	bool			is_equal(const Type* other,bool coerce=false,Name self_t=0) const;
 	bool			is_equal(const Type* other, const TypeParamXlat& xlat )const;
 	// todo 'is_equal' rename to iscompatible, is_equal/coercible call it with flags
 	bool			is_compatible(const Type* other,bool coerce=false) const;

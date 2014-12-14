@@ -39,8 +39,11 @@ ArgDef*	ExprStructDef::find_field(const Node* rhs)const{
 
 	return fi;
 }
-ArgDef* ExprStructDef::try_find_field(const Name name)const{
-	for (auto a:fields){if (a->name==name) return a;}
+ArgDef* ExprStructDef::try_find_field(const Name fname)const{
+	for (auto a:fields){
+		if (a->name==fname)
+			return a;
+	}
 	return nullptr;
 }
 
@@ -169,11 +172,18 @@ void ExprStructDef::roll_vtable() {
 
 		for (auto f:this->virtual_functions) {
 			// todo: static-virtual fields go here!
+			auto fnt=(Type*)(f->fn_type->clone());
+			if (fnt->sub->sub->sub->name==this->name){
+				fnt->sub->sub->sub->name=SELF_T;
+			}
+			if (fnt->sub->next->next->name==this->name){
+				fnt->sub->next->next->name=SELF_T;
+			}
 			this->vtable->fields.push_back(
 					new ArgDef(
 					this->pos,
 					f->name,
-					f->fn_type,
+					fnt,
 					new ExprIdent(this->pos, f->name)
 				)
 			);

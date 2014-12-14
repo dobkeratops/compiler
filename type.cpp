@@ -27,17 +27,17 @@ bool type_is_coercible(const Type* from,const Type* to,bool coerce){
 			return true;
 	}
 	// coercible struct-pointers with inheritance
-	auto s1=from->struct_def_noderef();
-	auto s2= to->struct_def_noderef();
+	auto s1=from->get_struct_autoderef();
+	auto s2= to->get_struct_autoderef();
 	if (s1&&s2 && coerce){
-		if (!s1->has_base_class(s2))
+		if (s1->has_base_class(s2))
 			return true;
 	}
 	
 	// TODO: 'intersection type' component coercion ?
 	// int coercions
 	// float
-	
+
 	if ((from->is_pointer_not_ref() || from->is_int()) && to->is_bool())
 		return true;
 	if (to->size() >= from->size()) {
@@ -132,7 +132,7 @@ ExprStructDef* Type::struct_def_noderef()const { // without autoderef
 	return struct_def();
 };
 
-bool Type::is_equal(const Type* other,bool coerce) const{
+bool Type::is_equal(const Type* other,bool coerce,Name self_t) const{
 	/// TODO factor out common logic, is_coercible(),eq(),eq(,xlat)
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
@@ -148,8 +148,15 @@ bool Type::is_equal(const Type* other,bool coerce) const{
 	
 	if (type_is_coercible(this,other,coerce))
 		return true;
-	else
-		if (this->name!=other->name)return false;
+	else{
+		if (this->name==SELF_T || other->name==SELF_T){
+			dbg_vtable("self found, self=%s\n",str(self_t));
+		}
+		auto n0=this->name==SELF_T?self_t:this->name;
+		auto n1=other->name==SELF_T?self_t:other->name;
+		if (n0!=n1)
+			return false;
+	}
 
 //	if (!this->sub && other->sub)) return true;
 	if (other->name==STR && type_compare(this,PTR,CHAR)) return true;
@@ -158,9 +165,11 @@ bool Type::is_equal(const Type* other,bool coerce) const{
 	auto p=this->sub,o=other->sub;
 		
 	for (; p && o; p=p->next,o=o->next) {
-		if (!p->is_equal(o,coerce)) return false;
+		if (!p->is_equal(o,false,self_t))// coercible only applies to root. eg vec<int>!=vec<bool> but int coerces to bool, ptr[Foo:>Bar] coerces to ptr[Bar]
+			return false;
 	}
-	if (o || p) return false; // didnt reach both..
+	if (o || p)
+		return false; // didnt reach both..
 	return true;
 }
 bool Type::is_equal(const Type* other,const TypeParamXlat& xlat) const{

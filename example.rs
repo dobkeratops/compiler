@@ -207,8 +207,8 @@ fn main(argc:int,argv:**char)->int{
 	let pbaz1= new Qux{x=66};
 	let pbaz2= new Bar{y=77};
 
-	do_something(pbaz1 as*IBaz);//TODO autocoerce to base type
-	do_something(pbaz2 as*IBaz);
+	do_something(pbaz1 as *IBaz);//TODO autocoerce to base type
+	do_something(pbaz2 as *IBaz);
 
 	// Expression syntax stolen from rust.
 	// if..else.. has a return value;more flexible than ternary op
@@ -227,6 +227,7 @@ fn main(argc:int,argv:**char)->int{
 }
 
 fn do_something(p:*IBaz){
+	printf("do something %p\n",p);
 	p.foo();
 }
 

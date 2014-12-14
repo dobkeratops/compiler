@@ -366,11 +366,19 @@ void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 
 const ExprFnDef* ExprStructDef::find_function_for_vtable(Name n, const Type* sig){
 	for (auto f:this->functions){
-		if (f->name==n && f->fn_type->is_coercible(sig)) /// TODO only 'this' other params should be specific should coerce
+		if (f->name!=n) continue;
+		dbg_vtable("try vtable fn %s.%s\n",str(name),str(f->name));
+#if DEBUG>=2
+		f->fn_type->dump(-1);
+		dbg_vtable("\n vs ");
+		sig->dump(-1);
+		dbg_vtable("\n");
+#endif
+		if (f->fn_type->is_equal(sig,false,this->name)) /// TODO only 'this' other params should be specific should coerce
 			return f;
 	}
 	for (auto f:this->virtual_functions){
-		if (f->name==n && f->fn_type->is_coercible(sig))
+		if (f->name==n && f->fn_type->is_equal(sig,false,this->name))
 			return f;
 	}
 	for (auto f:this->static_functions){

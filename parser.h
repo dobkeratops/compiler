@@ -12,7 +12,7 @@ extern Node* g_pRoot;	// temporary hack
 ExprBlock*	parse_block(TokenStream& src,int close,int delim, Expr* op);
 Expr*		parse_expr(TokenStream&src);
 Type*		parse_type(TokenStream& src, int close,Node* owner);
-ExprFnDef*	parse_fn(TokenStream&src,ExprStructDef* owner);	// eg fn foo()
+ExprFnDef*	parse_fn(TokenStream&src,ExprStructDef* owner,bool is_virtual=false);	// eg fn foo()
 ExprFnDef*	parse_closure(TokenStream&src,int close);//eg |x|{expr..} (x)->{}
 ExprFor*	parse_for(TokenStream&src);
 ExprIf*		parse_if(TokenStream&src);
