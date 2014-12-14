@@ -1,5 +1,6 @@
 #pragma once
 #include "everywhere.h"
+
 // type inference
 ResolvedType propogate_type(int flags,const Node*n, Type*& a,Type*& b);
 ResolvedType propogate_type(int flags, Expr *n, Type*& a,Type*& b);
@@ -235,16 +236,6 @@ struct MatchArm : ExprScopeBlock {
 	CgValue		compile_bind(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
 	ResolvedType	resolve(Scope* sc, Type* desired, int flags);
 };
-
-enum TypeId{
-	// TODO: just equate these to the master token enum. avoid future confusion
-	T_NONE,
-	T_BOOL,T_INT,T_UINT,T_FLOAT,T_CONST_STRING,T_VOID,T_AUTO,T_ONE,T_ZERO,T_VOIDPTR,T_NULLPTR,
-	T_WRONG_PRINT,T_FN,T_STRUCT,T_TUPLE,T_VARIANT,T_KEYWORD,T_NUM_TYPES,
-};
-bool is_type(int tok);
-extern bool g_lisp_mode;
-// module base: struct(holds fns,structs), function(local fns), raw module.
 
 struct ExprFlow:Expr{	// control flow statements
 };

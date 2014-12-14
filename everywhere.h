@@ -340,6 +340,17 @@ inline const char* str(const Name& n){return getString(n);}
 inline const char* str(int i){return i?g_Names.index_to_name[i].c_str():"";}
 int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const ExprBlock* callsite);
 
+enum TypeId{
+	// TODO: just equate these to the master token enum. avoid future confusion
+	T_NONE,
+	T_BOOL,T_INT,T_UINT,T_FLOAT,T_CONST_STRING,T_VOID,T_AUTO,T_ONE,T_ZERO,T_VOIDPTR,T_NULLPTR,
+	T_WRONG_PRINT,T_FN,T_STRUCT,T_TUPLE,T_VARIANT,T_KEYWORD,T_NUM_TYPES,
+};
+bool is_type(int tok);
+extern bool g_lisp_mode;
+// module base: struct(holds fns,structs), function(local fns), raw module.
+
+
 struct ResolvedType{
 	// TODO: This is a misfeature;
 	// return value from Resolve should just be status

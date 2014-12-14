@@ -1,5 +1,12 @@
 #pragma once
 #include "ast.h"
+#include "semantics.h"
+#include "codegen.h"
+#include "repl.h"
+#include "lexer.h"
+#include "parser.h"
+#include "run_test.h"
+#include "error.h"
 
 
 

@@ -1,5 +1,13 @@
 #pragma once
+#include "semantics.h"
+#include "codegen.h"
+#include "repl.h"
+#include "lexer.h"
+#include "parser.h"
+#include "run_test.h"
+#include "error.h"
 #include "type.h"
+
 struct NamedItems;
 // todo.. generic instantiation: typeparam logic, and adhoc mo
 struct  ExprFnDef : ExprDef {
