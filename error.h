@@ -20,6 +20,7 @@ void error(const Node* n, const char* str, ...);
 void error_newline();
 void info(const Node* n, const char* str="", ... );
 void warning(const Node* n, const char* str="", ... );
+void warning(const SrcPos& p, const char* str, ...);
 void error(const Node* n,const Scope* s, const char* str, ... );
 void error(const Node* n,const char* str, ... );
 void error(const char* str, ... );

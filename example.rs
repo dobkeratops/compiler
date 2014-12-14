@@ -32,7 +32,7 @@ fn invlerp(x0,x1,x)=(x-a)/(x1-x0);
 //  raw C like functions are currently written fn(int)->void 
 
 fn take_closure(funcp:|int|){
-    funcp(10);
+	funcp(10);
 }
 
 // more expression sugar ..sort salient info on one line

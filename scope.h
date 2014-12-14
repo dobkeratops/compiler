@@ -77,7 +77,7 @@ public:
 	NamedItems* find_named_items_local(Name name);
 	NamedItems* get_named_items_local(Name name);
 	NamedItems* find_named_items_rec(Name name);
-	ExprFor*		current_loop();
+	Expr*		current_loop();
 private:
 	void push_child(Scope* sub) { sub->owner_fn=this->owner_fn; sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 public:

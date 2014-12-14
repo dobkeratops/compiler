@@ -97,6 +97,7 @@ void warning(const Node* n, const char* str, ... ){
 	error_sub(n,E_WARNING,buffer);
 	error_maybe_end(n);
 }
+
 void info(const Node* n, const char* str, ... ){
 	char buffer[1024];
 	va_list arglist;
@@ -177,6 +178,17 @@ void error_srcpos(const SrcPos& p, const char* str, ...) {
 	error_srcpos(p);
 	error_print_line(str);
 	error_maybe_end(nullptr);
+}
+void warning(const SrcPos& p, const char* str, ...) {
+	char buffer[1024];
+	va_list arglist;
+	va_start( arglist, str );
+	vsprintf(buffer, str, arglist );
+	va_end( arglist );
+	error_newline();
+	error_srcpos(p);
+	error_print_line(buffer);
+
 }
 
 void error_begin(const SrcPos& p, const char* str, ...) {

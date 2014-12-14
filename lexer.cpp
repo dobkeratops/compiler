@@ -78,6 +78,7 @@ bool Lexer::is_comment(const char* c){
 }
 void Lexer::skip_whitespace(){
 	bool newline=false;
+	IndentLevel il;
 	while ((isWhitespace(*tok_end) || is_comment(tok_end))&&*tok_end) {
 		if (is_comment(tok_end)){
 			// skip comment
@@ -87,10 +88,26 @@ void Lexer::skip_whitespace(){
 			}
 		}
 		if (*tok_end=='\n') {pos.line++;line_start=tok_end; typaram_depth=0;indent=0;newline=true;}
-		if (newline)indent++;
+		if (newline){
+			if (tok_end[0]=='\t')
+				il.tabs++;
+			else if (tok_end[0]==' ')
+				il.spaces++;
+		}
 		pos.col=tok_end-line_start;
 		tok_end++;
 	}
+	// significant whitespace mode:-
+	if (newline){
+		curr_indent=il;
+		if (m_indent[depth].is_unset())
+			m_indent[depth]=curr_indent;
+		if (curr_indent.confused(m_indent[depth])){
+			::warning(pos, "indent spaces/tabs mixed change %d/%d -> %d/%d\n",
+					  curr_indent.spaces,curr_indent.tabs, m_indent[depth].spaces,m_indent[depth].tabs);
+		}
+	}
+	
 }
 
 void Lexer::typeparam_hack(){
@@ -187,20 +204,23 @@ Name Lexer::eat_tok() {
 	auto r=curr_tok;
 	advance_tok();
 	if (r==OPEN_BRACE || r==OPEN_BRACKET || r==OPEN_PAREN) {
-		bracket_pos[depth]=pos;ASSERT(depth<32);bracket[depth++]=(int)r;
+		bracket_open_pos[depth]=pos;ASSERT(depth<32);bracket_close[depth]=close_of((int)r);
+		depth++;
+		m_indent[depth].unset();
 	}
 	if (r==CLOSE_BRACE || r==CLOSE_BRACKET || r==CLOSE_PAREN) {
-		auto open=bracket[--depth];
-		if (depth<0)
+		if (depth<=0){
 			::error(pos, "too many close brackets");
-		auto close=close_of((int)open);
-		if (close!=(int)r ) {
-			::error_begin(pos,"found %s expected %s",str(r),str(close));
-			::error(bracket_pos[depth+1],"from here");
-			::error_end(0);
+		}else{
+			auto close=bracket_close[depth-1];
+			if (close!=(int)r ) {
+				::error_begin(pos,"found %s expected %s",str(r),str(close));
+				::error(bracket_open_pos[depth-1],"from here");
+				::error_end(0);
+			}
 		}
 	}
-	if (depth>0&&bracket[depth-1]==OR && r==OR){
+	if (depth>0&&bracket_close[depth-1]==(int)r){
 		depth--;
 	}
 #ifdef DEBUG2
@@ -208,12 +228,13 @@ Name Lexer::eat_tok() {
 		dbprintf("found debug token\n");
 	}
 #endif
-	
 	return r;
 }
 void Lexer::begin_lambda_bar_arglist() {
 	/// needed to handle OR like bracket for lambda eg |x,y|; allows nesting error eg |x,) '|' expected.
-	bracket[depth++]=OR;ASSERT(depth<32);
+	bracket_close[depth++]=OR;
+	m_indent[depth].unset();
+	ASSERT(depth<32);
 }
 
 Name Lexer::Lexer::eat_if(Name a, Name b, Name c){

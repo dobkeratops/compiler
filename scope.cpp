@@ -366,4 +366,23 @@ void Scope::dump(int depth)const {
 	newline(depth);dbprintf("}");
 }
 
+Expr*	Scope::current_loop(){
+	for (auto sc=this; sc;sc=sc->parent_within_fn()){
+		if (auto n=sc->node->as_for())
+			return (Expr*)n;
+	}
+	return nullptr;
+}
+
+
+ExprStructDef* Scope::find_struct(const Node* node) {
+	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){return sd;} return find_struct_named(node);
+}
+ExprStructDef* Scope::get_receiver() {
+	if (auto o=this->owner_fn)
+		if (auto f=o->as_fn_def())
+			return f->get_receiver();
+	return nullptr;
+}
+
 

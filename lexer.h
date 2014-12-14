@@ -1,5 +1,5 @@
 #pragma once
-#include "semantics.h"
+#include "everywhere.h"
 extern const char* g_filename;
 // STUPID HEADER FILES STUPID CLASSES
 /*
@@ -18,13 +18,34 @@ bool isOperator(char c);
 int	close_of(int open);
 inline int	close_of(Name open){return close_of((int)open);}
 
+struct IndentLevel{
+	int16_t spaces=0,tabs=0;
+	bool is_unset()const{return spaces==0&&tabs==0;}
+	void unset(){spaces=0;tabs=0;}
+	int val(){return spaces+tabs*4;}// rash assumption, TODO..
+	bool operator !=(const IndentLevel&other)const {
+		return spaces!=other.spaces || tabs!=other.tabs;
+	}
+	bool operator >(const IndentLevel&other)const {
+		return spaces>other.spaces || tabs>other.tabs;
+	}
+	bool operator <(const IndentLevel&other)const {
+		return spaces<other.spaces || tabs<other.tabs;
+	}
+	bool confused(const IndentLevel& other)const {
+		return (spaces<other.spaces && tabs>other.tabs) ||
+			(spaces>other.spaces && tabs<other.tabs);
+	}
+};
 struct Lexer {
 	char filename[512];
 	SrcPos	pos;
 	SrcPos	prev_pos;	// needed to correctly locate nodes after eat_tok()
 	enum {MAX_DEPTH=32};
-	SrcPos	bracket_pos[MAX_DEPTH];
-	int		bracket[MAX_DEPTH];
+	IndentLevel m_indent[MAX_DEPTH];
+	IndentLevel	curr_indent;
+	SrcPos	bracket_open_pos[MAX_DEPTH];
+	int		bracket_close[MAX_DEPTH];
 	const char* buffer=0,*tok_start=0,*tok_end=0,*prev_start=0,*line_start=0;
 	Name curr_tok;int typaram_depth=0;
 #ifdef WATCH_TOK
@@ -52,7 +73,9 @@ struct Lexer {
 	Name eat_if(Name a, Name b);
 	Name eat_if_not(Name i);
 	bool eat_if(Name i);
-	bool eat_if_lambda_bar(){if (eat_if(OR)){begin_lambda_bar_arglist();return true;}return false;}
+	bool eat_if_lambda_bar(){//rust syntax- bracket matching must know |...|
+		if (eat_if(OR)){begin_lambda_bar_arglist();return true;}return false;
+	}
 	bool is_placeholder()const;
 	Name eat_if_placeholder();
 	Name eat_ident();

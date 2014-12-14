@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "exprflow.h"
 #include "exprfndef.h"
 #include "exprstructdef.h"
 /// details of compiling LLVM
@@ -8,7 +9,6 @@ bool CgValue::is_valid()const{
 		return false;
 	return val!=0||reg!=0||addr!=0;
 }
-
 
 CgValue::CgValue(Node* n) {
 	// todo - unify with 'expr'

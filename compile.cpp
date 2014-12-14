@@ -150,11 +150,6 @@ void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 		}
 	}
 }
-CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
-	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
-	return cg.emit_if(this, this->cond, this->body, this->else_block);
-}
-
 
 
 	//  initializer
@@ -168,6 +163,12 @@ CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 	// else:
 	// endfor:
 CgValue 	CodeGen::flow_result[32]; // hack till we move stupid header
+
+CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
+	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
+	return cg.emit_if(this, this->cond, this->body, this->else_block);
+}
+
 
 CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 	return cg.emit_for(this, this->init,this->cond, this->incr, this->body, this->else_block);

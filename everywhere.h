@@ -112,6 +112,7 @@ struct Module;
 struct TypeParamXlat;
 struct VarDecl;
 struct NamedItems;
+struct ExprMatch;
 
 class CodeGen;
 class CgValue;
