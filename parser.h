@@ -1,5 +1,6 @@
 #pragma once
 #include "lexer.h"
+#include "exprstructdef.h"
 struct SrcOp{ Name op; SrcPos pos;};
 template<typename T>
 T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}

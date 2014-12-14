@@ -5,12 +5,24 @@
 #include "parser.h"
 #include "run_test.h"
 #include "error.h"
+#include "type.h"
 
 void Type::verify(){
 	verify_type(this);
 	for (auto x=this->sub; x;x=x->next)
 		x->verify();
 }
+
+Type* Type::get_elem(int index){
+	if (this->struct_def())
+		return this->struct_def()->get_elem_type(index);
+	ASSERT(index>=0);
+	auto s=sub;
+	for (;s&&index>0;s=s->next,--index){};
+	ASSERT(index==0);
+	return s;
+}
+
 
 bool type_is_coercible(const Type* from,const Type* to,bool coerce){
 	// void pointers auto-coerce like they should,

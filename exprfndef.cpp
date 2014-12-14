@@ -5,7 +5,7 @@
 #include "parser.h"
 #include "run_test.h"
 #include "error.h"
-
+#include "exprfndef.h"
 
 void ExprFnDef::verify(){
 	verify_expr_fn_def(this);

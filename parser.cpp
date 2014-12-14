@@ -1,6 +1,8 @@
 #include "semantics.h"
 #include "parser.h"
 #include "error.h"
+#include "exprfndef.h"
+#include "exprstructdef.h"
 
 //#define pop(X) ASSERT(X.size()>0); pop_sub(X);
 

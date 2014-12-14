@@ -6,6 +6,7 @@
 #include "parser.h"
 #include "run_test.h"
 #include "error.h"
+#include "exprfndef.h"
 
 
 Scope* Scope::make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner)

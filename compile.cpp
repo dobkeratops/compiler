@@ -1,4 +1,6 @@
 #include "compile.h"
+#include "exprstructdef.h"
+#include "exprfndef.h"
 
 /// compile methods from various types.
 

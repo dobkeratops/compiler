@@ -1,4 +1,6 @@
- #include "codegen.h"
+#include "codegen.h"
+#include "exprfndef.h"
+#include "exprstructdef.h"
 /// details of compiling LLVM
 /// CodeGen is planned to be an interface, slot in 'CodeGenLLVM' / 'CodeGenC'
 

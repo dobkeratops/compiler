@@ -6,6 +6,7 @@
 #include "parser.h"
 #include "run_test.h"
 #include "error.h"
+#include "exprfndef.h"
 
 const char** g_pp,*g_p;
 const char* g_filename=0;
@@ -1093,6 +1094,13 @@ int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const Expr
 	dbg_fnmatch("score matching gets %d\n",score);
 	return score;
 }
+void FindFunction::dump()
+{
+	for (int i=0; i<candidates.size();i++){
+		dbprintf("candidate %d for %s: %d %p score=%d\n",i, str(name),candidates[i].f->pos.line, candidates[i].f->instance_of, candidates[i].score);
+	}
+}
+
 void FindFunction::insert_candidate(ExprFnDef* f,int score){
 	verify_all();
 	if (candidates.size()>=max_candidates){
@@ -2218,6 +2226,12 @@ void ExprFor::dump(int d) const {
 	}
 }
 
+bool	ExprIdent::is_function_name()const	{
+	return dynamic_cast<ExprFnDef*>(this->def)!=0;
+}
+bool		ExprIdent::is_variable_name()const	{
+	return dynamic_cast<Variable*>(this->def)!=0;
+}
 
 
 

@@ -5,7 +5,8 @@
 #include "parser.h"
 #include "run_test.h"
 #include "error.h"
-
+#include "exprfndef.h"
+#include "exprstructdef.h"
 
 bool ExprStructDef::is_generic()const{
 	if (typeparams.size())
