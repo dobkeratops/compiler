@@ -6,6 +6,7 @@
 #include "run_test.h"
 #include "error.h"
 #include "exprfndef.h"
+#include "type.h"
 
 void ExprFnDef::verify(){
 	verify_expr_fn_def(this);
@@ -38,6 +39,11 @@ void ExprFnDef::set_receiver_if_unset(ExprStructDef* r){
 	}
 }
 
+bool	ExprFnDef::has_return_value() const{
+	if (auto r=return_type()){
+		return index(r->name)!=VOID;}
+	else return false;
+}
 
 
 void ExprFnDef::dump(int ind) const {

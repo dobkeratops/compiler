@@ -7,6 +7,18 @@
 #include "run_test.h"
 #include "error.h"
 #include "exprfndef.h"
+#include "type.h"
+
+ExprStructDef* Scope::find_struct_of(const Expr* srcloc)
+{
+	auto t=srcloc->type();
+	auto sname=t->deref_all();
+	if (!sname->is_struct()) error(srcloc,t,"expected struct, got %s",sname->name_str());
+	auto r=try_find_struct(sname);
+	//		if (!r)
+	//			error(srcloc,"cant find struct %s", sname->name_str());
+	return r;
+}//original scope because typarams might use it.
 
 
 Scope* Scope::make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner)

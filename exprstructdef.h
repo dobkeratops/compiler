@@ -1,4 +1,5 @@
 #pragma once
+#include "type.h"
 struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
 	// but its' backwards.

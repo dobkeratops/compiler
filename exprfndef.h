@@ -1,4 +1,6 @@
 #pragma once
+#include "type.h"
+
 // todo.. generic instantiation: typeparam logic, and adhoc mo
 struct  ExprFnDef : ExprDef {
 	ExprFnDef*	next_of_module=0; // todo: obsolete this.
@@ -63,11 +65,7 @@ struct  ExprFnDef : ExprDef {
 		auto x=get_return_value(); if (auto xt=x->get_type()) return xt;
 		return this->ret_type;
 	}
-	bool	has_return_value() const{
-		if (auto r=return_type()){
-			return index(r->name)!=VOID;}
-		else return false;
-	}
+	bool	has_return_value() const;
 	Node*	clone() const;
 	bool	is_undefined()const	{return body==nullptr || body->is_undefined();};
 	bool	is_extern()const	{return body==nullptr;}

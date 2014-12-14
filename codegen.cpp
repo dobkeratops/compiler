@@ -3,6 +3,8 @@
 #include "exprstructdef.h"
 /// details of compiling LLVM
 /// CodeGen is planned to be an interface, slot in 'CodeGenLLVM' / 'CodeGenC'
+bool CgValue::is_valid()const
+{if (val) if (val->type()->name==VOID) return false;return val!=0||reg!=0||addr!=0;}
 
 
 

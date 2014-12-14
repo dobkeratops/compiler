@@ -769,6 +769,12 @@ const char* Scope::name() const {
 // type Mul[float,float]->float
 // type Foo[a]->tuple[a.node,a.foo] // accessors for associated types?
 
+size_t ArgDef::size()const {
+	return this->type()?this->type()->size():0;
+}
+size_t ArgDef::alignment() const	{
+	return type()->alignment();
+}//todo, 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
 ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	dbg_resolve("resolving arg %s\n",this->name_str());
 	propogate_type_fwd(flags,this,desired,this->type_ref());
@@ -777,20 +783,6 @@ ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	}
 	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
 	return ResolvedType(this->type(), ResolvedType::COMPLETE);
-}
-void Type::clear_struct_def(){
-	this->clear_def();
-}
-void Type::set_struct_def(ExprStructDef* sd){
-	this->set_def(sd);
-}
-void Type::push_back(Type* t) {
-	if (!sub) sub=t;
-	else {
-		auto s=sub;
-		for (; s->next!=0; s=s->next){};
-		s->next =t;
-	}
 }
 const char* Node::get_name_str() const{
 	if (!this) return "(no_type)";

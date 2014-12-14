@@ -471,5 +471,21 @@ void Type::translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_repla
 	}
 }
 
+void Type::clear_struct_def(){
+	this->clear_def();
+}
+void Type::set_struct_def(ExprStructDef* sd){
+	this->set_def(sd);
+}
+void Type::push_back(Type* t) {
+	if (!sub) sub=t;
+	else {
+		auto s=sub;
+		for (; s->next!=0; s=s->next){};
+		s->next =t;
+	}
+}
+
+
 
 // todo table of each 'intrinsic type', and pointer to it

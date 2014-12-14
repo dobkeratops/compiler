@@ -1,6 +1,7 @@
 #pragma once
 // TODO : this shouldn't need the whole AST prototypes, just a few key items.
 #include "semantics.h"
+#include "type.h"
 
 // Describes interface to codegen(implemented by codegen_llvm);
 // codegen.cpp contains AST node 'compile' methods
@@ -39,7 +40,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	explicit CgValue(Node* n);
 	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
 	bool is_struct_elem()const{return elem>=0;}
-	bool is_valid()const{if (val) if (val->type()->name==VOID) return false;return val!=0||reg!=0||addr!=0;}
+	bool is_valid()const;
 	bool is_literal()const{return dynamic_cast<ExprLiteral*>(val)!=0;}
 	bool is_reg()const { return reg!=0;}
 	bool is_any()const{return is_literal()||is_reg();}
