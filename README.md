@@ -16,7 +16,7 @@ dont have a name yet hence 'hack'..
 
  * C operators, functions, structs,if-else, 
  * 'everything is an expression' syntax
- * function overloading
+ * function overloading+UFCS
  * Forward+Reverse Type Inference within functions, forward between functions
  * stack-based closures
  * C for loops + break/else expressions
@@ -41,11 +41,14 @@ Very early days, the compiler is a few weeks old.
 
 Basically trying to combine everything I like from C++ & Rust, dropping what I dont like, plus what i've always missed.
 
-This could all probably be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects (retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? both go against the underlying design of either ..)
+This could all be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects - retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? both go against the underlying design of either .
 
-Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code; I beleive C++ can be 'fixed' and improved without straying so far. Also I value productivity & performance over safety.
+Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code;
+I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code. Also I value performance+productivity over compile-time safety.(you need to write tests for other reasons, productivity for *tests* yields bug free code.)
 
-I beleive C++'s main 'curse' is the way headers & classes interact, and the asymetry between functions and methods has always been frustrating. Rust is too restrictive. Somewhere between the two is my perfect language.
+I beleive C++'s main 'curse' is the way headers & classes interact, and the asymetry between functions and methods has always been frustrating. Other flaws are acceptable due to its evolutionary path.
+
+Rust is too restrictive. Somewhere between the two is my perfect language.
 
 This is probably all way beyond a 1man project but I'll see how far I can get..
 
@@ -55,41 +58,45 @@ This is probably all way beyond a 1man project but I'll see how far I can get..
   * should be possible to non-destructively translate a subset back & forth.
   * allow use with established C++ libraries & sourcebases
   * context free grammar
-  * graph like module import: any file in a project can be the root for its own tests
+  * graph like/relative module import: 
+   * any file in a project can be the root for its own tests
+   * dont need to commit to 'crate roots', change library granularity
   * add alternate parser that can directly read subset of C++ headers ?
      (or adapt a rust community tool for C++ -> rust translation..)
   * self host by translating own source, be mindful of c++ subset used to write this
 
  * Additional Features inspired by Rust & other languages:
   * 2 way inference
-  * expression oriented syntax.
+  * expression oriented syntax (including for-else loop).
   * ADTs (possibly implement as sugar for dynamic_cast<>?)
-  * optional trait bounds on templates?
-  * rust-like trait-objects - (vtable*,data*)
+  * optional trait bounds on templates? (bounds replace SFINAE?)
+  * rust-like trait-objects - (vtable*,data*) - replaces multiple-inheritance
   * maybe aim to compile a subset of Rust programs,
-   * this is more like C++ than rust despite appearance;
+   * this is more like C++ than Rust despite appearance;
    * Can we reconcile Rust ideas with C++ semantics?
     * must think about details of fatpointers, 
     * nullpointer enum-optimization
-    * 'box' operator, not quite like 'new'
+    * Rust 'box' operator is very different to 'new'
     * differences between modules & namesspaces 
     * anything else ?
-  * maybe aim to transpile Rust aswell? (given our AST will have C++ and Rust-like elements in one place)
+  * maybe aim to transpile Rust aswell?
+   * AST will have C++ and Rust-like elements in one place
   * scala like sugar for default constructor
   * possibly currying, only freefunctions? or only for 'receiver or args'?
 
  * Additional features..  & inspired by other languages:
   * want "_" placeholder in ident position to query compiler -see haskell 'holes'..
-  * 100% Open World design - free functions+UFCS/Extention methods
+  * 100% Open World design 
+   * free functions+UFCS/Extention methods
    * minimal syntax changes to rearrange code,
    * adhoc gather of free functions into interfaces (like go, but generalized), 
-   * or sort by function into switch dispatch
+   * or sort by function into switch dispatch (for Join eg X|Y|Z types?)
   * possibly multimethods - automate rolling double-dispatch (hence 'any param' as vtable?)
   * some sort of reflection, opt in, and compile time.
   * where vtables are used, more flexibility: 
    * vtable should be upgraded to a 'class-object'
    * 'static-virtual data', 
-   * eg hot-swapping,
+   * eg hot-swapping (use ptr to class-object for state machines)
    * auto roll classfactory& 'message-map'.
    * possibly reflection info in the vtable - walk the fields.
    * possibly generalize vcall mechanism to implement c++ classes, rust trait objects and other systems under one 'roof'
