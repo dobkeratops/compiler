@@ -1,5 +1,5 @@
 
-#include "compiler.h"
+#include "semantics.h"
 #include "codegen.h"
 #include "repl.h"
 #include "lexer.h"

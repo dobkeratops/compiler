@@ -7,7 +7,8 @@ struct CompilerTest {
 	const char* name;
 	const char* file;int line;
 	const char* source;
-	const char* expected_result;
+	const char* expected_output;
+	bool		should_fail;
 };
 
 // every file is an implicitly a function aswell taking no args
@@ -112,7 +113,7 @@ CompilerTest g_Tests[]={
 		"	x:=voidpfr(argv);					\n"
 		"  0}"
 	},
-	{"adhoc template 2",__FILE__,__LINE__,
+	{"adhoc template",__FILE__,__LINE__,
 		"fn lerp(a,b,f)->float{(b-a)*f+a};		\n"
 		"fn main(argc:int,argv:**char)->int{	\n"
 		"  0}"
@@ -171,7 +172,7 @@ CompilerTest g_Tests[]={
 		nullptr
 	},
 	{
-	"member functions",__FILE__,__LINE__,
+	"member functions+UFCS",__FILE__,__LINE__,
 	// SOURCECODE
 /*1*/  "fn\"C\" printf(s:str,...)->int;  			\n"
 /*2*/  "struct Foo{									\n"
@@ -433,15 +434,18 @@ void run_tests(){
 		printf("\nRunning Test[%d]: %s\n\n",index,t->name);
 		char* output=0;
 		auto ret=
-		compile_and_run(t->source,t->name, tmp,B_DEFS|B_TYPES|B_RUN, t->expected_result?&output:nullptr);
-		if (ret!=0) {
-			printf("\n%s test %s failed\n", t->name);
+		compile_and_run(t->source,t->name, tmp,B_DEFS|B_TYPES|B_RUN, t->expected_output?&output:nullptr);
+		if (!t->should_fail && ret!=0) {
+			printf("\n test %s failed\n", t->name);
+			exit(-1);
+		} else if (t->should_fail && ret==0) {
+			printf("\n test %s supposed to yield compiler errors\n", t->name);
 			exit(-1);
 		}
 		if (output){
-			if (strcmp(output, t->expected_result)){
+			if (strcmp(output, t->expected_output)){
 				printf("\n%s:%d: Test[%d]\"%s\" gave incorrect output, expected:-\n",t->file,t->line,index,t->name);
-				dbprintf("[length=%d]\n%s\n",strlen(t->expected_result),t->expected_result);
+				dbprintf("[length=%d]\n%s\n",strlen(t->expected_output),t->expected_output);
 				dbprintf("[length=%d]\n%s\n",strlen(output),output);
 				exit(-1);
 			}

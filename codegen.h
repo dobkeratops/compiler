@@ -1,6 +1,6 @@
 #pragma once
 // TODO : this shouldn't need the whole AST prototypes, just a few key items.
-#include "compiler.h"
+#include "semantics.h"
 
 // Describes interface to codegen(implemented by codegen_llvm);
 // codegen.cpp contains AST node 'compile' methods

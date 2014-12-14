@@ -1,5 +1,5 @@
 #pragma once
-#include "compiler.h"
+#include "semantics.h"
 extern const char* g_filename;
 // STUPID HEADER FILES STUPID CLASSES
 /*

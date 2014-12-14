@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <cstdlib>
-#include "compiler.h"
+#include "sema.h"
 #include "error.h"
 
 bool g_error_on_newline=false;

@@ -1,5 +1,5 @@
 #include "main.h"
-#include "compiler.h"
+#include "semantics.h"
 #include "parser.h"
 #include "codegen.h"
 #include "run_test.h"
