@@ -46,7 +46,7 @@ This could all be done as a fork of a C++ compiler, or as a fork of Rust. Howeve
 Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code;
 I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code. Also I value performance+productivity over compile-time safety.(you need to write tests for other reasons, productivity for *tests* yields bug free code.)
 
-I beleive C++'s main 'curse' is the way headers & classes interact, and the asymetry between functions and methods has always been frustrating. Other flaws are acceptable due to its evolutionary path.
+I beleive C++'s main 'curse' is the way headers & classes interact, and the asymetry between functions and methods has always been frustrating. Other flaws are acceptable due to its evolutionary path and need to represent low level code.
 
 Rust is too restrictive. Somewhere between the two is my perfect language.
 
@@ -89,8 +89,10 @@ This is probably all way beyond a 1man project but I'll see how far I can get..
   * 100% Open World design 
    * free functions+UFCS/Extention methods
    * minimal syntax changes to rearrange code,
-   * adhoc gather of free functions into interfaces (like go, but generalized), 
-   * or sort by function into switch dispatch (for Join eg X|Y|Z types?)
+   * 'Expression Problem' - dont commit syntax upfront to sort by function or type
+    * adhoc gather of free functions into interfaces (like go, but generalized),
+     * 'duck type traits' 
+    * or sort by function into switch dispatch via Join types X|Y|Z types?
   * possibly multimethods - automate rolling double-dispatch (hence 'any param' as vtable?)
   * some sort of reflection, opt in, and compile time.
   * where vtables are used, more flexibility: 

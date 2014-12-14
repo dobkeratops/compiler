@@ -82,6 +82,7 @@ struct Node;
 struct Name;
 struct TypeParam;
 struct TParamDef;
+struct Expr;
 struct ExprType;
 struct ExprOp;
 struct  ExprFnDef;
@@ -105,6 +106,7 @@ struct VarDecl;
 class CodeGen;
 class CgValue;
 
+extern  int g_debug_get_instance;
 
 
 extern void dbprintf(const char*,...);
@@ -135,6 +137,17 @@ int is_left_assoc(Name ntok);
 bool is_number(Name n);
 Name get_infix_operator(Name tok);
 Name get_prefix_operator(Name tok);
+
+void verify_expr_op(const Node* p);
+void verify_expr_block(const Node* p);
+void verify_expr_fn_def(const Node* p);
+void verify_expr_ident(const Node* p);
+void verify_expr_block(const Node* p);
+void verify_type(const Node* p);
+void verify_all_sub();
+void dump_typeparams(const std::vector<TParamDef*>& ts) ;
+bool type_is_coercible(const Type* from,const Type* to,bool coerce);
+bool type_compare(const Type* t,int a0, int a1);
 
 
 int index_of(Name n);
@@ -230,6 +243,7 @@ struct NumDenom{int num; int denom;};
 
 
 Name getStringIndex(const char* str,const char* end=0);
+Name getStringIndexConcat(Name base, const char* s2);
 const char* str(int);
 inline int index(Name);
 #if DEBUG<2
@@ -342,6 +356,16 @@ struct ResolvedType{
 	//operator Type* ()const {return type;}
 	//operator bool()const { return status==COMPLETE && type!=0;}
 };
+// type inference
+ResolvedType propogate_type(int flags,const Node*n, Type*& a,Type*& b);
+ResolvedType propogate_type(int flags, Expr *n, Type*& a,Type*& b);
+ResolvedType propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b);
+ResolvedType propogate_type_fwd(int flags,Expr* e, const Type*& a);
+ResolvedType propogate_type(int flags,Expr* e, Type*& a);
+ResolvedType propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c);
+ResolvedType propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c);
+ResolvedType propogate_type(int flags,const Node* n, ResolvedType& a,Type*& b);
+ResolvedType propogate_type(int flags,const Node* n,ResolvedType& a,Type*& b,const Type* c);
 
 struct Capture;
 // load data->vtb // if this matters it would be inlined
@@ -457,6 +481,9 @@ public:
 };
 
 /// TODO-Anything matchable by the template engine eg Type, Constants, Ident.. (how far do we go unifying templates & macros..)
+
+bool type_params_eq(const vector<Type*>& a, const Type* tp);
+bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b);
 
 struct Type : Expr{
 	vector<TParamDef*> typeparams;
@@ -1154,6 +1181,8 @@ struct  ExprFnDef : ExprDef {
 	CgValue compile(CodeGen& cg, Scope* sc);
 	virtual Scope*	get_scope()				{return this->scope;}
 };
+ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags);
+
 
 struct StructInitializer{ // named initializer
 	ExprBlock*		si; // struct_intializer
