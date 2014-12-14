@@ -20,7 +20,7 @@ class CgValue;
 struct ExprFnDef;
 enum EmitFnMode {EmitDefinition,EmitDeclaration,EmitType};
 struct Type; struct ExprFnDef;
-void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp);
+void commit_capture_vars_to_stack(CodeGen& cg, CaptureVars* cp);
 CgValue	CgValueVoid();
 
 

@@ -14,7 +14,7 @@ CgValue Node::compile_if(CodeGen& cg, Scope* sc){
 }
 
 
-void commit_capture_vars_to_stack(CodeGen& cg, Capture* cp){
+void commit_capture_vars_to_stack(CodeGen& cg, CaptureVars* cp){
 	if (!cp) return;
 	return;
 }
@@ -506,7 +506,7 @@ CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc) {
 CgValue Type::compile(CodeGen& cg, Scope* sc){
 	return CgValue(0,this,0);	// propogate a type into compiler interface
 }
-CgValue Capture::compile(CodeGen& cg, Scope* outer_scope){
+CgValue CaptureVars::compile(CodeGen& cg, Scope* outer_scope){
 	auto cp=this;
 	cg.emit_struct_def_begin(cp->tyname());
 	decltype(cp->vars->capture_index) i=0;

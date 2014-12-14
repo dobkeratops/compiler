@@ -312,9 +312,9 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 	return ResolvedType(fn_type,ResolvedType::COMPLETE);
 }
 
-Capture* ExprFnDef::get_or_create_capture(ExprFnDef* src){
+CaptureVars* ExprFnDef::get_or_create_capture(ExprFnDef* src){
 	if (!this->my_capture) {
-		auto c=new Capture;
+		auto c=new CaptureVars;
 		this->my_capture = c;
 		c->capture_by = this;
 		c->capture_from=src;

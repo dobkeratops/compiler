@@ -111,7 +111,7 @@ CgValue CodeGen::load(const CgValue& v,Type* result_type) {
 		}
 		else if (auto fp=dynamic_cast<ExprFnDef*>(v.val)){
 			if (fp->is_closure()) {
-				// Build a pair. we would also build the Capture Object here.
+				// Build a pair. we would also build the CaptureVars Object here.
 				// TODO: we're blocked from making a nice' emit_make_pair()' wrapper here
 				// because: fp->fn_type is interpretted as {ptr,env}, but we must manually
 				// tell it to build the first & second types.

@@ -367,7 +367,7 @@ ResolvedType propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,
 ResolvedType propogate_type(int flags,const Node* n, ResolvedType& a,Type*& b);
 ResolvedType propogate_type(int flags,const Node* n,ResolvedType& a,Type*& b,const Type* c);
 
-struct Capture;
+struct CaptureVars;
 // load data->vtb // if this matters it would be inlined
 // load vtb->fn
 // when the time comes - vtb->destroy()
@@ -748,16 +748,16 @@ struct TParamDef: ExprDef{
 	const char* kind_str()const{return "TParamDef";}
 };
 
-/// Capture of local variables for a lambda function
+/// CaptureVars of local variables for a lambda function
 /// hidden entity created in resolve. compile to 'C' might roll these manually?
-struct Capture : ExprDef{
+struct CaptureVars : ExprDef{
 	Name			tyname(){return name;};
 	ExprFnDef*		capture_from=0;
 	ExprFnDef*		capture_by=0;
 	Variable*		vars=0;
-	Capture*		next_of_from=0;
+	CaptureVars*		next_of_from=0;
 	ExprStructDef*	the_struct=0;
-	void 			coalesce_with(Capture* other);
+	void 			coalesce_with(CaptureVars* other);
 	ExprStructDef*	get_struct();
 	CgValue			compile(CodeGen& cg, Scope* outer);
 	Node* clone() const override{
@@ -842,7 +842,7 @@ struct NamedItems {		// everything defined under a name
 enum VarKind{VkArg,Local,Global};
 struct Variable : ExprDef{
 	bool		on_stack=true;
-	Capture*	capture_in=0;	// todo: scope or capture could be unified? 'in this , or in capture ...'
+	CaptureVars*	capture_in=0;	// todo: scope or capture could be unified? 'in this , or in capture ...'
 	VarKind		kind;
 	Scope*		owner=0;
 	short capture_index;
@@ -1117,8 +1117,8 @@ struct  ExprFnDef : ExprDef {
 	ExprBlock*	callers=0;			// linklist of callers to here
 	NamedItems*	name_ptr=0;
 	Scope*		scope=0;
-	Capture*	captures=0;			//
-	Capture*	my_capture=0;			// for closures- hidden param,environment struct passed in
+	CaptureVars*	captures=0;			//
+	CaptureVars*	my_capture=0;			// for closures- hidden param,environment struct passed in
 	ExprStructDef* m_receiver=0;
 	int8_t		vtable_index=-1;
 	int8_t		vtable_param=0;		// which parameter dispatches
@@ -1157,7 +1157,7 @@ struct  ExprFnDef : ExprDef {
 	ResolvedType	resolve_function(Scope* definer,ExprStructDef* receiver, const Type* desired, int flags);
 	ResolvedType	resolve(Scope* scope,const Type* desired,int flags);
 	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);
-	Capture*		get_or_create_capture(ExprFnDef* src);
+	CaptureVars*		get_or_create_capture(ExprFnDef* src);
 	void			translate_typeparams(const TypeParamXlat& tpx)override;
 	vector<TParamDef*>* get_typeparams() override{return &this->typeparams;}
 	Expr*			last_expr()const{
@@ -1182,6 +1182,29 @@ struct  ExprFnDef : ExprDef {
 	virtual Scope*	get_scope()				{return this->scope;}
 };
 ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags);
+
+struct FindFunction {
+	struct Candidate{ExprFnDef* f; int score;};
+	vector<Candidate> candidates;
+	Name			name;
+	const Expr* 	callsite;
+	int 			flags;
+	bool 			verbose=false;
+	int				max_candidates=5;
+	const vector<Expr*>& args;
+	const Type* 	ret_type;
+	FindFunction(Name n, const vector<Expr*>& a, const Type* r,int f):name(n),args(a),ret_type(r),flags(f){}
+	
+	void consider_candidate(ExprFnDef* f);
+	void find_fn_sub(Expr* src);
+	void find_fn_from_scopes(Scope* s,Scope* ex);
+	void insert_candidate(ExprFnDef* f,int score);
+	void dump(){
+		for (int i=0; i<candidates.size();i++){
+			dbprintf("candidate %d for %s: %d %p score=%d\n",i, str(name),candidates[i].f->pos.line, candidates[i].f->instance_of, candidates[i].score);
+		}
+	}
+};
 
 
 struct StructInitializer{ // named initializer
