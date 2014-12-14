@@ -1,4 +1,17 @@
 #pragma once
+
+
+#include "semantics.h"
+#include "codegen.h"
+#include "repl.h"
+#include "lexer.h"
+#include "parser.h"
+#include "run_test.h"
+#include "error.h"
+#include "exprfndef.h"
+#include "type.h"
+
+
 struct NamedItems {		// everything defined under a name
 	Scope* owner=0;
 	Name		name;
@@ -6,11 +19,12 @@ struct NamedItems {		// everything defined under a name
 	Type*		types=0;
 	ExprFnDef*	fn_defs=0;
 	ExprStructDef*	structs=0; // also typedefs?
-
+	
 	ExprFnDef*	getByName(Name n);
-//	ExprFnDef* resolve(Call* site);
+	//	ExprFnDef* resolve(Call* site);
 	NamedItems(Name n,Scope* s){  name=n; owner=s;next=0;fn_defs=0;structs=0;types=0;}
 };
+
 
 /// 'Scope'-
 /// scopes are created when resolving, held on some node types.
@@ -74,7 +88,3 @@ public:
 	}
 	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner);
 };
-
-
-
-

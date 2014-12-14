@@ -1,11 +1,3 @@
-#include "semantics.h"
-#include "codegen.h"
-#include "repl.h"
-#include "lexer.h"
-#include "parser.h"
-#include "run_test.h"
-#include "error.h"
-#include "exprfndef.h"
 #include "exprstructdef.h"
 
 bool ExprStructDef::is_generic()const{

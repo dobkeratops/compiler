@@ -1,4 +1,8 @@
 #pragma once
+#include "semantics.h"
+#include "type.h"
+#include "scope.h"
+
 
 struct Node;
 struct Scope;

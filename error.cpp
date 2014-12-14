@@ -2,9 +2,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <cstdlib>
-#include "semantics.h"
-#include "error.h"
-#include "type.h"
 
 bool g_error_on_newline=false;
 int g_num_errors=0;

@@ -93,6 +93,8 @@ struct ExprIf;
 struct ExprBlock;
 struct ExprLiteral;
 struct ExprIdent;
+struct TraitDef;
+struct EnumDef;
 struct Match;
 struct MatchArm;
 struct ArgDef;
