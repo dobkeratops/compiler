@@ -8,7 +8,6 @@
 #include "error.h"
 #include "type.h"
 
-struct NamedItems;
 // todo.. generic instantiation: typeparam logic, and adhoc mo
 struct  ExprFnDef : ExprDef {
 	ExprFnDef*	next_of_module=0; // todo: obsolete this.

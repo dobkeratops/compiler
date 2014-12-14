@@ -6,9 +6,10 @@
 #include "parser.h"
 #include "run_test.h"
 #include "error.h"
+#include "scope.h"
 #include "exprfndef.h"
 #include "type.h"
-
+struct NamedItems;
 struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
 	// but its' backwards.

@@ -156,7 +156,7 @@ Option g_Options[]={
 	{'r',0,B_RUN|B_EXECUTABLE,"build & run"},
 	{'e',0,B_EXECUTABLE,"compile executable"},
 	{'v',0,B_VERBOSE,"verbose mode"},
-	{'T',0,0,"run inbuilt tests"},
+	{'T',0,0,"run tests"},
 	{'h',0,0,"help"},
 	{0,0,0,0}
 };

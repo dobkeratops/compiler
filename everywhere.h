@@ -32,8 +32,14 @@ extern "C" char* gets(char*);
 #else
 #define DBLOC()
 #endif
-#if DEBUG>=2
+
+#if DEBUG>=3
 #define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#else
+inline void dbg_varscope(const char*,...){}
+#endif
+
+#if DEBUG>=2
 #define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
@@ -45,7 +51,6 @@ extern "C" char* gets(char*);
 #else
 inline void dbg_generic(const char*,...){}
 inline void dbg_fnmatch(const char*,...){}
-inline void dbg_varscope(const char*,...){}
 inline void dbg_lambdas(const char*,...){}
 inline void dbg_instancing(const char*,...){}
 inline void dbg_resolve(const char*,...){}
@@ -106,6 +111,8 @@ struct ResolvedType;
 struct Module;
 struct TypeParamXlat;
 struct VarDecl;
+struct NamedItems;
+
 class CodeGen;
 class CgValue;
 
