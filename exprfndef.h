@@ -63,10 +63,7 @@ struct  ExprFnDef : ExprDef {
 	CaptureVars*		get_or_create_capture(ExprFnDef* src);
 	void			translate_typeparams(const TypeParamXlat& tpx)override;
 	vector<TParamDef*>* get_typeparams() override{return &this->typeparams;}
-	Expr*			last_expr()const{
-		if (auto b=body->as_block()) return b->argls.back();
-		else return body;
-	}
+	Expr*			last_expr()const;
 	Expr*			get_return_value() const;
 	Type*				return_type()const {
 		auto x=get_return_value(); if (auto xt=x->get_type()) return xt;

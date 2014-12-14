@@ -1,5 +1,13 @@
 #include "scope.h"
 
+ExprFnDef* NamedItems::getByName(Name n){
+	for(auto f=this->fn_defs;f;f=f->next_of_name){
+		if (f->name==n)
+			return f;
+	}
+	return nullptr;
+}
+
 ExprStructDef* Scope::find_struct_of(const Expr* srcloc)
 {
 	auto t=srcloc->type();

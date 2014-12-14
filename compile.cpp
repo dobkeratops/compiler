@@ -1,4 +1,5 @@
 #include "compile.h"
+#include "exprblock.h"
 #include "exprstructdef.h"
 #include "exprfndef.h"
 

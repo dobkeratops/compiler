@@ -3,6 +3,7 @@
 #include "parser.h"
 #include "codegen.h"
 #include "run_test.h"
+#include "exprblock.h"
 #include <unistd.h>
 
 void filename_change_ext(char* dst,const char* src,const char* new_ext){

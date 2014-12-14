@@ -1,4 +1,5 @@
 #include "exprfndef.h"
+#include "exprblock.h"
 
 void ExprFnDef::verify(){
 	verify_expr_fn_def(this);
@@ -387,6 +388,11 @@ const ExprFnDef* ExprStructDef::find_function_for_vtable(Name n, const Type* sig
 	}
 	return nullptr;
 }
+Expr*			ExprFnDef::last_expr()const{
+	if (auto b=body->as_block()) return b->argls.back();
+	else return body;
+}
+
 
 
 

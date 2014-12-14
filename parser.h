@@ -1,6 +1,7 @@
 #pragma once
 #include "lexer.h"
 #include "exprflow.h"
+#include "exprblock.h"
 #include "exprfndef.h"
 #include "exprstructdef.h"
 struct SrcOp{ Name op; SrcPos pos;};

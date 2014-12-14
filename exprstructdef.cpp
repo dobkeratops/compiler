@@ -173,12 +173,8 @@ void ExprStructDef::roll_vtable() {
 		for (auto f:this->virtual_functions) {
 			// todo: static-virtual fields go here!
 			auto fnt=(Type*)(f->fn_type->clone());
-			if (fnt->sub->sub->sub->name==this->name){
-				fnt->sub->sub->sub->name=SELF_T;
-			}
-			if (fnt->sub->next->next->name==this->name){
-				fnt->sub->next->next->name=SELF_T;
-			}
+			fnt->sub->sub->sub->replace_name_if(this->name,SELF_T);
+			fnt->sub->next->next->replace_name_if(this->name,SELF_T);
 			this->vtable->fields.push_back(
 					new ArgDef(
 					this->pos,
