@@ -13,14 +13,16 @@ ExprFnDef* NamedItems::getByName(Name n){
 ExprStructDef* Scope::find_struct_of(const Expr* srcloc)
 {
 	auto t=srcloc->type();
-	auto sname=t->deref_all();
-	if (!sname->is_struct()) error(srcloc,t,"expected struct, got %s",sname->name_str());
-	auto r=try_find_struct(sname);
+	auto st=t->deref_all();
+	if (!st->is_struct()) error(srcloc,t,"expected struct, got %s",st->name_str());
+	auto r=try_find_struct(st);
 	//		if (!r)
 	//			error(srcloc,"cant find struct %s", sname->name_str());
 	if (!r){
-		if (auto sd=srcloc->type()->def->as_struct_def()){
-			return sd;
+		if (t->def){
+			if (auto sd=t->def->as_struct_def()){
+				return sd;
+			}
 		}
 	}
 	return r;

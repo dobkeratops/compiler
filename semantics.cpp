@@ -620,6 +620,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			named_field_index=sd->field_index(op->lhs);
 			this->value.push_back(op->rhs);
 			t=op->rhs->type();
+			propogate_type(flags,op,field->type_ref(),op->rhs->type_ref());
 		}else if (named_field_index==-1){
 			if (field_index>=sd->fields.size()){
 				error(a,sd,"too many fields");
@@ -628,6 +629,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			this->value.push_back(a);
 			a->resolve(sc,field->type(),flags); // todo, need generics!
 			t=a->type();
+			propogate_type(flags,a,field->type_ref(),a->type_ref());
 		}else{
 			error(a,"named field expected");
 		}

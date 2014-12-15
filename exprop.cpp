@@ -186,6 +186,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			else if (auto field_name=rhs->as_ident()){
 				if (auto st=sc->find_struct_of(lhs)){
 					if (auto f=st->find_field(rhs)){
+						propogate_type(flags,this, f->type_ref(), this->type_ref());
 						ret=f->type();
 						return propogate_type(flags,this, ret,this->type_ref());
 					}

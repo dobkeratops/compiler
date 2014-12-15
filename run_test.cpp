@@ -16,18 +16,52 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
-	{
-		"return struct",__FILE__,__LINE__,
+/*	{
+		"pass anon struct to adhoc template fn",__FILE__,__LINE__,
+		"fn\"C\" printf(s:str,...)->int;		\n"
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let q:struct{x:int};				\n"
+		"	q.x=10;					\n"
+		"	foobar(&q);			\n"
+		"	0	}						\n"
+		"fn foobar(p){	\n"
+		"	printf(\"p.x=%d\",p.x);	\n"
+		"}\n"
+		,nullptr
+	},
+*/	{
+		"return anon struct infered type",__FILE__,__LINE__,
 		"fn main(argc:int,argv:**char)->int{\n"
 		"	let q=foobar();				\n"
 		"	let w=q.x;					\n"
 		"	0	}						\n"
-		"fn foobar()->struct {x:int,y:int}{	\n"
+		"fn foobar()->struct {x,y}{	\n"
 		"	_{88,99}	\n"
 		"}\n"
 		,nullptr
 	},
-
+	{
+		"anon struct infered types later..",__FILE__,__LINE__,
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let q=foobar();				\n"
+		"	let q.x=1.0;					\n"
+		"	let q.y=2.0;					\n"
+		"	0	}						\n"
+		"fn foobar()->struct {x,y}{	\n"
+		"	_{}\n"
+		"}\n"
+		,nullptr
+	},
+	{
+		"anon struct infer type",__FILE__,__LINE__,
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let q:struct{x,y};	\n"
+		"	q.x=1.0;					\n"
+		"	q.y=1.0;					\n"
+		"	0	}						\n"
+		,nullptr
+	},
+	
 	{
 		"multiple return",__FILE__,__LINE__,
 		"fn main(argc:int,argv:**char)->int{\n"
@@ -264,12 +298,12 @@ CompilerTest g_Tests[]={
 		"if expression",__FILE__,__LINE__,
 /*1*/	"extern \"C\" fn printf(s:str,...)->int;	\n"
 /*2*/	"fn main(argc:int, argv:**char)->int{	\n"
-/*3*/	"  x:=if argc<3{4} else{3};				\n"
+/*3*/	"  x:=if argc<3{printf(\"if\");4} else{printf(\"else\");3};				\n"
 /*4*/	"	0									\n"
 /*5*/	"}\n",
 		nullptr
 	},
-	{"voidptr coercion ",__FILE__,__LINE__,
+	{"voidptr auto coercion ",__FILE__,__LINE__,
 		"struct FILE;							\n"
 		"fn voidpf(d:*void)->int{0};			\n"
 		"fn voidpfr(p:**char)->*void{p as*void};\n"
@@ -279,7 +313,7 @@ CompilerTest g_Tests[]={
 		"  0}"
 	},
 	{"adhoc template",__FILE__,__LINE__,
-		"fn lerp(a,b,f)->float{(b-a)*f+a};		\n"
+		"fn lerp(a,b,f){(b-a)*f+a};		\n"
 		"fn main(argc:int,argv:**char)->int{	\n"
 		"	x:=lerp(0.0,10.0,0.5);"
 		"  0}"

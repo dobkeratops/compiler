@@ -156,6 +156,9 @@ fn main(argc:int,argv:**char)->int{
 	// useful with so much inference going on to keep that language syntax.
 
 	let u:Union<int,float>; 
+	let banana:struct{uuu:int,vvv:float}
+	banana.uuu=50;
+//	take_banana(banana);
 
 	// alternate syntax for declaring  a new uninitialized variable of type
 	v=:Union<float,int>;
@@ -309,9 +312,11 @@ fn tuple_test2()->(int,float,int){
 // if we name it, it doesn't go into any scope at the minute.
 
 fn ret_anon_struct()->struct{x:int, y:int}{
-	_{88,99} // _{...} is a struct initializer, like ident{..}, but infered
-			// must write preceeding _, because {...} is a compound expression
-			// todo - should we allow tuples to coerce to structs if layout matches?
+	let r; // infered from return value.
+	r.x=88;
+	r.y=99;
+	r
+	//could also write _{88,99}
 }
 fn foo_bar(i:int){
 }
@@ -327,5 +332,7 @@ fn foo_bar(p:*Foo,q:*Foo,w:*Foo){
 	printf("3ptr foo_bar %p %p\n",p,w);
 }
 
-
+fn take_banana(x){
+	printf("banana anon struct %d %f\n",x.uuu,x.vvv);
+}
 
