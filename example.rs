@@ -165,14 +165,15 @@ fn main(argc:int,argv:**char)->int{
 	let value=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		// var:=expr is  a shortcut for 'let'
 		acc+=i;
-
-		printf("i,j=%d,%d,x=%d\n",i,j,acc);
-		if i==5{printf("break\n");break 55}
+		for k:=0; k<10; k+=1 {
+			printf("i,k=%d,%d,x=%d\n",i,k,acc);
+			if k==5{printf("break from inner loop\n");break break 55;}
+		}
 	}else{
 		// for..else block called if no 'break'
 		printf("loop exit fine\n"); 
 		44
-	}
+	};
 	printf("loop return value = %d\n",value);
 
 	// Struct initializers...

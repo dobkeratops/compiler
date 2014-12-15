@@ -70,7 +70,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				}
 				auto else_block=loop->loop_else_block();
 				if (rhs && !else_block){
-					error(this,"break <expression> requires else block with alternate return expression, same type.");
+					error(this,"break <expression> requires else block with alternate return expression, same type. Use 'break break <expr>' for nesting");
 				}
 				if (else_block){
 					propogate_type(flags,(Node*)this,rhs->type_ref(),else_block->type_ref());
