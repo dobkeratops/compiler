@@ -271,26 +271,6 @@ ExprStructDef* dump_find_struct(Scope* s, Name name){
 // type Mul[float,float]->float
 // type Foo[a]->tuple[a.node,a.foo] // accessors for associated types?
 
-size_t ArgDef::size()const {
-	return this->type()?this->type()->size():0;
-}
-size_t ArgDef::alignment() const	{
-	return type()->alignment();
-}//todo, 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
-ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
-	dbg_resolve("resolving arg %s\n",this->name_str());
-	propogate_type_fwd(flags,this,desired,this->type_ref());
-	if (this->type()){
-		this->type()->resolve(sc,desired,flags);
-	}
-	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
-	return ResolvedType(this->type(), ResolvedType::COMPLETE);
-}
-const char* Node::get_name_str() const{
-	if (!this) return "(no_type)";
-	return getString(this->name);
-}
-
 	//todo: generic heirarchy equality test, duplicate code detection?
 bool type_compare(const Type* t,int a0, int a1){
 	if (t)
@@ -300,22 +280,6 @@ bool type_compare(const Type* t,int a0, int a1){
 					return true;
 	return false;
 }
-void Node::set_type(const Type* t)
-{	::verify(t);
-	if (this->m_type){
-		if (this->m_type->is_equal(t))
-			return ;
-#if DEBUG>=2
-		dbprintf("changing type?\n");
-		this->m_type->dump(-1);newline(0);
-		dbprintf("to..\n");
-		t->dump(-1);
-		newline(0);
-#endif
-		//ASSERT(this->m_type==0);
-	}
-	this->m_type=(Type*)t;
-};
 
 void dump_typeparams(const vector<TParamDef*>& ts) {
 	bool a=false;

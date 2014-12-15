@@ -389,6 +389,15 @@ Expr*	Scope::current_loop(int levels){
 }
 
 
+void dump_locals(Scope* s){
+	for (;s;s=s->parent){
+		for (auto v=s->vars; v;v=v->next_of_scope){
+			printf("\t;%s:",str(v->name));v->get_type()->dump(-1); printf("%%%s\n",str(v->reg_name));
+		}
+	}
+}
+
+
 ExprStructDef* Scope::find_struct(const Node* node) {
 	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){return sd;} return find_struct_named(node);
 }

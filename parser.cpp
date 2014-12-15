@@ -520,7 +520,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	return node;
 }
 ExprOp* parse_flow(TokenStream& src,Name flow_statement){
-	// break is an operator. label,return.
+	// eg break,continue,return. generalized return values, so they are expr.
 	Expr* expr=nullptr;
 	int levels=1;
 	while (src.eat_if(flow_statement)){

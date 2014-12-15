@@ -142,6 +142,7 @@ ExprStructDef* ExprStructDef::root_class(){
 	}
 	return this;
 }
+
 void ExprStructDef::roll_vtable() {
 	
 	if (this->is_vtable_built()){// ToDO: && is-class. and differentiate virtual functions. For the
@@ -262,6 +263,80 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 Node* EnumDef::clone()const {
 	return this->clone_sub(new EnumDef(this->pos,this->name));
 }
+
+
+void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef* vtable_layout){
+	// compile formatted vtable with additional data..
+	if (!vtable_layout->is_compiled){
+		// the vtable really is just a struct; eventually a macro system could generate
+		vtable_layout->compile(cg,sc);
+		vtable_layout->is_compiled=true;
+	}
+	dbg_vtable("compiling vtable for %s\n",sd->name_str());
+	cg.emit_global_begin(sd->vtable_name);
+	cg.emit_typename(str(vtable_layout->mangled_name));
+	cg.emit_struct_begin(16);
+	
+	for (auto a:vtable_layout->fields){
+		auto* s=sd;
+		for (;s;s=s->inherits){
+			if (auto f=s->find_function_for_vtable(a->name, a->type())){
+				cg.emit_fn_cast_global(f->get_mangled_name(),f->fn_type,a->type());
+				break;
+			}
+		}
+		if (!s){
+			cg.emit_undef();
+		}
+	}
+	
+	cg.emit_struct_end();
+	cg.emit_ins_end();
+}
+
+CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
+	auto st=this;
+	if (st->is_generic()) {	// emit generic struct instances
+		cg.emit_comment("instances of %s in %s %p",str(st->name), sc->name(),st);
+		int i=0;
+		for (auto ins=st->instances; ins; ins=ins->next_instance,i++){
+			cg.emit_comment("instance %d: %s %s in %s %p",i,str(st->name),str(ins->name) ,sc->name(),ins);
+			ins->compile(cg, sc);
+		}
+	} else {
+		cg.emit_comment("instance %s of %s in %s %p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st);
+		
+		for (auto fi: st->fields){
+			if (!fi->type())
+				return CgValue();
+			if (fi->type()->is_typeparam(sc))
+				return CgValue();
+			if (fi->type()->name>=IDENT){
+				if (!fi->type()->struct_def()){
+					cg.emit_comment("not compiling %s, it shouldn't have been instanced-see issue of partially resolving generic functions for better type-inference, we're getting these bugs: phantom initiated structs. must figure out how to mark them properly",str(this->get_mangled_name()));
+					return CgValue();
+				}
+			}
+		};
+		// instantiate the vtable
+		// todo: step back thru the hrc to find overrides
+		if (this->vtable)
+			compile_vtable_data(cg, this,sc, this->vtable);
+		
+		cg.emit_struct_def_begin(st->get_mangled_name());
+		for (auto fi: st->fields){
+			cg.emit_type(fi->type(), false);
+		};
+		cg.emit_struct_def_end();
+	}
+	return CgValue();	// todo: could return symbol? or its' constructor-function?
+}
+
+CgValue EnumDef::compile(CodeGen &cg, Scope *sc){
+	return CgValue();
+}
+
+
 
 
 

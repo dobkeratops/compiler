@@ -146,7 +146,13 @@ CgValue CgValue::index(RegisterName index){ // calculates & returns adress
 	return CgValue();
 }
 
+CgValue	CgValueVoid(){
+	return CgValue();
+}
 
+
+
+CgValue 	CodeGen::flow_result[32]; // hack till we move stupid header
 
 using std::function;
 CgValue CodeGen::load(const CgValue& v,Type* result_type) {
@@ -774,6 +780,16 @@ void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, N
 	if (extra) for (auto i=phi_vars.size(); i>0;i--)cg.emit_txt("       ");	// dirty hack to prevent source overun
 	cg.emit_txt("\n");
 }
+//  initializer
+// for:
+//  test condition br else
+//   body
+//   (break br endfor)
+//   increment
+//   br loop
+// break:
+// else:
+// endfor:
 
 CgValue emit_for_llvm(CodeGen& cg, ExprFor* e_for, Expr* e_init,Expr* e_cond, Expr* e_incr, Expr* e_body, Expr* e_else_block){
 	int index=cg.m_next_reg++;
@@ -850,7 +866,7 @@ CgValue emit_for_llvm(CodeGen& cg, ExprFor* e_for, Expr* e_init,Expr* e_cond, Ex
 
 CgValue CodeGen::emit_for(ExprFor* e_for, Expr* e_init,Expr* e_cond, Expr* e_incr, Expr* e_body, Expr* e_else_block){
 	// this is the kind of stupid bouncing we want to write a new language to avoid
-	// not sure how far we want to abstract this.. codegen llvm/C or not. using ExprFor as
+	// not sure how far we want to abstract this.. codegen llvm/C or not. using c-like For as
 	// universal 'back end' loop is quite flexible
 	return emit_for_llvm(*this,e_for, e_init, e_cond,e_incr,e_body,e_else_block);
 }

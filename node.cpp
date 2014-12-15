@@ -26,11 +26,33 @@ void Node::set_def(ExprDef *d){
 		def=d;
 	}
 }
+void Node::set_type(const Type* t)
+{	::verify(t);
+	if (this->m_type){
+		if (this->m_type->is_equal(t))
+			return ;
+#if DEBUG>=2
+		dbprintf("changing type?\n");
+		this->m_type->dump(-1);newline(0);
+		dbprintf("to..\n");
+		t->dump(-1);
+		newline(0);
+#endif
+		//ASSERT(this->m_type==0);
+	}
+	this->m_type=(Type*)t;
+};
 
 ExprStructDef* Node::as_struct_def()const{
-	//error(this,"expect struct def");
 	return nullptr;
 };
+const char* Node::get_name_str() const{
+	if (!this) return "(no_type)";
+	return getString(this->name);
+}
+
+
+
 RegisterName Node::get_reg_existing(){ASSERT(reg_name); return reg_name;}
 RegisterName Node::get_reg(CodeGen& cg, bool force_new){
 	// variable might be in a local scope shadowing others, so it still needs a unique name
@@ -47,4 +69,23 @@ RegisterName Node::get_reg(CodeGen& cg, bool force_new){
 RegisterName Node::get_reg_new(CodeGen& cg) {
 	return this->reg_name=cg.next_reg(name);
 }
+
+CgValue Node::compile_if(CodeGen& cg, Scope* sc){
+	if (this)
+		return this->compile(cg,sc);
+	else
+		return CgValueVoid();
+}
+
+CgValue Node::compile(CodeGen& cg, Scope* sc){
+	error(this,"compile not implemented for %s",this->kind_str());
+	return CgValue();
+}
+
+CgValue Node::codegen(CodeGen& cg, bool just_contents) {
+	dbprintf("TODO refactor codegen to use this virtual. warning codegen not implemented for %s\n",this->kind_str());
+	return CgValue();
+}
+
+
 

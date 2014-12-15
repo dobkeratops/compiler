@@ -29,14 +29,18 @@ extern "C" char* gets(char*);
 #define dbg_loc() dbprintf("%s:%d:",__FILE__,__LINE__);
 #if DEBUG>=4
 #define DBLOC() dbg_loc()
+#define dbg4(X) X
 #else
 #define DBLOC()
+#define dbg4(X)
 #endif
 
 #if DEBUG>=3
 #define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg3(X) X
 #else
 inline void dbg_varscope(const char*,...){}
+#define dbg2(X)
 #endif
 
 #if DEBUG>=2
@@ -48,7 +52,12 @@ inline void dbg_varscope(const char*,...){}
 #define dbg_vtable(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_strings(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_vcall(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg2(X) X
+#define dbg(X) X
 #else
+#define dbg2(X)
+#define dbg(X)
 inline void dbg_generic(const char*,...){}
 inline void dbg_fnmatch(const char*,...){}
 inline void dbg_lambdas(const char*,...){}
@@ -56,6 +65,7 @@ inline void dbg_instancing(const char*,...){}
 inline void dbg_resolve(const char*,...){}
 inline void dbg_type(const char*,...){}
 inline void dbg_vtable(const char*,...){}
+inline void dbg_vcall(const char*,...){}
 inline void dbg_strings(const char*,...){}
 #endif
 

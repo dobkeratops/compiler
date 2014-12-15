@@ -1,3 +1,4 @@
+#include "everywhere.h"
 #include "exprfndef.h"
 #include "exprblock.h"
 #include "scope.h"
@@ -396,6 +397,226 @@ Expr*			ExprFnDef::last_expr()const{
 	else return body;
 }
 
+
+void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
+	auto ofp=cg.ofp;
+	for (auto cp=fn->captures; cp;cp=cp->next_of_from){
+		cp->reg_name=next_reg_name(cp->tyname(), &cg.m_next_reg);
+		cg.emit_alloca_type(cp, cp->type()->deref_all());
+	}
+	for (auto v=sc->vars; v;v=v->next_of_scope){
+		if (!v->type()) {
+			cg.emit_comment("warning var %s has no type, something is wrong\n",v->name_str());
+			continue;
+		}
+		cg.emit_comment("local %s:%t..",v->name_str(),v->type()->name_str());
+		
+		if (v->kind!=Local) continue;
+		auto vt=v->expect_type();
+		if (v->capture_in)
+			continue; // no local emited if its in the capture
+		auto r= v->get_reg(cg, true);
+		if (vt->is_struct() || v->keep_on_stack()) {
+			cg.emit_alloca_type(v, vt);
+			v->reg_is_addr=true;
+		} else if (vt->is_array()){
+			auto t=vt->sub;
+			if (!t || !t->next){error(v,"array type needs 2 args");}
+			cg.emit_alloca_array_type(r, t, t->next->name,vt->alignment());
+			v->reg_is_addr=true;
+		} else	if (vt->is_pointer() || vt->is_function()){
+			continue;
+		} else {
+			dbprintf("error:\n");
+			vt->dump(-1);
+			error(n,"typenot handled %s",str(vt->name));
+		}
+	}
+}
+
+
+CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
+	auto fn_node = this;
+	auto ofp=cg.ofp;
+	
+	if (!fn_node){return CgValue();}
+	if (fn_node->is_undefined()) {
+		cg.emit_comment("fn %s prot",getString(fn_node->name));
+		cg.emit_function_signature(fn_node,EmitDeclaration);
+		return CgValue();
+	}
+	if (fn_node->is_generic()) {
+		cg.emit_comment("fn %s generic:-",getString(fn_node->get_mangled_name()));
+		for (auto f=fn_node->instances; f;f=f->next_instance){
+			cg.emit_comment("fn %s generic instance",getString(fn_node->get_mangled_name()));
+			f->compile(cg,outer_scope);
+		}
+		return CgValue();
+	}
+	
+	if (cg.curr_fn) // we can't nest function compilation - push to CodeGen stack
+	{
+		cg.compile_later.push_back(this);
+		return CgValue(this);
+	} else{
+		cg.curr_fn=this;
+	}
+	for (auto cp=this->captures; cp;cp=cp->next_of_from){
+		cp->compile(cg,outer_scope);
+	}
+	
+	cg.emit_global_fn_ptr(fn_node->type(),fn_node->get_mangled_name());
+	if (!fn_node->get_type() && fn_node->fn_type && fn_node->scope ){
+		error(fn_node,"function name %s %s %p %p %p %p", str(fn_node->name),str(fn_node->get_mangled_name()), fn_node->instance_of, fn_node->get_type(), fn_node->fn_type, fn_node->scope);
+		ASSERT(0 && "function must be resolved to compile it");
+		return CgValue();
+	}
+	cg.emit_comment("fn %s (%p) :- ins=%p of %p ", str(fn_node->name),fn_node, fn_node->instances, fn_node->instance_of);
+	
+	auto scope=fn_node->scope;
+	
+	cg.emit_function_signature(fn_node,EmitDefinition);
+	cg.emit_nest_begin("{\n");
+	if (fn_node->instance_of!=nullptr){
+		cg.emit_comment("compiling generic fn body");
+	}
+	emit_local_vars(cg, fn_node->body, fn_node, scope);
+	auto rtn=fn_node->get_return_value();
+	
+	if (fn_node->fn_type->name==CLOSURE){
+		auto cp=fn_node->my_capture;
+		if (cp){
+			cp->reg_name=cp->get_reg_new(cg);
+			cp->reg_name =cg.emit_cast_reg(__ENV_I8_PTR, cg.i8ptr(),cp->type()).reg;
+		}
+	}
+	
+	cg.emit_return(fn_node->body->compile(cg,scope));
+	cg.emit_nest_end("}\n");
+	cg.curr_fn=0;
+	return CgValue(fn_node);
+}
+
+
+CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiver, ExprBlock* e){
+	// [3.1]evaluate arguments
+	vector<CgValue> l_args;
+	
+	// process function argumetns & load
+	if (receiver){
+		auto recr=receiver->compile(cg,sc);
+		l_args.push_back(  cg.load(recr,recr.type) );
+	}
+	for (auto arg:e->argls){
+		auto reg=arg->compile(cg,sc);
+		if (!reg.type) {
+			error_begin(arg,"arg type not resolved in call\n");
+			dbprintf("arg type=");arg->dump(-1);newline(0);
+			auto reg=arg->compile(cg,sc);
+			error_end(arg);
+			ASSERT(reg.type);
+		}
+		l_args.push_back(cg.load(reg,arg->type()));
+	}
+	
+	//[3.2] evaluate call object..
+	auto call_fn=e->get_fn_call();
+	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
+	
+	// [3.3] argument conversions..
+	auto coerce_args=[&](Type* fn_type){
+		// todo - should not be needed
+		fn_type->resolve(sc, nullptr, 0);
+		auto ai=0;
+#if DEBUG>=2
+		fn_type->dump(-1);newline(0);
+#endif
+		auto fn_arg=fn_type->fn_args_first();
+		for (auto i=0; fn_arg; i++,fn_arg=fn_arg->next){
+#if DEBUG>=2
+			dbprintf("arg %d \n", i);fn_arg->dump(-1);newline(0);
+#endif
+			auto ae=i==0&&receiver?receiver:e->argls[i-(receiver?1:0)];
+			auto r=cg.emit_conversion(ae,l_args[i], fn_arg,sc);
+			l_args[i]=r;
+		}
+	};
+	
+	auto l_emit_arg_list=[&](CgValue env_ptr){
+		cg.emit_args_begin();
+		if(env_ptr.is_valid()){
+			cg.emit_type_operand(env_ptr);
+		}
+		for (auto a: l_args){
+			cg.emit_type_operand(a);
+		}
+		cg.emit_args_end();
+	};
+	
+	//[3.4] make the call..
+	if (e->call_expr->is_function_name()) {
+		auto fn_name=e->call_expr->name;
+		ExprStructDef* vts=nullptr;
+		ArgDef* vtable_fn=nullptr;
+		CgValue vtable;
+		if (receiver) {
+			// lookup types to see if we have a vcall.
+			ASSERT(recvp.type->is_pointer() && "haven't got auto-ref yet for receiver in a.foo(b) style call\n");
+			//receiver->dump(-1); newline(0);
+			auto vtable_name=__VTABLE_PTR;
+			auto structdef=recvp.type->get_struct_autoderef();
+			auto vtf=structdef->try_find_field(vtable_name);
+			if (vtf) {
+				vts=vtf->type()->get_struct_autoderef();
+			}
+			dbg_vcall("receiver: %s %s .%s\n",str(receiver->name),str(receiver->type()->name), str(e->call_expr->name));
+			dbg_vcall("vtbl=%p\n",vtf);
+			dbg_vcall("vtable struct=%p\n",vts);
+		}
+		if (vts) {
+			dbg_vcall("looks like a vcall %s\n",vts, str(vts->name));
+			vtable_fn=vts->try_find_field(fn_name);
+		}
+		if (vtable_fn) {
+			// we have a vcall, so now emit it..
+			// load the vtable
+			dbg_vcall("emit vcall %p %s.%s\n",vts, str(vts->name),str(vtable_fn->name_str()));
+			auto vtbl=cg.emit_getelementref(recvp,__VTABLE_PTR);
+			auto function_ptr=cg.emit_getelementval(vtbl,fn_name);
+			coerce_args(function_ptr.type);
+			cg.emit_call_begin(function_ptr);
+			l_emit_arg_list(CgValue());
+			return cg.emit_call_end();
+			
+		} else {
+			//[3.3.1] Direct Call
+			coerce_args(call_fn->type());
+			cg.emit_call_begin(CgValue(call_fn));
+			l_emit_arg_list(CgValue());
+			return cg.emit_call_end();
+		}
+	} else {
+		//[3.3.2] Indirect Call... Function Object
+		auto fn_obj = e->call_expr->compile(cg, sc);
+		auto call_t=e->call_expr->type();
+		coerce_args(call_t);
+		if (fn_obj.type->is_closure()){
+			//[.1] ..call Closure (function,environment*)
+			auto fn_ptr=cg.emit_getelementval(fn_obj,0,0,call_t);
+			auto envptr = cg.emit_getelementval(fn_obj,0,1,cg.i8ptr());
+			cg.emit_call_begin(fn_ptr);
+			l_emit_arg_list(envptr);
+			return cg.emit_call_end();
+		}else{
+			//[.2] ..Raw Function Pointer
+			cg.emit_call_begin(fn_obj.load(cg));
+			l_emit_arg_list(CgValue());
+			return cg.emit_call_end();
+		}
+	}
+	
+	return CgValue();
+}
 
 
 

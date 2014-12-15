@@ -71,4 +71,6 @@ struct  ExprFnDef : ExprDef {
 	CgValue compile(CodeGen& cg, Scope* sc);
 	virtual Scope*	get_scope()				{return this->scope;}
 };
+CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiver, ExprBlock* e);
+
 

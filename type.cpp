@@ -492,6 +492,9 @@ void Type::push_back(Type* t) {
 		s->next =t;
 	}
 }
+CgValue Type::compile(CodeGen& cg, Scope* sc){
+	return CgValue(0,this,0);	// propogate a type into compiler interface
+}
 
 
 

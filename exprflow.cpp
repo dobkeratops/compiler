@@ -39,6 +39,8 @@ void ExprIf::translate_typeparams(const TypeParamXlat& tpx){
 	this->else_block->translate_typeparams_if(tpx);
 	this->type()->translate_typeparams_if(tpx);
 }
+
+
 void ExprFor::translate_typeparams(const TypeParamXlat& tpx)
 {
 	this->init->translate_typeparams_if(tpx);
@@ -108,6 +110,10 @@ ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 		return body_type;
 	}
 }
+CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
+	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
+	return cg.emit_if(this, this->cond, this->body, this->else_block);
+}
 
 void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
 	incr->find_vars_written_if(s,vars);
@@ -143,6 +149,12 @@ void ExprFor::dump(int d) const {
 }
 
 
+CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
+	return cg.emit_for(this, this->init,this->cond, this->incr, this->body, this->else_block);
+}
+
+
+
 
 Node*
 ExprMatch::clone()const{
@@ -160,3 +172,40 @@ Node* MatchArm::clone()const{
 	a->next=(MatchArm*)next->clone_if();//TODO not recursive ffs.
 	return a;
 }
+
+CgValue compile_match_arm(CodeGen& cg, Scope* sc,Expr* match_expr, CgValue match_val, MatchArm* arm){
+	if (!arm->next){
+		// error check. we just ignore condition. error should assert its non exhaustive
+		arm->compile_bind(cg,sc,match_expr,match_val);
+		return arm->body->compile(cg,sc);
+	}
+	auto armsc=arm->get_scope();
+	return cg.emit_if_sub(
+						  arm,
+						  sc,
+						  [&]{return arm->compile_check(cg,armsc, match_expr, match_val);},
+						  [&]{arm->compile_bind(cg,armsc,match_expr,match_val);return arm->body->compile(cg,armsc);},
+						  arm->next);
+}
+
+CgValue MatchArm::compile_check(CodeGen &cg, Scope *sc, Expr *match_expr, CgValue match_val){
+	// emit a condition to check if the runtime value 'match_val' fits this pattern.
+	ASSERT(0&&"TODO");
+	return CgValue();
+}
+CgValue MatchArm::compile_bind(CodeGen &cg, Scope *sc, Expr *match_expr, CgValue match_val)	{
+	// extract local variables from the pattern...
+	ASSERT(0&&"TODO");
+	return CgValue();
+}
+
+CgValue
+ExprMatch::compile(CodeGen& cg, Scope* sc){
+	// TODO - dedicated with one set of phi-nodes at the end.
+	// this is RETARDED!!!
+	// TODO - turn some cases into binary-chop (no 'if-guards' & single value test)
+	// TODO - turn some cases into vtable.
+	auto match_val = this->expr->compile(cg,sc);
+	return compile_match_arm(cg, sc, this->expr, match_val, this->arms);
+}
+

@@ -4,6 +4,7 @@
 #include "exprfndef.h"
 #include "exprstructdef.h"
 #include "exprblock.h"
+#include "codegen.h"
 
 void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const{
 	this->call_expr->find_vars_written_if(s, vars);
@@ -281,6 +282,64 @@ void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
 	}
 	this->type()->translate_typeparams_if(tpx);
 }
+
+
+CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
+	return compile_sub(cg,sc,0);
+}
+
+CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
+	auto n=this;
+	auto e=this; auto curr_fn=cg.curr_fn;
+	// [1] compound expression - last expression is the return .
+	if(e->is_compound_expression()) {
+		if (auto num=e->argls.size()) {
+			for (int i=0; i<num-1; i++){
+				e->argls[i]->compile(cg,sc);
+			}
+			if (e->argls.size())
+				return e->argls[num-1]->compile(cg,sc);
+		};
+	}
+	else if (e->is_struct_initializer()){
+		StructInitializer si(sc,e); si.map_fields();
+		auto dbg=[&](){e->type()->dump(0);newline(0);};
+		auto struct_val= force_dst?CgValue(0,e->type(),force_dst):cg.emit_alloca_type(e, e->type());
+		e->reg_name=struct_val.reg; // YUK todo - reallyw wanted reg copy
+		// can we trust llvm to cache the small cases in reg..
+		if (e->argls.size()!=si.value.size())
+			dbprintf("warning StructInitializer vs argls mismatch, %d,%d\n",e->argls.size(),si.value.size());
+		for (int i=0; i<e->argls.size() && i<si.value.size();i++) {
+			auto rvalue=si.value[i]->compile(cg,sc);
+			auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);
+			auto r=dst.store(cg,rvalue.load(cg));
+			if (r.type==struct_val.type)
+				struct_val=r; // mutate by insertion if its 'in-reg'
+		}
+		// TODO: CLARIFY WHY... alloca returns 'ref' whilst struct-initializer gives a 'ptr'?
+		// eliminate this, its' messy. 'force_dst' should be a CgValue.
+		if (force_dst) {
+			struct_val.reg=force_dst;
+			struct_val.addr=0;
+		}
+		return struct_val;
+	}
+	// [2] Operator
+	//[3] ARRAY ACCESSs
+	else if (auto ar=n->is_subscript()){
+		auto expr=ar->call_expr->compile(cg,sc);// expression[index]
+		auto index=ar->argls[0]->compile(cg,sc);
+		/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
+		// TODO: abstract this into codegen -getelementref(CgValue ptr,CgValue index);
+		return cg.emit_get_array_elem_ref(expr, index);
+	}
+	//[3] FUNCTION CALL (no receiver)
+	else if (e->is_function_call()){
+		return compile_function_call(cg,sc,CgValue(),nullptr,e);
+	}
+	return CgValue();
+}
+
 
 
 

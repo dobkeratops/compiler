@@ -162,7 +162,7 @@ fn main(argc:int,argv:**char)->int{
 	// for-else completes rusts' "everything-is-an-expression" philosophy
 
 	let acc=0;
-	let value=for i:=0,j:=0; i<10; i+=1,j+=10 {
+	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		// var:=expr is  a shortcut for 'let'
 		acc+=i;
 		for k:=0; k<10; k+=1 {

@@ -3,6 +3,7 @@
 #include "scope.h"
 #include "exprstructdef.h"
 #include "exprblock.h"
+#include "codegen.h"
 
 void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
 	lhs->translate_typeparams_if(tpx);
@@ -296,6 +297,140 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		propogate_type(flags,this, rhst,type_ref());
 		return propogate_type_fwd(flags,this, desired, type_ref());
 	}
+}
+
+CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
+	auto n=this;
+	auto e=this;
+	auto opname = e->name;
+	int opflags = operator_flags(opname);
+	auto t=e->get_type();//get_type_llvm();
+	
+	// TODO 2operand form should copy regname for this node from the lhs.
+	// TODO - multiple forms:
+	//
+	// generalize by lvalue being in register or memory.
+	// 3-operand; assign-op; assign-op; mem-assign-op;
+	if (opname==DOT || opname==ARROW){
+		if (rhs->as_ident()) {
+			auto lhsv=e->lhs->compile(cg,sc);
+			// auto-deref is part of language semantics, done here..
+			while (lhsv.type->num_pointers()+(lhsv.addr?1:0) > 1){
+				cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
+				lhsv = lhsv.deref_op(cg,0);
+			}
+			return lhsv.get_elem(cg,e->rhs,sc);
+		}
+		else{
+			// compile method call
+			return compile_function_call(cg,sc,e->lhs->compile(cg,sc),e->lhs,e->rhs->as_block());
+		}
+	}
+	else if (opname==BREAK){
+		cg.emit_comment("BREAK EXPRESSION");
+		
+		cg.emit_break(rhs->compile(cg,sc),lhs?getNumberInt(lhs->name):1);
+		return CgValue();
+	}
+	else if (opname==CONTINUE){
+		cg.emit_comment("CONTINUE");
+		
+		cg.emit_continue(lhs?getNumberInt(lhs->name):1);
+		return CgValue();
+	}
+	else if (e->lhs && e->rhs){
+		auto lhs=e->lhs->compile(cg,sc);
+		auto rhs=e->rhs->compile(cg,sc);
+		auto lhs_v=sc->find_variable_rec(e->lhs->name);
+		auto outname=lhs_v?lhs_v->name:opname;
+		
+		if (opname==DECLARE_WITH_TYPE){ // do nothing-it was sema'sjob to create a variable.
+			ASSERT(sc->find_scope_variable(e->lhs->name));
+			return  CgValue(lhs_v);
+		}
+		else if(opname==AS) {
+			// if (prim to prim) {do fpext, etc} else..
+			return cg.emit_cast(lhs,e);
+		}
+		else
+			if (opname==LET_ASSIGN){// := Let-Assign *must* create a new variable,infer type.
+				return lhs.store(cg,rhs);
+			}
+			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
+				auto r=cg.emit_conversion(e, rhs, e->type(),sc);
+				return lhs.store(cg,r);
+			}
+			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
+				auto result=cg.emit_instruction(opname,t?t:rhs.type, 0,lhs,rhs);
+				return lhs.store(cg,result);
+			}else {
+				// RISClike 3operand dst=op(src1,src2)
+				auto r=cg.emit_instruction(opname,e->get_type(),0,lhs,rhs);
+				return r;
+			}
+	} else if (!e->lhs && e->rhs){ // prefix unary operators
+		if (opname==ADDR){
+			auto src=e->rhs->compile(cg,sc);
+			if (!src.type || !n->type()) {
+				n->dump(-1);
+				error(n,"something wrong\n");
+			}
+			return src.addr_op(cg,n->type());
+		}
+		else if (opname==DEREF){
+			auto src=e->rhs->compile(cg,sc);
+			return src.deref_op(cg,n->type());
+		}
+		else if (opname==NEW){
+			if (auto b=rhs->as_block()){
+				if (b->is_struct_initializer()){
+					auto reg=cg.emit_malloc(this->type(),1);
+					auto st=b->call_expr->type()->get_struct_autoderef();
+					if (st->vtable){
+						auto vtref=cg.emit_getelementref(reg,__VTABLE_PTR);
+						cg.emit_store_global(vtref, st->vtable_name );
+					}
+					return b->compile_sub(cg,sc,reg.reg);
+				} else if (b->is_subscript()){ // new Foo[5] makes 5 foos; [5,6,7] is like new int[3],(fill..)
+					if (b->argls.size()==1){
+						auto num=b->argls[0]->compile(cg,sc);
+						return cg.emit_malloc_array(this->type(),num);
+					}
+					else{
+						// empty dynamic array ctr
+					}
+				}
+			}
+			error(e,"TODO:new only works for  new StructName{....} \n");
+			return CgValue();
+		}
+		else if (opname==DELETE){
+			auto x=rhs->compile(cg,sc);
+			cg.emit_free(x,1);	///TODO array types, rustlike DST??
+			
+			/// TODO call destructor here.
+			return CgValue();
+		}
+		else {
+			auto src=e->rhs->compile(cg,sc);
+			if (opflags & (WRITE_LHS|WRITE_RHS)){static int once;if (once++){dbprintf(";TODO: logic for modifications to memory");}}
+			// todo: handle read/modify-writeness.
+			// postincrement/preincrement etc go here..
+			//			auto r=cg.emit_instruction(opname,t,0,src);
+			//			return src.store(cg,r);
+			cg.emit_comment("TODO - ++ --");
+			return CgValue();
+		}
+	} else if (e->lhs && !e->rhs) {
+		if (opname==DECLARE_WITH_TYPE){ // do nothing-it was sema'sjob to create a variable.
+			auto lhs_v=sc->find_scope_variable(e->lhs->name);
+			return  CgValue(lhs_v);
+		}
+		
+		error(e,"postfix operators not implemented yet.");
+		return CgValue();
+	} else
+		return CgValue();
 }
 
 

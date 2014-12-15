@@ -82,6 +82,34 @@ void ExprIdent::dump(int depth) const {
 	//	if (this->def) {dbprintf("(%s %d)",this->def->pos.line);}
 	if (auto t=this->get_type()) {dbprintf(":");t->dump(-1);}
 }
+CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc){
+	auto n=this;
+	// Its' either a local, part of 'this', or in a capture...
+	auto var=sc->find_variable_rec(n->name);
+	if (!var){
+		if (auto fi=n->def->as_field()){
+			// emit Load instruction
+			auto thisv=sc->find_variable_rec(THIS);
+			sc->dump(0);
+			ASSERT(thisv&&"attempting to find field in non method,?");
+			return CgValue(thisv).get_elem(cg, this, sc);
+		} else
+			if (n->def) {
+				return CgValue(n->def);
+			}
+		error(n,"var not found %s\n",n->name_str());
+		return CgValue();
+	}
+	else if (auto cp=var->capture_in){
+		return CgValue(cp->reg_name,cp->type(),0,var->capture_index);
+	}
+	if (var && var!=n->def){
+		error(n,"var/def out of sync %s %s\n",n->name_str(),var->name_str());
+		return CgValue();
+	}
+	return CgValue(var);
+}
+
 
 void	ExprDef::remove_ref(Node* ref){
 	Node** pp=&refs;
@@ -97,7 +125,9 @@ void	ExprDef::remove_ref(Node* ref){
 	ref->def=0;
 }
 
-
+CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc) {
+	return CgValue(this);
+}
 
 
 void ExprLiteral::dump(int depth) const{
@@ -208,11 +238,28 @@ void Variable::dump(int depth) const{
 	}
 }
 
+size_t ArgDef::size()const {
+	return this->type()?this->type()->size():0;
+}
+size_t ArgDef::alignment() const	{
+	return type()->alignment();
+}//todo, 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
+ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
+	dbg_resolve("resolving arg %s\n",this->name_str());
+	propogate_type_fwd(flags,this,desired,this->type_ref());
+	if (this->type()){
+		this->type()->resolve(sc,desired,flags);
+	}
+	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
+	return ResolvedType(this->type(), ResolvedType::COMPLETE);
+}
+
 void ArgDef::dump(int depth) const {
 	newline(depth);dbprintf("%s",getString(name));
 	if (this->type()) {dbprintf(":");type()->dump(-1);}
 	if (default_expr) {dbprintf("=");default_expr->dump(-1);}
 }
+
 Node*	TParamDef::clone() const
 {	return new TParamDef(this->pos,this->name, (TParamVal*) (this->bound->clone_if()),(TParamVal*) (this->defaultv->clone_if()));
 }
@@ -331,4 +378,29 @@ void CaptureVars::coalesce_with(CaptureVars *other){
 		v->capture_in=this;
 	}
 }
+
+
+void commit_capture_vars_to_stack(CodeGen& cg, CaptureVars* cp){
+	if (!cp) return;
+	return;
+}
+
+CgValue CaptureVars::compile(CodeGen& cg, Scope* outer_scope){
+	auto cp=this;
+	cg.emit_struct_def_begin(cp->tyname());
+	decltype(cp->vars->capture_index) i=0;
+	for (auto v=cp->vars;v;v=v->next_of_capture,++i){
+		cg.emit_type(v->type());
+		v->capture_index=i;
+	}
+	cg.emit_struct_def_end();
+	cp->type() = new Type(cp->capture_by, PTR,cp->tyname());
+	cp->type()->sub->set_struct_def((ExprStructDef*) cp);
+	return CgValue(this);
+}
+
+
+
+
+
 

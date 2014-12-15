@@ -22,17 +22,16 @@ CompilerTest g_Tests[]={
 		/*2*/	"fn main(argc:int, argv:**char)->int{	\n"
 		/*4*/	"	v:=for i:=0;i<10;i+=1 {	\n"
 				"		for j:=0; j<10; j+=1 {"
-		/*7*/	"			printf(\"for loop i=%d j=%d\\n\",i,j);\n"
 		/*8*/	"			if j==5 {break break 44;}				\n"
 		/*9*/	"		}									\n"
 		/*9*/	"	}									\n"
 		/*10*/	"	else{								\n"
 		/*11*/	"		printf(\"loop complete i=%d\\n\",i);55\n"
 		/*12*/	"	}									\n"
-		/*13*/	"	printf(\"loop ret=%d;\\n\",v);	\n"
+		/*13*/	"	printf(\"loop ret=%d\\n\",v);	\n"
 		/*14*/	"	0									\n"
 		/*15*/	"}\n",
-		nullptr
+		"loop ret=44\n"
 	},
 
 	{
@@ -166,6 +165,7 @@ CompilerTest g_Tests[]={
 	{"adhoc template",__FILE__,__LINE__,
 		"fn lerp(a,b,f)->float{(b-a)*f+a};		\n"
 		"fn main(argc:int,argv:**char)->int{	\n"
+		"	x:=lerp(0.0,10.0,0.5);"
 		"  0}"
 	},
 	{
