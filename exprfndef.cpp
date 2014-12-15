@@ -141,6 +141,10 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 		auto t=call_args[i]->get_type();
 		if (t && !new_fn->args[i]->type())	{
 			new_fn->args[i]->set_type((Type*)t->clone());
+#if DEBUG>=2
+			dbprintf("arg %s:",new_fn->args[i]->name_str());t->dump(-1);
+			dbprintf("\n");
+#endif
 		}
 	}
 	if (return_type && !new_fn->return_type()){
@@ -166,6 +170,17 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	srcfn->instances=new_fn;
 	new_fn->instance_of = srcfn;
 	new_fn->resolved=false;
+	
+#if DEBUG>=2
+	dbprintf("arg types after instancing\n");
+	for (auto i=0; i<new_fn->args.size() && i<call_args.size(); i++){
+		auto t=new_fn->args[i];
+		dbprintf("arg ");t->dump(-1);
+		dbprintf("\n");
+		
+	}
+#endif
+	
 	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type ininstantiation too
 	//	new_fn->dump(0);
 	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
@@ -184,7 +199,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, c
 	dbg_fnmatch("\n");
 	new_fn->fn_type->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
 #endif
-	
+
 	verify_all();
 	return new_fn;	// welcome new function!
 }
@@ -245,7 +260,9 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 			this->args[i]->resolve(this->scope, nullptr, flags); // todo: call with defaultparams & init-expr
 			auto arg=this->args[i];
 			auto v=sc->find_scope_variable(arg->name);
-			if (!v){v=sc->create_variable(arg,arg->name,VkArg);}
+			if (!v){
+				v=sc->create_variable(arg,arg->name,VkArg);
+			}
 			propogate_type(flags,arg, arg->type_ref(),v->type_ref());
 			if (arg->default_expr){static int warn=0; if (!warn){warn=1;
 				dbprintf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
@@ -357,7 +374,8 @@ bool Type::is_typeparam(Scope* sc)const{
 }
 void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 	dbg_generic("translate typeparams for fn %s\n",this->name_str());
-	for (auto &a:args) a->translate_typeparams(tpx);
+	for (auto &a:args)
+		a->translate_typeparams(tpx);
 
 	
 	this->ret_type->translate_typeparams_if(tpx);

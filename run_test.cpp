@@ -16,7 +16,7 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
-/*	{
+	{
 		"pass anon struct to adhoc template fn",__FILE__,__LINE__,
 		"fn\"C\" printf(s:str,...)->int;		\n"
 		"fn main(argc:int,argv:**char)->int{\n"
@@ -29,7 +29,7 @@ CompilerTest g_Tests[]={
 		"}\n"
 		,nullptr
 	},
-*/	{
+	{
 		"return anon struct infered type",__FILE__,__LINE__,
 		"fn main(argc:int,argv:**char)->int{\n"
 		"	let q=foobar();				\n"

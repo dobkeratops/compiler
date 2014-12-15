@@ -280,7 +280,7 @@ Type* Type::get_void_ptr(){
 }
 
 bool Type::is_struct()const{
-	return struct_def()!=0 || name>=IDENT; //TODO .. it might be a typedef.
+	return struct_def()!=0 || name>=IDENT ||(def && def->as_struct_def()); //TODO .. it might be a typedef.
 }
 int Type::num_pointers() const {
 	if (!this) return 0;
@@ -420,7 +420,8 @@ void Type::translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_repla
 	// TODO: assert there is no shadowing in this types' own definitions
 	
 	Type* new_type=0;
-	this->clear_struct_def();
+	if (!this->is_anon_struct())
+		this->clear_struct_def();
 	int param_index=tpx.typeparam_index(this->name);
 	if ((this->name==PLACEHOLDER || this->name==AUTO) && inherit_replace){
 		this->name=inherit_replace->name;

@@ -2,6 +2,15 @@
 #include "scope.h"
 #include "exprstructdef.h"
 
+void dump_locals(Scope* s){
+	for (;s;s=s->parent){
+		for (auto v=s->vars; v;v=v->next_of_scope){
+			printf("\t;%s:",str(v->name));v->get_type()->dump(-1); printf("%%%s\n",str(v->reg_name));
+		}
+	}
+}
+
+
 ExprFnDef* NamedItems::getByName(Name n){
 	for(auto f=this->fn_defs;f;f=f->next_of_name){
 		if (f->name==n)
@@ -14,7 +23,18 @@ ExprStructDef* Scope::find_struct_of(const Expr* srcloc)
 {
 	auto t=srcloc->type();
 	auto st=t->deref_all();
-	if (!st->is_struct()) error(srcloc,t,"expected struct, got %s",st->name_str());
+	if (!st->is_struct()){
+#if DEBUG >= 2
+		t->dump(0);newline(0);
+		dump_locals(this);
+#endif
+		if (st->def){
+			if (auto sd=st->def->as_struct_def()){
+				return sd;
+			}
+		}
+		error(srcloc,t,"expected struct, got %s",st->name_str());
+	}
 	auto r=try_find_struct(st);
 	//		if (!r)
 	//			error(srcloc,"cant find struct %s", sname->name_str());
@@ -393,15 +413,6 @@ Expr*	Scope::current_loop(int levels){
 		}
 	}
 	return nullptr;
-}
-
-
-void dump_locals(Scope* s){
-	for (;s;s=s->parent){
-		for (auto v=s->vars; v;v=v->next_of_scope){
-			printf("\t;%s:",str(v->name));v->get_type()->dump(-1); printf("%%%s\n",str(v->reg_name));
-		}
-	}
 }
 
 

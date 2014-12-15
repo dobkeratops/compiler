@@ -332,7 +332,8 @@ member_of()	{ // todo, implement for 'Variable' aswell, unify capture & member-o
 void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
 	this->name.translate_typeparams(tpx);
 	if (this->get_type()){
-		this->get_type()->set_struct_def(nullptr); // needs resolving again
+		if (!this->get_type()->is_anon_struct())
+			this->get_type()->set_struct_def(nullptr); // needs resolving again
 		this->get_type()->translate_typeparams(tpx);
 	}
 	if (this->default_expr){

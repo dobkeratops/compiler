@@ -33,6 +33,7 @@ struct Type : ExprDef {
 	bool	is_float()const		{return raw_type_flags()&RT_FLOATING;}
 	bool	is_signed()const	{return raw_type_flags()&RT_SIGNED;}
 	bool	is_register()const	{return !is_complex();}
+	bool	is_anon_struct()const	{return !this->name && this->def;}
 	bool	is_complex()const;
 	bool	is_struct()const;
 	bool	is_bool()const		{return name==BOOL;}
