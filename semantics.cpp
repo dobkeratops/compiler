@@ -423,6 +423,9 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	for (int i=0; i<f->typeparams.size(); i++){matched_type_params.push_back(nullptr);}
 
 	int score=0;
+	// no args needed or given.. score is 1..
+	if (this->args.size()==0 && f->is_enough_args(0))
+		score++;
 	// +1 for any matching arg type regardless of placement,bonus if aprox right order
 	for (int i=0; i<args.size(); i++) {
 		auto at=args[i]->get_type(); if (!at) continue;

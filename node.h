@@ -80,25 +80,25 @@ public:
 	virtual void verify() {};
 	// abstract interface to 'struct-like' entities;
 	virtual Type* get_elem_type(int index){error(this,"tried to get elem on name=%s kind=%s",str(this->name),this->kind_str());return nullptr;}
-	virtual Name get_elem_name(int index){return this->get_elem(index)->name;}
+	virtual Name get_elem_name(int index){return this->get_elem_node(index)->name;}
 	virtual int get_elem_index(Name name){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return -1;}
 	virtual int get_elem_count()const{return 0;}
 	virtual size_t alignment()const {return 16;} // unless you know more..
-	virtual Node*	get_elem(int index){
+	virtual Node*	get_elem_node(int index){
 		error(this,"tried to get elem %d on %s:%s, not supported",index, str(this->name),this->kind_str());
 		return nullptr;
 	}
-	virtual Node*	get_elem(int index,int subindex){
-		return this->get_elem(index)->get_elem(subindex);
+	virtual Node*	get_elem_node(int index,int subindex){
+		return this->get_elem_node(index)->get_elem_node(subindex);
 	}
-	virtual Node*	get_elem(int index,int sub1,int sub2){
-		return this->get_elem(index)->get_elem(sub1)->get_elem(sub2);
+	virtual Node*	get_elem_node(int index,int sub1,int sub2){
+		return this->get_elem_node(index)->get_elem_node(sub1)->get_elem_node(sub2);
 	}
 	virtual Node*	get_last(){
-		return this->get_elem(this->get_elem_count()-1);
+		return this->get_elem_node(this->get_elem_count()-1);
 	}
 	virtual Node*	get_first(){
-		return this->get_elem(0);
+		return this->get_elem_node(0);
 	}
 	virtual ~Node(){
 		error("dont call delete, we haven't sorted out ownership of Types or nodes. compiler implementation doesn't need to free anything. Types will be owned by a manager, not the ast ");

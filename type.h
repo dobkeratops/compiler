@@ -2,7 +2,7 @@
 
 #include "stringtable.h"
 struct Name;
-struct Type : Expr{
+struct Type : ExprDef {
 	vector<TParamDef*> typeparams;
 	//ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
@@ -68,8 +68,11 @@ struct Type : Expr{
 	
 	bool		has_typeparam(Scope* sc);
 	bool 		is_typeparam(Scope* sc) const;
-	const Type*	get_elem(int index) const;
+	const Type*	get_elem(int index) const{return (const_cast<Type*>(this))->get_elem(index);}
 	Type*		get_elem(int index);
+	Type*		get_elem_type(int index){
+		return get_elem(index);
+	}
 	int			num_pointers()const;
 	int			num_pointers_and_arrays()const;
 	ExprStructDef*	struct_def_noderef()const;
@@ -83,6 +86,7 @@ struct Type : Expr{
 	void			dump_sub(int f
 							 )const;
 	void			dump(int depth)const;
+	static Type*	get_auto();
 	static Type*	get_bool();
 	static Type*	get_void();
 	static Type*	get_void_ptr();

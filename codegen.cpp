@@ -358,7 +358,20 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,
 	}
 	ASSERT(numptr==1);
 	
-	auto sd=src.type->deref_all()->def;//struct_def();
+	auto sderef=src.type->deref_all();
+	auto sd=sderef->def;//struct_def();
+	if (!sd && sderef->name==TUPLE) {
+		sd=sderef;
+	}
+	if (!sd){
+		dbprintf("\nsomething wrong:-\n");
+		dbprintf("%s\n",src.type->name_str());
+		src.type->dump(0);
+		if (src.type->def)
+			src.type->def->dump(0);
+		src.type->deref_all()->dump(0);
+		ASSERT(0 && "something wrong");
+	}
 	auto field_type=sd->get_elem_type(field_index);//fields[field_index]->type();
 	auto areg=this->next_reg();
 	this->emit_ins_begin(areg, "getelementptr inbounds  ");

@@ -240,7 +240,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		flags=0; // dont throw type error here
 	}
 	
-	if (true ||!this->is_generic()){
+	if (true || !this->is_generic()){
 		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
 			this->args[i]->resolve(this->scope, nullptr, flags); // todo: call with defaultparams & init-expr
 			auto arg=this->args[i];

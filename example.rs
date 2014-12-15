@@ -162,6 +162,10 @@ fn main(argc:int,argv:**char)->int{
 	// calls to templated functions .. setting value & tag of the variant
 	setv(&u,2.0);
 	setv(&u,5);
+
+	let tup=tuple_test();
+	let tup2=tuple_test2();
+	printf("tuple components %d %d %d\n",tup.0, tup.1, tup.2);
  
 	// type inference with polymorphic lambdas
 	// could overload 'map' to supply different combinations of types
@@ -284,7 +288,12 @@ struct Bar : IBaz {
 		printf("hello from Bar.foo this.y=%d\n",y);
 	}
 }
-
+fn tuple_test(){
+	(12,23,34)
+}
+fn tuple_test2()->(int,float,int){
+	(12,23.0,34)
+}
 fn foo_bar(i:int){
 }
 fn foo_bar(p:*void){

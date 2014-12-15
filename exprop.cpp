@@ -4,13 +4,15 @@
 #include "exprstructdef.h"
 #include "exprblock.h"
 #include "codegen.h"
-
+#include "lexer.h"
 void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
 	lhs->translate_typeparams_if(tpx);
 	rhs->translate_typeparams_if(tpx);
 	this->type()->translate_typeparams_if(tpx);
 }
 
+void dump_field_info(Node* n,Scope* sc){
+}
 
 void ExprOp::verify() {
 	verify_expr_op(this);
@@ -172,13 +174,27 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			verify_expr_op(this);
 			//			verify_expr_ident(rhs);
 			//			ASSERT(rhs->as_ident());
-			if (auto field_name=rhs->as_ident()){
+			
+			if (isNumStart(*str(rhs->name))){
+				auto fi=getNumberInt(rhs->name);
+				if (auto t=this->lhs->type()){
+					auto elem_t = t->get_elem(fi);
+					propogate_type(flags, this, elem_t);
+					return propogate_type_fwd(flags,this, desired, this->type_ref());
+				}
+			}
+			else if (auto field_name=rhs->as_ident()){
 				if (auto st=sc->find_struct_of(lhs)){
 					if (auto f=st->find_field(rhs)){
 						ret=f->type();
 						return propogate_type(flags,this, ret,this->type_ref());
 					}
 				}
+				if (flags&R_FINAL) {
+					dump_field_info(this,sc);
+				}
+				// no good.
+				return ResolvedType();
 			} else if (auto call=rhs->as_block()){
 				auto method_name=call->call_expr->name;
 				// really we want to desugar this, a.foo(b) is just foo(a,b)
@@ -188,8 +204,9 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				return propogate_type(flags,this,call->type(),this->type_ref());
 			} else {
 				if (flags & R_FINAL){
-					error(this,"dot operator not call or field acess", t->name_str());
+					error_begin(this,"dot operator not call or field acess %s.%s %d", t->name_str(), this->rhs->name_str(), is_number(this->rhs->name));
 					error(this,"cant find struct %s", t->name_str());
+					error_end(this);
 				}
 			}
 		}
@@ -312,19 +329,24 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	// generalize by lvalue being in register or memory.
 	// 3-operand; assign-op; assign-op; mem-assign-op;
 	if (opname==DOT || opname==ARROW){
-		if (rhs->as_ident()) {
-			auto lhsv=e->lhs->compile(cg,sc);
-			// auto-deref is part of language semantics, done here..
-			while (lhsv.type->num_pointers()+(lhsv.addr?1:0) > 1){
-				cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
-				lhsv = lhsv.deref_op(cg,0);
-			}
-			return lhsv.get_elem(cg,e->rhs,sc);
-		}
-		else{
+		if (rhs->as_block()){
 			// compile method call
 			return compile_function_call(cg,sc,e->lhs->compile(cg,sc),e->lhs,e->rhs->as_block());
 		}
+		auto lhsv=e->lhs->compile(cg,sc);
+		// auto-deref is part of language semantics, done here..
+		while (lhsv.type->num_pointers()+(lhsv.addr?1:0) > 1){
+			cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
+			lhsv = lhsv.deref_op(cg,0);
+		}
+		if (isNumStart(*str(rhs->name))){
+			return lhsv.get_elem_index(cg, getNumberInt(rhs->name));
+		}
+		if (rhs->as_ident()) {
+			return lhsv.get_elem(cg,e->rhs,sc);
+		}
+		error(this,"unhandled case, dot operator");
+		return CgValue();
 	}
 	else if (opname==BREAK){
 		cg.emit_comment("BREAK EXPRESSION");

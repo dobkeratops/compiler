@@ -17,6 +17,111 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	{
+		"multiple return",__FILE__,__LINE__,
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let q=foobar();				\n"
+		"	0	}\n"
+		"fn foobar()->(int,float,int){	\n"
+		"	(1,2.0,3)	\n"
+		"}\n"
+		,nullptr
+	},
+
+	{	"multi feature test 2",__FILE__,__LINE__,
+		
+		"fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{\n"
+		"	let result=init();\n"
+		"	for index:=0; index<src.size(); index+=1 {\n"
+		"		push_back(&result, f(get(src,index)));\n"
+		"	}\n"
+		"	result \n"
+		"}\n"
+		"fn\"C\" printf(s:str,...)->int;\n"
+		"fn debugme[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{\n"
+		" if u.tag==0 { fx(&u.x)}\n"
+		" else { fy(&u.y)}\n"
+		"}\n"
+		"fn main(argc:int,argv:**char)->int{\n"
+		"fv:=Foo{vx=13,vy=14,vz=15};\n"
+		" u=:Union[int,float];\n"
+		" setv(&u,0.0);\n"
+		" setv(&u,0);\n"
+		" z:=debugme(&u,											\n"
+		"	|x:&int|{printf(\"union was set to int\\n\");10},	\n"
+		"	|x:&float|{printf(\"union was set to float\\n\");12}	\n"
+		"	);												\n"
+		"printf(\"map union returns %d\\n\", z);						\n"
+		"	xs=:array[int,512];\n"
+		"q:=xs[1]; p1:=&xs[1];\n"
+		"	xs[2]=000;\n"
+		"	xs[2]+=400;\n"
+		"	*p1=30;\n"
+		"z:=5;\n"
+		"y:=xs[1]+z+xs[2];\n"
+		"x:=0;\n"
+		"	something_foo(&fv,&fv);\n"
+		"	for i:=0,j:=0; i<10; i+=1,j+=10 {\n"
+		"		x+=i;\n"
+		"		printf(\"i,j=%d,%d,x=%d\\n\",i,j,x);\n"
+		"	}else{\n"
+		"		printf(\"loop exit fine\\n\");\n"
+		"	}\n"
+		"		something_foo(&fv);\n"
+		"		something(&fv);\n"
+		"		take_closure(|x|{printf(\"closure says %d %d\\n\",x,y);})\n"
+		"		\n"
+		"		x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};\n"
+		"		printf(\"yada yada yada\\n\");\n"
+		"		printf(\"\\nHello World %d\n\", y );\n"
+		"		0\n"
+		"		}\n"
+		"fn lerp(a,b,f)->float{(b-a)*f+a};\n"
+		"fn foo(a:*char)->void;\n"
+		"struct Foo {\n"
+		"vx:int, vy:int, vz:int\n"
+		"}\n"
+		"fn something_foo(f:&Foo){\n"
+		"	printf(\"f.x= %d\\n\", f.vx);\n"
+		"}\n"
+		"fn something_foo(f:&Foo,x:&Foo){\n"
+		"	printf(\"something_foo with 2 args overloaded\\n\");\n"
+		"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx,f.vy,f.vz);\n"
+		"}\n"
+		"fn something(f:&Foo){\n"
+		"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx, f.vy, f.vz);\n"
+		"}\n"
+		"fn something(f:float){\n"
+		"}\n"
+		"fn something(f:float,x){\n"
+		"}\n"
+		"fn take_closure(funcp:(int)->void){\n"
+		"	funcp(10);\n"
+		"}\n"
+		"struct Union[X,Y]{\n"
+		"tag:int,\n"
+		"x:X,y:Y,\n"
+		"};\n"
+		"fn setv[X,Y](u:&Union[X,Y],x:Y)->void{\n"
+		" printf(\"setv Y\\n\");\n"
+		"}\n"
+		"fn setv[X,Y](u:&Union[X,Y],x:X)->void{\n"
+		" printf(\"setv X\\n\");\n"
+		"}\n"
+		,
+		nullptr
+	},
+	
+
+	{
+		"tuples",__FILE__,__LINE__,
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let x=(1,0.0,3);			\n"
+		"	let q=x.1;				\n"
+		"	0	"
+		"}"
+		,nullptr
+	},
+	{
 		"for  else, nested break",__FILE__,__LINE__,
 		/*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
 		/*2*/	"fn main(argc:int, argv:**char)->int{	\n"
@@ -358,91 +463,6 @@ CompilerTest g_Tests[]={
 		,
 		nullptr
 	},
-
-	{	"multi feature test 2",__FILE__,__LINE__,
-		
-		"fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{\n"
-		"	let result=init();\n"
-		"	for index:=0; index<src.size(); index+=1 {\n"
-		"		push_back(&result, f(get(&src,index)));\n"
-		"	}\n"
-		"	result \n"
-		"}\n"
-		"fn\"C\" printf(s:str,...)->int;\n"
-		"fn debugme[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{\n"
-		" if u.tag==0 { fx(&u.x)}\n"
-		" else { fy(&u.y)}\n"
-		"}\n"
-		"fn main(argc:int,argv:**char)->int{\n"
-		"fv:=Foo{vx=13,vy=14,vz=15};\n"
-		" u=:Union[int,float];\n"
-		" setv(&u,0.0);\n"
-		" setv(&u,0);\n"
-		" z:=debugme(&u,											\n"
-		"	|x:&int|{printf(\"union was set to int\\n\");10},	\n"
-		"	|x:&float|{printf(\"union was set to float\\n\");12}	\n"
-		"	);												\n"
-		"printf(\"map union returns %d\\n\", z);						\n"
-		"	xs=:array[int,512];\n"
-		"q:=xs[1]; p1:=&xs[1];\n"
-		"	xs[2]=000;\n"
-		"	xs[2]+=400;\n"
-		"	*p1=30;\n"
-		"z:=5;\n"
-		"y:=xs[1]+z+xs[2];\n"
-		"x:=0;\n"
-		"	something_foo(&fv,&fv);\n"
-		"	for i:=0,j:=0; i<10; i+=1,j+=10 {\n"
-		"		x+=i;\n"
-		"		printf(\"i,j=%d,%d,x=%d\\n\",i,j,x);\n"
-		"	}else{\n"
-		"		printf(\"loop exit fine\\n\");\n"
-		"	}\n"
-		"		something_foo(&fv);\n"
-		"		something(&fv);\n"
-		"		take_closure(|x|{printf(\"closure says %d %d\\n\",x,y);})\n"
-		"		\n"
-		"		x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};\n"
-		"		printf(\"yada yada yada\\n\");\n"
-		"		printf(\"\\nHello World %d\n\", y );\n"
-		"		0\n"
-		"		}\n"
-		"fn lerp(a,b,f)->float{(b-a)*f+a};\n"
-		"fn foo(a:*char)->void;\n"
-		"struct Foo {\n"
-		"vx:int, vy:int, vz:int\n"
-		"}\n"
-		"fn something_foo(f:&Foo){\n"
-		"	printf(\"f.x= %d\\n\", f.vx);\n"
-		"}\n"
-		"fn something_foo(f:&Foo,x:&Foo){\n"
-		"	printf(\"something_foo with 2 args overloaded\\n\");\n"
-		"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx,f.vy,f.vz);\n"
-		"}\n"
-		"fn something(f:&Foo){\n"
-		"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx, f.vy, f.vz);\n"
-		"}\n"
-		"fn something(f:float){\n"
-		"}\n"
-		"fn something(f:float,x){\n"
-		"}\n"
-		"fn take_closure(funcp:(int)->void){\n"
-		"	funcp(10);\n"
-		"}\n"
-		"struct Union[X,Y]{\n"
-		"tag:int,\n"
-		"x:X,y:Y,\n"
-		"};\n"
-		"fn setv[X,Y](u:&Union[X,Y],x:Y)->void{\n"
-		" printf(\"setv Y\\n\");\n"
-		"}\n"
-		"fn setv[X,Y](u:&Union[X,Y],x:X)->void{\n"
-		" printf(\"setv X\\n\");\n"
-		"}\n"
-		,
-		nullptr
-	},
-
 	{
 		nullptr,nullptr,0,nullptr,nullptr
 	}
@@ -451,6 +471,7 @@ CompilerTest g_Tests[]={
 
 void run_tests(){
 	int index=0;
+	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
 	for (auto t=g_Tests; t->name; t++,index++){
 		char tmp[256]; sprintf(tmp,"test_%d.ll",index);
 		printf("\nRunning Test[%d]: %s\n\n",index,t->name);
@@ -474,7 +495,6 @@ void run_tests(){
 			free(output);
 		}
 	}
-	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
 
 }
 					

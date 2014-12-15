@@ -87,12 +87,31 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 	if (this->type()) this->type()->resolve(sc,nullptr,flags);
 	this->def->resolve_if(sc, nullptr, flags);
 	
-	
 	/// loose end? if this is a method-call, we dont resolve the symbol here,
 	/// in other contexts we do
 	if (this->call_expr &&!receiver)
 		this->call_expr->resolve(sc,nullptr,flags);
 	::verify(this->get_type());
+
+	if (this->is_tuple()) {
+		for (size_t i=0; i<this->argls.size(); i++) {
+			auto desired_sub=desired?desired->get_elem(i):nullptr;
+			this->argls[i]->resolve(sc,desired_sub,flags);
+		}
+		// todo: we need to get better at filling in the gaps.
+		if (!this->get_type()) {
+			auto t=new Type(this, TUPLE);
+			for (size_t i=0; i<this->argls.size();i++){
+				auto ct=this->argls[i]->get_type();
+				if (!ct) ct=Type::get_auto();
+				t->push_back(ct);
+			}
+			t->set_def(t);
+			this->set_type(t);
+		}
+		return propogate_type_fwd(flags,(Node*)this, desired,this->type_ref());
+	}
+
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->get_type()) this->set_type(new Type(this,VOID));
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
@@ -292,7 +311,16 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 	auto n=this;
 	auto e=this; auto curr_fn=cg.curr_fn;
 	// [1] compound expression - last expression is the return .
-	if(e->is_compound_expression()) {
+	if (e->is_tuple()){
+		auto tuple=cg.emit_alloca_type(e, e->type());
+		for (int i=0; i<e->argls.size(); i++){
+			auto val=e->argls[i]->compile(cg,sc);
+			auto elem=tuple.get_elem_index(cg,i);
+			elem.store(cg,val);
+		}
+		return tuple;
+	}
+	else if(e->is_compound_expression()) {
 		if (auto num=e->argls.size()) {
 			for (int i=0; i<num-1; i++){
 				e->argls[i]->compile(cg,sc);

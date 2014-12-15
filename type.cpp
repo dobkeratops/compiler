@@ -255,11 +255,16 @@ bool Type::is_complex()const{
 	return false;
 }
 // todo table of each 'intrinsic type', and pointer to it
-Type* g_bool,*g_void,*g_void_ptr,*g_int;
+Type* g_bool,*g_void,*g_void_ptr,*g_int,*g_auto;
 Type* Type::get_bool(){
 	/// todo type hash on inbuilt indices
 	if (g_bool)return g_bool;
 	return (g_bool=new Type(nullptr,BOOL));
+}
+Type* Type::get_auto(){
+	/// todo type hash on inbuilt indices
+	if (g_auto)return g_auto;
+	return (g_auto=new Type(nullptr,AUTO));
 }
 Type* Type::get_void(){
 	if (g_void)return g_void;
@@ -305,7 +310,9 @@ size_t Type::alignment() const{
 
 size_t Type::size() const{
 	auto tf=this->raw_type_flags();
-	if (tf){return tf&RT_SIZEMASK};
+	if (tf){
+		return tf&RT_SIZEMASK
+	};
 	auto union_size=[](const Type *t){
 		size_t max_elem_size=0;
 		for (auto s=t->sub; s;s=s->next){
