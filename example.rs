@@ -158,7 +158,7 @@ fn main(argc:int,argv:**char)->int{
 	let u:Union<int,float>; 
 	let banana:struct{uuu:int,vvv:float}
 	banana.uuu=50;
-//	take_banana(banana);
+	take_banana(&banana);
 
 	// alternate syntax for declaring  a new uninitialized variable of type
 	v=:Union<float,int>;
@@ -333,6 +333,6 @@ fn foo_bar(p:*Foo,q:*Foo,w:*Foo){
 }
 
 fn take_banana(x){
-	printf("banana anon struct %d %f\n",x.uuu,x.vvv);
+	printf("banana anon struct in adhoc template x=%d \n",x.uuu);
 }
 
