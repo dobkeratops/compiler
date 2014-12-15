@@ -169,6 +169,7 @@ fn main(argc:int,argv:**char)->int{
 			printf("i,k=%d,%d,x=%d\n",i,k,acc);
 			if k==5{printf("break from inner loop\n");break break 55;}
 		}
+		if j==6 {break 66;}
 	}else{
 		// for..else block called if no 'break'
 		printf("loop exit fine\n"); 
