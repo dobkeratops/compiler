@@ -63,7 +63,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		if (this->rhs) {
 			// break expression..
 			rhs->resolve(sc,desired,flags);
-			auto loop = sc->current_loop();
+			auto loop = sc->current_loop(this->lhs?getNumberInt(lhs->name):1);
 			if (flags & R_FINAL){
 				if (!loop && flags&R_FINAL) {
 					error(this,"break without loop");

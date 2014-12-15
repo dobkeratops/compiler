@@ -13,7 +13,8 @@ struct Expr : public Node{					// anything yielding a value
 public:
 };
 
-
+struct ExprDef;
+struct ExprStructDef;
 struct ExprScopeBlock : Expr{
 	Scope*		scope=0;
 };
@@ -30,7 +31,7 @@ struct Pattern : Node {
 struct ExprDef :Expr{
 	Node*	refs=0;
 	void	remove_ref(Node* ref);
-	virtual ExprStructDef* member_of()const{return nullptr;}
+	virtual ExprDef* member_of(){return nullptr;}
 };
 
 struct TParamDef: ExprDef{
@@ -81,7 +82,7 @@ struct ArgDef :ExprDef{
 	void set_owner(Scope* s){
 		ASSERT(owner==0 ||owner==s);
 		this->owner=s;}
-	ExprStructDef* member_of();
+	ExprDef* member_of()override;
 	uint32_t	size_of,offset;
 	//Type* type=0;
 	Expr*		default_expr=0;
@@ -137,8 +138,9 @@ struct ExprIdent :Expr{
 	ExprIdent(Name n,SrcPos sp)				{pos=sp;name=n;set_type(nullptr);}
 	ExprIdent(SrcPos sp,Name n)				{pos=sp;name=n;set_type(nullptr);}
 	const char*	kind_str()const override		{return"ident";}
-	Name		as_name()const override			{return name;};
-	ExprIdent*	as_ident()						{return this;}
+	Name		as_name()const override		{return name;};
+	ExprIdent*	as_ident()					{return this;}
+	const ExprIdent* as_ident() const		{return this;}
 	bool		is_function_name()const	override;
 	bool		is_variable_name()const	override;
 	bool		is_placeholder()const			{return name==PLACEHOLDER;}
@@ -147,6 +149,7 @@ struct ExprIdent :Expr{
 	CgValue		compile(CodeGen&cg, Scope* sc) override;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags) override;
 };
+
 
 // load data->vtb // if this matters it would be inlined
 // load vtb->fn

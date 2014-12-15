@@ -376,10 +376,14 @@ void Scope::dump(int depth)const {
 	newline(depth);dbprintf("}");
 }
 
-Expr*	Scope::current_loop(){
+Expr*	Scope::current_loop(int levels){
+	int i=0;
 	for (auto sc=this; sc;sc=sc->parent_within_fn()){
-		if (auto n=sc->node->as_for())
-			return (Expr*)n;
+		if (auto n=sc->node->as_for()){
+			i++;
+			if (i==levels)
+				return (Expr*)n;
+		}
 	}
 	return nullptr;
 }

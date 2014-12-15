@@ -205,9 +205,23 @@ const char* getString(const Name& n) {
 	auto i=index(n);
 	return i?g_Names.index_to_name[i].c_str():"";
 }
+
 Name getNumberIndex(int num){
 	char tmp[32];sprintf(tmp,"%d",num); return g_Names.get_index(tmp,0,StringTable::Number);
 }
+Name getNumberIndex(float num){
+	char tmp[32];sprintf(tmp,"%f",num); return g_Names.get_index(tmp,0,StringTable::Number);
+}
 bool is_number(Name n){
 	return g_Names.flags[(int)n]&StringTable::Number;
+}
+int getNumberInt(Name n){
+	int r;
+	sscanf(str(n),"%d",&r);
+	return r;
+}
+float getNumberFloat(Name n){
+	float r;
+	sscanf(str(n),"%f",&r);
+	return r;
 }

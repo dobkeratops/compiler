@@ -165,6 +165,7 @@ ExprLiteral::ExprLiteral(const SrcPos& s,float f) {
 	set_type(new Type(this,FLOAT));
 	type_id=T_FLOAT;
 	u.val_float=f;
+	this->name = getNumberIndex(f);
 }
 ExprLiteral::ExprLiteral(const SrcPos& s,int i) {
 	pos=s;
@@ -172,6 +173,7 @@ ExprLiteral::ExprLiteral(const SrcPos& s,int i) {
 	set_type(new Type(this,INT));
 	type_id=T_INT;
 	u.val_int=i;
+	this->name = getNumberIndex(i);
 }
 ExprLiteral::ExprLiteral(const SrcPos& s,const char* start,int length) {//copy
 	pos=s;
@@ -273,8 +275,10 @@ void ExprIdent::translate_typeparams(const TypeParamXlat& tpx)
 	this->type()->translate_typeparams_if(tpx);
 }
 
-ExprStructDef* ArgDef::member_of()	{ // todo, implement for 'Variable' aswell, unify capture & member-object.
-	if (owner) return owner->get_receiver();
+ExprDef* ArgDef::
+member_of()	{ // todo, implement for 'Variable' aswell, unify capture & member-object.
+	if (owner)
+		return (ExprDef*)owner->get_receiver();
 	return nullptr;
 }
 

@@ -739,16 +739,17 @@ void CodeGen::emit_branch(CgValue cond, Name label_then, Name label_else){
 	emit_txt("i1 %%%s, label %%%s, label %%%s",str(cr.reg), str(label_then), str(label_else));
 	emit_ins_end();
 }
-CgValue CodeGen::emit_break(  CgValue v){
+CgValue CodeGen::emit_break(  CgValue v, int levels){
 	
-	auto i=this->flow_depth-1;
+	auto i=this->flow_depth-levels;
 	ASSERT(i>=0);
 	this->flow_result[i].store(*this, v);
 	emit_branch(this->flow_break_to[i]);
 	return this->flow_result[i];
 }
-CgValue CodeGen::emit_continue(){
-	auto i=this->flow_depth-1;
+CgValue CodeGen::emit_continue(int levels){
+	auto i=this->flow_depth-levels;
+	ASSERT(i>=0);
 	emit_branch(this->flow_continue_to[i]);
 	return this->flow_result[i];
 }

@@ -4,11 +4,6 @@
 #include "ast.h"
 #include "codegen.h"
 
-bool Node::is_ident()const {
-	return (dynamic_cast<const ExprIdent*>(this)!=0);
-}
-
-
 void Node::clear_def(){
 	if (def)
 		def->remove_ref(this);

@@ -522,11 +522,15 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 ExprOp* parse_flow(TokenStream& src,Name flow_statement){
 	// break is an operator. label,return.
 	Expr* expr=nullptr;
+	int levels=1;
+	while (src.eat_if(flow_statement)){
+		levels++;
+	}
 	if (!(src.peek_tok()==CLOSE_BRACE || src.peek_tok()==SEMICOLON)){
 		dbprintf("%s\n",str(src.peek_tok()));
 		expr=parse_expr(src);
 	}
-	return new ExprOp(flow_statement, src.pos,nullptr,expr);
+	return new ExprOp(flow_statement, src.pos,new ExprLiteral(src.pos,levels),expr);
 }
 
 ExprLiteral* parse_literal(TokenStream& src) {
@@ -607,7 +611,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 			return fn_type;
 		}
 	} else {
-		// prefixes in typegrammar..
+		// prefixes in typegrammar - pointers
 		if (tok==MUL || tok==AND) {
 			ret=new Type(owner,PTR);
 			ret->sub=parse_type(src,close,owner);

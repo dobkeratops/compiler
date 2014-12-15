@@ -56,7 +56,7 @@ public:
 		error(this,"expected named item at node %s kind=%s",str(this->name),this->kind_str());
 		return PLACEHOLDER;
 	};
-	bool is_ident()const;
+	bool is_ident()const{return as_ident()!=nullptr;}
 	virtual ExprStructDef* as_struct_def()const;
 	template<typename T> T* as()const{ auto ret= const_cast<T*>(dynamic_cast<T*>(this)); if (!ret){error(this,"expected,but got %s",this->kind_str());} return ret;};
 	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
@@ -66,6 +66,7 @@ public:
 	CgValue compile_if(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
 	virtual ExprIdent*	as_ident() {return nullptr;}
+	virtual const ExprIdent*	as_ident() const{return nullptr;}
 	virtual ExprFor* 	as_for() {return nullptr;}
 	virtual ExprFnDef*	as_fn_def() {return nullptr;}
 	virtual const ExprFnDef*	as_fn_def() const {return nullptr;}

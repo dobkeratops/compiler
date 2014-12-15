@@ -103,6 +103,7 @@ extern StringTable g_Names;
 
 
 Name getStringIndex(const char* str,const char* end);
+Name getNumberIndex(float num);	// ints in the type system stored
 Name getNumberIndex(int num);	// ints in the type system stored like so
 int getNumberInt(Name n);
 float getNumberFloat(Name n);

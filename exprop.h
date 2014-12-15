@@ -20,10 +20,13 @@ struct ExprOp: public Expr{
 	int		get_op_name() const				{return index(this->name);}
 	bool	is_undefined()const				{return (lhs?lhs->is_undefined():false)||(rhs?rhs->is_undefined():false);}
 	ExprOp*		as_op()const override		{return const_cast<ExprOp*>(this);}
-const char* kind_str()const override		{return"operator";}
-void 		translate_typeparams(const TypeParamXlat& tpx) override;
+	const char* kind_str()const override		{return"operator";}
+	void 		translate_typeparams(const TypeParamXlat& tpx) override;
 ResolvedType resolve(Scope* scope, const Type* desired,int flags) override;
-void 		find_vars_written(Scope* s, set<Variable*>& vars) const override;
-void 		verify() override;
-CgValue compile(CodeGen& cg, Scope* sc);
+	void 		find_vars_written(Scope* s, set<Variable*>& vars) const override;
+	void 		verify() override;
+	int			num_levels(int name);
+	int			get_flow_expr(int name);
+	CgValue compile(CodeGen& cg, Scope* sc);
+
 };

@@ -328,6 +328,18 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			return compile_function_call(cg,sc,e->lhs->compile(cg,sc),e->lhs,e->rhs->as_block());
 		}
 	}
+	else if (opname==BREAK){
+		cg.emit_comment("BREAK EXPRESSION");
+		
+		cg.emit_break(rhs->compile(cg,sc),lhs?getNumberInt(lhs->name):1);
+		return CgValue();
+	}
+	else if (opname==CONTINUE){
+		cg.emit_comment("CONTINUE");
+		
+		cg.emit_continue(lhs?getNumberInt(lhs->name):1);
+		return CgValue();
+	}
 	else if (e->lhs && e->rhs){
 		auto lhs=e->lhs->compile(cg,sc);
 		auto rhs=e->rhs->compile(cg,sc);
@@ -399,11 +411,6 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 			cg.emit_free(x,1);	///TODO array types, rustlike DST??
 			
 			/// TODO call destructor here.
-			return CgValue();
-		}
-		else if (opname==BREAK){
-			cg.emit_comment("BREAK EXPRESSION");
-			cg.emit_break(rhs->compile(cg,sc));
 			return CgValue();
 		}
 		else {
