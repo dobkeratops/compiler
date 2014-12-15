@@ -18,6 +18,11 @@ ExprStructDef* Scope::find_struct_of(const Expr* srcloc)
 	auto r=try_find_struct(sname);
 	//		if (!r)
 	//			error(srcloc,"cant find struct %s", sname->name_str());
+	if (!r){
+		if (auto sd=srcloc->type()->def->as_struct_def()){
+			return sd;
+		}
+	}
 	return r;
 }//original scope because typarams might use it.
 

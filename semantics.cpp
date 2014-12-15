@@ -566,15 +566,34 @@ void dump(vector<T*>& src) {
 }
 ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 
-	auto sd=sc->find_struct(si->call_expr);
-	if (!sd){
-		if (flags&R_FINAL){
-			error(si->call_expr,"can't find struct %s",si->call_expr->name_str());
-		}
-		return ResolvedType();
+	ExprStructDef* sd=nullptr;
+	if (si->call_expr->name==PLACEHOLDER && desiredType){
+		if (desiredType->def)
+			sd=desiredType->def->as_struct_def();
+		dbg_type("infered struct init def=%s\n",sd->name_str());
+		if (!sd) return ResolvedType();
+		sd->dump(-1);
+		dbg_type("\n");
+		si->call_expr->set_type(desiredType);
+		if (!si)
+			si->set_type(desiredType);
+	} else if (si->call_expr->type() && si->call_expr->name==PLACEHOLDER){
+		dbg_type("why is this hapening? def\n");
+		sd=si->call_expr->type()->def->as_struct_def();
 	}
+	else {
+		sd=sc->find_struct(si->call_expr);
+		if (!sd){
+			if (flags&R_FINAL){
+				error(si->call_expr,"can't find struct %s",si->call_expr->name_str());
+			}
+			return ResolvedType();
+		}
+	}
+	// if its in place..
 	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
-	if (local_struct_def)sc->add_struct(local_struct_def); // todo - why did we need this?
+	if (local_struct_def)
+		sc->add_struct(local_struct_def); // todo - why did we need this?
 	if (!si->type()){
 		si->set_type(new Type(sd));
 	}

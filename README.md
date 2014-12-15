@@ -44,9 +44,11 @@ Basically trying to combine everything I like from C++ & Rust, dropping what I d
 This could all be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects - retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? both go against the underlying design of either .
 
 Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code;
-I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code. Also I value performance+productivity over compile-time safety.(you need to write tests for other reasons, productivity for *tests* yields bug free code.)
+I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code.
 
-I beleive C++'s main 'curse' is the way headers & classes interact, and the asymetry between functions and methods has always been frustrating. Other flaws are acceptable due to its evolutionary path and need to represent low level code.
+Also I value performance+productivity over compile-time safety.(you need to write tests for other reasons, productivity for *tests* yields bug free code... there is so much you still can't verify at compile time).
+
+I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating. Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
 Rust is too restrictive. Somewhere between the two is my perfect language.
 

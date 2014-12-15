@@ -17,6 +17,18 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	{
+		"return struct",__FILE__,__LINE__,
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let q=foobar();				\n"
+		"	let w=q.x;					\n"
+		"	0	}						\n"
+		"fn foobar()->struct {x:int,y:int}{	\n"
+		"	_{88,99}	\n"
+		"}\n"
+		,nullptr
+	},
+
+	{
 		"multiple return",__FILE__,__LINE__,
 		"fn main(argc:int,argv:**char)->int{\n"
 		"	let q=foobar();				\n"
@@ -26,7 +38,6 @@ CompilerTest g_Tests[]={
 		"}\n"
 		,nullptr
 	},
-
 	{	"multi feature test 2",__FILE__,__LINE__,
 		
 		"fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{\n"
@@ -471,7 +482,6 @@ CompilerTest g_Tests[]={
 
 void run_tests(){
 	int index=0;
-	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
 	for (auto t=g_Tests; t->name; t++,index++){
 		char tmp[256]; sprintf(tmp,"test_%d.ll",index);
 		printf("\nRunning Test[%d]: %s\n\n",index,t->name);
@@ -495,6 +505,7 @@ void run_tests(){
 			free(output);
 		}
 	}
+	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
 
 }
 					

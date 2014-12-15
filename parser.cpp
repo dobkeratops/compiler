@@ -589,6 +589,11 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 		ret->push_back(parse_tuple(src,owner));// args
 		parse_ret_val(src,owner,ret);
 	}
+	else if (tok==STRUCT){
+		auto sd=parse_struct(src);
+		ret=new Type(sd); ret->pos=src.pos;
+		
+	}
 	else if (tok==OR){ // rust-style closure |arg0,arg1,..|->ret
 		ret = new Type(owner,CLOSURE);
 		auto args=new Type(owner,TUPLE); ret->push_back(args);
@@ -670,7 +675,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 
 ExprStructDef* parse_struct(TokenStream& src) {
 	auto pos=src.pos;
-	auto sname=src.eat_ident();
+	auto sname=src.peek_tok()==OPEN_BRACE?0:src.eat_ident();
 	return parse_struct_body(src,pos,sname,nullptr);
 }
 // TODO: are struct,trait,enum actually all the same thing with a different 'default'

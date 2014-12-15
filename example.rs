@@ -48,7 +48,7 @@ fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
 fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{
 	let result=reserve(src.size());
 	for index:=0; index<src.size(); index+=1 {
-		push_back(&result, f(get(&src,index)));
+		push_back(&result, f(src.get(index)));
 	}
 	result
 }
@@ -73,6 +73,7 @@ struct Foo {
 struct IBaz {
 	// sugar: with other qualifiers, 'fn' is optional,assumed.
 	virtual foo(){}  
+	virtual bar(){}  
 }
 // in a 'trait', functions default to 'virtual'.
 //struct IBar {
@@ -166,6 +167,9 @@ fn main(argc:int,argv:**char)->int{
 	let tup=tuple_test();
 	let tup2=tuple_test2();
 	printf("tuple components %d %d %d\n",tup.0, tup.1, tup.2);
+
+	let foo=ret_anon_struct();
+	printf("anon struct fields= %d %d\n",foo.x, foo.y);
  
 	// type inference with polymorphic lambdas
 	// could overload 'map' to supply different combinations of types
@@ -280,6 +284,9 @@ struct Qux : IBaz {
 	fn foo(){
 		printf("hello from Qux.foo this=%p this.x=%d\n",this,x);
 	}
+	fn bar(){
+		printf("hello from Qux.bar this=%p this.x=%d\n",this,x);
+	}
 }
 
 struct Bar : IBaz {
@@ -287,12 +294,24 @@ struct Bar : IBaz {
 	fn foo(){
 		printf("hello from Bar.foo this.y=%d\n",y);
 	}
+	fn bar(){
+		printf("hello from Bar.bar this.y=%d\n",y);
+	}
 }
 fn tuple_test(){
 	(12,23,34)
 }
 fn tuple_test2()->(int,float,int){
 	(12,23.0,34)
+}
+// multiple *named* return values as anonymous struct
+// need to write 'struct' because type-context doesn't  include braces
+// if we name it, it doesn't go into any scope at the minute.
+
+fn ret_anon_struct()->struct{x:int, y:int}{
+	_{88,99} // _{...} is a struct initializer, like ident{..}, but infered
+			// must write preceeding _, because {...} is a compound expression
+			// todo - should we allow tuples to coerce to structs if layout matches?
 }
 fn foo_bar(i:int){
 }
