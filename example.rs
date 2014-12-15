@@ -2,7 +2,6 @@
 
 // Uses .rs extention for syntax highlighting, but this is not Rust source.
 // omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types.
-// TODO extern"C" methods with simplified mangle.
 struct FILE;
 extern"C"fn printf(s:str,...)->int;
 extern"C"fn fopen(d:*char,z:*char)->*FILE;
@@ -62,8 +61,17 @@ struct Foo {
 }
 
 // internal vtables
+// simplified implementation - base must describe whole vtable layout
+// 'inherited' types overide base class functions & can override eachother.
+// this language does not focus on class-heirachies
+// other mechanisms to follow (trait objects) 
+// & switch-like dispatch can be done with templates.
+// performance code sorts by type anyway.
+//
+// have implemented this for self-hosting.. the compiler in C++ uses them.
+
 struct IBaz {
-	// sugar: with other qualifiers, 'fn' is optional,assumed
+	// sugar: with other qualifiers, 'fn' is optional,assumed.
 	virtual foo(){}  
 }
 // in a 'trait', functions default to 'virtual'.
@@ -97,7 +105,8 @@ fn something(f:float,x){
 // but want the template engine able to handle rolling pleasant custom variants
 // (TODO: max[sizeof[X],sizeof[Y]] operators in template engine..)
 //
-// raw pointers could implement anything
+// raw pointers can implement anything.. variants could be in precompiled
+// datastructures with variable size, or they could be an tag+owned-pointer
 
 struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is convention
 	tag:int,
@@ -133,13 +142,24 @@ fn main(argc:int,argv:**char)->int{
 	take_closure(|x|{printf("closure1 says x=%d y=%d\n",x,captured_y);});
 
 	// sugar for closure as last arg, foo(..)do x{...}  === foo(..,|x|{...})
+	// similar to rusts' lost "DO" notation - 
+	// but 'do' keyword is still free for another use as a prefix
 	take_closure() do x{
 		printf("closure2 says x=%d y=%d\n",x,captured_y);
 	}
 
+	// let for introducing variable, rather than just ident:T
+	// :T would be used as a type-assertion
+	// its still possible Rust might change to ':' for 'as'?
+	// this uses ":" in dumps for postfixing type info & it would be
+	// useful with so much inference going on to keep that language syntax.
+
 	let u:Union<int,float>; 
 
-	// calls to templated functions
+	// alternate syntax for declaring  a new uninitialized variable of type
+	v=:Union<float,int>;
+
+	// calls to templated functions .. setting value & tag of the variant
 	setv(&u,2.0);
 	setv(&u,5);
  
@@ -147,7 +167,7 @@ fn main(argc:int,argv:**char)->int{
 	// could overload 'map' to supply different combinations of types
 	// C++ equivalent doesn't seem to match all template args.
 	// as far as i've tried it.. you always need to specify 
-	// a  parameter manually
+	// a parameter manually
 
 	let z=map(&u,
 		|x:&int|{printf("union was set to int %d\n",*x);15},
@@ -157,21 +177,26 @@ fn main(argc:int,argv:**char)->int{
 
 	// C-like for loops minus parens, compulsory {}
 	// handles simple cases without needing a whole iterator library..
+	//
 	// enhanced with expression syntax: break <expr> , else {expr}
 	// type of 'value' is infered from the break/else expressions
 	// for-else completes rusts' "everything-is-an-expression" philosophy
 
 	let acc=0;
+	//:= from 'go', x:=y is a shortcut for let x:=y 
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
-		// var:=expr is  a shortcut for 'let'
 		acc+=i;
 		for k:=0; k<10; k+=1 {
 			printf("i,k=%d,%d,x=%d\n",i,k,acc);
-			if k==5{printf("break from inner loop\n");break break 55;}
+			if k==5{
+				printf("break from inner loop\n");
+				break break 55; // read like break(break 55). 2 levels
+			}
 		}
-		if j==6 {break 66;}
+		if j==6 {break 66;} // break with return expression.
 	}else{
-		// for..else block called if no 'break'
+		// for..else block called if no 'break'. 
+		// else blocks needed to complete loops as expressions.
 		printf("loop exit fine\n"); 
 		44
 	};
@@ -189,12 +214,20 @@ fn main(argc:int,argv:**char)->int{
 	let fv3=new Foo{31,32,33}; // struct initializer, sequential
 	something_foo(fv3);
 
-	// Test UFCS+overloading
+	// Test UFCS+overloading .. see definitions of foo_bar below.
+	// if designing a language in a vacuum , I would have done 100% UFCS
+	// there are 'member-functions' purely 
+	// to ease translation/interfacing to & from C++.
+
 	foo_bar(fv3,0.4);
 	fv3.foo_bar(fv3,77);
 	fv3.foo_bar(fv3,fv3);
 
-	 // test arrays and ptrs work
+	// test arrays and ptrs work
+	// 'x as *T' for raw pointer casts, like C (T*)x
+	// unsafe like C. safety can come later
+	// whats most important now is the elegant mechanisms for avoiding raw ptrs
+
 	let my_array:array<int,512>;   // like C++ array<int,512>
 	let q=my_array[1];
 	my_array[2]=10;
@@ -209,8 +242,8 @@ fn main(argc:int,argv:**char)->int{
 	let pbaz1= new Qux{x=66};
 	let pbaz2= new Bar{y=77};
 
-	do_something(pbaz1 as *IBaz);//TODO autocoerce to base type
-	do_something(pbaz2 as *IBaz);
+	do_something(pbaz1 as*IBaz);//TODO autocoerce to base type
+	do_something(pbaz2 as*IBaz);
 
 	// Expression syntax stolen from rust.
 	// if..else.. has a return value;more flexible than ternary op
@@ -234,8 +267,9 @@ fn do_something(p:*IBaz){
 }
 
 // implementing vtable based 'classes', like C++
-// TODO handle rust-like trait-objects
-// wont implement C++ multiple-inheritance.
+// TODO handle rust/go style trait-objects to complement.
+// dont need C++ multiple-inheritance.
+// 
 
 struct Qux : IBaz {
 	x:int;
