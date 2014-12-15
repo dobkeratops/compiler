@@ -1,3 +1,6 @@
+// for friendlier 'build *.cpp in this directory' 
+// this isn't part of the project, its just used to see what LLVM output is
+#ifdef COMPILE_FOO
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -71,3 +74,4 @@ int main(int argc, const char** argv) {
 		printf("<2");
 	return 0;
 }
+#endif

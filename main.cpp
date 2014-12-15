@@ -1,4 +1,5 @@
 #include "main.h"
+#include "ast.h"
 #include "semantics.h"
 #include "parser.h"
 #include "codegen.h"
