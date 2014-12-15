@@ -1,11 +1,7 @@
 #pragma once
 #include "semantics.h"
-#include "codegen.h"
-#include "repl.h"
-#include "lexer.h"
-#include "parser.h"
-#include "run_test.h"
-#include "error.h"
+//#include "ast.h"
+//#include "exprstructdef.h"
 #include "exprfndef.h"
 #include "type.h"
 

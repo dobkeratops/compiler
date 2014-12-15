@@ -1,6 +1,8 @@
 #include "ast.h"
 #include "exprop.h"
 #include "scope.h"
+#include "exprstructdef.h"
+#include "exprblock.h"
 
 void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
 	lhs->translate_typeparams_if(tpx);

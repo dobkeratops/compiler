@@ -2,6 +2,7 @@
 #include "semantics.h"
 #include "scope.h"
 #include "exprfndef.h"
+#include "exprstructdef.h"
 #include "exprblock.h"
 
 void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const{

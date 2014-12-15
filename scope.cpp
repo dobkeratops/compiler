@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "scope.h"
+#include "exprstructdef.h"
 
 ExprFnDef* NamedItems::getByName(Name n){
 	for(auto f=this->fn_defs;f;f=f->next_of_name){

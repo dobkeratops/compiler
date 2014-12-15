@@ -1,4 +1,5 @@
 #include "exprstructdef.h"
+#include "codegen.h"
 
 bool ExprStructDef::is_generic()const{
 	if (typeparams.size())
