@@ -1,14 +1,8 @@
 #pragma once
-#include "semantics.h"
-#include "codegen.h"
-#include "repl.h"
-#include "lexer.h"
-#include "parser.h"
-#include "run_test.h"
-#include "error.h"
-#include "type.h"
+#include "ast.h"
 
 // todo.. generic instantiation: typeparam logic, and adhoc mo
+struct CodeGen;
 struct  ExprFnDef : ExprDef {
 	ExprFnDef*	next_of_module=0; // todo: obsolete this.
 	ExprFnDef*	next_of_name=0;	//link of all functions of same name...

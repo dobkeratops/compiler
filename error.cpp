@@ -1,4 +1,7 @@
 #include "error.h"
+#include "ast.h"
+#include "scope.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <cstdlib>

@@ -1,19 +1,7 @@
 #pragma once
-#include "ast.h"
-#include "semantics.h"
-#include "codegen.h"
-#include "repl.h"
-#include "lexer.h"
-#include "parser.h"
-#include "run_test.h"
-#include "error.h"
 
-
-
-
-bool type_params_eq(const vector<Type*>& a, const Type* tp);
-bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b);
-
+#include "stringtable.h"
+struct Name;
 struct Type : Expr{
 	vector<TParamDef*> typeparams;
 	//ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
@@ -137,4 +125,7 @@ struct Type : Expr{
 	virtual void verify();
 	CgValue	compile(CodeGen& cg, Scope* sc);
 };
+bool type_params_eq(const vector<Type*>& a, const Type* tp);
+bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b);
+
 

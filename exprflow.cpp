@@ -1,4 +1,4 @@
-
+#include "ast.h"
 #include "exprflow.h"
 
 void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{

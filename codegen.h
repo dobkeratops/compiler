@@ -14,6 +14,13 @@ void name_mangle_append_scope(char* buffer, int size, const Scope* s);
 char* name_mangle_append_name(char* buffer, int size, Name n);
 Name next_reg_name(int *next_reg_index);
 Name next_reg_name(Name prefix_name, int *next_reg_index);
+struct LLVMOp {
+	int return_type;
+	const char* op_signed;
+	const char* op_unsigned;
+};
+const LLVMOp* get_op_llvm(Name opname,Name tyname); // for tokens with 1:1 llvm mapping
+const char* get_llvm_type_str(Name tname);
 
 
 class CodeGen;
@@ -41,7 +48,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
 	bool is_struct_elem()const{return elem>=0;}
 	bool is_valid()const;
-	bool is_literal()const{return dynamic_cast<ExprLiteral*>(val)!=0;}
+	bool is_literal()const;
 	bool is_reg()const { return reg!=0;}
 	bool is_any()const{return is_literal()||is_reg();}
 	bool is_addr() const {return reg==0 && val==0;}

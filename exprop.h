@@ -1,9 +1,7 @@
 #pragma once
-#include "semantics.h"
-#include "type.h"
 /// todo:
 /// [1] operator overloading,
-/// [2] custor operators
+/// [2] custom operators
 /// seperate binary,unary
 ///thats why this is its own file..
 

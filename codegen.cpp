@@ -1,9 +1,70 @@
+#include "ast.h"
 #include "codegen.h"
 #include "exprflow.h"
 #include "exprfndef.h"
 #include "exprstructdef.h"
 /// details of compiling LLVM
 /// CodeGen is planned to be an interface, slot in 'CodeGenLLVM' / 'CodeGenC'
+
+typedef LLVMOp LLVMOp2[2];
+LLVMOp2 g_llvm_ops[]= {
+	{{-1,"add","add"},{-1,"fadd","fadd"}},
+	{{-1,"sub","sub"},{-1,"fsub","fsub"}},
+	{{-1,"mul","mul"},{-1,"fmul","fmul"}},
+	{{-1,"div","div"},{-1,"fdiv","fdiv"}},
+	{{-1,"and","and"},{-1,"fand","fand"}},
+	{{-1,"or","or"},{-1,"fadd",""}},
+	{{-1,"xor","xor"},{-1,"fadd",""}},
+	{{-1,"srem","rem"},{-1,"fadd",""}},
+	{{-1,"shl","shl"},{-1,"fadd",""}},
+	{{-1,"ashr","shr"},{-1,"fadd",""}},
+};
+LLVMOp2 g_llvm_logic_ops[]= {
+	{{-1,"and",""},{-1,"fadd",""}},
+	{{-1,"or",""},{-1,"fadd",""}},
+};
+LLVMOp2 g_llvm_cmp_ops[]= {
+	{{-1,"icmp slt","icmp ult"},{-1,"fcmp ult","fcmp ult"}},
+	{{-1,"icmp sgt","icmp ult"},{-1,"fcmp ugt","fcmp ugt"}},
+	{{-1,"icmp sle","icmp ult"},{-1,"fcmp ule","fcmp ule"}},
+	{{-1,"icmp sge","icmp ult"},{-1,"fcmp uge","fcmp uge"}},
+	{{-1,"icmp eq","icmp eq"},{-1,"fcmp ueq","fcmp ueq"}},
+	{{-1,"icmp ne","icmp ne"},{-1,"fcmp une","fcmp une"}},
+};
+//const char* g_llvm_type[]={
+//	"i32","i32","i1","float","i8","i8*"
+//};
+const char* g_llvm_type_str[]={
+	"i32","u32","i64",
+	"i8","i16","i32","i64","u8","u16","u32","u64","u128","i1",
+	"half","float","double","< 4 x float >", "i8", "i8*","void","void*",
+	nullptr
+};
+const char* get_llvm_type_str(Name n_type_name){
+	auto tname=index(n_type_name);
+	if (tname>=INT && tname<=(VOIDPTR)){
+		return g_llvm_type_str[tname-INT];
+	}
+	return getString(tname);
+}
+
+const LLVMOp* get_op_llvm(Name ntok,Name ntype){
+	auto tok=index(ntok); auto type=index(ntype);
+	int ti=(type==FLOAT||type==DOUBLE||type==FLOAT)?1:0;
+	if (tok>=ADD && tok<=SHR)
+		return &g_llvm_ops[tok-ADD][ti];
+	if (tok>=ADD_ASSIGN && tok<=SHR_ASSIGN)
+		return&g_llvm_ops[tok-ADD_ASSIGN][ti];
+	if (tok>=LOG_AND && tok<=LOG_OR)
+		return &g_llvm_logic_ops[tok-LOG_AND][ti];
+	if (tok>=LT && tok<=NE)
+		return &g_llvm_cmp_ops[tok-LT][ti];
+	return 0;
+}
+bool CgValue::is_literal() const{
+	return dynamic_cast<ExprLiteral*>(val)!=0;
+}
+
 bool CgValue::is_valid()const{
 	if (val) if (val->type()->name==VOID)
 		return false;

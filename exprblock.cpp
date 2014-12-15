@@ -1,4 +1,6 @@
+#include "ast.h"
 #include "semantics.h"
+#include "scope.h"
 #include "exprfndef.h"
 #include "exprblock.h"
 

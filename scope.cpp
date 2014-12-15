@@ -1,3 +1,4 @@
+#include "ast.h"
 #include "scope.h"
 
 ExprFnDef* NamedItems::getByName(Name n){

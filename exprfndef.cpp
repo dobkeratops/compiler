@@ -1,5 +1,7 @@
 #include "exprfndef.h"
 #include "exprblock.h"
+#include "scope.h"
+#include "codegen.h"
 
 void ExprFnDef::verify(){
 	verify_expr_fn_def(this);

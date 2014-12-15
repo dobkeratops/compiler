@@ -1,3 +1,4 @@
+#include "ast.h"
 #include "compile.h"
 #include "exprblock.h"
 #include "exprstructdef.h"

@@ -1,4 +1,9 @@
+#include "ast.h"
 #include "type.h"
+#include "everywhere.h"
+#include "stringtable.h"
+#include "exprstructdef.h"
+#include "codegen.h"
 
 void Type::verify(){
 	verify_type(this);

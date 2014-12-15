@@ -1,12 +1,20 @@
 #pragma once
 #include "everywhere.h"
+#include "error.h"
+#include "stringtable.h"
+
+
 /// TODO - this sourcefile is placeholder,
 /// want to move ast description in here but its' still tied up with random stuff
 
+struct Type;
+struct Expr;
 struct Node {
 private:Type* m_type=0;
 	
+	
 public:
+	int visited;					// anti-recursion flag.
 	Node*	m_parent=0;					// for search & error messages,convenience TODO option to strip.
 	Name name;
 	RegisterName reg_name=0;			// temporary for llvm SSA calc. TODO: these are really in Expr, not NOde.
@@ -103,11 +111,25 @@ public:
 	void dump_top()const;
 };
 
+
+template<typename T>
+T* expect_cast(Node* n){
+	auto r=dynamic_cast<T*>(n);
+	if (!r) {
+		extern void error(const Node*,const char*,...);
+		T t;
+		error(n, "expected %s to be %s not %s", str(n->name),t.kind_str(), n->kind_str());
+		n->dump(-1);
+	}
+	return r;
+}
+
+
 typedef Type TParamVal;
+
 // Type Parameter, actually Template Parameter as we generalize it.
 struct Expr : public Node{					// anything yielding a value
 public:
-	int visited;					// anti-recursion flag.
 };
 
 
@@ -244,5 +266,37 @@ struct ExprIdent :Expr{
 	CgValue		compile(CodeGen&cg, Scope* sc) override;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags) override;
 };
+
+// load data->vtb // if this matters it would be inlined
+// load vtb->fn
+// when the time comes - vtb->destroy()
+//                       vtb->trace
+
+/// TODO-Anything matchable by the template engine eg Type, Constants, Ident.. (how far do we go unifying templates & macros..)
+
+/// CaptureVars of local variables for a lambda function
+/// hidden entity created in resolve. compile to 'C' might roll these manually?
+struct CaptureVars : ExprDef{
+	/// TODO - this doesn't really want to be in 'ast',
+	// have just moved it to stop 'semantics' interface depending..
+	//
+	Name			tyname(){return name;};
+	ExprFnDef*		capture_from=0;
+	ExprFnDef*		capture_by=0;
+	Variable*		vars=0;
+	CaptureVars*		next_of_from=0;
+	ExprStructDef*	the_struct=0;
+	void 			coalesce_with(CaptureVars* other);
+	ExprStructDef*	get_struct();
+	CgValue			compile(CodeGen& cg, Scope* outer);
+	Node* clone() const override{
+		dbprintf("warning todo template instatntiation of captures\n");
+		return nullptr;
+	};
+	Type*			get_elem_type(int i);
+	Name			get_elem_name(int i);
+	int				get_elem_count();
+};
+
 
 

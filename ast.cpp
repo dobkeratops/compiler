@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "type.h"
+#include "scope.h"
 #include "semantics.h"
 
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
@@ -334,3 +335,43 @@ void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
 		this->default_expr->translate_typeparams(tpx);
 	}
 }
+
+Type* CaptureVars::get_elem_type(int i){
+	auto v=vars;
+	for (; v&&i>0; i--,v=v->next_of_capture);
+	return v->type();
+}
+
+Name CaptureVars::get_elem_name(int i){
+	auto v=vars;
+	for (; v&&i>0; i--,v=v->next_of_capture);
+	return v->name;
+}
+int CaptureVars::get_elem_count(){
+	auto v=vars;
+	int i=0;
+	for (; v; i++,v=v->next_of_capture);
+	return i;
+}
+
+void CaptureVars::coalesce_with(CaptureVars *other){
+	// remap all functions that use the other to point to me
+	while (other->capture_by){
+		auto f=other->capture_by; // pop others' f
+		other->capture_by=f->next_of_capture;
+		
+		f->next_of_capture= this->capture_by;	// push f to this' capture_by list.
+		this->capture_by=f;
+		f->my_capture=this;
+	}
+	// steal other's variables
+	while (other->vars){
+		auto v=other->vars;		// pop other's var
+		other->vars=v->next_of_capture;
+		
+		v->next_of_capture=this->vars; // push to this
+		this->vars=v;
+		v->capture_in=this;
+	}
+}
+

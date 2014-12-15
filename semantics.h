@@ -1,7 +1,11 @@
 #pragma once
-#include "everywhere.h"
-#include "ast.h"
 
+#include "stringtable.h"
+struct Type;
+struct TParamDef;
+struct Expr;
+struct ResolvedType;
+struct Name;
 // type inference
 ResolvedType propogate_type(int flags,const Node*n, Type*& a,Type*& b);
 ResolvedType propogate_type(int flags, Expr *n, Type*& a,Type*& b);
@@ -14,33 +18,6 @@ ResolvedType propogate_type(int flags,const Node* n, ResolvedType& a,Type*& b);
 ResolvedType propogate_type(int flags,const Node* n,ResolvedType& a,Type*& b,const Type* c);
 
 struct CaptureVars;
-// load data->vtb // if this matters it would be inlined
-// load vtb->fn
-// when the time comes - vtb->destroy()
-//                       vtb->trace
-
-/// TODO-Anything matchable by the template engine eg Type, Constants, Ident.. (how far do we go unifying templates & macros..)
-
-/// CaptureVars of local variables for a lambda function
-/// hidden entity created in resolve. compile to 'C' might roll these manually?
-struct CaptureVars : ExprDef{
-	Name			tyname(){return name;};
-	ExprFnDef*		capture_from=0;
-	ExprFnDef*		capture_by=0;
-	Variable*		vars=0;
-	CaptureVars*		next_of_from=0;
-	ExprStructDef*	the_struct=0;
-	void 			coalesce_with(CaptureVars* other);
-	ExprStructDef*	get_struct();
-	CgValue			compile(CodeGen& cg, Scope* outer);
-	Node* clone() const override{
-		dbprintf("warning todo template instatntiation of captures\n");
-		return nullptr;
-	};
-	Type*			get_elem_type(int i);
-	Name			get_elem_name(int i);
-	int				get_elem_count();
-};
 
 
 ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) ;
@@ -67,7 +44,7 @@ struct StructInitializer{ // named initializer
 	ResolvedType resolve(const Type* desiredType,int flags);
 };
 
-
+typedef Type TParamVal;
 struct TypeParamXlat{
 	const vector<TParamDef*>& typeparams; const vector<TParamVal*>& given_types;
 	TypeParamXlat();
