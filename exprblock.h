@@ -29,21 +29,22 @@ struct ExprBlock :public ExprScopeBlock{
 	bool	is_array_initializer()const		{return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
 	void	set_delim(int delim)			{delimiter=delim;}
 	ExprBlock* is_subscript()const override	{if (this->bracket_type==OPEN_BRACKET && call_expr) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
-ExprFnDef*	get_fn_call()const;
-Name		get_fn_name() const;
-void		dump(int depth) const;
-Node*		clone() const;
-bool		is_undefined()const;
-void		create_anon_struct_initializer();
-void			clear_reg()				{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); reg_name=0;};
-const char* kind_str() const  override		{return"block";}
-ExprBlock* 		as_block()  override 	{return this;}
-Scope*	get_scope()	override			{return this->scope;}
-void 			verify();
-CgValue 		compile(CodeGen& cg, Scope* sc);
-CgValue 		compile_sub(CodeGen& cg, Scope* sc,RegisterName dst);
-void	translate_typeparams(const TypeParamXlat& tpx) override;
-void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
-ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
-ResolvedType	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
+	ExprFnDef*	get_fn_call()const;
+	Name		get_fn_name() const;
+	void		dump(int depth) const;
+	Node*		clone() const;
+	bool		is_undefined()const;
+	void		create_anon_struct_initializer();
+	void			clear_reg()				{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); reg_name=0;};
+	const char* kind_str() const  override		{return"block";}
+	ExprBlock* 		as_block() override 	{return this;}
+	const ExprBlock*		as_block() const override		{return this;};
+	Scope*	get_scope()	override			{return this->scope;}
+	void 			verify();
+	CgValue 		compile(CodeGen& cg, Scope* sc);
+	CgValue 		compile_sub(CodeGen& cg, Scope* sc,RegisterName dst);
+	void	translate_typeparams(const TypeParamXlat& tpx) override;
+	void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
+	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
+	ResolvedType	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
 };

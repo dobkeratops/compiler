@@ -65,25 +65,41 @@ public:
 	virtual CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_if(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
-	virtual ExprIdent*	as_ident() {return nullptr;}
+	virtual ExprIdent*			as_ident() 		{return nullptr;}
 	virtual const ExprIdent*	as_ident() const{return nullptr;}
-	virtual ExprFor* 	as_for() {return nullptr;}
-	virtual ExprFnDef*	as_fn_def() {return nullptr;}
+	virtual ExprFor* 			as_for() 		{return nullptr;}
+	virtual ExprFnDef*			as_fn_def() 	{return nullptr;}
 	virtual const ExprFnDef*	as_fn_def() const {return nullptr;}
-	virtual ExprBlock*	as_block() {return nullptr;}
-	virtual TParamDef*	as_tparam_def() {return nullptr;}
-	ExprBlock* as_block() const{return const_cast<Node*>(this)->as_block();}
-	virtual ArgDef* as_arg_def() {return nullptr;}
-	virtual Variable* as_variable() {return nullptr;}
+	virtual ExprBlock*			as_block()		{return nullptr;}
+	virtual TParamDef*			as_tparam_def() {return nullptr;}
+	virtual const ExprBlock* 	as_block() const{return nullptr;}
+	virtual ArgDef* as_arg_def()				{return nullptr;}
+	virtual Variable* as_variable()				{return nullptr;}
 	virtual const Variable* as_variable() const {return nullptr;}
-	ArgDef*			as_field() {return this->as_arg_def();}
+	ArgDef*			as_field() 			{return this->as_arg_def();}
 	virtual void verify() {};
 	// abstract interface to 'struct-like' entities;
 	virtual Type* get_elem_type(int index){error(this,"tried to get elem on name=%s kind=%s",str(this->name),this->kind_str());return nullptr;}
-	virtual Name get_elem_name(int index){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return nullptr;}
+	virtual Name get_elem_name(int index){return this->get_elem(index)->name;}
 	virtual int get_elem_index(Name name){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return -1;}
 	virtual int get_elem_count()const{return 0;}
 	virtual size_t alignment()const {return 16;} // unless you know more..
+	virtual Node*	get_elem(int index){
+		error(this,"tried to get elem %d on %s:%s, not supported",index, str(this->name),this->kind_str());
+		return nullptr;
+	}
+	virtual Node*	get_elem(int index,int subindex){
+		return this->get_elem(index)->get_elem(subindex);
+	}
+	virtual Node*	get_elem(int index,int sub1,int sub2){
+		return this->get_elem(index)->get_elem(sub1)->get_elem(sub2);
+	}
+	virtual Node*	get_last(){
+		return this->get_elem(this->get_elem_count()-1);
+	}
+	virtual Node*	get_first(){
+		return this->get_elem(0);
+	}
 	virtual ~Node(){
 		error("dont call delete, we haven't sorted out ownership of Types or nodes. compiler implementation doesn't need to free anything. Types will be owned by a manager, not the ast ");
 	}
