@@ -115,20 +115,20 @@ struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is conventio
 };
 
 fn map[X,Y,R](
-	u:*Union[X,Y],
+	u:&Union[X,Y],
 	fx:|*X|->R,
 	fy:|*Y|->R)
 	->R{
 	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
 }
 
-fn setv[X,Y](u:*Union[X,Y],y:Y)->void{
+fn setv[X,Y](u:&Union[X,Y],y:Y)->void{
 	printf("setv Y\n");
 	u.y=y;
 	u.tag=1;
 }
 
-fn setv[X,Y](u:*Union[X,Y],x:X)->void{
+fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 	printf("setv X\n");
 	u.x=x;
 	u.tag=0;
@@ -164,8 +164,8 @@ fn main(argc:int,argv:**char)->int{
 	v=:Union<float,int>;
 
 	// calls to templated functions .. setting value & tag of the variant
-	setv(&u,2.0);
-	setv(&u,5);
+	u.setv(2.0);
+	u.setv(5);
 
 	let tup=tuple_test();
 	let tup2=tuple_test2();
@@ -180,8 +180,8 @@ fn main(argc:int,argv:**char)->int{
 	// as far as i've tried it.. you always need to specify 
 	// a parameter manually
 
-	let pu=&u;
-	let z=pu.map(
+//	let pu=&u;
+	let z=u.map(
 		|x:*int|{printf("union was set to int %d\n",*x);15},
 		|x:*float|{printf("union was set to float %.3f\n",*x);17}
 	);

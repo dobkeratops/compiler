@@ -28,14 +28,14 @@ CompilerTest g_Tests[]={
 		/* 8*/ "fn main(argc:int, argv:**char)->int{		\n"
 		/* 9*/ "	u=:Union[int,float];					\n"
 		/*10*/ "	u.setv(10)								\n"
-		/*11*/ "	printf(\"u.tag=%d\\n\",u.tag);			\n"
+		/*11*/ "	printf(\"u.tag=%d a=%d\\n\",u.tag,u.a);			\n"
 		/*12*/ "	setv(u,10.0)	;						\n"
-		/*13*/ " printf(\"u.tag=%d\\n\",u.tag);				\n"
+		/*13*/ "	printf(\"u.tag=%d\\n\",u.tag);				\n"
 		/*14*/ "	0}										\n"
 		/*15*/ "fn\"C\" printf(s:str,...)->int;					\n"
 		,
 		// expected result
-		"u.tag=0\n"
+		"u.tag=0 a=10\n"
 		"u.tag=1\n"
 	},
 

@@ -524,7 +524,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 	// process function argumetns & load
 	if (receiver){
 		auto recr=receiver->compile(cg,sc);
-		l_args.push_back(  cg.load(recr,recr.type) );
+		l_args.push_back( recr /*cg.load(recr,recr.type) old behaviour - autoload args - not now because we have REF args too*/ );
 	}
 	for (auto arg:e->argls){
 		auto reg=arg->compile(cg,sc);
@@ -535,7 +535,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			error_end(arg);
 			ASSERT(reg.type);
 		}
-		l_args.push_back(cg.load(reg,arg->type()));
+		l_args.push_back(reg /*cg.load(reg,arg->type()) Old behaviour - autoload args. not now because we have REF args*/);
 	}
 	
 	//[3.2] evaluate call object..
@@ -551,12 +551,19 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		fn_type->dump(-1);newline(0);
 #endif
 		auto fn_arg=fn_type->fn_args_first();
-		for (auto i=0; fn_arg; i++,fn_arg=fn_arg->next){
+		int i=0;
+		for (; fn_arg; i++,fn_arg=fn_arg->next){
 #if DEBUG>=2
 			dbprintf("arg %d \n", i);fn_arg->dump(-1);newline(0);
 #endif
 			auto ae=i==0&&receiver?receiver:e->argls[i-(receiver?1:0)];
 			auto r=cg.emit_conversion(ae,l_args[i], fn_arg,sc);
+			l_args[i]=r;
+		}
+		//C-like variadic-args 'coerce to self' - needed for trivial refs->values
+		for (;i<l_args.size();i++){
+			auto ae=e->argls[i-(receiver?1:0)];
+			auto r=cg.emit_conversion(ae, l_args[i], l_args[i].type, sc);
 			l_args[i]=r;
 		}
 	};

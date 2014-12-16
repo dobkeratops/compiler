@@ -218,6 +218,10 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 			}
 			for (;arg_index<argls.size(); arg_index++){ // variadic args.
 				argls[arg_index]->resolve(sc,nullptr,flags);
+#if DEBUG >=2
+				dbprintf("resolve variadic C arg[%d]\n",arg_index);
+				argls[arg_index]->type()->dump_if(0);newline(0);
+#endif
 			}
 			const Type* fr=fn_type->fn_return();
 			propogate_type_fwd(flags,this, fr);

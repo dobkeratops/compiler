@@ -116,6 +116,8 @@ CgValue CgValue::ref_op(CodeGen& cg,const Type* t) const { // take type calculat
 		ASSERT(t->sub->is_equal(this->type));
 		return CgValue(addr,t);
 	}else if (reg && !addr){
+		ASSERT(t->name==REF && this->type->name!=REF);
+		ASSERT(t->sub->is_equal(this->type));
 		cg.emit_comment("TODO: REMOVE THE AUTO LOAD OF ARGUMENTS, DEFER THAT TO 'ARG CONVERSION- that should check if arg is a 'ref', and not load it. currently we store then load!");
 		auto r=cg.emit_alloca_type((Expr*)t, this->type);
 		cg.store(r,*this);
@@ -1402,20 +1404,41 @@ void CodeGen::emit_alloca_array_type(Name r, Type* t, Name count,int align)
 	cg.emit_txt(" = alloca [%s x %s] , align %zu\n",str(count),get_llvm_type_str(t->name),align);
 }
 
-CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src, const Type* to_type,const Scope* sc) {
+CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* to_type,const Scope* sc) {
 	/// TODO: make it clear, this is a helper, not overloaded per back-end
 	// no need to convert..
 #if DEBUG>=2
 	dbprintf("\nconvert type:- \n");
-	src.type->dump(-1);dbprintf("\n --to--> \n");
+	src0.type->dump(-1);dbprintf("\n --to--> \n");
 	to_type->dump(-1);dbprintf("\n");
 #endif
-	if (src.type->is_equal(to_type,false))
-		return src;
+	CgValue src=src0;
+	if (src0.type->is_equal(to_type,false)){
+		if (src0.reg && !src0.addr)
+			return src0;
+		// must load if turning a ref int a value
+		if (src0.addr && !src0.reg){
+			src=src0.load(*this);
+		}
+	}
+	if (src.type->name==REF && to_type->name!=REF){
+		src=src.load(*this);
+	}
+#if DEBUG>=2
+	dbprintf("\n after 'ref'->'value' src is (reg=%s; val=%p; addr=%s)\n",str(src.reg),src.val,str(src.addr));
+	src.type->dump(-1);newline(0);
+#endif
+
 	// We must convert..
 	// is it a trivial pointer conversion?
+
 	if (src.type->name!=REF && to_type->name==REF){
-		return src.ref_op(*this,to_type);
+		//return src.ref_op(*this,to_type);
+		if (!src.reg && src.addr){
+			return CgValue(src.addr, to_type);
+		} else {
+			error(n,"\ntried to take reference from value..? this is ok, but am currently trying to make the other case work\n");
+		}
 	}else
 	if (src.type->is_pointer_not_ref() && to_type->is_pointer_not_ref()){
 		if ((to_type->sub->name>=IDENT) && !to_type->sub->def){
@@ -1424,15 +1447,20 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src, const Type* t
 #endif
 			newline(0);
 		}
-
 		return this->emit_cast_to_type(src,to_type);
-	} else {
-		to_type->dump(-1);newline(0);
-		src.type->dump(-1);newline(0);
-
-		error(n,"TODO need conversion operators\n");
-		return CgValue();
+	} else if (src.type->is_equal(to_type,false)){
+		if (src.reg && !src.addr){
+			return src;
+		}
+		return src.load(*this);
 	}
+
+	dbprintf("tried to convert:-\n");
+	to_type->dump(-1);dbprintf("\n--to-->\n");
+	src.type->dump(-1);dbprintf("\n");
+	error(n,"\nTODO need conversion operators\n");
+	return CgValue();
+
 }
 
 
