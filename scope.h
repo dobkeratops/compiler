@@ -12,8 +12,9 @@ struct NamedItems {		// everything defined under a name
 	NamedItems*		next=0;
 	Type*		types=0;
 	ExprFnDef*	fn_defs=0;
-	ExprStructDef*	structs=0; // also typedefs?
-	
+	ExprStructDef*	structs=0;	// also typedefs?
+	ArgDef*		fields=0;		// also fields..
+
 	ExprFnDef*	getByName(Name n);
 	//	ExprFnDef* resolve(Call* site);
 	NamedItems(Name n,Scope* s){  name=n; owner=s;next=0;fn_defs=0;structs=0;types=0;}
@@ -60,6 +61,7 @@ public:
 	ExprStructDef*	try_find_struct(const Type* t){return this->find_struct_sub(this,t);}
 	ExprStructDef*	find_struct_of(const Expr* srcloc);
 	Scope*			parent_within_fn(){if (!parent) return nullptr; if (parent->owner_fn!=this->owner_fn) return nullptr; return parent;}
+	void			visit_named_items(Name n,std::function<void(NamedItems* n,Scope* sc)> f,Scope* ignore=0);
 	ExprStructDef*	find_struct_sub(Scope* original,const Type* t);
 	ExprStructDef*	find_struct_named(Name name);
 	ExprStructDef*	find_struct_named(const Node* node){return find_struct_named(node->as_name());}

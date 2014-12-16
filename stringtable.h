@@ -117,6 +117,7 @@ inline const char* str(int i){return i?g_Names.index_to_name[i].c_str():"";}
 struct Type;
 void print_tok(Name n);
 bool is_type(int tok);
+void find_completions(Name n,std::function<void(Name n,int)> f);
 
 struct LLVMType {
 	Name name;

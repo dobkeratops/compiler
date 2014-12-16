@@ -62,12 +62,12 @@ const char* g_token_str[]={
 	"&&","||",		//logical
 	"=",":=","=:","@",
 	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
-	".=",	// linklist follow ptr.=next
+	".=","?=",	// linklist follow ptr.=next
 	"++","--","++","--", //inc/dec
 	"-","*","&","!","~", // unary ops
-	"*?","*!","&?","~[]","[]","&[]", // special pointers?
+	"*?","*!","&?","~[]","[]","&[]","??","<?>","<*>","<+>","<-->","</>","?->", // special pointers?
 	",",";",";;",
-	"...","..",
+	"...","..","..<","..>","..>=","..<=",
 	"_","",
 	"\"C\"","__vtable_ptr","__env_ptr","__env_i8_ptr",
 	NULL,
@@ -83,10 +83,12 @@ const char* g_operator_symbol[]={
 	"log_and","log_or",
 	"assign","let_assign","assign_colon","pattern_bind",
 	"assign_add","assign_sub","assign_mul","assign_div","assign_and","assign_or","assign_xor","assign_mod","assign_shl","assign_shr",
-	"assign_dot","post_inc","post_dec","pre_inc","pre_dec",
+	"assign_dot","maybe_assign",
+	"post_inc","post_dec","pre_inc","pre_dec",
 	"negate","deref","not","complement",
-	"opt_ptr","own_ptr","maybe_ref","own_vector","slice","slice_ref",
-	"comma","semicolon","doublesemicolon","ellipsis","dotdot","placeholder",""
+	"opt_ptr","own_ptr","maybe_ref","own_vector","slice","slice_ref", "double_question_mark","tag_question_mark","tag_mul","tag_add","tag_sub","tag_div","maybe_arrow",
+	"comma","semicolon","doublesemicolon","ellipsis","dotdot","range_lt","range_gt","range_ge","range_le",
+	"placeholder",""
 };
 
 const char* operator_symbol(Name tok){
@@ -254,3 +256,21 @@ float getNumberFloat(Name n){
 	sscanf(str(n),"%f",&r);
 	return r;
 }
+
+void find_completions(Name src,std::function<void(Name,int)> f){
+	for (int n=0; n<g_Names.index_to_name.size(); n++) {
+		const char* s1=str(src);
+		const char* s2=str(n);
+		const char* s0=s1;
+		int match;
+		for (;*s1 && *s2; s1++,s2++){
+			if (*s1!=*s2)
+				break;
+		}
+		if (*s1)// didn't find s1's..
+			continue;
+		f(Name(n),s1-s0);
+	}
+}
+
+

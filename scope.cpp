@@ -90,6 +90,20 @@ TParamDef*	Scope::get_typeparam_for(Type* t) {
 	return nullptr;
 }
 
+void	Scope::visit_named_items(Name find_name,std::function<void (NamedItems *,Scope* sc)> f,Scope* ignore){
+	if (!this) return;
+	if (this==ignore)
+		return;
+	for (auto sub=this->child; sub;sub=sub->next){
+		visit_named_items(find_name,f,ignore);
+	}
+	for (auto ni=this->named_items;ni;ni=ni->next){
+		if (ni->name!=find_name) continue;
+		f(ni,this);
+	}
+	this->parent_or_global()->visit_named_items(find_name,f,this);
+}
+
 NamedItems* Scope::get_named_items_local(Name name){
 	if (auto ni=find_named_items_local(name))
 		return ni;

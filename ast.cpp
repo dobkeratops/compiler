@@ -4,6 +4,7 @@
 #include "semantics.h"
 #include "exprstructdef.h"
 #include "codegen.h"
+#include "assist.h"
 
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
@@ -70,7 +71,9 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 					}
 				}
 			}
-			error(this,scope,"\'%s\' undeclared identifier",str(this->name));
+			error_begin(this,"\'%s\' undeclared identifier",str(this->name));
+			assist_find_symbol(this,scope,this->name);
+			error_end(this);
 		}
 		return ResolvedType();
 	}

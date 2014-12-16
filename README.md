@@ -24,12 +24,13 @@ dont have a name yet hence 'hack'..
  * HKT (template-template parameters)
  * new/delete ,and a ordered or named struct field initializer
  * limited C++-style internal vtables & single inheritance
+ * Some operator overloading (no conversions yet)
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 example source..
 https://github.com/dobkeratops/compiler/blob/master/example.rs
 
-Very early days, the compiler is a few weeks old.
+Quite early days.
 
 #### Long Term Goals:-
 
@@ -37,7 +38,7 @@ Very early days, the compiler is a few weeks old.
  * open-world polymorphism
  * add Rust/functional language inspired features
  * features for parallelism, GPGPU programming
- * a subset should make a passable embedded dynamic language
+ * a subset should make a passable embedded dynamic language (think of C++-&-Lua usecase)
 
 Basically trying to combine everything I like from C++ & Rust, dropping what I dont like, plus what i've always missed.
 
@@ -46,7 +47,7 @@ This could all be done as a fork of a C++ compiler, or as a fork of Rust. Howeve
 Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code;
 I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code.
 
-Also I value performance+productivity over compile-time safety.(you need to write tests for other reasons, productivity for *tests* yields bug free code... there is so much you still can't verify at compile time).
+Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* is what yields working code... there is so much you still can't verify at compile time.
 
 I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating. Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
@@ -59,13 +60,18 @@ This is probably all way beyond a 1man project but I'll see how far I can get..
  * Resyntax a significant subset of C++, in the spirit of SPECS; 
   * should be possible to non-destructively translate a subset back & forth.
   * allow use with established C++ libraries & sourcebases
-  * context free grammar
-  * graph like/relative module import: 
-   * any file in a project can be the root for its own tests
-   * dont need to commit to 'crate roots', change library granularity
-  * add alternate parser that can directly read subset of C++ headers ?
-     (or adapt a rust community tool for C++ -> rust translation..)
   * self host by translating own source, be mindful of c++ subset used to write this
+  * context free grammar
+
+ * graph like/relative module import: 
+  * any file in a project should work as the root for its own tests
+  * dont need to commit to 'crate roots', change library granularity
+  * relative namespace search (to avoid any absolute root), just warn about ambiguity
+
+ * add alternate parser that can directly read subset of C++ headers ?
+     (or adapt a rust community tool for C++ -> rust translation..)
+
+ * compare with other projects .. 'SugarCpp', .jai etc .. converge on whichever is closer to my ideal..
 
  * Additional Features inspired by Rust & other languages:
   * 2 way inference
@@ -78,13 +84,17 @@ This is probably all way beyond a 1man project but I'll see how far I can get..
    * Can we reconcile Rust ideas with C++ semantics?
     * must think about details of fatpointers, 
     * nullpointer enum-optimization
+    * borrowed pointers vs references? 
+     * Possibly adopt '^'/'&' for C++ref vs rust borrow? 
+     * will rust get 'auto-deref' in which case it'll behave a little more like C++ref?
     * Rust 'box' operator is very different to 'new'
     * differences between modules & namesspaces 
     * anything else ?
-  * maybe aim to transpile Rust aswell?
+  * maybe aim to transpile to Rust aswell?
    * AST will have C++ and Rust-like elements in one place
   * scala like sugar for default constructor
   * possibly currying, only freefunctions? or only for 'receiver or args'?
+  * Would like to copy Rust's macro engine identically but its not a priority right now.
 
  * Additional features..  & inspired by other languages:
   * want "_" placeholder in ident position to query compiler -see haskell 'holes'..
@@ -129,5 +139,7 @@ This is probably all way beyond a 1man project but I'll see how far I can get..
       * eg foo.bar could return  (&Bar,this) which autocoerces to &Bar 
     * maybe nested 'this' for nested classes (eg scene->lights,scene->meshes...)
   * 'intersection types' for cutting structures up without having to butcher source
+    * maybe just autoderef on tuple member acessors so tuples do that job..
   * immutable data hint ? (eg for coalesced-allocations,local ptrs)
-  * 'vtable-from-address' for pooled objects?
+  * 'vtable-from-address' for pooled objects?.. 
+    * generalize 'get-vtable','get-data' to do classes,trait-obj & more in 1 system?

@@ -21,6 +21,26 @@ const Type* Type::get_elem(int index)const{
 	return s;
 }
 
+bool Type::is_userdefined()const{
+	if (!this)return false;
+	if (this->name==PTR)
+		return false;
+	if (this->name==REF||this->is_qualifier())
+		return this->sub->is_userdefined();
+	if (this->name>=IDENT)
+		return true;
+	return false;
+}
+bool Type::is_primitive()const{
+	if (!this)return false;
+	if (this->name==PTR)
+		return false;
+	if (this->name==REF || this->is_qualifier())
+		return this->sub->is_primitive();
+	if (this->name>=IDENT)
+		return true;
+	return false;
+}
 
 bool type_is_coercible(const Type* from,const Type* to,bool coerce){
 	/// TODO cleanup- move into is_equal/_sub instead of passing flag

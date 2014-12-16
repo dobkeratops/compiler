@@ -83,6 +83,7 @@ struct ArgDef :ExprDef{
 		ASSERT(owner==0 ||owner==s);
 		this->owner=s;}
 	ExprDef* member_of()override;
+	ArgDef*		next_of_name=0;
 	uint32_t	size_of,offset;
 	//Type* type=0;
 	Expr*		default_expr=0;

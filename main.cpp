@@ -88,7 +88,7 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 						*capture_output=(char*)malloc(max_len);
 						char* dst=*capture_output;
 						int c;
-						while (c=getc(fp)){
+						while (0!=(c=getc(fp))){
 							if(c==EOF) break;
 							ASSERT(i<max_len-1);
 							i++;

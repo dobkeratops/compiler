@@ -74,6 +74,8 @@ struct Type : ExprDef {
 	const Type*		get_elem_type(int index) const{
 		return get_elem(index);
 	}
+	bool			is_primitive()const;
+	bool			is_userdefined()const;
 	int			num_pointers()const;
 	int			num_pointers_and_arrays()const;
 	ExprStructDef*	struct_def_noderef()const;

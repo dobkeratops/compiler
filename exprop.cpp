@@ -332,6 +332,12 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
  	if (!(lhs->type_if()||rhs->type_if()||desired)){
 		return false;		// no info to go on.
 	}
+	// at least one must be a custom type, like C++.
+	int num_non_prim=0;
+	if (this->lhs)if (lhs->type()->is_userdefined()) num_non_prim++;
+	if (this->rhs)if (rhs->type()) if (!rhs->type()->is_userdefined()) num_non_prim++;
+	if (!num_non_prim)
+		return false;
 	vector<Expr*> args;if (lhs)args.push_back(lhs);if (rhs)args.push_back(rhs);
 	auto fnd=sc->find_fn(this->name, this, args,desired,flags&(~R_FINAL));
 	if (fnd) {

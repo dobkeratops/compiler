@@ -60,6 +60,11 @@ fn map<V,A,B>(src:&V<A>, f:|*A|->B)-> V<B>{
 struct Foo {
 	vx:int, vy:int, vz:int
 }
+struct Vec3{ vx:float,vy:float,vz:float};
+// adhoc overloading like C++. 
+//(no conversions yet,might rely on inference using output type?)
+fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
+fn -(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz} }
 
 // internal vtables
 // simplified implementation - base must describe whole vtable layout
@@ -150,6 +155,9 @@ fn main(argc:int,argv:**char)->int{
 		printf("closure2 says x=%d y=%d\n",x,captured_y);
 	}
 
+	let v0=Vec3{1.0,0.0,0.0};
+	let v1=Vec3{0.0,1.0,0.0};
+	let v2=v0+v1;
 	// let for introducing variable, rather than just ident:T
 	// :T would be used as a type-assertion
 	// its still possible Rust might change to ':' for 'as'?
@@ -165,6 +173,9 @@ fn main(argc:int,argv:**char)->int{
 	v=:Union<float,int>;
 
 	// calls to templated functions .. setting value & tag of the variant
+	// using UFCS.. 'setv' declared as a freefunction.
+	// (perhaps it would be more elegant to implement assignment op overload
+	// for emulating variants better..)
 	u.setv(2.0);
 	u.setv(5);
 
@@ -189,7 +200,7 @@ fn main(argc:int,argv:**char)->int{
 	printf("map union returned z=%d\n",z);
 
 	// C-like for loops minus parens, compulsory {}
-	// handles simple cases without needing a whole iterator library..
+	// handles simple cases without needing a whole iterator library
 	//
 	// enhanced with expression syntax: break <expr> , else {expr}
 	// type of 'value' is infered from the break/else expressions
@@ -197,6 +208,7 @@ fn main(argc:int,argv:**char)->int{
 
 	let acc=0;
 	//:= from 'go', x:=y is a shortcut for let x:=y 
+	// get 'value' from loop return..
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		acc+=i;
 		for k:=0; k<10; k+=1 {
@@ -214,10 +226,12 @@ fn main(argc:int,argv:**char)->int{
 		44
 	};
 	printf("loop return value = %d\n",value);
-
+	
+	
 	// Struct initializers...
 
 	let fv=Foo{vx=13,vy=14,vz=15}; // initialize struct on stack, named fields
+
 	something_foo(&fv,&fv);
 	printf("fv.vx=%d\n",fv.vx);
 
@@ -303,7 +317,7 @@ struct Bar : IBaz {
 		printf("hello from Bar.bar this.y=%d\n",y);
 	}
 }
-fn tuple_test(){
+fn tuple_test(){	// rturn type inference
 	(12,23,34)
 }
 fn tuple_test2()->(int,float,int){

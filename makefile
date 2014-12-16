@@ -1,8 +1,8 @@
 run: hack
 	./hack example.rs -tr
 
-SRC = main.cpp node.cpp stringtable.cpp ast.cpp semantics.cpp exprfndef.cpp exprstructdef.cpp type.cpp scope.cpp exprflow.cpp compile.cpp exprop.cpp exprblock.cpp lexer.cpp parser.cpp codegen.cpp  run_test.cpp  repl.cpp error.cpp everywhere.cpp
-HEADER = main.h node.h stringtable.h ast.h semantics.h compile.h codegen.h lexer.h parser.h run_test.h  repl.h error.h everywhere.h exprstructdef.h exprop.h exprblock.h exprfndef.h type.h
+SRC = main.cpp node.cpp stringtable.cpp ast.cpp semantics.cpp exprfndef.cpp exprstructdef.cpp type.cpp scope.cpp exprflow.cpp compile.cpp exprop.cpp exprblock.cpp lexer.cpp parser.cpp codegen.cpp  run_test.cpp  repl.cpp error.cpp everywhere.cpp assist.cpp
+HEADER = main.h node.h stringtable.h ast.h semantics.h compile.h codegen.h lexer.h parser.h run_test.h  repl.h error.h everywhere.h exprstructdef.h exprop.h exprblock.h exprfndef.h type.h assist.h
 hack: $(SRC) $(HEADER) foo
 	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG
 
