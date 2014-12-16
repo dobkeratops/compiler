@@ -543,9 +543,9 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
 	
 	// [3.3] argument conversions..
-	auto coerce_args=[&](Type* fn_type){
+	auto coerce_args=[&](const Type* fn_type){
 		// todo - should not be needed
-		fn_type->resolve(sc, nullptr, 0);
+		const_cast<Type*>(fn_type)->resolve(sc, nullptr, 0);
 		auto ai=0;
 #if DEBUG>=2
 		fn_type->dump(-1);newline(0);

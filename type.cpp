@@ -11,7 +11,7 @@ void Type::verify(){
 		x->verify();
 }
 
-Type* Type::get_elem(int index){
+const Type* Type::get_elem(int index)const{
 	if (this->struct_def())
 		return this->struct_def()->get_elem_type(index);
 	ASSERT(index>=0);

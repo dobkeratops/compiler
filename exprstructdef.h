@@ -60,9 +60,9 @@ struct ExprStructDef: ExprDef {
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc);
-	Type*			get_elem_type(int i){return this->fields[i]->type();}
-	Name			get_elem_name(int i){return this->fields[i]->name;}
-	int 			get_elem_index(Name name){int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
+	const Type*			get_elem_type(int i)const{return this->fields[i]->type();}
+	Name			get_elem_name(int i)const {return this->fields[i]->name;}
+	int 			get_elem_index(Name name)const {int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
 	int				override_index(ExprFnDef* f);
 	int				vtable_size();
 	int				vtable_base_index();

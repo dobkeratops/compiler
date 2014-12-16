@@ -69,9 +69,9 @@ struct Type : ExprDef {
 	
 	bool		has_typeparam(Scope* sc);
 	bool 		is_typeparam(Scope* sc) const;
-	const Type*	get_elem(int index) const{return (const_cast<Type*>(this))->get_elem(index);}
-	Type*		get_elem(int index);
-	Type*		get_elem_type(int index){
+	Type*	get_elem(int index){auto r=const_cast<const Type*>(this)->get_elem(index); return const_cast<Type*>(r);}
+	const Type*		get_elem(int index)const;
+	const Type*		get_elem_type(int index) const{
 		return get_elem(index);
 	}
 	int			num_pointers()const;

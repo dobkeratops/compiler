@@ -338,7 +338,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		// auto-deref is part of language semantics, done here..
 		while (lhsv.type->num_pointers()+(lhsv.addr?1:0) > 1){
 			cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
-			lhsv = lhsv.deref_op(cg,0);
+			lhsv = lhsv.deref_for_dot(cg,0);
 		}
 		if (isNumStart(*str(rhs->name))){
 			return lhsv.get_elem_index(cg, getNumberInt(rhs->name));

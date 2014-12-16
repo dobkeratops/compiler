@@ -178,9 +178,9 @@ struct CaptureVars : ExprDef{
 		dbprintf("warning todo template instatntiation of captures\n");
 		return nullptr;
 	};
-	Type*			get_elem_type(int i);
-	Name			get_elem_name(int i);
-	int				get_elem_count();
+	const Type*			get_elem_type(int i)const override;
+	Name			get_elem_name(int i)const override;
+	int				get_elem_count() const override;
 };
 
 

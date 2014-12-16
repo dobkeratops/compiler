@@ -88,7 +88,7 @@ CgValue::CgValue(Node* n) {
 	}
 	this->type=n->type();
 }
-CgValue CgValue::addr_op(CodeGen& cg,Type* t) { // take type calculated by sema
+CgValue CgValue::addr_op(CodeGen& cg,const Type* t)const { // take type calculated by sema
 	ASSERT(this->type);
 	if (!reg && (bool)addr) {	// we were given a *reference*, we make the vlaue the adress
 		ASSERT(t->name==PTR);
@@ -138,11 +138,7 @@ CgValue CgValue::ref_op(CodeGen& cg,const Type* t) const { // take type calculat
 		//			return this->to_stack(cg).addr_op(cg,t);
 	}
 }
-
-CgValue CgValue::deref_op(CodeGen& cg, Type* t) {
-	/// todo: * C++ only loads a pointer.
-	/// if its a ref-to-ptr it has to load the pointer first
-	ASSERT(this->type->name==PTR || this->type->name==REF);
+CgValue CgValue::deref_for_dot(CodeGen& cg, const Type* t)const {
 	if (!t) { t=this->type->sub;}
 	// todo type assertion 't' is the output type.
 	if (!addr) {		// the value we were given is now the *adress* - we return a reference, not a pointer.
@@ -152,6 +148,12 @@ CgValue CgValue::deref_op(CodeGen& cg, Type* t) {
 		auto ret=cg.load(*this);
 		return CgValue(0,t,ret.reg); // ... and return it as another reference: eg given T&* p,  returning T& q=*p
 	}
+}
+CgValue CgValue::deref_op(CodeGen& cg, const Type* t)const {
+	/// todo: * C++ only loads a pointer.
+	/// if its a ref-to-ptr it has to load the pointer first
+	ASSERT(this->type->name==PTR && this->type->sub->is_equal(t));
+	return deref_for_dot(cg,t);
 }
 
 CgValue CgValue::get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const{	//calculates & returns adress
@@ -165,7 +167,7 @@ CgValue CgValue::get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const{	//
 	auto field=sd->find_field(field_name);
 	return get_elem_index(cg,index);
 }
-CgValue CgValue::get_elem_index(CodeGen& cg, int field_index,Type *field_type) const{
+CgValue CgValue::get_elem_index(CodeGen& cg, int field_index,const Type *field_type) const{
 	if ((bool)reg && !addr && !(this->type->is_pointer())){
 		// lazy ref to inreg field index,
 		// 'load'/'store' will do 'insert'/'extract'
@@ -191,7 +193,7 @@ CgValue	CgValueVoid(){
 CgValue 	CodeGen::flow_result[32]; // hack till we move stupid header
 
 using std::function;
-CgValue CodeGen::load(const CgValue& v,Type* result_type) {
+CgValue CodeGen::load(const CgValue& v,const Type* result_type) {
 	//if (!this->is_valid()) return CgValue();
 	auto& cg=*this;
 	auto ofp=cg.ofp;
@@ -495,7 +497,7 @@ CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 	return CgValue(outr,lit->type());
 }
 
-CgValue CodeGen::emit_store(RegisterName reg, Type* type, RegisterName addr){
+CgValue CodeGen::emit_store(RegisterName reg,const Type* type, RegisterName addr){
 	emit_ins_begin_name("store");
 	emit_type(type,0);
 	emit_reg(reg);
@@ -640,7 +642,7 @@ void CodeGen::emit_free(CgValue ptr, Type* t,size_t count){
 	/// TODO .. just memleak now..
 }
 
-CgValue CodeGen::emit_malloc(Type* t,size_t count){
+CgValue CodeGen::emit_malloc(const Type* t,size_t count){
 	ASSERT(t->name==PTR &&"pass a pointer type in, it allocs *T.necasery to avoid allocating a ptr[T]");
 	auto r1=next_reg();
 	auto r2=next_reg();
@@ -664,7 +666,7 @@ CgValue CodeGen::emit_free(CgValue ptr,size_t count){
 	return CgValue();
 }
 
-CgValue CodeGen::emit_malloc_array(Type* t,CgValue count){
+CgValue CodeGen::emit_malloc_array(const Type* t,CgValue count){
 	auto rsizereg=next_reg();
 	auto cr=this->load(count);
 	auto rsize=emit_instruction_reg_i32("mul", cr.type, 0, cr, t->sub->size());
@@ -690,7 +692,7 @@ void CodeGen::emit_type_operand(const CgValue& src){
 	this->emit_operand(src);
 }
 
-void CodeGen::emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,CgValue src1){
+void CodeGen::emit_instruction_sub(Name opname,const Type* type,  RegisterName dstr,CgValue src1){
 //	ASSERT(dst.is_reg());
 	const LLVMOp* op=get_op_llvm(opname,type?type->name:VOID);
 	this->emit_reg(dstr);
@@ -702,7 +704,7 @@ void CodeGen::emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,Cg
 	}
 	this->emit_operand(src1);
 }
-CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname, CgValue src1){
+CgValue CodeGen::emit_instruction(Name opname,const Type* type,Name outname, CgValue src1){
 	auto dstr=next_reg();
 	auto r1=load(src1);
 	emit_ins_begin_sub();
@@ -710,7 +712,7 @@ CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname, CgValue s
 	emit_ins_end();
 	return CgValue(dstr, type);
 }
-CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname,  CgValue src1,CgValue src2){
+CgValue CodeGen::emit_instruction(Name opname,const Type* type,Name outname,  CgValue src1,CgValue src2){
 	ASSERT(type!=0);
 	auto r1=this->load(src1);
 	auto r2=this->load(src2);
@@ -727,7 +729,7 @@ CgValue CodeGen::emit_instruction(Name opname,Type* type,Name outname,  CgValue 
 	return CgValue(dstr, type);
 }
 
-CgValue CodeGen::emit_instruction_reg_i32(Name opname,Type* type,  Name outname,CgValue src1,int imm_val){
+CgValue CodeGen::emit_instruction_reg_i32(Name opname,const Type* type,  Name outname,CgValue src1,int imm_val){
 	ASSERT(type!=0);
 	auto r1=load(src1);
 	ASSERT(r1.type->is_int());
@@ -789,7 +791,7 @@ void CodeGen::emit_fn_cast_global(Name n,const Type* srct, const Type *dstt){
 	cg.emit_nest_end("");
 }
 
-CgValue CodeGen::emit_alloca_type(Expr* holder, Type* t) {
+CgValue CodeGen::emit_alloca_type(Expr* holder, const Type* t) {
 	if (t->is_void()){
 		emit_comment("void value not allocated for %d",holder->pos.line);
 		return CgValue();
@@ -1296,7 +1298,7 @@ void CodeGen::emit_i32_reg(Name reg) {
 	emit_reg(reg);
 }
 
-RegisterName	CodeGen::emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index){
+RegisterName	CodeGen::emit_extractvalue(RegisterName dst,const Type* type,RegisterName src,int index){
 	emit_ins_begin(dst,"extractvalue");
 	emit_type(type);
 	emit_reg(src);
@@ -1419,7 +1421,7 @@ void CodeGen::emit_global_fn_ptr(const Type* t, Name n){
 	cg.emit_nest_end("");
 }
 
-void CodeGen::emit_alloca_array_type(Name r, Type* t, Name count,int align)
+void CodeGen::emit_alloca_array_type(Name r, const Type* t, Name count,int align)
 {
 	auto &cg=*this;
 	cg.emit_txt("\t");

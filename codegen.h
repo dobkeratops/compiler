@@ -37,13 +37,13 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	// these values aren't persistent so it doesn't matter too much.
 	RegisterName reg;
 	int elem=-1;     // if its a struct-in-reg
-	Type* type;
+	const Type* type;
 	RegisterName addr;
 	Node*	val;		// which AST node it corresponds to
 	int ofs;
-	explicit CgValue(RegisterName n,const Type* t):reg(n),type(const_cast<Type*>(t)){elem=-1;addr=0;ofs=0;val=0;}
-	explicit CgValue(RegisterName n,Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
-	explicit CgValue(RegisterName v,Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
+	//explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
+	explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
+	explicit CgValue(RegisterName v,const Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
 	explicit CgValue(Node* n);
 	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
 	bool is_struct_elem()const{return elem>=0;}
@@ -52,15 +52,16 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	bool is_reg()const { return reg!=0;}
 	bool is_any()const{return is_literal()||is_reg();}
 	bool is_addr() const {return reg==0 && val==0;}
-	CgValue addr_op(CodeGen& cg,Type* t);
+	CgValue addr_op(CodeGen& cg,const Type* t)const;
 	CgValue ref_op(CodeGen& cg,const Type* t) const;
-	CgValue deref_op(CodeGen& cg, Type* t);
+	CgValue deref_op(CodeGen& cg, const Type* t)const;
+	CgValue deref_for_dot(CodeGen& cg, const Type* t)const;
 	inline CgValue to_rvalue(CodeGen& cg)const;
 	inline CgValue load(CodeGen& cg)const;
 	inline CgValue store(CodeGen& cg) const;
 	inline CgValue store(CodeGen& cg,const CgValue& src) const;
 	CgValue get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const;
-	CgValue get_elem_index(CodeGen& cg, int field_index,Type *field_type=0) const;
+	CgValue get_elem_index(CodeGen& cg, int field_index,const Type *field_type=0) const;
 	CgValue index(RegisterName index);
 	void	dump()const;
 };
@@ -130,7 +131,7 @@ public:
 	void emit_fn_cast_global(Name n,const Type* srct,const Type* dstt);
 	void emit_ins_begin_sub();
 	void emit_undef();
-	CgValue emit_alloca_type(Expr* holder, Type* t);
+	CgValue emit_alloca_type(Expr* holder, const Type* t);
 	RegisterName  emit_ins_begin(RegisterName reg, const char* op);
 	void emit_ins_name(const char* txt);
 	void emit_ins_begin_name(const char* txt);
@@ -149,10 +150,10 @@ public:
 	void emit_pointer_end();
 	void emit_phi_reg_label(Name reg, Name label);
 	JumpLabel	gen_label(const char* name,int index=0);
-	void emit_instruction_sub(Name opname,Type* type,  RegisterName dstr,CgValue src1);
-	CgValue emit_instruction(Name opname,Type* type,  Name outname,CgValue src1);
-	CgValue emit_instruction(Name opname,Type* type,  Name outname,CgValue src1,CgValue src2);
-	CgValue emit_instruction_reg_i32(Name opname,Type* type,  Name outname,CgValue src1,int val);
+	void emit_instruction_sub(Name opname,const Type* type,  RegisterName dstr,CgValue src1);
+	CgValue emit_instruction(Name opname,const Type* type,  Name outname,CgValue src1);
+	CgValue emit_instruction(Name opname,const Type* type,  Name outname,CgValue src1,CgValue src2);
+	CgValue emit_instruction_reg_i32(Name opname,const Type* type,  Name outname,CgValue src1,int val);
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
 	void emit_int_lit(Name type, int value);
@@ -160,11 +161,11 @@ public:
 	void emit_i32_reg(Name reg);
 	void emit_operand_literal(const CgValue& cg,const ExprLiteral* lit);
 	CgValue emit_make_literal(ExprLiteral* l);
-	RegisterName	emit_extractvalue(RegisterName dst,Type* type,RegisterName src,int index);
+	RegisterName	emit_extractvalue(RegisterName dst,const Type* type,RegisterName src,int index);
 	CgValue	emit_extractvalue(CgValue& src , int index);
-	CgValue emit_store(RegisterName reg, Type* type, RegisterName addr);
+	CgValue emit_store(RegisterName reg, const Type* type, RegisterName addr);
 	CgValue 		emit_store_global(CgValue dst, Name globalvar);
-	void emit_alloca_array_type(Name n, Type* t, Name count,int align);
+	void emit_alloca_array_type(Name n, const Type* t, Name count,int align);
 
 	// lazy load/store of abstract CgValue (ref or register)
 	CgValue store(const CgValue& dst, const CgValue& src);//{return dst.store(*this,src);};
@@ -200,12 +201,12 @@ public:
 	CgValue emit_storeelement(const CgValue& obj, Name field,const CgValue& data);
 	CgValue emit_extract(CgValue src, int index);
 	CgValue emit_insert(CgValue src, int index);
-	CgValue emit_getelementptr(RegisterName ptr,Type* struct_t,int index, Type* elem_t);
+	CgValue emit_getelementptr(RegisterName ptr,const Type* struct_t,int index, const Type* elem_t);
 	CgValue emit_assign(const CgValue& dst, const CgValue& src);
-	CgValue emit_malloc( Type* t,size_t count);
+	CgValue emit_malloc( const Type* t,size_t count);
 	CgValue emit_free( CgValue ptr,size_t count);
-	CgValue emit_free_array(Type* t, CgValue count);
-	CgValue emit_malloc_array( Type* t,CgValue count);
+	CgValue emit_free_array(const Type* t, CgValue count);
+	CgValue emit_malloc_array(const Type* t,CgValue count);
 	
 	void emit_global_fn_ptr(const Type* t, Name n);
 	int emit_global_string_literal(Name n, const char* s);
@@ -222,7 +223,7 @@ public:
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg1,const CgValue& arg2);
 	CgValue emit_conversion(const Node* n, const CgValue& src, const Type* to_type, const Scope* sc);
 
-	CgValue load(const CgValue& v,Type* result_type=0);
+	CgValue load(const CgValue& v,const Type* result_type=0);
 	CgValue to_rvalue(const CgValue& lvalue_or_rvalue){
 		// TODO - check its' an addr.
 		return lvalue_or_rvalue.load(*this);

@@ -341,18 +341,18 @@ void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
 	}
 }
 
-Type* CaptureVars::get_elem_type(int i){
+const Type* CaptureVars::get_elem_type(int i)const {
 	auto v=vars;
 	for (; v&&i>0; i--,v=v->next_of_capture);
 	return v->type();
 }
 
-Name CaptureVars::get_elem_name(int i){
+Name CaptureVars::get_elem_name(int i)const {
 	auto v=vars;
 	for (; v&&i>0; i--,v=v->next_of_capture);
 	return v->name;
 }
-int CaptureVars::get_elem_count(){
+int CaptureVars::get_elem_count()const {
 	auto v=vars;
 	int i=0;
 	for (; v; i++,v=v->next_of_capture);
