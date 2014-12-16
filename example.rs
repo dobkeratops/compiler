@@ -45,7 +45,8 @@ fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
 // might want more specific declaration but
 // does the use in the parameter list say enough?
 
-fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{
+// c++ refs for 1st param work for autoderef
+fn map<V,A,B>(src:&V<A>, f:|*A|->B)-> V<B>{ 
 	let result=reserve(src.size());
 	for index:=0; index<src.size(); index+=1 {
 		push_back(&result, f(src.get(index)));
@@ -114,12 +115,12 @@ struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is conventio
 	x:X,y:Y,
 };
 
-fn map[X,Y,R](
-	u:&Union[X,Y],
+fn match_with[X,Y,R]( // we will need to make overloaded permutations
+	u:&Union[X,Y], // 1st param is a ref ,not pointer, so it can autoderef.
 	fx:|*X|->R,
 	fy:|*Y|->R)
 	->R{
-	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
+	if u.tag==0 { fx(&u.x)} else {fy(&u.y)}
 }
 
 fn setv[X,Y](u:&Union[X,Y],y:Y)->void{
@@ -175,13 +176,13 @@ fn main(argc:int,argv:**char)->int{
 	printf("anon struct fields= %d %d\n",foo.x, foo.y);
  
 	// type inference with polymorphic lambdas
-	// could overload 'map' to supply different combinations of types
+	// could overload 'match' to supply different combinations of types
 	// C++ equivalent doesn't seem to match all template args.
 	// as far as i've tried it.. you always need to specify 
 	// a parameter manually
 
 //	let pu=&u;
-	let z=u.map(
+	let z=u.match_with(
 		|x:*int|{printf("union was set to int %d\n",*x);15},
 		|x:*float|{printf("union was set to float %.3f\n",*x);17}
 	);

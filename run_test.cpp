@@ -17,6 +17,22 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	{
+		"closures",__FILE__,__LINE__,
+		/*1*/ 	"fn\"C\" printf(s:str,...)->int;  							\n"
+		/*10*/	"fn take_closure(pfunc:|int|->void){ pfunc(5);}\n"
+		/*  */	"fn main(argc:int, argv:**char)->int{		\n"
+		/*  */	"	y:=11;z:=12;w:=0; y+=10;w+=7;			\n"
+		/*51*/	"	take_closure()do x{yy:=y;printf(\"closure x=%d captured y=%d z=%d yy=%d\\n\",x,y,z,yy);}\n"
+		"printf(\"y=%d z=%d w=%d\\n\",y+=90,z,w);\n"
+		/*17*/	"	0\n"
+		/*20*/  "}														\n"
+		,
+		// Result
+		"closure x=5 captured y=21 z=12 yy=21\n"
+		"y=111 z=12 w=7\n"
+	},
+
+	{
 		"type parameter inference UFCS autoref",__FILE__,__LINE__,
 		/* 1*/ "struct Union<A,B>{a:A,b:B, tag:int};		\n"
 		/* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
@@ -97,7 +113,7 @@ CompilerTest g_Tests[]={
 	},
 	{	"multi feature test 2",__FILE__,__LINE__,
 		
-		"fn map<V,A,B>(src:&V<A>, f:|&A|->B)-> V<B>{\n"
+		"fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{\n"
 		"	let result=init();\n"
 		"	for index:=0; index<src.size(); index+=1 {\n"
 		"		push_back(&result, f(get(src,index)));\n"
@@ -105,7 +121,7 @@ CompilerTest g_Tests[]={
 		"	result \n"
 		"}\n"
 		"fn\"C\" printf(s:str,...)->int;\n"
-		"fn debugme[X,Y,R](u:&Union[X,Y], fx:(&X)->R,fy:(&Y)->R)->R{\n"
+		"fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{\n"
 		" if u.tag==0 { fx(&u.x)}\n"
 		" else { fy(&u.y)}\n"
 		"}\n"
@@ -115,8 +131,8 @@ CompilerTest g_Tests[]={
 		" setv(&u,0.0);\n"
 		" setv(&u,0);\n"
 		" z:=debugme(&u,											\n"
-		"	|x:&int|{printf(\"union was set to int\\n\");10},	\n"
-		"	|x:&float|{printf(\"union was set to float\\n\");12}	\n"
+		"	|x:*int|{printf(\"union was set to int\\n\");10},	\n"
+		"	|x:*float|{printf(\"union was set to float\\n\");12}	\n"
 		"	);												\n"
 		"printf(\"map union returns %d\\n\", z);						\n"
 		"	xs=:array[int,512];\n"
@@ -148,14 +164,14 @@ CompilerTest g_Tests[]={
 		"struct Foo {\n"
 		"vx:int, vy:int, vz:int\n"
 		"}\n"
-		"fn something_foo(f:&Foo){\n"
+		"fn something_foo(f:*Foo){\n"
 		"	printf(\"f.x= %d\\n\", f.vx);\n"
 		"}\n"
-		"fn something_foo(f:&Foo,x:&Foo){\n"
+		"fn something_foo(f:*Foo,x:*Foo){\n"
 		"	printf(\"something_foo with 2 args overloaded\\n\");\n"
 		"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx,f.vy,f.vz);\n"
 		"}\n"
-		"fn something(f:&Foo){\n"
+		"fn something(f:*Foo){\n"
 		"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx, f.vy, f.vz);\n"
 		"}\n"
 		"fn something(f:float){\n"
@@ -169,10 +185,10 @@ CompilerTest g_Tests[]={
 		"tag:int,\n"
 		"x:X,y:Y,\n"
 		"};\n"
-		"fn setv[X,Y](u:&Union[X,Y],x:Y)->void{\n"
+		"fn setv[X,Y](u:*Union[X,Y],x:Y)->void{\n"
 		" printf(\"setv Y\\n\");\n"
 		"}\n"
-		"fn setv[X,Y](u:&Union[X,Y],x:X)->void{\n"
+		"fn setv[X,Y](u:*Union[X,Y],x:X)->void{\n"
 		" printf(\"setv X\\n\");\n"
 		"}\n"
 		,
@@ -399,21 +415,6 @@ CompilerTest g_Tests[]={
 "Bar.w=17\n"
 },
 	{
-		"closures",__FILE__,__LINE__,
-/*1*/ 	"fn\"C\" printf(s:str,...)->int;  							\n"
-/*10*/	"fn take_closure(pfunc:|int|->void){ pfunc(5);}\n"
-/*  */	"fn main(argc:int, argv:**char)->int{		\n"
-/*  */	"	y:=11;z:=12;w:=0; y+=10;w+=7;			\n"
-/*51*/	"	take_closure()do x{printf(\"closure x=%d captured y=%d z=%d\\n\",x,y,z);}\n"
-	"printf(\"y=%d z=%d w=%d\\n\",y+=90,z,w);\n"
-/*17*/	"	0\n"
-/*20*/  "}														\n"
-		,
-// Result
-		"closure x=5 captured y=21 z=12\n"
-		"y=111 z=12 w=7\n"
-	},
-	{
 		"allocation",__FILE__,__LINE__,
 /*1*/ 	"fn\"C\" printf(s:str,...)->int;  			\n"
 /*2*/	"struct Foo{x:int,y:int};				\n"
@@ -449,10 +450,10 @@ CompilerTest g_Tests[]={
 	{
 		"type parameter inference",__FILE__,__LINE__,
 /* 1*/ "struct Union<A,B>{a:A,b:B, tag:int};		\n"
-/* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
+/* 2*/ "fn setv[A,B](u:*Union[A,B], v:A)->void{		\n"
 /* 3*/ "	u.a=v; u.tag=0; 						\n"
 /* 4*/ "}											\n"
-/* 5*/ "fn setv[A,B](u:&Union[A,B], v:B)->void{		\n"
+/* 5*/ "fn setv[A,B](u:*Union[A,B], v:B)->void{		\n"
 /* 6*/ "	u.b=v; u.tag=1; 						\n"
 /* 7*/ "}											\n"
 /* 8*/ "fn main(argc:int, argv:**char)->int{		\n"
@@ -471,10 +472,10 @@ CompilerTest g_Tests[]={
 	{
 		"multi feature test 1",__FILE__,__LINE__,
 /* 1*/ "enum FooBar{Foo{x:int,y:int},Bar{p:float,q:float} }	\n"
-/* 3*/ "fn setv[A,B](u:&Union[A,B], v:A){\n"
+/* 3*/ "fn setv[A,B](u:*Union[A,B], v:A){\n"
 /* 4*/ "	u.a=v; u.tag=0; \n"
 /* 5*/ "}\n"/* 1*/
-/* 6*/ "fn setv[A,B](u:&Union[A,B], v:B){\n"
+/* 6*/ "fn setv[A,B](u:*Union[A,B], v:B){\n"
 /* 7*/ "	u.b=v; u.tag=1; \n"
 /* 8*/ "}\n"
 /* 9*/ "fn take_fn(pfunc:fn(int)->void){ pfunc(5);}\n"

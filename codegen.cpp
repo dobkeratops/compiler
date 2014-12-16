@@ -1413,8 +1413,15 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 	to_type->dump(-1);dbprintf("\n");
 #endif
 	CgValue src=src0;
+	if (src0.elem>=0){
+#if DEBUG>=2
+		dbprintf("converting field..\n");
+#endif
+	}
 	if (src0.type->is_equal(to_type,false)){
-		if (src0.reg && !src0.addr)
+		if (src0.reg && src0.elem>=0 && !src0.addr)
+			return src0.load(*this);
+		if (src0.reg && src0.elem<0 && !src0.addr)
 			return src0;
 		// must load if turning a ref int a value
 		if (src0.addr && !src0.reg){
@@ -1431,12 +1438,18 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 
 	// We must convert..
 	// is it a trivial pointer conversion?
+#if DEBUG>=2
+	if (src.elem>=0){
+		dbprintf("elem=%d\n",src.elem);
+	}
+#endif
 
 	if (src.type->name!=REF && to_type->name==REF){
-		//return src.ref_op(*this,to_type);
 		if (!src.reg && src.addr){
 			return CgValue(src.addr, to_type);
 		} else {
+			this->emit_comment("TODO RVO, does llvm do it for us??");
+			return src.ref_op(*this,to_type);
 			error(n,"\ntried to take reference from value..? this is ok, but am currently trying to make the other case work\n");
 		}
 	}else
