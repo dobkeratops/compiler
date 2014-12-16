@@ -369,7 +369,7 @@ int match_typeparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<
 	return ret_score;
 }
 
-int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vector<Expr*>& args,const ExprBlock* callsite){
+int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vector<Expr*>& args,const Expr* callsite){
 	// TODO: allow the types to feedback in the math
 	matched.resize(f->typeparams.size());
 	int score=0;

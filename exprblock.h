@@ -28,7 +28,12 @@ struct ExprBlock :public ExprScopeBlock{
 	bool	is_anon_struct()const			{return this->is_struct_initializer() && !this->call_expr;}
 	bool	is_array_initializer()const		{return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
 	void	set_delim(int delim)			{delimiter=delim;}
-	ExprBlock* is_subscript()const override	{if (this->bracket_type==OPEN_BRACKET && call_expr) return (ExprBlock*) this; return (ExprBlock*)nullptr;}
+	ExprBlock* is_subscript()const override	{
+		if (this->bracket_type==OPEN_BRACKET && call_expr){
+			return (ExprBlock*) this;
+		}
+		return (ExprBlock*)nullptr;
+	}
 	ExprFnDef*	get_fn_call()const;
 	Name		get_fn_name() const;
 	void		dump(int depth) const;

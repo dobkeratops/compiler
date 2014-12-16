@@ -156,7 +156,8 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 #endif
 	verify_all();
 	
-	auto callsiteb=dynamic_cast<const ExprBlock*>(pcallsite);
+	//auto callsiteb=dynamic_cast<const ExprBlock*>(pcallsite);
+	auto callsiteb=pcallsite;
 	ASSERT(callsiteb!=0 &&"ambiguity, when we come to do operator overloads, ExprOp & ExprBlock will call..");
 	vector<Type*>	ins_typarams;
 	match_typeparams(ins_typarams, srcfn,call_args, callsiteb);

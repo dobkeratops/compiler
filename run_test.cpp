@@ -17,6 +17,20 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	{
+		"operator overload",__FILE__,__LINE__,
+		"fn\"C\" printf(s:str,...)->int;		\n"
+		"struct Vec3{ x:float,y:float,z:float}	\n"
+		"fn +(a:&Vec3,b:&Vec3)->Vec3{ Vec3{a.x+b.x,a.y+b.y,a.z+b.z} }"
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let v0=Vec3{1.0,2.0,3.0};	\n"
+		"	let v1=Vec3{2.0,2.0,4.0};	\n"
+		"	let v2:Vec3;			\n"
+		"	v2=v0+v1;				\n"
+		"	0	}	\n"
+		,nullptr
+	},
+
+	{
 		"references vs values",__FILE__,__LINE__,
 		"fn\"C\" printf(s:str,...)->int;		\n"
 		"fn main(argc:int,argv:**char)->int{\n"

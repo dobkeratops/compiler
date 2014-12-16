@@ -72,6 +72,28 @@ const char* g_token_str[]={
 	"\"C\"","__vtable_ptr","__env_ptr","__env_i8_ptr",
 	NULL,
 };
+const char* g_operator_symbol[]={
+	"tuple_constructor","","intializer_list","","array_initializer","",
+	"tparam_begin","tparam_end",
+	"arrow","dot","if_dot","fat_arrow","rev_arrow","in_scope","swap",
+	"pipe","rev_pipe","tag_dot","tag_dollar","supertype","subtype",
+	"of_type","as","new","delete",
+	"op_add","op_sub","op_mul","op_div",
+	"bit_and","bit_or","bit_xor","op_mod","op_shl","op_shr","if_else","op_max","op_min","op_lt","op_gt","op_le","op_ge","op_eq","op_ne",
+	"log_and","log_or",
+	"assign","let_assign","assign_colon","pattern_bind",
+	"assign_add","assign_sub","assign_mul","assign_div","assign_and","assign_or","assign_xor","assign_mod","assign_shl","assign_shr",
+	"assign_dot","post_inc","post_dec","pre_inc","pre_dec",
+	"negate","deref","not","complement",
+	"opt_ptr","own_ptr","maybe_ref","own_vector","slice","slice_ref",
+	"comma","semicolon","doublesemicolon","ellipsis","dotdot","placeholder",""
+};
+
+const char* operator_symbol(Name tok){
+	if (tok>=OPEN_PAREN && tok<IDENT)
+		return  g_operator_symbol[(int)tok-OPEN_PAREN];
+	return nullptr;
+}
 
 int g_tok_info[]={
 	0,
@@ -108,6 +130,8 @@ int g_tok_info[]={
 	0, //placeholder
 	0,0,0,0,0
 };
+
+const char* operator_symbol(Name ok);
 bool is_ident(Name tok){return tok>=IDENT;}
 bool is_type(Name tok){return tok<T_NUM_TYPES;}
 bool is_operator(Name tok){ return tok>=ARROW && tok<COMMA;}
@@ -124,6 +148,8 @@ int is_prefix(Name ntok){auto tok=index(ntok);return tok<IDENT?(g_tok_info[tok] 
 int arity(Name ntok){auto tok=index(ntok);return  (tok<IDENT)?((g_tok_info[tok] & (UNARY) )?1:2):-1;}
 int is_right_assoc(Name ntok){auto tok=index(ntok);return (tok<IDENT)?(g_tok_info[tok]&ASSOC):0;}
 int is_left_assoc(Name ntok){auto tok=index(ntok);return (tok<IDENT)?(!(g_tok_info[tok]&ASSOC)):0;}
+const char* symbol_of(Name tok)
+{if(auto p=operator_symbol(tok))return p;else return str(tok);}
 
 Name get_prefix_operator(Name tok) {
 	auto itok=index(tok);

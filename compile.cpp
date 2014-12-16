@@ -72,7 +72,7 @@ void name_mangle(char* dst, int size, const ExprFnDef* src) {
 	// todo - check how template params are suppsoed to mangle
 	sprintf(dst,"_Z");dst+=2;
 	size_t len=strlen(dst); size--; size-=len;
-	name_mangle_append_segment(dst, size, str(src->name));
+	name_mangle_append_segment(dst, size, symbol_of(src->name));
 	for (auto a:src->args){
 		name_mangle_append_type(dst,size, a->type());
 	}

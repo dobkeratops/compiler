@@ -35,22 +35,29 @@ CgValue	CgValueVoid();
 struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v or v=a.m. One is a load, the other is a store. it may or may not load/store either side of the instruction. a 'variable' is included here as a form of 'adress', for var+= ...
 	// TODO: this should be a tagged-union?
 	// these values aren't persistent so it doesn't matter too much.
+
 	RegisterName reg;
 	int elem=-1;     // if its a struct-in-reg
-	const Type* type;
 	RegisterName addr;
 	Node*	val;		// which AST node it corresponds to
+
+	const Type* type;
 	int ofs;
 	//explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
-	explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
-	explicit CgValue(RegisterName v,const Type* t,RegisterName address_reg,int elem_index=-1):reg(v){elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;}
+	explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){
+		elem=-1;addr=0;ofs=0;val=0;
+	}
+	explicit CgValue(RegisterName v,const Type* t,RegisterName address_reg,int elem_index=-1):reg(v){
+		elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;
+	}
 	explicit CgValue(Node* n);
 	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
 	bool is_struct_elem()const{return elem>=0;}
 	bool is_valid()const;
 	bool is_literal()const;
-	bool is_reg()const { return reg!=0;}
-	bool is_any()const{return is_literal()||is_reg();}
+	bool is_reg()const 	{ return reg!=0;}
+	bool is_elem()const {return elem>=0;}
+	bool is_any()const	{return is_literal()||is_reg();}
 	bool is_addr() const {return reg==0 && val==0;}
 	CgValue addr_op(CodeGen& cg,const Type* t)const;
 	CgValue ref_op(CodeGen& cg,const Type* t) const;

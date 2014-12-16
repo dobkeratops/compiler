@@ -197,9 +197,9 @@ CgValue CodeGen::load(const CgValue& v,const Type* result_type) {
 	//if (!this->is_valid()) return CgValue();
 	auto& cg=*this;
 	auto ofp=cg.ofp;
-	if (v.elem>=0){
+	if (v.is_elem() ){
 		// todo: why not 'addr' aswell?
-		if (v.type->is_pointer() || (v.addr &&!v.reg)) {
+		if (v.type->is_pointer() || (v.is_addr())) {
 			cg.emit_comment("dot reg=%s addr=%s index=%d",str(v.reg),str(v.addr),v.elem);
 			auto sub=v.get_elem_index(cg,v.elem,result_type);
 			return cg.load(sub);

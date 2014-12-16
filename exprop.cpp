@@ -45,7 +45,7 @@ void ExprOp::dump(int depth) const {
 	auto id=this->name;
 	if (lhs) {lhs->dump(depth+1);}
 	
-	newline(depth);print_tok(id);
+	newline(depth);if (get_fn())dbprintf("fn");print_tok(id);
 	
 	if (rhs) {rhs->dump(depth+1);}
 	newline(depth);dbprintf(")");
@@ -62,6 +62,13 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	auto op_ident=name;
 	if (this->type()) this->type()->resolve(sc,desired,flags);
 	//	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
+
+	//look for overload
+	if (find_overloads(sc,desired,flags)){
+		return propogate_type_fwd(flags, this, desired, this->type_ref());
+	}
+	
+	// intrinsic operators
 	if (op_ident==BREAK){
 		if (this->rhs) {
 			// break expression..
@@ -317,6 +324,28 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 }
 
+bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
+	if (!name)
+		return false;
+	if (this->get_fn())
+		return true;
+ 	if (!(lhs->type_if()||rhs->type_if()||desired)){
+		return false;		// no info to go on.
+	}
+	vector<Expr*> args;if (lhs)args.push_back(lhs);if (rhs)args.push_back(rhs);
+	auto fnd=sc->find_fn(this->name, this, args,desired,flags&(~R_FINAL));
+	if (fnd) {
+#if DEBUG >=2
+		dbprintf("\nusing overload %s( ",str(this->name));this->lhs->type()->dump_if(-1);dbprintf(" ");this->rhs->type()->dump_if(-1);dbprintf(" )\n");
+#endif
+		this->set_fn(fnd);
+		//override any type that might have been infered by intrinsic operators.
+		this->set_type(fnd->return_type());
+		return true;
+	}
+	return false;
+}
+
 CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	auto n=this;
 	auto e=this;
@@ -329,6 +358,9 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 	//
 	// generalize by lvalue being in register or memory.
 	// 3-operand; assign-op; assign-op; mem-assign-op;
+	if (get_fn()){
+		return compile_operator_overload(cg,sc);
+	}
 	if (opname==DOT || opname==ARROW){
 		if (rhs->as_block()){
 			// compile method call
@@ -456,5 +488,21 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 		return CgValue();
 }
 
+CgValue ExprOp::compile_operator_overload(CodeGen& cg,Scope* sc){
+	auto call_fn=const_cast<ExprFnDef*>(this->get_fn());
+
+	CgValue lhsa,rhsa;
+	if (this->lhs)
+		lhsa=cg.emit_conversion(lhs, lhs->compile(cg,sc), call_fn->args[0]->type(),sc);
+	if (this->rhs)
+		rhsa=cg.emit_conversion(rhs, rhs->compile(cg,sc), call_fn->args[1]->type(),sc);
+
+	cg.emit_call_begin(CgValue(call_fn));
+	cg.emit_args_begin();
+	if (lhs)cg.emit_type_operand(lhsa);
+	if (rhs)cg.emit_type_operand(rhsa);
+	cg.emit_args_end();
+	return cg.emit_call_end();
+}
 
 

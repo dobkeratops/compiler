@@ -118,6 +118,7 @@ public:
 		if (this) {return this->m_type;} else return nullptr;
 #endif
 	}
+	const Type* type_if()const	{if (this)return this->type();else return nullptr;}
 	Type*& type()				{::verify(this->m_type);return this->m_type;}
 	const Type* type()const		{::verify(this->m_type);return this->m_type;}
 	void type(const Type* t)	{::verify(t);this->m_type=(Type*)t;}

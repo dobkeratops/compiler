@@ -214,7 +214,7 @@ ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,bool is_virtual) {
 
 	auto tok=src.eat_tok();
 	if (tok!=OPEN_PAREN) {
-		ASSERT(is_ident(tok));
+		ASSERT(is_ident(tok)|| is_operator(tok));
 		fndef->name=tok;
 		if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
 			parse_typeparams(src,fndef->typeparams,close_of(open));
