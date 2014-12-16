@@ -302,8 +302,24 @@ int num_known_arg_types(vector<Expr*>& args) {
 //void match_generic_type_param_sub(const vector<TParamDef>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
 	
 //}
+int match_typeparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg );
 
-int match_typeparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* fn_arg, const Type* given_arg)
+int match_typeparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg )
+{
+	if (!fn_arg) return 0;
+	if (!given_arg) return 0;
+
+	// type root coercsion rules
+	if (given_arg->name!=CONST && fn_arg->name==CONST)
+		return match_typeparams_from_arg(matched_tps,fn_tps, given_arg,fn_arg->sub);
+	if (given_arg->name==MUT && fn_arg->name!=MUT)
+		return match_typeparams_from_arg(matched_tps,fn_tps, given_arg->sub,fn_arg);
+	if (given_arg->name!=REF && fn_arg->name==REF)
+		return match_typeparams_from_arg(matched_tps,fn_tps, given_arg,fn_arg->sub);
+	return match_typeparams_from_arg_sub(matched_tps,fn_tps, given_arg, fn_arg);
+}
+
+int match_typeparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps, const Type* given_arg, const Type* fn_arg )
 {
 	int ret_score=0;
 //	if (!fn_arg && !given_arg) return 0;
@@ -316,7 +332,7 @@ int match_typeparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TPar
 	if (fn_arg->sub || given_arg->sub) {
 		dbg_fnmatch("[");
 		for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->	next,sub2=sub2->next) {
-			ret_score+=match_typeparams_from_arg(matched_tps,fn_tps, sub1, sub2);
+			ret_score+=match_typeparams_from_arg_sub(matched_tps,fn_tps, sub2,sub1);
 		}
 		dbg_fnmatch("]");
 	}
@@ -362,9 +378,9 @@ int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vect
 		f->args[i]->type()->dump_if(-1); newline(0);
 		args[i]->dump_if(-1); newline(0);
 #endif
-		score+=match_typeparams_from_arg(matched,f->typeparams, f->args[i]->type(), args[i]->type());
+		score+=match_typeparams_from_arg(matched,f->typeparams, args[i]->type(), f->args[i]->type());
 	}
-	score+=match_typeparams_from_arg(matched, f->typeparams, f->ret_type, callsite->type());
+	score+=match_typeparams_from_arg(matched, f->typeparams, callsite->type(), f->ret_type);
 	dbg_fnmatch("score matching gets %d\n",score);
 	return score;
 }
@@ -431,9 +447,9 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 		auto at=args[i]->get_type(); if (!at) continue;
 		for (int jj=i; jj<f->args.size(); jj++) {
 			auto j=jj%args.size();
-			if (f->args[j]->get_type()->is_equal(at)){
+			if (auto s=f->args[j]->get_type()->is_equal_or_coercible(at)){
 				if (j==i) score+=(1+args.size()-i); // args in right pos score higher
-				score++;
+				score+=s;
 				break;
 			}
 		}
@@ -455,8 +471,8 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			score++; //1 point for an 'any' arg on either side
 		} else{
 			// both args are given:
-			if (f->args[i]->get_type()->is_equal(args[i]->get_type())) {
-				score+=10;// 1 exact match worth more than any number of anys
+			if (auto s=f->args[i]->get_type()->is_equal_or_coercible(args[i]->get_type())) {
+				score+=s+10;// 1 exact match worth more than any number of anys
 			} else{
 				//if (!is_generic_type(f->typeparams,f->args[i]->get_type())
 				
@@ -474,10 +490,10 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	if (f->typeparams.size()){
 #if DEBUG>=2
 		dbg_fnmatch("%s score=%d; before typaram match\n",str(f->name),score);
-		dbg_fnmatch("callsite: %d args\n",callsite->as_block()->argls.size());
-		for (int i=0; i<callsite->as_block()->argls.size();i++) {
+		dbg_fnmatch("callsite: %d args\n",args.size());
+		for (int i=0; i<args.size();i++) {
 			dbg_fnmatch("arg %s:",  str(args[i]->name));
-			callsite->as_block()->argls[i]->type()->dump_if(-1);
+			args[i]->type()->dump_if(-1);
 			dbg_fnmatch("\tvs\t");
 			f->args[i]->type()->dump_if(-1);
 			dbg_fnmatch("\n");
@@ -485,14 +501,14 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 		dbg_fnmatch("\n");
 #endif
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
-			score+=match_typeparams_from_arg(matched_type_params,f->typeparams, f->args[i]->get_type(), args[i]->get_type());
+			score+=match_typeparams_from_arg(matched_type_params,f->typeparams, args[i]->get_type(), f->args[i]->get_type() );
 		}
-		score+=match_typeparams_from_arg(matched_type_params, f->typeparams,f->ret_type,ret_type);
+		score+=match_typeparams_from_arg(matched_type_params, f->typeparams,ret_type,f->ret_type);
 		dbg_fnmatch("typaram matcher for %s\n",f->name_str());
 		dbg_fnmatch("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
 		dbg_fnmatch("%s score=%d; matched typeparams{:-\n",str(f->name),score);
 		for (auto i=0; i<f->typeparams.size(); i++){
-			dbg_fnmatch("[%d]%s = %s;\n", i,str(f->typeparams[i]->name),matched_type_params[i]?str(matched_type_params[i]->name):"" );
+			dbg_fnmatch("[%d]%s = %s;\n", i,str(f->typeparams[i]->name),matched_type_params[i]?str(matched_type_params[i]->name):"not found" );
 			}
 		dbg_fnmatch("}\n");
 		dbg_fnmatch("\n");

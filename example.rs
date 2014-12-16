@@ -83,15 +83,15 @@ struct IBaz {
 // open overloading like C++; most specific function is matched at callsite
 // f:&Foo means parameter 'f' , reference to Foo.. 
 
-fn something_foo(f:&Foo){
+fn something_foo(f:*Foo){
 	printf("something_foo with 1 arg overloaded\n");
 	printf("f.x= %d\n", f.vx);
 }
-fn something_foo(f:&Foo,x:&Foo){
+fn something_foo(f:*Foo,x:*Foo){
 	printf("something_foo with 2 args overloaded\n");
 	printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
 }
-fn something(f:&Foo){
+fn something(f:*Foo){
 	printf("something overloaded with &Foo param\n");
 	printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
 }
@@ -115,20 +115,20 @@ struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is conventio
 };
 
 fn map[X,Y,R](
-	u:&Union[X,Y],
-	fx:|&X|->R,
-	fy:|&Y|->R)
+	u:*Union[X,Y],
+	fx:|*X|->R,
+	fy:|*Y|->R)
 	->R{
 	if u.tag==0 { fx(&u.x)} else{fy(&u.y)}
 }
 
-fn setv[X,Y](u:&Union[X,Y],y:Y)->void{
+fn setv[X,Y](u:*Union[X,Y],y:Y)->void{
 	printf("setv Y\n");
 	u.y=y;
 	u.tag=1;
 }
 
-fn setv[X,Y](u:&Union[X,Y],x:X)->void{
+fn setv[X,Y](u:*Union[X,Y],x:X)->void{
 	printf("setv X\n");
 	u.x=x;
 	u.tag=0;
@@ -182,8 +182,8 @@ fn main(argc:int,argv:**char)->int{
 
 	let pu=&u;
 	let z=pu.map(
-		|x:&int|{printf("union was set to int %d\n",*x);15},
-		|x:&float|{printf("union was set to float %.3f\n",*x);17}
+		|x:*int|{printf("union was set to int %d\n",*x);15},
+		|x:*float|{printf("union was set to float %.3f\n",*x);17}
 	);
 	printf("map union returned z=%d\n",z);
 

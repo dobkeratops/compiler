@@ -617,8 +617,13 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 		}
 	} else {
 		// prefixes in typegrammar - pointers
-		if (tok==MUL || tok==AND) {
+		if (tok==MUL){
 			ret=new Type(owner,PTR);
+			ret->sub=parse_type(src,close,owner);
+		}
+		else
+		if (tok==AND) {
+			ret=new Type(owner,REF);
 			ret->sub=parse_type(src,close,owner);
 		}else {
 			// main: something[typeparams]..

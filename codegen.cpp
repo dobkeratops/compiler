@@ -105,6 +105,38 @@ CgValue CgValue::addr_op(CodeGen& cg,Type* t) { // take type calculated by sema
 		//			return this->to_stack(cg).addr_op(cg,t);
 	}
 }
+CgValue CgValue::ref_op(CodeGen& cg,const Type* t) const { // take type calculated by sema
+	ASSERT(this->type);
+#if DEBUG>=2
+	this->type->dump(0);
+	t->dump(0);newline(0);
+#endif
+	if (!reg && (bool)addr) {	// we were given a *reference*, we make the vlaue the adress
+		ASSERT(t->name==REF);
+		ASSERT(t->sub->is_equal(this->type));
+		return CgValue(addr,t);
+	}else if (reg && !addr){
+		cg.emit_comment("TODO: REMOVE THE AUTO LOAD OF ARGUMENTS, DEFER THAT TO 'ARG CONVERSION- that should check if arg is a 'ref', and not load it. currently we store then load!");
+		auto r=cg.emit_alloca_type((Expr*)t, this->type);
+		cg.store(r,*this);
+		
+#if DEBUG>=2
+		dbprintf("ref of stored into:-");
+		r.type->dump(0);newline(0);
+#endif
+		return r;
+	} else if (auto v=this->val->as_variable()){
+		if (v->reg_is_addr){
+			return CgValue(v->reg_name, new Type(0,REF,v->type()));
+		}
+	}
+	{
+		ASSERT(0 && "tryting to take adress of register");
+		return CgValue();
+		//			return this->to_stack(cg).addr_op(cg,t);
+	}
+}
+
 CgValue CgValue::deref_op(CodeGen& cg, Type* t) {
 	ASSERT(this->type->name==PTR || this->type->name==REF);
 	if (!t) { t=this->type->sub;}
@@ -1374,14 +1406,17 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src, const Type* t
 	/// TODO: make it clear, this is a helper, not overloaded per back-end
 	// no need to convert..
 #if DEBUG>=2
-	dbprintf("\nconv \n");
-	src.type->dump(-1);dbprintf(" to \n");
+	dbprintf("\nconvert type:- \n");
+	src.type->dump(-1);dbprintf("\n --to--> \n");
 	to_type->dump(-1);dbprintf("\n");
 #endif
 	if (src.type->is_equal(to_type,false))
 		return src;
 	// We must convert..
 	// is it a trivial pointer conversion?
+	if (src.type->name!=REF && to_type->name==REF){
+		return src.ref_op(*this,to_type);
+	}else
 	if (src.type->is_pointer_not_ref() && to_type->is_pointer_not_ref()){
 		if ((to_type->sub->name>=IDENT) && !to_type->sub->def){
 #if DEBUG>=2

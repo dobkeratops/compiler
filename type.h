@@ -78,10 +78,17 @@ struct Type : ExprDef {
 	int			num_pointers_and_arrays()const;
 	ExprStructDef*	struct_def_noderef()const;
 	ExprStructDef*	get_struct_autoderef() const; // with autoderef
-	bool			is_coercible(const Type* other) const{return is_equal(other,true);};
+	bool			is_coercible(const Type* other,Name self_t=0) const{return is_equal(other,true,self_t);};
 	bool			is_equal(const Type* other,bool coerce=false,Name self_t=0) const;
-	bool			is_equal(const Type* other, const TypeParamXlat& xlat )const;
+	bool			is_equal(const Type* other, const TypeParamXlat& xlat ,Name self_t=0)const;
+	bool			is_equal_sub(const Type* other,bool coerce=false,Name self_t=0) const;
+	bool			is_equal_sub(const Type* other, const TypeParamXlat& xlat ,Name self_t=0)const;
 	// todo 'is_equal' rename to iscompatible, is_equal/coercible call it with flags
+	int				is_equal_or_coercible(const Type* other, Name self_t=0) const{
+		if (is_equal(other,false,self_t)) return 10;
+		else if (is_coercible(other,self_t)) return 1;
+		else return 0;
+	}
 	bool			is_compatible(const Type* other,bool coerce=false) const;
 	bool			is_auto(){return !this || this->name==AUTO;}
 	void			dump_sub(int f

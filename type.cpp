@@ -23,6 +23,8 @@ Type* Type::get_elem(int index){
 
 
 bool type_is_coercible(const Type* from,const Type* to,bool coerce){
+	/// TODO cleanup- move into is_equal/_sub instead of passing flag
+	/// coersions only happen at root level
 	// void pointers auto-coerce like they should,
 	// thats what they're there for, legacy C
 	// modern code just doesn't use void*
@@ -136,8 +138,28 @@ ExprStructDef* Type::struct_def_noderef()const { // without autoderef
 //	else return nullptr;
 	return struct_def();
 };
-
-bool Type::is_equal(const Type* other,bool coerce,Name self_t) const{
+bool Type::is_equal(const Type* other, bool coerce, Name self_t) const{
+	/// TODO this is redundant, move all to typeparam based matcher
+	/// and just pass tp==0
+	// handle root level coersions
+	if ((!this) && (!other)) return true;
+	if (coerce && this && other){
+		if (this->name!=CONST && other->name==CONST ){	// non-const coerces to const just fine - too mutability flag tracked on type itself, to handle mut/const from C++/rust. to be annotaed from fn
+			return is_equal(other->sub, coerce, self_t);
+		}
+		if (this->name==MUT && other->name!=MUT){	// non-const coerces to const just fine - too mutability
+			return this->sub->is_equal(other, coerce, self_t);
+		}
+		if (this->name==PTR && other->name==REF) {	// ptr coerces to ref fine.
+			return this->sub->is_equal(other->sub,coerce,self_t);
+		}
+		if (this->name!=REF && other->name==REF) {	// object coerces to ref fine
+			return this->is_equal(other->sub,coerce,self_t);
+		}
+	}
+	return is_equal_sub(other,coerce,self_t);
+}
+bool Type::is_equal_sub(const Type* other,bool coerce,Name self_t) const{
 	/// TODO factor out common logic, is_coercible(),eq(),eq(,xlat)
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
@@ -177,7 +199,29 @@ bool Type::is_equal(const Type* other,bool coerce,Name self_t) const{
 		return false; // didnt reach both..
 	return true;
 }
-bool Type::is_equal(const Type* other,const TypeParamXlat& xlat) const{
+
+bool Type::is_equal(const Type* other,const TypeParamXlat& xlat,Name self_t) const{
+	//if (coerce)
+	if ((!this) && (!other)) return true;
+	if (this && other && 0)
+	{
+		if (this->name!=CONST && other->name==CONST){	// non-const coerces to const just fine - too mutability flag tracked on type itself, to handle mut/const from C++/rust. to be annotaed from fn
+			return this->is_equal(other->sub, xlat, self_t);
+		}
+		if (this->name==MUT && other->name!=MUT){	// non-const coerces to const just fine - too mutability
+			return this->sub->is_equal(other, xlat, self_t);
+		}
+		if (this->name==PTR && other->name==REF) {	// ptr coerces to ref fine.
+			return this->sub->is_equal(other->sub,xlat,self_t);
+		}
+		if (this->name!=REF && other->name==REF) {	// object coerces to ref fine
+			return this->is_equal(other->sub,xlat,self_t);
+		}
+	}
+	return is_equal_sub(other,xlat,self_t);
+
+}
+bool Type::is_equal_sub(const Type* other,const TypeParamXlat& xlat,Name self_t) const{
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
 	if (this &&this->name==AUTO){

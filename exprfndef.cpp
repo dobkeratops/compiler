@@ -580,7 +580,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		CgValue vtable;
 		if (receiver) {
 			// lookup types to see if we have a vcall.
-			ASSERT(recvp.type->is_pointer() && "haven't got auto-ref yet for receiver in a.foo(b) style call\n");
+			//ASSERT(recvp.type->is_pointer() && "haven't got auto-ref yet for receiver in a.foo(b) style call\n");
 			//receiver->dump(-1); newline(0);
 			auto vtable_name=__VTABLE_PTR;
 			auto structdef=recvp.type->get_struct_autoderef();

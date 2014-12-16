@@ -111,7 +111,13 @@ public:
 	virtual bool is_variable_name()const	{return false;}
 	virtual Scope* get_scope()				{return nullptr;}
 	Type* expect_type() const;
-	Type* get_type() const		{ if(this) {::verify(this->m_type);return this->m_type;}else return nullptr;}
+	Type* get_type() const		{
+#if DEBUG>=4
+		if(this) {::verify(this->m_type);return this->m_type;}else return nullptr;
+#else
+		if (this) {return this->m_type;} else return nullptr;
+#endif
+	}
 	Type*& type()				{::verify(this->m_type);return this->m_type;}
 	const Type* type()const		{::verify(this->m_type);return this->m_type;}
 	void type(const Type* t)	{::verify(t);this->m_type=(Type*)t;}

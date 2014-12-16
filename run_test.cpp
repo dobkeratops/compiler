@@ -17,7 +17,7 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	{
-		"type parameter inference UFCS",__FILE__,__LINE__,
+		"type parameter inference UFCS autoref",__FILE__,__LINE__,
 		/* 1*/ "struct Union<A,B>{a:A,b:B, tag:int};		\n"
 		/* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
 		/* 3*/ "	u.a=v; u.tag=0; 						\n"
@@ -26,10 +26,10 @@ CompilerTest g_Tests[]={
 		/* 6*/ "	u.b=v; u.tag=1; 						\n"
 		/* 7*/ "}											\n"
 		/* 8*/ "fn main(argc:int, argv:**char)->int{		\n"
-		/* 9*/ "	u=:Union[int,float]; pu:=&u;					\n"
-		/*10*/ "	pu.setv(10)								\n"
+		/* 9*/ "	u=:Union[int,float];					\n"
+		/*10*/ "	u.setv(10)								\n"
 		/*11*/ "	printf(\"u.tag=%d\\n\",u.tag);			\n"
-		/*12*/ "	setv(&u,10.0)	;						\n"
+		/*12*/ "	setv(u,10.0)	;						\n"
 		/*13*/ " printf(\"u.tag=%d\\n\",u.tag);				\n"
 		/*14*/ "	0}										\n"
 		/*15*/ "fn\"C\" printf(s:str,...)->int;					\n"
