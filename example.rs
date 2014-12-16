@@ -1,6 +1,7 @@
 #!hack -r
 
-// Uses .rs extention for syntax highlighting, but this is not Rust source.
+// Uses .rs extention for syntax highlighting, but this is NOT Rust source.
+//
 // omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types.
 struct FILE;
 extern"C"fn printf(s:str,...)->int;
