@@ -62,6 +62,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	CgValue get_elem(CodeGen& cg,const Node* field_name,Scope* sc)const;
 	CgValue get_elem_index(CodeGen& cg, int field_index,Type *field_type=0) const;
 	CgValue index(RegisterName index);
+	void	dump()const;
 };
 
 

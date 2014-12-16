@@ -1403,21 +1403,24 @@ void CodeGen::emit_alloca_array_type(Name r, Type* t, Name count,int align)
 	cg.emit_reg(r);
 	cg.emit_txt(" = alloca [%s x %s] , align %zu\n",str(count),get_llvm_type_str(t->name),align);
 }
+void CgValue::dump()const {
+	dbprintf("%(");
+	dbprintf("reg=%s;",str(reg));
+	dbprintf("val=%p %s %s;",val,val?val->name_str():"",val?val->kind_str():"");
+	dbprintf("reg=%s;elem=%d;type:",str(reg),elem);
+	type->dump(-1);
+	dbprintf(")");
+}
 
 CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* to_type,const Scope* sc) {
 	/// TODO: make it clear, this is a helper, not overloaded per back-end
 	// no need to convert..
 #if DEBUG>=2
 	dbprintf("\nconvert type:- \n");
-	src0.type->dump(-1);dbprintf("\n --to--> \n");
+	src0.dump();dbprintf("\n --to--> \n");
 	to_type->dump(-1);dbprintf("\n");
 #endif
 	CgValue src=src0;
-	if (src0.elem>=0){
-#if DEBUG>=2
-		dbprintf("converting field..\n");
-#endif
-	}
 	if (src0.type->is_equal(to_type,false)){
 		if (src0.reg && src0.elem>=0 && !src0.addr)
 			return src0.load(*this);
@@ -1432,17 +1435,12 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 		src=src.load(*this);
 	}
 #if DEBUG>=2
-	dbprintf("\n after 'ref'->'value' src is (reg=%s; val=%p; addr=%s)\n",str(src.reg),src.val,str(src.addr));
-	src.type->dump(-1);newline(0);
+	dbprintf("\n after 'ref'->'value' src is");
+	src.dump();newline(0);
 #endif
 
 	// We must convert..
 	// is it a trivial pointer conversion?
-#if DEBUG>=2
-	if (src.elem>=0){
-		dbprintf("elem=%d\n",src.elem);
-	}
-#endif
 
 	if (src.type->name!=REF && to_type->name==REF){
 		if (!src.reg && src.addr){
@@ -1468,9 +1466,10 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 		return src.load(*this);
 	}
 
-	dbprintf("tried to convert:-\n");
-	to_type->dump(-1);dbprintf("\n--to-->\n");
-	src.type->dump(-1);dbprintf("\n");
+	dbprintf("\ntried to convert:-\n");
+	src0.dump();
+	dbprintf("\n--to-->\n");
+	to_type->dump(-1);newline(0);
 	error(n,"\nTODO need conversion operators\n");
 	return CgValue();
 
