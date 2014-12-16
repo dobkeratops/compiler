@@ -100,6 +100,7 @@ This is probably all way beyond a 1man project but I'll see how far I can get..
   * want "_" placeholder in ident position to query compiler -see haskell 'holes'..
   * 100% Open World design 
    * free functions+UFCS/Extention methods
+   * would prefer if methods never existed but need them for interfacing with C++
    * minimal syntax changes to rearrange code,
    * 'Expression Problem' - dont commit syntax upfront to sort by function or type
     * adhoc gather of free functions into interfaces (like go, but generalized),
