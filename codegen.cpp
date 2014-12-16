@@ -140,6 +140,8 @@ CgValue CgValue::ref_op(CodeGen& cg,const Type* t) const { // take type calculat
 }
 
 CgValue CgValue::deref_op(CodeGen& cg, Type* t) {
+	/// todo: * C++ only loads a pointer.
+	/// if its a ref-to-ptr it has to load the pointer first
 	ASSERT(this->type->name==PTR || this->type->name==REF);
 	if (!t) { t=this->type->sub;}
 	// todo type assertion 't' is the output type.
@@ -331,7 +333,24 @@ CgValue CodeGen::store(const CgValue& v){// for read-modify-write
 CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 	auto &cg=*this;
 	auto src_in_reg=cg.load(src);
-	
+#if DEBUG>=2
+	dbprintf("\nstore:\t");
+	src.dump();
+	dbprintf("\nto:\t");
+	dst.dump();
+	dbprintf("\nsrc in reg=\t");
+	src_in_reg.dump();
+	dbprintf("\n");
+#endif
+	if (src_in_reg.type->name==REF && src_in_reg.type->sub->is_equal(dst.type)){
+		src_in_reg=CgValue(0,src_in_reg.type->sub,src_in_reg.reg).load(*this);
+#if DEBUG>=2
+		dbprintf("\nsrc in reg loaded again because it was a ref=\n");
+		src_in_reg.dump();
+		dbprintf("\n");
+#endif
+	}
+
 	if (dst.elem>=0){
 		auto newreg=next_reg_name(&cg.m_next_reg);
 		if ( dst.reg && !dst.addr){
@@ -353,8 +372,12 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 		}
 	}
 
-	if (dst.addr)
+	if (dst.addr){
+		//ASSERT( dst.type->is_equal(src_in_reg.type));
+		
+
 		cg.emit_store(src_in_reg.reg, dst.type, dst.addr);
+	}
 	else if (dst.reg) {
 		cg.emit_store(src_in_reg.reg, dst.type, dst.reg);
 	} else if (dst.val) {
@@ -1407,7 +1430,7 @@ void CgValue::dump()const {
 	dbprintf("%(");
 	dbprintf("reg=%s;",str(reg));
 	dbprintf("val=%p %s %s;",val,val?val->name_str():"",val?val->kind_str():"");
-	dbprintf("reg=%s;elem=%d;type:",str(reg),elem);
+	dbprintf("addr=%s;elem=%d;type:",str(addr),elem);
 	type->dump(-1);
 	dbprintf(")");
 }
@@ -1437,13 +1460,14 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 #if DEBUG>=2
 	dbprintf("\n after 'ref'->'value' src is");
 	src.dump();newline(0);
+	dbprintf("\n");
 #endif
 
 	// We must convert..
 	// is it a trivial pointer conversion?
 
 	if (src.type->name!=REF && to_type->name==REF){
-		if (!src.reg && src.addr){
+		if (!src.reg && src.elem<0 && src.addr){
 			return CgValue(src.addr, to_type);
 		} else {
 			this->emit_comment("TODO RVO, does llvm do it for us??");
@@ -1462,6 +1486,13 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 	} else if (src.type->is_equal(to_type,false)){
 		if (src.reg && !src.addr){
 			return src;
+		}
+		return src.load(*this);
+	}
+	// load reference->value?
+	if (src0.type->name==REF && to_type->name!=REF){
+		if (!src0.type->sub->is_equal(to_type)){
+			error(n,"\ncan't convert,bug\n");
 		}
 		return src.load(*this);
 	}

@@ -111,6 +111,7 @@ struct Variable : ExprDef{
 	VarKind		kind;
 	Scope*		owner=0;
 	short capture_index;
+	const char*	kind_str(){return "variable";}
 	bool		keep_on_stack(){return on_stack||capture_in!=0;}
 	Variable*	next_of_scope=0;	// TODO could these be unified, var is owned by capture or scope
 	Variable*	next_of_capture=0;

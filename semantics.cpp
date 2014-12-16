@@ -148,6 +148,10 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 		a->dump(-1);
 		warning(b->get_origin(),"vs here");
 		b->dump(-1);
+#if DEBUG>=2
+		if (a->is_coercible(b)){
+		}
+#endif
 		error_end(n);
 		return ResolvedType(a,ResolvedType::ERROR);
 	}

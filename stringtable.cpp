@@ -18,19 +18,22 @@ int g_raw_types[]={
 	8|RT_INTEGER,
 	16|RT_INTEGER,
 	1|RT_INTEGER,
-	2|RT_FLOATING,
+	2|RT_FLOATING,//half
 	4|RT_FLOATING,
 	8|RT_FLOATING,
 	16|RT_FLOATING|RT_SIMD,
 	1|RT_INTEGER,
 	8|RT_POINTER,
 	0|0,
+	8|RT_POINTER,
 	0|0,
 	0|0,
-	0|0,
-	0|0,
-	0|0,
-	0|0,
+	8|RT_POINTER,
+	1|RT_INTEGER,
+	1|RT_INTEGER,
+	0|0,//auto
+	8|RT_POINTER,//ptr
+	8|RT_POINTER,//ref
 	0|0,
 };
 const char* g_token_str[]={

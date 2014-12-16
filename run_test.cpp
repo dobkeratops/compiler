@@ -17,6 +17,19 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	{
+		"references vs values",__FILE__,__LINE__,
+		"fn\"C\" printf(s:str,...)->int;		\n"
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let apple=15;	\n"		//integer value
+		"	let ref_apple:&int; \n"	// c++ reference
+		"	ref_apple=apple;	\n"	// ref_apple should be the adress of apple
+		"	let banana:int;	\n"		// banana, just a value
+		"	banana=ref_apple;	\n"	// this should load the *value* from apple->banana
+		"	0	}	\n"
+		,nullptr
+	},
+
+	{
 		"closures",__FILE__,__LINE__,
 		/*1*/ 	"fn\"C\" printf(s:str,...)->int;  							\n"
 		/*10*/	"fn take_closure(pfunc:|int|->void){ pfunc(5);}\n"

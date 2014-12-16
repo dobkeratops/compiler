@@ -150,8 +150,8 @@ bool Type::is_equal(const Type* other, bool coerce, Name self_t) const{
 		if (this->name==MUT && other->name!=MUT){	// non-const coerces to const just fine - too mutability
 			return this->sub->is_equal(other, coerce, self_t);
 		}
-		if (this->name==PTR && other->name==REF) {	// ptr coerces to ref fine.
-			return this->sub->is_equal(other->sub,coerce,self_t);
+		if (this->name==REF && other->name!=REF) {	// ref coerces to value
+			return this->sub->is_equal(other,coerce,self_t);
 		}
 		if (this->name!=REF && other->name==REF) {	// object coerces to ref fine
 			return this->is_equal(other->sub,coerce,self_t);
@@ -211,15 +211,14 @@ bool Type::is_equal(const Type* other,const TypeParamXlat& xlat,Name self_t) con
 		if (this->name==MUT && other->name!=MUT){	// non-const coerces to const just fine - too mutability
 			return this->sub->is_equal(other, xlat, self_t);
 		}
-		if (this->name==PTR && other->name==REF) {	// ptr coerces to ref fine.
-			return this->sub->is_equal(other->sub,xlat,self_t);
+		if (this->name==REF && other->name!=REF) {	// ptr coerces to ref fine.
+			return this->sub->is_equal(other,xlat,self_t);
 		}
 		if (this->name!=REF && other->name==REF) {	// object coerces to ref fine
 			return this->is_equal(other->sub,xlat,self_t);
 		}
 	}
 	return is_equal_sub(other,xlat,self_t);
-
 }
 bool Type::is_equal_sub(const Type* other,const TypeParamXlat& xlat,Name self_t) const{
 	if ((!this) && (!other)) return true;
