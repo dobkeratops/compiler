@@ -181,7 +181,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 			// For the best match, say what you'd have to do to fix, then show all matches
 			if (args.size()<best.f->min_args()){info(best.f,"maybe requires %d args, %d given",best.f->min_args(),args.size());}
 			vector<Type*> callsite_tys;
-			match_typeparams(callsite_tys, best.f,callsite->as_block());
+			match_typeparams(callsite_tys, best.f,args,callsite->as_block());
 			auto tpxlat=TypeParamXlat{best.f->typeparams,callsite_tys};
 			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
 				

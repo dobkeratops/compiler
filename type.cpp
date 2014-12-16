@@ -432,7 +432,9 @@ void Type::translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_repla
 	if (param_index>=0){
 		auto pi=param_index;
 		auto src_ty=tpx.given_types[pi];
-		if (!src_ty){error(this,"typaram not given,partial instance?");}
+		if (!src_ty){
+			error(this,"typaram not given,partial instance?");
+		}
 		if (!src_ty->sub) {
 			this->name=src_ty->name;
 		} else if (!this->sub){

@@ -271,7 +271,7 @@ ExprStructDef* dump_find_struct(Scope* s, Name name){
 // type Mul[float,float]->float
 // type Foo[a]->tuple[a.node,a.foo] // accessors for associated types?
 
-	//todo: generic heirarchy equality test, duplicate code detection?
+//todo: generic heirarchy equality test, duplicate code detection?
 bool type_compare(const Type* t,int a0, int a1){
 	if (t)
 		if (t->name==a0)
@@ -349,7 +349,7 @@ int match_typeparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TPar
 	return ret_score;
 }
 
-int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const ExprBlock* callsite){
+int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vector<Expr*>& args,const ExprBlock* callsite){
 	// TODO: allow the types to feedback in the math
 	matched.resize(f->typeparams.size());
 	int score=0;
@@ -357,12 +357,12 @@ int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const Expr
 	callsite->dump(0);newline(0);
 #endif
 	for (int i=0; i<f->typeparams.size();i++) matched[i]=0;
-	for (int i=0; i<callsite->argls.size(); i++) {
+	for (int i=0; i<args.size(); i++) {
 #if DEBUG>=2
 		f->args[i]->type()->dump_if(-1); newline(0);
-		callsite->argls[i]->type()->dump_if(-1); newline(0);
+		args[i]->dump_if(-1); newline(0);
 #endif
-		score+=match_typeparams_from_arg(matched,f->typeparams, f->args[i]->type(), callsite->argls[i]->type());
+		score+=match_typeparams_from_arg(matched,f->typeparams, f->args[i]->type(), args[i]->type());
 	}
 	score+=match_typeparams_from_arg(matched, f->typeparams, f->ret_type, callsite->type());
 	dbg_fnmatch("score matching gets %d\n",score);
@@ -474,7 +474,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	if (f->typeparams.size()){
 #if DEBUG>=2
 		dbg_fnmatch("%s score=%d; before typaram match\n",str(f->name),score);
-		dbg_fnmatch("callsite:\n");
+		dbg_fnmatch("callsite: %d args\n",callsite->as_block()->argls.size());
 		for (int i=0; i<callsite->as_block()->argls.size();i++) {
 			dbg_fnmatch("arg %s:",  str(args[i]->name));
 			callsite->as_block()->argls[i]->type()->dump_if(-1);

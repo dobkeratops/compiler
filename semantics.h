@@ -77,6 +77,7 @@ struct FindFunction {
 	void insert_candidate(ExprFnDef* f,int score);
 	void dump();
 };
+int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const vector<Expr*>& args, const ExprBlock* callsite);
 
 
 

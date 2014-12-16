@@ -17,6 +17,29 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	{
+		"type parameter inference UFCS",__FILE__,__LINE__,
+		/* 1*/ "struct Union<A,B>{a:A,b:B, tag:int};		\n"
+		/* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
+		/* 3*/ "	u.a=v; u.tag=0; 						\n"
+		/* 4*/ "}											\n"
+		/* 5*/ "fn setv[A,B](u:&Union[A,B], v:B)->void{		\n"
+		/* 6*/ "	u.b=v; u.tag=1; 						\n"
+		/* 7*/ "}											\n"
+		/* 8*/ "fn main(argc:int, argv:**char)->int{		\n"
+		/* 9*/ "	u=:Union[int,float]; pu:=&u;					\n"
+		/*10*/ "	pu.setv(10)								\n"
+		/*11*/ "	printf(\"u.tag=%d\\n\",u.tag);			\n"
+		/*12*/ "	setv(&u,10.0)	;						\n"
+		/*13*/ " printf(\"u.tag=%d\\n\",u.tag);				\n"
+		/*14*/ "	0}										\n"
+		/*15*/ "fn\"C\" printf(s:str,...)->int;					\n"
+		,
+		// expected result
+		"u.tag=0\n"
+		"u.tag=1\n"
+	},
+
+	{
 		"pass anon struct to adhoc template fn",__FILE__,__LINE__,
 		"fn\"C\" printf(s:str,...)->int;		\n"
 		"fn main(argc:int,argv:**char)->int{\n"
@@ -322,8 +345,8 @@ CompilerTest g_Tests[]={
 		"let array",__FILE__,__LINE__,
 		"fn main(argc:int, argv:**char)->int{	\n"
 		"	let xs:array[int,10];				\n"
-		"	let ptr={&xs[1]};					\n"
-		"	ptr[1]=5;							\n"
+		"	let ptr1={&xs[1]};					\n"
+		"	ptr1[1]=5;							\n"
 		"	0									\n"
 		"}										\n",
 		nullptr

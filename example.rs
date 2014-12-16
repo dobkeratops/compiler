@@ -180,7 +180,8 @@ fn main(argc:int,argv:**char)->int{
 	// as far as i've tried it.. you always need to specify 
 	// a parameter manually
 
-	let z=map(&u,
+	let pu=&u;
+	let z=pu.map(
 		|x:&int|{printf("union was set to int %d\n",*x);15},
 		|x:&float|{printf("union was set to float %.3f\n",*x);17}
 	);

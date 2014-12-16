@@ -38,7 +38,7 @@ const char* g_token_str[]={
 	"int","uint","size_t","i8","i16","i32","i64","u8","u16","u32","u64","u128","bool",
 	"half","float","double","float4",
 	"char","str","void","voidptr","one","zero","nullptr","true","false",
-	"auto","pTr","ref","Self",
+	"auto","ptr","ref","Self",
 	"tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
 	"print___","fn","struct","class","trait","virtual","static","extern", "enum","array","vector","union","variant","with","match","where","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
