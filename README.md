@@ -57,7 +57,7 @@ It almost seems like a deliberate joke - how can a language run GameOfLife with 
 
 Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
-Rust on the other hand is too restrictive, in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. So somewhere between the two is my perfect language.
+Rust on the other hand is too restrictive, in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. Traits are good but I'd prefer them optional & duck-typed. So somewhere between the two is my perfect language.
 
 This is probably all way beyond a 1man project but I'll see how far I can get. Perhaps I can just experiment and converge on whatever mainstream option is closest.
 
@@ -101,12 +101,14 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
   * C++17,21.. of course.
   * Rust
   * D
-  * blows' ".jai" "language for games" etc
-  * 'SugarCpp',
+  * Go - disqualified by GC but some interesting ideas eg adhoc gather,'does a lot with a little'
+  * blows' ".jai" "language for games" - most similar stated goal, but maybe different preferences
+  * 'SugarCpp' - an interesting transpiler
 
  * Features inspired by Rust & other languages:
   * 2 way inference
-  * expression oriented syntax (including for-else loop).
+  * expression oriented syntax
+   * completed by adding  for-else loop,"break expressions".
   * ADTs (possibly implement as sugar for dynamic_cast<>?)
   * optional trait bounds on templates? (bounds replace SFINAE?)
   * rust-like trait-objects - (vtable*,data*) - replaces multiple-inheritance
