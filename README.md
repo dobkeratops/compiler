@@ -14,6 +14,7 @@ Dont have a name yet hence 'hack'..
 
  * C operators, functions, structs,if-else, 
  * 'everything is an expression' syntax
+ * C for loops + break../else{..} expressions
  * function overloading+UFCS
  * Forward+Reverse Type Inference within functions, forward between functions
  * stack-based closures
@@ -22,7 +23,6 @@ Dont have a name yet hence 'hack'..
  * new/delete ,and a ordered or named struct field initializer
  * limited C++-style internal vtables & single inheritance
  * Some operator overloading (no conversions yet)
- * C for loops + break/else expressions (completes expression syntax)
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 example source..
