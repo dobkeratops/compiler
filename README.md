@@ -4,7 +4,7 @@ A subset of C/C++,+more, resyntaxed like Rust.  Implemented in C++.
 
 '$ make' to compile & run inbuilt test
 
-'$ ./hack -r exampl.rs' to compile & run example program.
+'$ ./hack -r example.rs' to compile & run example program.
 
 see 'example.rs' example source; 
 
