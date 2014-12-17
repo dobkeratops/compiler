@@ -253,8 +253,6 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 	// remaining types are assumed overloadable.
 	//look for overload - infer fowards only first like C++
-	if (lhs)lhs->resolve(sc,nullptr,flags&(~R_FINAL));
-	if (rhs)rhs->resolve(sc,nullptr,flags&(~(R_PUT_ON_STACK|R_FINAL)));
 	if (find_overloads(sc,desired,flags)){
 		return propogate_type_fwd(flags, this, desired, this->type_ref());
 	}
@@ -329,6 +327,16 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		auto rhst=rhs->resolve(sc,desired,flags&!R_PUT_ON_STACK);
 		propogate_type(flags,this, lhst,type_ref());
 		propogate_type(flags,this, rhst,type_ref());
+
+		if (flags & R_FINAL){
+			if (!(lhs->type()->is_number() && rhs->type()->is_number())){
+				error_begin(this,"operator %s needs primitive args,given:",this->name_str());
+				info(lhs,lhs->type());
+				info(rhs,rhs->type());
+				error_end(this);
+			}
+		}
+
 		return propogate_type_fwd(flags,this, desired, type_ref());
 	}
 }
@@ -338,13 +346,21 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 		return false;
 	if (this->get_fn())
 		return true;
+	if (lhs)lhs->resolve(sc,nullptr,flags&(~R_FINAL));
+	if (rhs)rhs->resolve(sc,nullptr,flags&(~(R_PUT_ON_STACK|R_FINAL)));
  	if (!(lhs->type_if()||rhs->type_if()||desired)){
 		return false;		// no info to go on.
 	}
+#if DEBUG >=2
+	dbprintf("considering overload for:-\n");
+	dbprintf("lhs="); lhs->dump_if(-1);newline(0);
+	dbprintf("rhs="); rhs->dump_if(-1);newline(0);
+	dbprintf("\n");
+#endif
 	// at least one must be a custom type, like C++.
 	int num_non_prim=0;
 	if (this->lhs)if (lhs->type()->is_userdefined()) num_non_prim++;
-	if (this->rhs)if (rhs->type()) if (!rhs->type()->is_userdefined()) num_non_prim++;
+	if (this->rhs)if (rhs->type()->is_userdefined()) num_non_prim++;
 	if (!num_non_prim)
 		return false;
 	vector<Expr*> args;if (lhs)args.push_back(lhs);if (rhs)args.push_back(rhs);

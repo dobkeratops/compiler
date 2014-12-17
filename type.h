@@ -31,6 +31,7 @@ struct Type : ExprDef {
 	int	raw_type_flags()const	{int i=index(name)-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
 	bool	is_int()const		{return raw_type_flags()&RT_INTEGER;}
 	bool	is_float()const		{return raw_type_flags()&RT_FLOATING;}
+	bool	is_number()const	{return raw_type_flags()&(RT_FLOATING|RT_INTEGER);}
 	bool	is_signed()const	{return raw_type_flags()&RT_SIGNED;}
 	bool	is_register()const	{return !is_complex();}
 	bool	is_anon_struct()const	{return !this->name && this->def;}

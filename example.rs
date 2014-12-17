@@ -9,7 +9,7 @@ extern"C"fn fopen(d:*char,z:*char)->*FILE;
 extern"C"fn fclose(d:*FILE)->int;
 extern"C"fn fread(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn fwrite(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
-
+extern"C"fn sqrt(f:float)->float;
 // stolen from rust: function syntax 'fn <function name>(args) optional return value {body}
 // however ommitting return value means infer it, not 'void' 
 
@@ -63,16 +63,27 @@ struct Foo {
 	vx:int, vy:int, vz:int
 }
 struct Vec3{ vx:float,vy:float,vz:float};
+
 // adhoc overloading like C++. 
 //(no conversions yet,might rely on inference using output type?)
 fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
+
+//single-expression syntax seems nice for math functions
 fn -(a:&Vec3,b:&Vec3)=Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz};
 fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx + a.vy*b.vy + a.vz*b.vz;
+fn *(a:&Vec3,f:float)=Vec3{vx=a.vx*f,vy=a.vy*f,vz=a.vz*f};
 fn ^(a:&Vec3,b:&Vec3)=Vec3{
 	a.vy*b.vz-a.vz*b.vy,
 	a.vz*b.vx-a.vx*b.vz,
 	a.vx*b.vy-a.vy*b.vx
 };
+fn length(a:&Vec3)=sqrt(a|a);
+fn normalize(a:&Vec3)=a*(1.0/length(a));
+// bilerp implemented using generic 'lerp' defined above
+// it will just instance it for 'Vec3' because it's got + * -
+// like C++.
+// this could have been totally generic too.
+fn bilerp(a0:&Vec3,b0:&Vec3,a1:&Vec3,b1:&Vec3,u:float,v:float)=lerp(lerp(a0,a1,u),lerp(b0,b1,u),v);
 
 // internal vtables
 // simplified implementation - base must describe whole vtable layout

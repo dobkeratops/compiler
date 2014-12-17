@@ -105,7 +105,7 @@ bool  Type::has_typeparam(Scope* sc){
 ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 {
 	if(!this)return ResolvedType();
-	if (!this->struct_def() && this->name>=IDENT && !is_number(this->name)){
+	if (!this->struct_def() && this->name>=IDENT && !::is_number(this->name)){
 		if (!strcmp(str(name),"Union")){
 			sc->owner_fn->dump_if(0);
 			this->dump(-1);newline(0);
@@ -123,7 +123,7 @@ ResolvedType Type::resolve(Scope* sc,const Type* desired,int flags)
 			}
 		}
 	}
-#if DEBUG >=2
+#if DEBUG >=3
 	dbprintf("%s structdef=%p def= %p\n",this->name_str(),this->struct_def(),this->def);
 #endif
 	auto ds=desired?desired->sub:nullptr;
@@ -293,7 +293,7 @@ void Type::dump_sub(int flags)const{
 		dbprintf(")");
 	} else{
 		dbprintf("%s",getString(name));
-#if DEBUG>=2
+#if DEBUG>=3
 		if (this->struct_def())
 			dbprintf("( struct_def=%s )", str(this->struct_def()->get_mangled_name()));
 		if (this->def)

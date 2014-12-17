@@ -447,6 +447,16 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	if (this->args.size()==0 && f->is_enough_args(0))
 		score++;
 	// +1 for any matching arg type regardless of placement,bonus if aprox right order
+#if DEBUG>=2
+	dbprintf("try to match args:-\n");
+	for (auto x:this->args){
+		x->dump(-1);dbprintf("\n");
+	}
+	dbprintf("...with:-\n");
+	for (auto x:f->args){
+		x->dump(-1);dbprintf("\n");
+	}
+#endif
 	for (int i=0; i<args.size(); i++) {
 		auto at=args[i]->get_type(); if (!at) continue;
 		for (int jj=i; jj<f->args.size(); jj++) {

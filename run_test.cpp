@@ -16,19 +16,22 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
+	
 	{
-/*		"basic operator overload",__FILE__,__LINE__,
-		"fn\"C\" printf(s:str,...)->int;		\n"
-		"struct Vec3{ x:float,y:float,z:float};	\n"
-		"fn +(a:&Vec3,b:&Vec3)=Vec3{a.x+b.x, a.y+b.y, a.z+b.z};"
+		"WIP, overloads with mixed types",__FILE__,__LINE__,
+		
+		"struct Vec3{ vx:float,vy:float,vz:float};"
+		"extern\"C\"fn sqrt(f:float)->float;"
+		"fn *(a:&Vec3,f:float)=Vec3{vx=a.vx*f,vy=a.vy*f,vz=a.vz*f};"
+		"fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx+a.vy*b.vy+a.vz*b.vz;"
+		"fn inv_length(a:&Vec3)=1.0/sqrt(a|a);"
+		"fn mul_vec(a:&Vec3)=a*inv_length(a);"
 		"fn main(argc:int,argv:**char)->int{\n"
-		"	let v0=Vec3{1.0,2.0,3.0};	\n"
-		"	let v1=Vec3{2.0,2.0,4.0};	\n"
-		"	let v2:Vec3;			\n"
-		"	v2=v0+v1;				\n"
 		"	0	}	\n"
 		,nullptr
-*/
+	},
+	
+	{
 		"basic operator overload",__FILE__,__LINE__,
 		"fn\"C\" printf(s:str,...)->int;		\n"
 		"struct Vec3{ x:float,y:float,z:float};	\n"

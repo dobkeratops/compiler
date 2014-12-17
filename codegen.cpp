@@ -335,7 +335,7 @@ CgValue CodeGen::store(const CgValue& v){// for read-modify-write
 CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 	auto &cg=*this;
 	auto src_in_reg=cg.load(src);
-#if DEBUG>=2
+#if DEBUG>=3
 	dbprintf("\nstore:\t");
 	src.dump();
 	dbprintf("\nto:\t");
@@ -346,7 +346,7 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 #endif
 	if (src_in_reg.type->name==REF && src_in_reg.type->sub->is_equal(dst.type)){
 		src_in_reg=CgValue(0,src_in_reg.type->sub,src_in_reg.reg).load(*this);
-#if DEBUG>=2
+#if DEBUG>=3
 		dbprintf("\nsrc in reg loaded again because it was a ref=\n");
 		src_in_reg.dump();
 		dbprintf("\n");

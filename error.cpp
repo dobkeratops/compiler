@@ -170,6 +170,11 @@ void error(const Node* n, const Type* t) {
 	t->dump(-1);
 	error_maybe_end(n);
 }
+void info(const Node* n, const Type* t) {
+	error_sub(n,E_INFO,"");
+	t->dump(-1);
+	error_maybe_end(n);
+}
 
 void error_srcpos(const SrcPos& p, const char* str, ...) {
 	char buffer[1024];
