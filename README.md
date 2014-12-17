@@ -4,13 +4,11 @@ A subset of C/C++,+more, resyntaxed like Rust.  Implemented in C++.
 
 '$ make' to compile & run inbuilt test
 
-'$ ./hack hello.rpp' to compile & run example program.
+'$ ./hack -r exampl.rs' to compile & run example program.
 
-see 'hello.rs' example source; (using rs extention for highlighting)
+see 'example.rs' example source; 
 
-'compiler.h' descibes the ast, 'compiler.cpp' is contains bulk of the resolving
-
-dont have a name yet hence 'hack'..
+Dont have a name yet hence 'hack'..
 
 #### Currently supports:-
 
@@ -19,12 +17,12 @@ dont have a name yet hence 'hack'..
  * function overloading+UFCS
  * Forward+Reverse Type Inference within functions, forward between functions
  * stack-based closures
- * C for loops + break/else expressions
  * templated functions & structs
  * HKT (template-template parameters)
  * new/delete ,and a ordered or named struct field initializer
  * limited C++-style internal vtables & single inheritance
  * Some operator overloading (no conversions yet)
+ * C for loops + break/else expressions (completes expression syntax)
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 example source..
@@ -32,48 +30,78 @@ https://github.com/dobkeratops/compiler/blob/master/example.rs
 
 Quite early days.
 
+
 #### Long Term Goals:-
 
  * significant C++ subset resyntaxed
  * open-world polymorphism
  * add Rust/functional language inspired features
  * features for parallelism, GPGPU programming
- * a subset should make a passable embedded dynamic language (think of C++-&-Lua usecase)
+ * a subset should make a passable embedded dynamic language
+  * (think of 1 language to handle the C++-&-embedded-Lua usecase)
 
 Basically trying to combine everything I like from C++ & Rust, dropping what I dont like, plus what i've always missed.
 
 This could all be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects - retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? both go against the underlying design of either .
 
 Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code;
+
 I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code.
 
-Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* is what yields working code... there is so much you still can't verify at compile time.
+Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* is what yields working code... there is still so much you still can't verify at compile time.
 
-I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating. Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
+I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating.
 
-Rust is too restrictive. Somewhere between the two is my perfect language.
+Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
-This is probably all way beyond a 1man project but I'll see how far I can get..
+Rust is too restrictive, in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. So somewhere between the two is my perfect language.
+
+This is probably all way beyond a 1man project but I'll see how far I can get. Perhaps I can just experiment and converge on whatever mainstream option is closest.
+
+#### project structure & info..
+
+ * 'main.cpp' contains the driver,'parser.cpp' builds the AST,
+ * 'node.h'=AST; implementations - eg'exprfndef.cpp' &'exprstructdef.cpp' 'exprOp.cpp 
+ * 'semantics.cpp' & '::resolve()' methods do inference/overload resolving..
+ * 'codegen.cpp' encapsulates the output, called from node '::compile()' methods 
+  * this is a hacky text output at the minute but does the job, 
+  * maybe replaced with mutliple back ends... LLVM, C++ transpile..
+
+ * sorry for the range of coding styles here: 
+  * I'm intending to transpile to self-host, 
+  * so have been reluctant to dive into full "modern C++"
+  * still might want to eliminate dependance on C++ stdlib with simplified Vec<T>
+
+
+
 
 #### Goals In detail:-
 
  * Resyntax a significant subset of C++, in the spirit of SPECS; 
   * should be possible to non-destructively translate a subset back & forth.
-  * allow use with established C++ libraries & sourcebases
+  * to eliminate the risk of transitition
+  * allow use with,& in, established C++ libraries & sourcebases
   * self host by translating own source, be mindful of c++ subset used to write this
   * context free grammar
 
  * graph like/relative module import: 
   * any file in a project should work as the root for its own tests
-  * dont need to commit to 'crate roots', change library granularity
-  * relative namespace search (to avoid any absolute root), just warn about ambiguity
+  * No committing to heirachical structure
+   * dont need to commit to 'crate roots', change library granularity
+   * relative namespace search (to avoid any absolute root), just warn about ambiguity
+   * overloading is,IMO, like 'tagging'. find more ways to leverage/improve that.
 
  * add alternate parser that can directly read subset of C++ headers ?
      (or adapt a rust community tool for C++ -> rust translation..)
 
- * compare with other projects .. 'SugarCpp', .jai etc .. converge on whichever is closer to my ideal..
+ * compare with other projects, converge with whichever mainstream option is closer
+  * C++17,21.. of course..
+  * Rust
+  * D
+  * blows' ".jai" "language for games" etc
+  * 'SugarCpp',
 
- * Additional Features inspired by Rust & other languages:
+ * Features inspired by Rust & other languages:
   * 2 way inference
   * expression oriented syntax (including for-else loop).
   * ADTs (possibly implement as sugar for dynamic_cast<>?)
