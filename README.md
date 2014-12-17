@@ -77,7 +77,6 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
 
 
 
-
 #### Goals In detail:- (a huge TODO list..)
 
  * Resyntax a significant subset of C++, in the spirit of SPECS; 
