@@ -71,7 +71,7 @@ fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
 //single-expression syntax seems nice for math functions
 fn -(a:&Vec3,b:&Vec3)=Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz};
 fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx + a.vy*b.vy + a.vz*b.vz;
-fn *(a:&Vec3,f:float)=Vec3{vx=a.vx*f,vy=a.vy*f,vz=a.vz*f};
+fn *(a:&Vec3,f:float)=Vec3{a.vx*f,a.vy*f,a.vz*f};
 fn ^(a:&Vec3,b:&Vec3)=Vec3{
 	a.vy*b.vz-a.vz*b.vy,
 	a.vz*b.vx-a.vx*b.vz,
@@ -79,6 +79,7 @@ fn ^(a:&Vec3,b:&Vec3)=Vec3{
 };
 fn length(a:&Vec3)=sqrt(a|a);
 fn normalize(a:&Vec3)=a*(1.0/length(a));
+
 // bilerp implemented using generic 'lerp' defined above
 // it will just instance it for 'Vec3' because it's got + * -
 // like C++.
