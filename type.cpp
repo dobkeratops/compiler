@@ -569,6 +569,11 @@ CgValue Type::compile(CodeGen& cg, Scope* sc){
 	return CgValue(0,this,0);	// propogate a type into compiler interface
 }
 
+void dump(const Type* a,const Type* b){
+	dbprintf("\ntype1:"); a->dump_if(-1);
+	dbprintf("\ttype2:"); b->dump_if(-1);
+	dbprintf("\n");
+}
 
 
 // todo table of each 'intrinsic type', and pointer to it

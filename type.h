@@ -140,6 +140,7 @@ struct Type : ExprDef {
 	virtual void verify();
 	CgValue	compile(CodeGen& cg, Scope* sc);
 };
+void dump(const Type* a,const Type* b);
 bool type_params_eq(const vector<Type*>& a, const Type* tp);
 bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b);
 

@@ -35,8 +35,9 @@ Name ExprStructDef::get_mangled_name()const{
 
 ArgDef*	ExprStructDef::find_field(const Node* rhs)const{
 	auto fi= this->try_find_field(rhs->as_name());
-	if (!fi)
-		error(rhs,this,"no field %s in ",str(name),str(this->name));
+	if (!fi){
+		error(rhs,this,"no field %s in %s",str(rhs->name),str(this->name));
+	}
 
 	return fi;
 }

@@ -130,7 +130,7 @@ void ExprFnDef::dump_signature()const{
 ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
 	verify_all();
 	dbg_generic("instantiating %s %d for call %s %d\n",str(name),srcfn->pos.line, pcallsite->name_str(),pcallsite->pos.line);
-	dbg_generic("\t%d args %d args inc receiver\n", pcallsite->as_block()->argls.size(), call_args.size());
+	dbg_generic("\t%d args %d args inc receiver\n", pcallsite->get_elem_count(), call_args.size());
 	if (srcfn->type_parameter_index(srcfn->name)>=0){
 		dbprintf("WARNING instantiated templated NAME function for %s, as no function of the right name was found.. experiment aimed at implementing OOP thru generics.. eg fn METHOD[OBJ,METHOD,ARG0,ARG1](o:OBJ,a0:ARG0,a1:ARG1){ o.vtable.METHOD(o,a0,a1)}", str(name));
 	}

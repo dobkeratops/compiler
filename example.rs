@@ -66,12 +66,14 @@ struct Vec3{ vx:float,vy:float,vz:float};
 
 // adhoc overloading like C++. 
 //(no conversions yet,might rely on inference using output type?)
+// thanks to Rust-like 'fn' we dont need another keyword 'operator'?
 fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
 
-//single-expression syntax seems nice for math functions
-fn -(a:&Vec3,b:&Vec3)=Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz};
+fn -(a:&Vec3,b:&Vec3)= Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz};
 fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx + a.vy*b.vy + a.vz*b.vz;
 fn *(a:&Vec3,f:float)=Vec3{a.vx*f,a.vy*f,a.vz*f};
+//single-expression syntax seems nice for math functions
+// eg cross product with less nesting.
 fn ^(a:&Vec3,b:&Vec3)=Vec3{
 	a.vy*b.vz-a.vz*b.vy,
 	a.vz*b.vx-a.vx*b.vz,
@@ -233,7 +235,7 @@ fn main(argc:int,argv:**char)->int{
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		acc+=i;
 		for k:=0; k<10; k+=1 {
-			printf("i,k=%d,%d,x=%d\n",i,k,acc);
+			printf("i=%d,k=%d,acc=%d\n",i,k,acc);
 			if k==5{
 				printf("break from inner loop\n");
 				break break 55; // read like break(break 55). 2 levels

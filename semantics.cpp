@@ -597,10 +597,16 @@ void dump(vector<T*>& src) {
 ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 
 	ExprStructDef* sd=nullptr;
+#if DEBUG >=2
+	dbprintf("struct init: %s:",si->call_expr->name_str());
+	si->call_expr->type()->dump_if(-1);
+	dbprintf("\tdesired:");desiredType->dump_if(-1);newline(0);
+#endif
 	if (si->call_expr->name==PLACEHOLDER && desiredType){
-		if (desiredType->def)
+		if (desiredType->def){
 			sd=desiredType->def->as_struct_def();
-		dbg_type("infered struct init def=%s\n",sd->name_str());
+			dbg_type("infered struct init def=%s\n",sd->name_str());
+		}
 		if (!sd) return ResolvedType();
 		sd->dump(-1);
 		dbg_type("\n");

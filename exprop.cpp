@@ -130,12 +130,16 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 		else if (op_ident==ASSIGN){
 			ASSERT(this->lhs && this->rhs);
-			propogate_type_fwd(flags,this, desired, type_ref());
-			auto rhs_t=rhs->resolve(sc,desired,flags);
-			auto lhs_t=lhs->resolve(sc,desired,flags);		// might assign to struct-field, ...
+			dbg(::dump(this->lhs->type(),this->rhs->type()));
+			rhs->resolve(sc,lhs->type_ref(),flags);
+
+			lhs->resolve(sc,rhs->type_ref(),flags);
+			dbg(::dump(this->lhs->type(),this->rhs->type());)
+
 			propogate_type(flags,this, rhs->type_ref(), lhs->type_ref());
-			propogate_type(flags,this, type_ref(),rhs->type_ref());
-			return propogate_type(flags, this, type_ref(),lhs->type_ref());
+			return propogate_type_fwd(flags,this, desired, type_ref());
+			//propogate_type(flags,this, type_ref(),rhs->type_ref());
+			//return propogate_type(flags, this, type_ref(),lhs->type_ref());
 		} else{
 			ASSERT(0);
 			return ResolvedType();

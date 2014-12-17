@@ -16,6 +16,20 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
+	{
+		"templated struct initializer",__FILE__,__LINE__,
+		
+		"struct Vec3<T>{ x:T,y:T,z:T};"
+		"fn + <T>(a:&Vec3<T>,b:&Vec3<T>)->Vec3<T> =_{a.x+b.x, a.y+b.y, a.z+b.z};"
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	let v1:Vec3<float>;		\n"
+		"	let v2:Vec3<float>;		\n"
+		"	v1=_{0.0,1.0,2.0};		\n"
+		"	v2=_{2.0,1.0,0.0};		\n"
+		"	v3:=v1+v2;				\n"
+		"	0	}					\n"
+		,nullptr
+	},
 	
 	{
 		"WIP, overloads with mixed types",__FILE__,__LINE__,

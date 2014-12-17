@@ -52,4 +52,7 @@ struct ExprBlock :public ExprScopeBlock{
 	void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
 	ResolvedType	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
+	int	get_elem_count()const override{return this->argls.size();}
+	Node*	get_elem_node(int i) override{return this->argls[i];}
 };
+
