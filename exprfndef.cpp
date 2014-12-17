@@ -77,11 +77,13 @@ ExprStructDef*	ExprFnDef::get_receiver(){ // TODO: switch to 1st-argument.
 Expr* ExprFnDef::get_return_value() const{
 	if (this->body){
 		if (auto b=dynamic_cast<ExprBlock*>(this->body)){
-			if (b->argls.size()>0){
-				return b->argls.back();
+			if (b->is_compound_expression()){
+				if (b->argls.size()>0){
+					return b->argls.back();
+				}
 			}
 		}
-		else return this->body;
+		return this->body;
 	}
 	return 0;
 }

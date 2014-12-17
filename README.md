@@ -99,10 +99,10 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
  * compare with other projects, converge with whichever mainstream option is closer
   * C++17,21.. of course.
   * Rust
-  * D
-  * Go - disqualified by GC but some interesting ideas eg adhoc gather,'does a lot with a little'
   * blows' ".jai" "language for games" - most similar stated goal, but maybe different preferences
   * 'SugarCpp' - an interesting transpiler
+  * D
+  * Go - disqualified by GC but some interesting ideas eg adhoc gather,'does a lot with a little'
 
  * Features inspired by Rust & other languages:
   * 2 way inference
@@ -159,6 +159,8 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
     * recover Rusts old ~,@ sigils for smarpointers
   * maybe want a REPL.
   * statements at root level? (perhaps root level statements outside main are tests?)
+  * syntactic sugar to suit it , eg [...] could make a dynamic array whilst (T,T,T) coerces to array<T,N>
+   * I think this is useful for writing tests.
 
  * features aimed at data-parallel,GPGPU/shader programming 
   * eg compile the same code on GPU or CPU for debugging, streamline boilerplate (uniforms etc).

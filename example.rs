@@ -28,6 +28,7 @@ fn lerp(a,b,f)=(b-a)*f+a;
 fn invlerp(x0,x1,x)=(x-a)/(x1-x0);
 
 //  declare a function taking a closure:
+//	syntax copied from Rust.
 //  represented as a pair of pointers (function*, environment*)
 //  raw C like functions are currently written fn(int)->void 
 
@@ -65,7 +66,13 @@ struct Vec3{ vx:float,vy:float,vz:float};
 // adhoc overloading like C++. 
 //(no conversions yet,might rely on inference using output type?)
 fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
-fn -(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz} }
+fn -(a:&Vec3,b:&Vec3)=Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz};
+fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx + a.vy*b.vy + a.vz*b.vz;
+fn ^(a:&Vec3,b:&Vec3)=Vec3{
+	a.vy*b.vz-a.vz*b.vy,
+	a.vz*b.vx-a.vx*b.vz,
+	a.vx*b.vy-a.vy*b.vx
+};
 
 // internal vtables
 // simplified implementation - base must describe whole vtable layout
@@ -73,9 +80,10 @@ fn -(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz} }
 // this language does not focus on class-heirachies
 // other mechanisms to follow (trait objects) 
 // & switch-like dispatch can be done with templates.
+//
 // performance code sorts by type anyway.
 //
-// have implemented this for self-hosting.. the compiler in C++ uses them.
+// have implemented this for eventual self-hosting.. the compiler in C++ uses them.
 
 struct IBaz {
 	// sugar: with other qualifiers, 'fn' is optional,assumed.

@@ -63,10 +63,6 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (this->type()) this->type()->resolve(sc,desired,flags);
 	//	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
 
-	//look for overload
-	if (find_overloads(sc,desired,flags)){
-		return propogate_type_fwd(flags, this, desired, this->type_ref());
-	}
 	
 	// intrinsic operators
 	if (op_ident==BREAK){
@@ -168,6 +164,40 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			return propogate_type_fwd(flags,this,desired);
 		}
 	}
+	else if (op_ident==NEW ){
+		// new struct initializer ->  malloc(sizeof(struct)); codegen struct initializer 'inplace'; ret is ptr[S]
+		// can we generalize this:
+		//  ident{expr,..} actually means run the init expr in there, like 'with'
+		/// todo: generalize inference with wrapper , eg A vs X[B]. use for *t, &t, new t, t[i]
+		auto b=rhs->as_block();
+		if (!b && flags){
+			error(b,"new type[n] or new type{..} expected");
+		}
+		if (desired && !get_type()){
+			this->set_type(desired);
+		}
+		if (!desired && !get_type() && rhs->get_type()) {
+			this->set_type( new Type(this,PTR,(Type*)b->get_type()->clone()) );
+		}
+		if (get_type())
+			propogate_type(flags, (Node*)this, this->get_type()->sub, b->type_ref());
+		
+		if (rhs->is_subscript()){
+			b->call_expr->resolve(sc,get_type()?get_type()->sub:nullptr,flags);
+			b->set_type(b->call_expr->get_type());
+		}
+		else {
+			b->resolve(sc, desired?desired->sub:nullptr, flags);
+			
+		}
+		
+		return propogate_type_fwd(flags,this, desired, this->type_ref());
+	}
+	else if (op_ident==DELETE ){
+		rhs->resolve(sc,nullptr,flags);
+		return ResolvedType();
+	}
+
 	else if (op_ident==DOT || op_ident==ARROW) {
 		auto lhs_t=lhs->resolve(sc, 0,flags);//type doesn't push up- the only info we have is what field it needs
 		auto t=lhs_t.type;
@@ -221,7 +251,16 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		verify_all();
 		return ResolvedType(this->type(),ResolvedType::INCOMPLETE);
 	}
-	else if (op_ident==ADDR){  //result=&lhs
+	// remaining types are assumed overloadable.
+	//look for overload - infer fowards only first like C++
+	if (lhs)lhs->resolve(sc,nullptr,flags&(~R_FINAL));
+	if (rhs)rhs->resolve(sc,nullptr,flags&(~(R_PUT_ON_STACK|R_FINAL)));
+	if (find_overloads(sc,desired,flags)){
+		return propogate_type_fwd(flags, this, desired, this->type_ref());
+	}
+
+
+	if (op_ident==ADDR){  //result=&lhs
 		// todo: we can assert give type is one less pointer, if given
 		ASSERT(!lhs && rhs);
 		Type* dt=nullptr;
@@ -266,40 +305,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 		else return ResolvedType();
 	}
-	else if (op_ident==NEW ){
-		// new struct initializer ->  malloc(sizeof(struct)); codegen struct initializer 'inplace'; ret is ptr[S]
-		// can we generalize this:
-		//  ident{expr,..} actually means run the init expr in there, like 'with'
-		/// todo: generalize inference with wrapper , eg A vs X[B]. use for *t, &t, new t, t[i]
-		auto b=rhs->as_block();
-		if (!b && flags){
-			error(b,"new type[n] or new type{..} expected");
-		}
-		if (desired && !get_type()){
-			this->set_type(desired);
-		}
-		if (!desired && !get_type() && rhs->get_type()) {
-			this->set_type( new Type(this,PTR,(Type*)b->get_type()->clone()) );
-		}
-		if (get_type())
-			propogate_type(flags, (Node*)this, this->get_type()->sub, b->type_ref());
-		
-		if (rhs->is_subscript()){
-			b->call_expr->resolve(sc,get_type()?get_type()->sub:nullptr,flags);
-			b->set_type(b->call_expr->get_type());
-		}
-		else {
-			b->resolve(sc, desired?desired->sub:nullptr, flags);
-			
-		}
-		
-		return propogate_type_fwd(flags,this, desired, this->type_ref());
-	}
-	else if (op_ident==DELETE ){
-		rhs->resolve(sc,nullptr,flags);
-		return ResolvedType();
-	}
-	else if (is_condition(op_ident)){
+	
+	
+	
+	if (is_condition(op_ident)){
 		auto lhst=lhs->resolve(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
 		auto rhst=rhs->resolve(sc,lhs->type_ref(),flags);
 		propogate_type(flags,(Node*)this, lhs->type_ref(),rhs->type_ref());
