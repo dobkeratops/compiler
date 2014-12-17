@@ -31,14 +31,15 @@ https://github.com/dobkeratops/compiler/blob/master/example.rs
 Quite early days.
 
 
-#### Long Term Goals:-
+#### Long Term Goals / project pillars :-
 
+ * a systems language, 'for games'. no GC,zero overhead principle.
  * significant C++ subset resyntaxed
  * open-world polymorphism
  * add Rust/functional language inspired features
  * features for parallelism, GPGPU programming
  * a subset should make a passable embedded dynamic language
-  * (think of 1 language to handle the C++-&-embedded-Lua usecase)
+  * (think of 1 language to handle the C++-&-embedded-Lua usecase. recover @ptr..)
 
 Basically trying to combine everything I like from C++ & Rust, dropping what I dont like, plus what i've always missed.
 
@@ -50,11 +51,13 @@ I beleive C++ can be 'fixed' and improved without straying so far,without sacrif
 
 Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* is what yields working code... there is still so much you still can't verify at compile time.
 
-I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating.
+I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating.(I have worked mostly on platforms where vtables were unacceptable). 
+
+It almost seems like a deliberate joke - how can a language run GameOfLife with compile time metaprogramming, parse ambiguous syntax with GLR, but NOT find definitions out of order?
 
 Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
-Rust is too restrictive, in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. So somewhere between the two is my perfect language.
+Rust on the other hand is too restrictive, in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. So somewhere between the two is my perfect language.
 
 This is probably all way beyond a 1man project but I'll see how far I can get. Perhaps I can just experiment and converge on whatever mainstream option is closest.
 
@@ -75,7 +78,7 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
 
 
 
-#### Goals In detail:-
+#### Goals In detail:- (a huge TODO list..)
 
  * Resyntax a significant subset of C++, in the spirit of SPECS; 
   * should be possible to non-destructively translate a subset back & forth.
@@ -95,7 +98,7 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
      (or adapt a rust community tool for C++ -> rust translation..)
 
  * compare with other projects, converge with whichever mainstream option is closer
-  * C++17,21.. of course..
+  * C++17,21.. of course.
   * Rust
   * D
   * blows' ".jai" "language for games" etc
