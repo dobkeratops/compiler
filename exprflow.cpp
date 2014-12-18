@@ -52,6 +52,15 @@ void ExprFor::translate_typeparams(const TypeParamXlat& tpx)
 	this->type()->translate_typeparams_if(tpx);
 }
 
+void ExprFor::recurse(std::function<void(Node*)>& f){
+	this->cond->recurse(f);
+	this->init->recurse(f);
+	this->body->recurse(f);
+	this->else_block->recurse(f);
+	this->pattern->recurse(f);
+	this->type()->recurse(f);
+}
+
 
 Node* ExprFor::clone()const{
 	auto n=new ExprFor(this->pos);
@@ -110,6 +119,13 @@ ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 		return body_type;
 	}
 }
+void ExprIf::recurse(std::function<void(Node*)>& f){
+	this->cond->recurse(f);
+	this->body->recurse(f);
+	this->else_block->recurse(f);
+	this->type()->recurse(f);
+}
+
 CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
 	return cg.emit_if(this, this->cond, this->body, this->else_block);
@@ -187,7 +203,19 @@ CgValue compile_match_arm(CodeGen& cg, Scope* sc,Expr* match_expr, CgValue match
 						  [&]{arm->compile_bind(cg,armsc,match_expr,match_val);return arm->body->compile(cg,armsc);},
 						  arm->next);
 }
-
+void ExprMatch::recurse(std::function<void(Node*)>& f){
+	if (!this)return;
+	this->expr->recurse(f);
+	for (auto a=this->arms;a;a=a->next)
+		a->recurse(f);
+	this->type()->recurse(f);
+}
+void MatchArm::recurse(std::function<void(Node *)> &f){
+	if (!this)return;
+	this->body->recurse(f);
+	this->pattern->recurse(f);
+	this->type()->recurse(f);
+}
 CgValue MatchArm::compile_check(CodeGen &cg, Scope *sc, Expr *match_expr, CgValue match_val){
 	// emit a condition to check if the runtime value 'match_val' fits this pattern.
 	ASSERT(0&&"TODO");

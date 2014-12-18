@@ -260,6 +260,10 @@ ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
 	return ResolvedType(this->type(), ResolvedType::COMPLETE);
 }
+void ArgDef::recurse(std::function<void(Node*)>&f){
+	this->type()->recurse(f);
+	this->default_expr->recurse(f);
+}
 
 void ArgDef::dump(int depth) const {
 	newline(depth);dbprintf("%s",getString(name));
@@ -298,6 +302,7 @@ ArgDef::clone() const{
 	if (!this) return nullptr;
 	return new ArgDef(this->pos,this->name, (Type*)this->type()->clone_if(),(Expr*)this->default_expr->clone_if());
 }
+
 Node*
 ExprIdent::clone() const {
 	auto r=new ExprIdent(this->name,this->pos);
@@ -306,25 +311,60 @@ ExprIdent::clone() const {
 	return r;
 }
 
-Node*Pattern::clone() const{
+void
+ExprIdent::recurse(std::function<void(Node*)>&f){
+	if (!this)return;
+	// typeparams?
+	type()->recurse(f);
+}
+
+IdentWithTParams::IdentWithTParams(SrcPos _pos, ExprIdent* id) {
+	this->ident=id;
+	this->pos=_pos;
+}
+void IdentWithTParams::dump(int depth) const{
+	newline(depth);ident->dump(-1);
+	dbprintf("<");
+	for (auto x:given_tparams){x->dump(-1);dbprintf(",");}
+	dbprintf(">");
+}
+void IdentWithTParams::recurse(std::function<void(Node*)>& f) {
+	ident->recurse(f);
+	for (auto x:given_tparams){
+		x->recurse(f);
+	}
+	type()->recurse(f);
+}
+void IdentWithTParams::translate_typeparams(const TypeParamXlat& tpx) {
+	// templated idents?
+	// TODO - these could be expresions - "concat[T,X]"
+	this->name.translate_typeparams(tpx);
+	for (auto x:given_tparams){x->translate_typeparams(tpx);}
+	this->type()->translate_typeparams(tpx);
+}
+
+Node* IdentWithTParams::clone()const {
+	auto iwt=new IdentWithTParams(pos,(ExprIdent*)ident->clone());
+	iwt->given_tparams.reserve(given_tparams.size());
+	for (auto x:given_tparams){
+		iwt->given_tparams.push_back((TParamVal*)x->clone());
+	}
+	return (Node*) iwt;
+}
+Node*Pattern::clone() const {
 	auto np=new Pattern(); np->pos=pos;
 	np->next=(Pattern*)np->clone_if();// todo not recursive!!
 	np->sub=(Pattern*)np->clone_if();
 	return np;
 }
-
-
-
-void Name::translate_typeparams(const TypeParamXlat& tpx)
-{
+void Name::translate_typeparams(const TypeParamXlat& tpx) {
 	auto index=tpx.typeparam_index(*this);
 	if (index>=0){
 		ASSERT(tpx.given_types[index]->sub==0 && "TODO type-expressions for name? concat[],...");
 		*this=tpx.given_types[index]->name;
 	}
 }
-void ExprIdent::translate_typeparams(const TypeParamXlat& tpx)
-{
+void ExprIdent::translate_typeparams(const TypeParamXlat& tpx) {
 	// templated idents?
 	// TODO - these could be expresions - "concat[T,X]"
 	this->name.translate_typeparams(tpx);
@@ -393,6 +433,11 @@ void CaptureVars::coalesce_with(CaptureVars *other){
 void commit_capture_vars_to_stack(CodeGen& cg, CaptureVars* cp){
 	if (!cp) return;
 	return;
+}
+void	CaptureVars::recurse(std::function<void(Node*)>&) {
+	//TODO - not sure if this makes sense.
+	//CaptureVars is not part of the AST. but it is compilable.
+	// it contains references to variables, & links to its owner & context functions
 }
 
 CgValue CaptureVars::compile(CodeGen& cg, Scope* outer_scope){

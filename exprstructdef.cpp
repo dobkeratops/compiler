@@ -125,10 +125,25 @@ void ExprStructDef::dump_instances(int depth)const{
 Node* ExprStructDef::clone() const{
 	return this->clone_sub(new ExprStructDef(this->pos,this->name));
 }
+void ExprStructDef::recurse(std::function<void (Node *)> & f){
+	if(this) return;
+	for (auto x:this->fields)		x->recurse(f);
+	for (auto x:this->typeparams)	x->recurse(f);
+	for (auto x:this->functions)	x->recurse(f);
+	for (auto x:this->virtual_functions)x->recurse(f);
+	for (auto x:this->static_functions)x->recurse(f);
+	for (auto x:this->static_fields)x->recurse(f);
+	for (auto x:this->static_virtual)x->recurse(f);
+	for (auto x:this->structs)x->recurse(f);
+	for (auto x:this->literals)x->recurse(f);
+	for (auto x:this->typedefs)x->recurse(f);
+	this->type()->recurse(f);
+}
+
 Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
+	for (auto tp:this->typeparams){auto ntp=(TParamDef*)tp->clone();
+		d->typeparams.push_back(ntp);}
 	for (auto m:this->fields) {d->fields.push_back((ArgDef*)m->clone());}
-//	for (auto t:this->typeparams) {d->typeparams.push_back(t->clone());}
-	d->typeparams = this->typeparams;
 	for (auto f:this->functions){d->functions.push_back((ExprFnDef*)f->clone());}
 	for (auto f:this->virtual_functions){d->virtual_functions.push_back((ExprFnDef*)f->clone());}
 	for (auto f:this->static_functions){d->static_functions.push_back((ExprFnDef*)f->clone());}
@@ -136,9 +151,9 @@ Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
 	for (auto f:this->static_virtual){d->static_virtual.push_back((ArgDef*)f->clone());}
 	for (auto s:this->structs){d->structs.push_back((ExprStructDef*)s->clone());}
 	for (auto l:this->literals){d->literals.push_back((ExprLiteral*)l->clone());}
+	for (auto l:this->typedefs){d->typedefs.push_back((TypeDef*)l->clone());}
 	return d;
 }
-
 
 void ExprStructDef::inherit_from(Scope * sc,Type *base_type){
 	if (inherits!=0) return;// already resolved.ø
@@ -321,7 +336,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 			ins->get_mangled_name();
 			for (auto i0=st->instances;i0!=ins; i0=i0->next_instance){
 				if (i0->mangled_name==ins->mangled_name){
-					dbprintf("ERROR DUPLICATE INSTANCE this shouldn't happen, its a bug from inference during struct initializers (starts with a uncertain instance, then eventually fills in typeparams - not quite sure how best to fix it right now\n");
+					cg.emit_comment("ERROR DUPLICATE INSTANCE this shouldn't happen, its a bug from inference during struct initializers (starts with a uncertain instance, then eventually fills in typeparams - not quite sure how best to fix it right now\n");
 					goto cont;
 				}
 			}

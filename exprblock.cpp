@@ -38,7 +38,12 @@ void ExprBlock::dump(int depth) const {
 	}
 	newline(depth);dbprintf(b+2);
 	if (this->get_type()){dbprintf(":");this->get_type()->dump_if(-1);}
-	
+}
+
+void ExprBlock::recurse(std::function<void (Node *)>& f){
+	if (call_expr){call_expr->recurse(f);}
+	for(auto x:argls){x->recurse(f);}
+	type()->recurse(f);
 }
 
 ExprBlock::ExprBlock(const SrcPos& s){ pos=s;}

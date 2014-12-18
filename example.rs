@@ -69,10 +69,10 @@ struct Vec3{ vx:float,vy:float,vz:float};
 // thanks to Rust-like 'fn' we dont need another keyword 'operator'?
 fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
 
+//single-expression syntax seems nice for math functions & simple constructors
 fn -(a:&Vec3,b:&Vec3)= Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz};
 fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx + a.vy*b.vy + a.vz*b.vz;
 fn *(a:&Vec3,f:float)=Vec3{a.vx*f,a.vy*f,a.vz*f};
-//single-expression syntax seems nice for math functions
 // eg cross product with less nesting.
 fn ^(a:&Vec3,b:&Vec3)=Vec3{
 	a.vy*b.vz-a.vz*b.vy,
@@ -162,7 +162,6 @@ fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 	u.x=x;
 	u.tag=0;
 }
-
 
 fn main(argc:int,argv:**char)->int{
 	printf("example program ./hello.rpp compiled & run by default makefile\n");

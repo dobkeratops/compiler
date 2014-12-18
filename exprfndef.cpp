@@ -71,6 +71,14 @@ void ExprFnDef::dump_sub(int ind, Name prefix) const {
 		}
 	}
 }
+void ExprFnDef::recurse(std::function<void(Node *)>& f){
+	if (!this)return;
+	for (auto x:this->args)	x->recurse(f);
+	if (this->body)			this->body->recurse(f);
+	this->type()->recurse(f);
+	
+}
+
 ExprStructDef*	ExprFnDef::get_receiver(){ // TODO: switch to 1st-argument.
 	return m_receiver;
 }

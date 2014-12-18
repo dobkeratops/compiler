@@ -51,7 +51,11 @@ void ExprOp::dump(int depth) const {
 	newline(depth);dbprintf(")");
 	if (get_type()) {dbprintf(":");get_type()->dump(-1);};
 }
-
+void ExprOp::recurse(std::function<void(Node*)>& f){
+	lhs->recurse(f);
+	rhs->recurse(f);
+	type()->recurse(f);
+}
 Node* ExprOp::clone() const {
 	return (Node*) new ExprOp(this->name,this->pos, (Expr*) this->lhs->clone_if(), (Expr*) this->rhs->clone_if());
 }

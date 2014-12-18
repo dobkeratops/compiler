@@ -54,5 +54,6 @@ struct ExprBlock :public ExprScopeBlock{
 	ResolvedType	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
 	int	get_elem_count()const override{return this->argls.size();}
 	Node*	get_elem_node(int i) override{return this->argls[i];}
+	void		recurse(std::function<void(Node*)>&) override;
 };
 

@@ -32,5 +32,5 @@ struct ExprOp: public Expr{
 	bool		find_overloads(Scope* sc,const Type* desired,int flags);
 	CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_operator_overload(CodeGen& cg, Scope* sc);
-
+	void		recurse(std::function<void(Node*)>&);
 };

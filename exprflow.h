@@ -34,6 +34,7 @@ struct ExprIf :  ExprFlow {
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	CgValue			compile(CodeGen& cg, Scope* sc);
 	Scope*	get_scope()	override			{return this->scope;}
+	void	recurse(std::function<void(Node*)>& f)override;
 };
 
 /// For-Else loop/expression. Currrently the lowest level loop construct
@@ -62,6 +63,7 @@ struct ExprFor :  ExprFlow {
 	void translate_typeparams(const TypeParamXlat& tpx) override;
 	CgValue compile(CodeGen& cg, Scope* sc);
 	Expr*	loop_else_block()const override{return else_block;}
+	void	recurse(std::function<void(Node*)>& f)override;
 };
 
 
@@ -74,7 +76,9 @@ struct ExprMatch : ExprFlow {
 	Expr*		expr=0;
 	MatchArm*	arms=0;
 	Node*	clone()const;
+	void	recurse(std::function<void(Node*)>& f)override;
 };
+
 struct MatchArm : ExprScopeBlock {
 	/// if match expr satisfies the pattern,
 	///  binds variables from the pattern & executes 'expr'
@@ -89,6 +93,7 @@ struct MatchArm : ExprScopeBlock {
 	// todo - as patterns exist elsewhere, so 'compile-bind might generalize'.
 	CgValue		compile_bind(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
 	ResolvedType	resolve(Scope* sc, Type* desired, int flags);
+	void		recurse(std::function<void(Node*)>& f) override;
 };
 
 

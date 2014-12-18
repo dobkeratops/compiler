@@ -123,6 +123,7 @@ struct Match;
 struct MatchArm;
 struct ArgDef;
 struct ExprDef;
+struct ExprTypeDef;
 struct Scope;
 struct Type;
 struct Variable;

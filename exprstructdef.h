@@ -22,6 +22,7 @@ struct ExprStructDef: ExprDef {
 	vector<ExprFnDef*>		virtual_functions;
 	vector<ExprFnDef*>		functions;
 	vector<ExprFnDef*>		static_functions;
+	vector<TypeDef*>		typedefs;
 	Type*	inherits_type=0;
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
@@ -79,6 +80,7 @@ struct ExprStructDef: ExprDef {
 	const ExprFnDef*		find_function_for_vtable(Name n, const Type* fn_type);
 	bool			has_base_class(ExprStructDef* other)const;
 	int				num_instances()const {auto n=0;for (auto ins=instances;ins;ins=ins->next_instance){n++;} return n;}
+	void		recurse(std::function<void(Node*)>&);
 };
 
 struct EnumDef  : ExprStructDef {

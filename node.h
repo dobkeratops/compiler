@@ -60,7 +60,7 @@ public:
 	virtual ExprStructDef* as_struct_def()const;
 	template<typename T> T* as()const{ auto ret= const_cast<T*>(dynamic_cast<T*>(this)); if (!ret){error(this,"expected,but got %s",this->kind_str());} return ret;};
 	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
-	virtual int recurse(std::function<int(Node* f)> f){dbprintf("recurse not implemented\n");return 0;};
+	virtual void recurse(std::function<void(Node* f)>& f){dbprintf("recurse not implemented for %s\n",this->kind_str());ASSERT(0&&"unimplemented recurse");};
 	
 	virtual CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_if(CodeGen& cg, Scope* sc);

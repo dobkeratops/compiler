@@ -25,7 +25,6 @@ struct Pattern : Node {
 	Pattern* next=0;
 	Pattern* sub=0;
 	Node*	clone()const;
-	
 };
 /// any node that is a Definition, maintains list of refs
 struct ExprDef :Expr{
@@ -103,6 +102,7 @@ struct ArgDef :ExprDef{
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	ResolvedType	resolve(Scope* sc, const Type* desired, int flags) override;
 	ArgDef*	as_arg_def()		{return this;}
+	void		recurse(std::function<void(Node*)>&) override;
 };
 
 enum VarKind{VkArg,Local,Global};
@@ -130,7 +130,6 @@ struct Variable : ExprDef{
 	void dump(int depth) const;
 };
 
-
 struct ExprIdent :Expr{
 	// TODO: definition pointer. (ptr to field,function,struct,typedef..)
 	void		dump(int depth) const;
@@ -150,6 +149,18 @@ struct ExprIdent :Expr{
 	void		translate_typeparams(const TypeParamXlat& tpx) override;
 	CgValue		compile(CodeGen&cg, Scope* sc) override;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags) override;
+	void		recurse(std::function<void(Node*)>&) override;
+};
+// Identifier with given type-parameters
+struct IdentWithTParams : Expr{
+	ExprIdent*			ident;
+	vector<TParamVal*>	given_tparams;
+	void		dump(int depth)const override;
+	Node*		clone()const override;
+	void		translate_typeparams(const TypeParamXlat& tpx) override;
+	void		recurse(std::function<void(Node*)>&) override;
+	IdentWithTParams(SrcPos src, ExprIdent* ident);
+	const char*	kind_str()const override		{return"ident<..>";}
 };
 
 
@@ -182,6 +193,7 @@ struct CaptureVars : ExprDef{
 	const Type*			get_elem_type(int i)const override;
 	Name			get_elem_name(int i)const override;
 	int				get_elem_count() const override;
+	void		recurse(std::function<void(Node*)>&) override;
 };
 
 
