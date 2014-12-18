@@ -20,7 +20,7 @@ CompilerTest g_Tests[]={
 		"templated struct initializer",__FILE__,__LINE__,
 		
 		"struct Vec3<T>{ x:T,y:T,z:T};"
-		"fn + <T>(a:&Vec3<T>,b:&Vec3<T>)->Vec3<T> =_{a.x+b.x, a.y+b.y, a.z+b.z};"
+		"fn + <T>(a:&Vec3<T>,b:&Vec3<T>)=Vec3::<T>{a.x+b.x, a.y+b.y, a.z+b.z};"
 		"fn main(argc:int,argv:**char)->int{\n"
 		"	let v1:Vec3<float>;		\n"
 		"	let v2:Vec3<float>;		\n"

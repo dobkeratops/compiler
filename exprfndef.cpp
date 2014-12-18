@@ -135,7 +135,10 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 		dbprintf("WARNING instantiated templated NAME function for %s, as no function of the right name was found.. experiment aimed at implementing OOP thru generics.. eg fn METHOD[OBJ,METHOD,ARG0,ARG1](o:OBJ,a0:ARG0,a1:ARG1){ o.vtable.METHOD(o,a0,a1)}", str(name));
 	}
 	Scope* src_fn_owner=srcfn->scope->parent_or_global();
+	dbg(srcfn->dump(0));
+
 	ExprFnDef* new_fn =(ExprFnDef*) srcfn->clone();
+	dbg(new_fn->dump(0));
 	// fill any args we can from the callsite.
 	// TODO: translate generic-type-params
 	// because we may infer return from that
@@ -165,6 +168,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	match_typeparams(ins_typarams, srcfn,call_args, callsiteb);
 	TypeParamXlat xlat(srcfn->typeparams, ins_typarams);
 	new_fn->translate_typeparams(xlat);
+	dbg(new_fn->dump(0));
 	
 	// todo: translate return type. for the minute we discard it..
 	new_fn->set_def(srcfn);

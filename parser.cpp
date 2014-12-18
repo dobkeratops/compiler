@@ -217,7 +217,7 @@ ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,bool is_virtual) {
 		ASSERT(is_ident(tok)|| is_operator(tok));
 		fndef->name=tok;
 		if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-			parse_typeparams(src,fndef->typeparams,close_of(open));
+			parse_typeparams_def(src,fndef->typeparams,close_of(open));
 		}
 		tok=src.expect(OPEN_PAREN);
 	} else {
@@ -394,6 +394,18 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 			flush_op_stack(node,operators,operands);
 			was_operand=false;
 		}
+		else if (src.eat_if(DOUBLE_COLON)){
+			auto open_tp=src.eat_if(LT,OPEN_BRACKET);
+			if (open_tp && was_operand){
+				auto opb=operands.back();
+				auto t=new Type(opb->pos, opb->name);
+				parse_typeparams_given(src,t,close_of(open_tp));
+				opb->set_type(t);
+				dbg(t->dump(-1));dbg(newline(1));
+			} else {
+				error(src.pos,"::<TypeParams> must follow identifier");
+			}
+		}
 		else if (src.eat_if(WHERE)){
 			// simple syntax sugar,parser hack.
 			flatten_stack(operators,operands);
@@ -437,7 +449,11 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		} else if (src.eat_if(OPEN_BRACE)){
 			//			error(operands.back()?operands.back():node,"struct initializer");
 			if (was_operand){// struct initializer
-				operands.push_back(parse_block(src,CLOSE_BRACE,COMMA,pop(operands)));
+				auto ident=pop(operands);
+				auto si=parse_block(src,CLOSE_BRACE,COMMA,ident);
+				operands.push_back(si);
+				si->set_type(ident->get_type()); //eg ident might have typeparams.struct init uses given type
+				dbg(operands.back()->dump(0));
 			}
 			else{//progn aka scope block with return value.
 				auto sub=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
@@ -662,7 +678,7 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	}
 	return a;
 }
-void parse_typeparams(TokenStream& src,vector<TParamDef*>& out,int close) {
+void parse_typeparams_def(TokenStream& src,vector<TParamDef*>& out,int close) {
 	while (!src.eat_if(close)){
 		//		if (src.eat_if(CLOSE_BRACKET)) break;
 		out.push_back(
@@ -672,6 +688,13 @@ void parse_typeparams(TokenStream& src,vector<TParamDef*>& out,int close) {
 				src.eat_if(COLON)?parse_type(src,0,nullptr):nullptr,
 				src.eat_if(ASSIGN)?parse_type(src,0,nullptr):nullptr
 				));
+		src.eat_if(COMMA);
+	}
+}
+void parse_typeparams_given(TokenStream& src, Type* addto, int close){
+	while (!src.eat_if(close)){
+		auto tp=parse_type(src,COMMA,addto);
+		addto->push_back(tp);
 		src.eat_if(COMMA);
 	}
 }
@@ -698,7 +721,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	auto sd=new ExprStructDef(pos,name);
 	// todo, namespace it FFS.
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-		parse_typeparams(src,sd->typeparams,close_of(open));
+		parse_typeparams_def(src,sd->typeparams,close_of(open));
 	}
 	if (src.eat_if(COLON)) {
 		sd->inherits_type = parse_type(src,0,nullptr); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
@@ -745,7 +768,7 @@ ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
 	Name tok;
 	auto sd=new ExprStructDef(pos,name);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-		parse_typeparams(src,sd->typeparams,close_of(open));
+		parse_typeparams_def(src,sd->typeparams,close_of(open));
 	}
 	if (!src.eat_if(OPEN_PAREN))
 		return sd;
@@ -756,7 +779,7 @@ EnumDef* parse_enum(TokenStream& src) {
 	auto tok=src.eat_ident();
 	auto ed=new EnumDef(src.pos,tok);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-		parse_typeparams(src,ed->typeparams,close_of(open));
+		parse_typeparams_def(src,ed->typeparams,close_of(open));
 	}
 	if (src.eat_if(COLON)) {
 		ed->inherits_type = parse_type(src,0,ed); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field

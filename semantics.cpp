@@ -588,12 +588,14 @@ void dbprint_find(const vector<ArgDef*>& args){
 	for (int i=0; i<args.size(); i++) {dbprintf(" %d:",i);dbprintf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
 	dbprintf(")\n");
 }
+
 template<typename T>
 void dump(vector<T*>& src) {
 	for (int i=0; i<src.size(); i++) {
 		dbprintf(src[i]->dump());
 	}
 }
+
 ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 
 	ExprStructDef* sd=nullptr;
@@ -626,6 +628,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			return ResolvedType();
 		}
 	}
+	dbg(sd->dump(0));
 	// if its in place..
 	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
 	if (local_struct_def)

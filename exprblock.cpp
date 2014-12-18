@@ -166,6 +166,7 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 			return propogate_type_fwd(flags,this, desired);
 		} else return ResolvedType();
 	} else if (this->is_struct_initializer()){
+		dbg(this->type()->dump_if(-1));dbg(newline(0));
 		auto si=StructInitializer(sc,this);
 		return si.resolve(desired,flags);
 	}

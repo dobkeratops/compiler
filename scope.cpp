@@ -429,9 +429,14 @@ Expr*	Scope::current_loop(int levels){
 	return nullptr;
 }
 
-
 ExprStructDef* Scope::find_struct(const Node* node) {
-	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){return sd;} return find_struct_named(node);
+	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){
+		return sd;
+	}
+//	if (node->type()){
+//		return(node->type());
+//	}
+	return find_struct_named(node);
 }
 ExprStructDef* Scope::get_receiver() {
 	if (auto o=this->owner_fn)

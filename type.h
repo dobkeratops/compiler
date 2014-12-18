@@ -25,6 +25,7 @@ struct Type : ExprDef {
 	Type(Name outer, ExprStructDef* inner);
 	Type(Node* origin,Name i);
 	Type(Name i,SrcPos sp);
+	Type(SrcPos sp,Name i):Type(i,sp){};	///TODO swap permanently, its more logical
 	Type() { name=0;sub=0;next=0;}
 	size_t	alignment() const;
 	size_t	size() const;
