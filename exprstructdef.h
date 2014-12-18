@@ -56,6 +56,7 @@ struct ExprStructDef: ExprDef {
 	size_t		alignment() const			{size_t max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
 	void			dump(int depth)const;
+	void			dump_instances(int depth)const;
 	size_t			size() const;
 	Node*			clone()const;
 	Node*			clone_sub(ExprStructDef* into) const;
@@ -77,6 +78,7 @@ struct ExprStructDef: ExprDef {
 	bool			is_vtable_built(){return this->vtable_name!=0;}
 	const ExprFnDef*		find_function_for_vtable(Name n, const Type* fn_type);
 	bool			has_base_class(ExprStructDef* other)const;
+	int				num_instances()const {auto n=0;for (auto ins=instances;ins;ins=ins->next_instance){n++;} return n;}
 };
 
 struct EnumDef  : ExprStructDef {

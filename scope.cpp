@@ -259,8 +259,26 @@ Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 	}
 	return nullptr;
 }
-ExprStructDef* Scope::find_struct_sub(Scope* original,const Type* t){
+ExprStructDef* Scope::find_struct_name_type(Scope* original,Name nm,const Type* t){
 	if (!t->has_non_instanced_typeparams())
+		return nullptr;
+	if (auto fn=this->find_named_items_local(nm)){
+		for (auto st=fn->structs; st;st=st->next_of_name){
+			if (st->name==nm) {
+				// find with type-params...
+				if (!st->is_generic())
+					return st;
+				return st->get_instance(original, t);
+			}
+		}
+	}
+	if (auto p=parent_or_global())
+		return p->find_struct_name_type_if(original, nm,t);
+	else return nullptr;
+}
+ExprStructDef* Scope::find_struct_sub(Scope* original,const Type* t){
+	return find_struct_name_type(original,t->name,t);
+/*	if (!t->has_non_instanced_typeparams())
 		return nullptr;
 	if (auto fn=this->find_named_items_local(t->name)){
 		for (auto st=fn->structs; st;st=st->next_of_name){
@@ -274,7 +292,9 @@ ExprStructDef* Scope::find_struct_sub(Scope* original,const Type* t){
 	}
 	if (auto p=parent_or_global()) return p->find_struct_sub(original,t);
 	else return nullptr;
+ */
 }
+
 ExprStructDef* Scope::find_struct_named(Name name){
 	if (auto fn=this->find_named_items_local(name)){
 		for (auto st=fn->structs; st;st=st->next_of_name){
@@ -433,9 +453,9 @@ ExprStructDef* Scope::find_struct(const Node* node) {
 	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){
 		return sd;
 	}
-//	if (node->type()){
-//		return(node->type());
-//	}
+	if (auto sd=find_struct_sub_if(this,node->type())){
+		return sd;
+	}
 	return find_struct_named(node);
 }
 ExprStructDef* Scope::get_receiver() {

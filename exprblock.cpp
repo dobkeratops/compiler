@@ -27,7 +27,7 @@ void ExprBlock::dump(int depth) const {
 	auto b=(this->bracket_type==OPEN_PAREN)?"(\0)\0":"{\0}\0";
 	dbprintf(b+0);
 	if (this->call_expr){
-		dbprintf(this->is_subscript()?"subscript: ":this->is_struct_initializer()?"struct_init":"call ");
+		dbprintf(this->is_subscript()?"subscript: ":this->is_struct_initializer()?"struct_init ":"call ");
 		this->call_expr->dump(-100);
 		//
 	} else{

@@ -12,17 +12,21 @@ Dont have a name yet hence 'hack'..
 
 #### Currently supports:-
 
- * C operators, functions, structs,if-else, 
+ * most C operators, functions, structs,if-else, 
+  *(todo ++/--,and use &p[i] instead of ptr arithmetic)
  * 'everything is an expression' syntax
  * C for loops + break../else{..} expressions
  * function overloading+UFCS
- * Forward+Reverse Type Inference within functions, forward between functions
- * stack-based closures
+ * Forward+Reverse Type Inference within functions, 
+  * forward between functions -by virtue of adhoc templates
+ * stack-based closures 
+  * (workaround: if need escape,use a class)
  * templated functions & structs
- * HKT (template-template parameters)
+ * WIP ..HKT (template-template parameters)
+  * .. not extensively tested
  * new/delete ,and a ordered or named struct field initializer
  * limited C++-style internal vtables & single inheritance
- * Some operator overloading (no conversions yet)
+ * limited operator overloading (no conversions yet)
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 example source..
@@ -96,13 +100,16 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
  * add alternate parser that can directly read subset of C++ headers ?
      (or adapt a rust community tool for C++ -> rust translation..)
 
- * compare with other projects, converge with whichever mainstream option is closer
+ * compare with other languages, converge with whichever mainstream option is closer, take inspiration..
   * C++17,21.. of course.
-  * Rust
+  * Rust - first non-C++ language I've wanted to use.
   * blows' ".jai" "language for games" - most similar stated goal, but maybe different preferences
   * 'SugarCpp' - an interesting transpiler
-  * D
-  * Go - disqualified by GC but some interesting ideas eg adhoc gather,'does a lot with a little'
+  * D - never grabbed me for some reason, but has many features of interest 
+   * (tends to focus on gc, and doesn't have expression syntax?)
+  * disqualified by CG, but still interesting:-
+   * Julia - focus on multimethods & interactivity
+   * Go - adhoc duck-type interface gather, simple but practical
 
  * Features inspired by Rust & other languages:
   * 2 way inference

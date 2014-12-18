@@ -16,6 +16,10 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	
 	propogate_type_fwd(flags,this, desired,this->type_ref());
 	if (this->type()) this->type()->resolve(scope,desired,flags);
+	if (auto sd=scope->find_struct_name_type_if(scope,this->name,this->type())) {
+		this->set_def(sd);
+		return propogate_type_fwd(flags,this, desired,this->type_ref());
+	}else
 	if (auto sd=scope->find_struct_named(this->name)) {
 		this->set_def(sd);
 		if (!this->get_type()){
@@ -297,6 +301,8 @@ ArgDef::clone() const{
 Node*
 ExprIdent::clone() const {
 	auto r=new ExprIdent(this->name,this->pos);
+	r->set_type(this->get_type());	// this is where given typeparams live.
+	r->clear_def();	// def will need re-resolving.
 	return r;
 }
 

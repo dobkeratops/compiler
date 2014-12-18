@@ -142,7 +142,7 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 		if (!(flags & R_FINAL))
 			return ResolvedType(0,ResolvedType::INCOMPLETE);
 		
-		n->dump(0);
+		dbg(n->dump(0));
 		error_begin(n," type mismatch\n");
 		warning(a->get_origin(),"from here:");
 		a->dump(-1);
@@ -600,10 +600,16 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 
 	ExprStructDef* sd=nullptr;
 #if DEBUG >=2
-	dbprintf("struct init: %s:",si->call_expr->name_str());
+	dbprintf("\n===================\nstruct init: %s:",si->call_expr->name_str());
 	si->call_expr->type()->dump_if(-1);
 	dbprintf("\tdesired:");desiredType->dump_if(-1);newline(0);
+
+	auto sdn=sc->find_struct_named(si->call_expr->name);
+	sdn->dump_instances(0);
+
 #endif
+	
+	
 	if (si->call_expr->name==PLACEHOLDER && desiredType){
 		if (desiredType->def){
 			sd=desiredType->def->as_struct_def();
@@ -616,11 +622,12 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 		if (!si)
 			si->set_type(desiredType);
 	} else if (si->call_expr->type() && si->call_expr->name==PLACEHOLDER){
-		dbg_type("why is this hapening? def\n");
+		dbg_type("placeholder type with inferred type\n");
 		sd=si->call_expr->type()->def->as_struct_def();
 	}
 	else {
 		sd=sc->find_struct(si->call_expr);
+		dbg(sd->dump_if(0));
 		if (!sd){
 			if (flags&R_FINAL){
 				error(si->call_expr,"can't find struct %s",si->call_expr->name_str());
@@ -628,14 +635,21 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			return ResolvedType();
 		}
 	}
+	dbg(printf("=====struct init & desired type..=====\n"));
+	dbg(desiredType->dump_if(0));
 	dbg(sd->dump(0));
 	// if its in place..
 	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
-	if (local_struct_def)
+	if (local_struct_def){
 		sc->add_struct(local_struct_def); // todo - why did we need this?
-	if (!si->type()){
-		si->set_type(new Type(sd));
+		sd=local_struct_def;
 	}
+	//if (!si->type()){
+	//	si->set_type(new Type(sd));
+	//}
+	propogate_type(flags,(Node*)si, si->type_ref(),si->call_expr->type_ref());
+	propogate_type_fwd(flags,si, desiredType);
+
 	si->call_expr->def=sd;
 	si->def=sd;
 	// assignment forms are expected eg MyStruct{x=...,y=...,z=...} .. or can we have MyStruct{expr0,expr1..} equally?
@@ -666,6 +680,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			}
 			field=sd->fields[field_index++];
 			this->value.push_back(a);
+			dbg(field->dump(0));dbg(printf("\n --set_to--> \n"));dbg(a->dump());dbg(newline(0));
 			a->resolve(sc,field->type(),flags); // todo, need generics!
 			t=a->type();
 			propogate_type(flags,a,field->type_ref(),a->type_ref());
@@ -682,7 +697,6 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 		}
 	}
 //	?. // if (this) return this->.... else return None.
-	
 	return propogate_type_fwd(flags,si, desiredType);
 }
 

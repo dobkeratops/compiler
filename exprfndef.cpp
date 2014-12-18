@@ -264,8 +264,12 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 	}
 	
 	if (true || !this->is_generic()){
+		// Need to propogate types in generic function bodies eg polylambdas
+		// but dont need to terminate compiling until its instantiated properly
+		auto use_flags=(this->is_generic())?(flags&~R_FINAL):flags;
+			
 		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
-			this->args[i]->resolve(this->scope, nullptr, flags); // todo: call with defaultparams & init-expr
+			this->args[i]->resolve(this->scope, nullptr, use_flags); // todo: call with defaultparams & init-expr
 			auto arg=this->args[i];
 			auto v=sc->find_scope_variable(arg->name);
 			if (!v){

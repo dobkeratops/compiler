@@ -38,7 +38,6 @@ extern "C" char* gets(char*);
 #if DEBUG>=3
 #define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg3(X) X
-#define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_emitconv(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #else
@@ -47,6 +46,7 @@ inline void dbg_varscope(const char*,...){}
 #endif
 
 #if DEBUG>=2
+#define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_type(...) {DBLOC();dbprintf(__VA_ARGS__);}
@@ -62,7 +62,6 @@ inline void dbg_varscope(const char*,...){}
 inline void dbg_generic(const char*,...){}
 inline void dbg_fnmatch(const char*,...){}
 inline void dbg_lambdas(const char*,...){}
-inline void dbg_instancing(const char*,...){}
 inline void dbg_resolve(const char*,...){}
 inline void dbg_type(const char*,...){}
 inline void dbg_vtable(const char*,...){}

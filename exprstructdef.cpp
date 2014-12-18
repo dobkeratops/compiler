@@ -61,6 +61,7 @@ void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)
 	if (tpx.typeparams_all_set())
 		this->typeparams.resize(0);
 	this->type()->translate_typeparams_if(tpx);
+	dbg(this->dump(0));
 }
 
 ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
@@ -79,6 +80,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 		dbg_instancing("instantiating struct %s[",this->name_str());
 		for (auto t=type->sub;t;t=t->next)dbg_instancing("%s,",t->name_str());
 		dbg_instancing("]\n");
+		dbg_instancing("%s now has %d instances\n",this->name_str(),this->num_instances()+1);
 #endif
 		// TODO: store a tree of partial instantiations eg by each type..
 		vector<Type*> ty_params;
@@ -101,11 +103,23 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 			for (auto i=0; i<ins->instanced_types.size();i++)
 				dbprintf(ins->instanced_types[i]->name_str());
 		ins->translate_typeparams(TypeParamXlat(this->typeparams, ins->instanced_types));
+		dbg(printf("instances are now:-\n"));
+		dbg(this->dump_instances(0));
 	}
 	if (!type->struct_def()) { const_cast<Type*>(type)->set_struct_def(ins);}
 //	else { ASSERT(type->struct_def==ins && "instantiated type should be unique")};
 	
 	return ins;
+}
+void ExprStructDef::dump_instances(int depth)const{
+	if (!this)return ;
+	int x=0;
+	newline(depth);	dbprintf("instances of %s{",this->name_str());
+	for (auto i=this->instances;i;i=i->next_instance,x++){
+		dbprintf("\n%s instance %d/%d",this->name_str(), x,this->num_instances());
+		i->dump(depth+1);
+	}
+	newline(depth);	dbprintf("}",this->name_str());
 }
 
 Node* ExprStructDef::clone() const{
@@ -300,9 +314,19 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 	if (st->is_generic()) {	// emit generic struct instances
 		cg.emit_comment("instances of %s in %s %p",str(st->name), sc->name(),st);
 		int i=0;
+		dbg(this->dump_instances(0));
+		
 		for (auto ins=st->instances; ins; ins=ins->next_instance,i++){
 			cg.emit_comment("instance %d: %s %s in %s %p",i,str(st->name),str(ins->name) ,sc->name(),ins);
+			ins->get_mangled_name();
+			for (auto i0=st->instances;i0!=ins; i0=i0->next_instance){
+				if (i0->mangled_name==ins->mangled_name){
+					dbprintf("ERROR DUPLICATE INSTANCE this shouldn't happen, its a bug from inference during struct initializers (starts with a uncertain instance, then eventually fills in typeparams - not quite sure how best to fix it right now\n");
+					goto cont;
+				}
+			}
 			ins->compile(cg, sc);
+		cont:;
 		}
 	} else {
 		cg.emit_comment("instance %s of %s in %s %p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st);
