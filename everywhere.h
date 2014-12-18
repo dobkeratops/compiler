@@ -77,44 +77,36 @@ extern "C" char* gets(char*);
 #ifndef dbg_strings
 #define dbg_strings(x,...)
 #endif
-
 #ifndef dbg_vcall
 #define dbg_vcall(x,...)
 #endif
-
-
 #ifndef dbg_vtable
 #define dbg_vtable(x,...)
 #endif
-
 #ifndef dbg_resolve
 #define dbg_resolve(x,...)
 #endif
-
 #ifndef dbg_lambdas
 #define dbg_lambdas(x,...)
 #endif
-
 #ifndef dbg_fnmatch
 #define dbg_fnmatch(x,...)
 #endif
-
 #ifndef dbg_generic
 #define dbg_generic(x,...)
 #endif
-
+#ifndef dbg_type
+#define dbg_type(x,...)
+#endif
 #ifndef dbg_instancing
 #define dbg_instancing(x,...)
 #endif
-
 #ifndef dbg_emitconv
 #define dbg_emitconv(x,...)
 #endif
-
 #ifndef dbg_varscope
 #define dbg_varscope(x,...)
 #endif
-
 #ifndef dbg_resolve
 #define dbg_resolve(x,...)
 #endif

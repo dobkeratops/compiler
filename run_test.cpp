@@ -16,6 +16,21 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
+	
+	{
+		"struct default constructor",__FILE__,__LINE__,
+		"struct Extents(min:float,max:float){ \n"
+		"	centre:float=sum/2,				\n"
+		"	size:float	=diff/2				\n"
+		"} where {							\n"
+		"	sum:=min+max;					\n"
+		"	size:=max-min;					\n"
+		"}\n"
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	0	}					\n"
+		,nullptr
+	},
+
 	{
 		"templated struct initializer+overload",__FILE__,__LINE__,
 		

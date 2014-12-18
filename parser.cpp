@@ -712,7 +712,12 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 ExprStructDef* parse_struct(TokenStream& src) {
 	auto pos=src.pos;
 	auto sname=src.peek_tok()==OPEN_BRACE?0:src.eat_ident();
-	return parse_struct_body(src,pos,sname,nullptr);
+	auto sd=parse_struct_body(src,pos,sname,nullptr);
+	if (src.eat_if(WHERE)){
+		src.expect(OPEN_BRACE);
+		sd->body=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
+	}
+	return sd;
 }
 // TODO: are struct,trait,enum actually all the same thing with a different 'default'
 ExprStructDef* parse_tuple_struct_body_sub(TokenStream& src, ExprStructDef* sd){
@@ -728,6 +733,14 @@ ExprStructDef* parse_tuple_struct_body_sub(TokenStream& src, ExprStructDef* sd){
 ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* force_inherit){
 	auto sd=new ExprStructDef(pos,name);
 	// todo, namespace it FFS.
+	vector<ArgDef*> args;
+	if (src.eat_if(OPEN_PAREN)){ // constructor args eg struct Foo(x,y,z){field1=x+y,..}
+		while (!src.eat_if(CLOSE_PAREN)){
+			args.push_back(parse_arg(src,0));
+			src.eat_if(COMMA);
+		}
+	}
+	for (auto x:args)x->dump(0);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
 		parse_typeparams_def(src,sd->typeparams,close_of(open));
 	}
@@ -738,12 +751,15 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	}
 	// todo - tuple struct..
 	vector<ArgDef*> default_construct_args;
-	if (src.eat_if(OPEN_BRACKET)){
+	if (src.eat_if(OPEN_PAREN)){
 		return parse_tuple_struct_body_sub(src,sd);
 		// todo: if open brace follows, we actually have a default constructor & struct body combo.
 	}
-	if (!src.eat_if(OPEN_BRACE))	// empty struct.
+	if (!src.eat_if(OPEN_BRACE)){	// empty struct or tuple struct.
+		sd->fields=args;
 		return sd;
+	}
+	sd->args=args;
 	// todo: type-params.
 	Name tok;
 	while ((tok=src.peek_tok())!=NONE){

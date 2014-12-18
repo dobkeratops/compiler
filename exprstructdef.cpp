@@ -58,6 +58,7 @@ void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)
 	for (auto f:static_fields)		f->translate_typeparams(tpx);
 	for (auto f:static_virtual)		f->translate_typeparams(tpx);
 	for (auto s:structs)			s->translate_typeparams(tpx);
+	((Node*)body)->translate_typeparams_if(tpx);
 	if (tpx.typeparams_all_set())
 		this->typeparams.resize(0);
 	this->type()->translate_typeparams_if(tpx);
@@ -127,6 +128,7 @@ Node* ExprStructDef::clone() const{
 }
 void ExprStructDef::recurse(std::function<void (Node *)> & f){
 	if(this) return;
+	for (auto a:this->args)		a->recurse(f);
 	for (auto x:this->fields)		x->recurse(f);
 	for (auto x:this->typeparams)	x->recurse(f);
 	for (auto x:this->functions)	x->recurse(f);
@@ -137,12 +139,14 @@ void ExprStructDef::recurse(std::function<void (Node *)> & f){
 	for (auto x:this->structs)x->recurse(f);
 	for (auto x:this->literals)x->recurse(f);
 	for (auto x:this->typedefs)x->recurse(f);
+	((Node*)this->body)->recurse(f);
 	this->type()->recurse(f);
 }
 
 Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
 	for (auto tp:this->typeparams){auto ntp=(TParamDef*)tp->clone();
 		d->typeparams.push_back(ntp);}
+	for (auto a:this->args) {d->args.push_back((ArgDef*)a->clone());}
 	for (auto m:this->fields) {d->fields.push_back((ArgDef*)m->clone());}
 	for (auto f:this->functions){d->functions.push_back((ExprFnDef*)f->clone());}
 	for (auto f:this->virtual_functions){d->virtual_functions.push_back((ExprFnDef*)f->clone());}
@@ -152,6 +156,8 @@ Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
 	for (auto s:this->structs){d->structs.push_back((ExprStructDef*)s->clone());}
 	for (auto l:this->literals){d->literals.push_back((ExprLiteral*)l->clone());}
 	for (auto l:this->typedefs){d->typedefs.push_back((TypeDef*)l->clone());}
+	d->inherits=this->inherits;
+	d->body=(ExprBlock*)((Node*)this->body)->clone_if();
 	return d;
 }
 
@@ -230,6 +236,7 @@ void ExprStructDef::roll_vtable() {
 	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??
 }
 void ExprStructDef::dump(int depth) const{
+	auto depth2=depth>=0?depth+1:depth;
 	newline(depth);
 	dbprintf("%s %s",this->kind_str(), getString(this->name));dump_typeparams(this->typeparams);
 	dbprintf("[");
@@ -242,13 +249,20 @@ void ExprStructDef::dump(int depth) const{
 	}
 	dbprintf("]");
 	if (this->inherits) {dbprintf(" : %s", str(inherits->name));}
+	if (this->args.size()){
+		dbprintf("(");for (auto a:this->args)	{a->dump(-1);dbprintf(",");};dbprintf(")");
+	}
 	dbprintf("{");
-	for (auto m:this->literals)	{m->dump(depth+1);}
-	for (auto m:this->fields)	{m->dump(depth+1);}
-	for (auto s:this->structs)	{s->dump(depth+1);}
-	for (auto f:this->functions){f->dump(depth+1);}
-	for (auto f:this->virtual_functions){f->dump(depth+1);}
+	for (auto m:this->literals)	{m->dump(depth2);}
+	for (auto m:this->fields)	{m->dump(depth2);}
+	for (auto s:this->structs)	{s->dump(depth2);}
+	for (auto f:this->functions){f->dump(depth2);}
+	for (auto f:this->virtual_functions){f->dump(depth2);}
 	newline(depth);dbprintf("}");
+	if (this->body){
+		dbprintf("where");
+		((Node*)this->body)->dump(depth);
+	}
 }
 
 ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
@@ -260,7 +274,7 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 
 	if (!this->is_generic()){
 		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
-		for (auto m:fields)			{m->resolve(sc,nullptr,flags);}
+		for (auto m:fields)			{m->resolve(sc,nullptr,flags&~R_FINAL);}
 		for (auto m:static_fields)	{m->resolve(sc,nullptr,flags);}
 		for (auto m:static_virtual)	{m->resolve(sc,nullptr,flags);}
 		for (auto s:structs){

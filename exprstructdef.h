@@ -23,6 +23,8 @@ struct ExprStructDef: ExprDef {
 	vector<ExprFnDef*>		functions;
 	vector<ExprFnDef*>		static_functions;
 	vector<TypeDef*>		typedefs;
+	vector<ArgDef*>			args;		// default constructor form
+	ExprBlock*				body=0;		// for default constructor form.
 	Type*	inherits_type=0;
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
