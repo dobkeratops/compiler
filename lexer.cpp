@@ -11,6 +11,7 @@ bool isOperator(char c){return c=='+'||c=='-'||c=='*'||c=='/'||c=='.'||c=='='||c
 
 int close_of(int open){
 	if (open==LT) return GT;
+	else if (open==OPEN_TYPARAM) return GT;	//TYPARAM is a special token for disambiguated <...>
 	else if (open==OPEN_BRACKET) return CLOSE_BRACKET;
 	else if (open==OPEN_BRACE) return CLOSE_BRACE;
 	else if (open==OPEN_PAREN) return CLOSE_PAREN;

@@ -319,8 +319,20 @@ ExprIdent::recurse(std::function<void(Node*)>&f){
 }
 
 IdentWithTParams::IdentWithTParams(SrcPos _pos, ExprIdent* id) {
+	name=id->name;
 	this->ident=id;
 	this->pos=_pos;
+}
+Type* IdentWithTParams::make_type(Scope* sc)const{
+	auto t=new Type(this->ident->as_name(),pos);
+	for (auto x:given_tparams)t->push_back((TParamVal*)x->clone());
+	return t;
+}
+int IdentWithTParams::get_elem_count()const{
+	return this->given_tparams.size();
+}
+Node* IdentWithTParams::get_elem_node(int i){
+	return this->given_tparams[i];
 }
 void IdentWithTParams::dump(int depth) const{
 	newline(depth);ident->dump(-1);
@@ -340,7 +352,7 @@ void IdentWithTParams::translate_typeparams(const TypeParamXlat& tpx) {
 	// TODO - these could be expresions - "concat[T,X]"
 	this->name.translate_typeparams(tpx);
 	for (auto x:given_tparams){x->translate_typeparams(tpx);}
-	this->type()->translate_typeparams(tpx);
+	this->type()->translate_typeparams_if(tpx);
 }
 
 Node* IdentWithTParams::clone()const {

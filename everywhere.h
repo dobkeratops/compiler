@@ -26,26 +26,21 @@ extern "C" char* gets(char*);
 // Debug Prints
 // on level 3 compiling is ultra verbose, level 4 adds line numbers
 
-#define dbg_loc() dbprintf("%s:%d:",__FILE__,__LINE__);
+
 #if DEBUG>=4
-#define DBLOC() dbg_loc()
 #define dbg4(X) X
-#else
-#define DBLOC()
-#define dbg4(X)
+#define DBLOC() dbprintf("%s:%d:",__FILE__,__LINE__);
 #endif
 
 #if DEBUG>=3
-#define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg3(X) X
+#define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_emitconv(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#else
-inline void dbg_varscope(const char*,...){}
-#define dbg2(X)
 #endif
 
 #if DEBUG>=2
+#define dbg2(X) X
 #define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
@@ -54,26 +49,72 @@ inline void dbg_varscope(const char*,...){}
 #define dbg_generic(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_strings(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_vcall(...) {DBLOC();dbprintf(__VA_ARGS__);}
-#define dbg2(X) X
-#define dbg(X) X
-#else
-#define dbg2(X)
-#define dbg(X)
-inline void dbg_generic(const char*,...){}
-inline void dbg_fnmatch(const char*,...){}
-inline void dbg_lambdas(const char*,...){}
-inline void dbg_resolve(const char*,...){}
-inline void dbg_type(const char*,...){}
-inline void dbg_vtable(const char*,...){}
-inline void dbg_vcall(const char*,...){}
-inline void dbg_strings(const char*,...){}
 #endif
+
+#if DEBUG>=2
+#define dbg(X) X
+#endif
+
+#ifndef DBLOC
+#define DBLOC(X)
+#endif
+
+#ifndef dbg4
+#define dbg4(X)
+#endif
+
+#ifndef dbg3 
+#define dbg3(X)
+#endif
+
+#ifndef dbg2
+#define dbg2(X)
+#endif
+#ifndef dbg
+#define dbg(X)
+#endif
+
+#ifndef dbg_strings
+#define dbg_strings(x,...)
+#endif
+
+#ifndef dbg_vcall
+#define dbg_vcall(x,...)
+#endif
+
+
+#ifndef dbg_vtable
+#define dbg_vtable(x,...)
+#endif
+
+#ifndef dbg_resolve
+#define dbg_resolve(x,...)
+#endif
+
+#ifndef dbg_lambdas
+#define dbg_lambdas(x,...)
+#endif
+
+#ifndef dbg_fnmatch
+#define dbg_fnmatch(x,...)
+#endif
+
+#ifndef dbg_generic
+#define dbg_generic(x,...)
+#endif
+
 #ifndef dbg_instancing
 #define dbg_instancing(x,...)
 #endif
+
 #ifndef dbg_emitconv
 #define dbg_emitconv(x,...)
 #endif
+
+#ifndef dbg_varscope
+#define dbg_varscope(x,...)
+#endif
+
 #ifndef dbg_resolve
 #define dbg_resolve(x,...)
 #endif

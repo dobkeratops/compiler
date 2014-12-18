@@ -453,6 +453,9 @@ ExprStructDef* Scope::find_struct(const Node* node) {
 	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){
 		return sd;
 	}
+	if (auto iwt=dynamic_cast<const IdentWithTParams*>(node)){
+		const_cast<Node*>(node)->set_type(iwt->make_type(this));
+	}
 	if (auto sd=find_struct_sub_if(this,node->type())){
 		return sd;
 	}

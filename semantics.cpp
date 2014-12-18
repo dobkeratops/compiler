@@ -608,36 +608,32 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 	sdn->dump_instances(0);
 
 #endif
-	
-	
 	if (si->call_expr->name==PLACEHOLDER && desiredType){
-		if (desiredType->def){
-			sd=desiredType->def->as_struct_def();
-			dbg_type("infered struct init def=%s\n",sd->name_str());
-		}
-		if (!sd) return ResolvedType();
-		sd->dump(-1);
+		propogate_type_fwd(flags,si, desiredType,si->call_expr->type_ref());
+		sd=si->call_expr->type()->def->as_struct_def();
+		if (!sd)
+			return ResolvedType();
+		dbg(sd->dump(-1));
 		dbg_type("\n");
 		si->call_expr->set_type(desiredType);
 		if (!si)
 			si->set_type(desiredType);
-	} else if (si->call_expr->type() && si->call_expr->name==PLACEHOLDER){
-		dbg_type("placeholder type with inferred type\n");
-		sd=si->call_expr->type()->def->as_struct_def();
 	}
 	else {
 		sd=sc->find_struct(si->call_expr);
 		dbg(sd->dump_if(0));
 		if (!sd){
 			if (flags&R_FINAL){
-				error(si->call_expr,"can't find struct %s",si->call_expr->name_str());
+				error_begin(si->call_expr,"can't find struct");
+				si->call_expr->dump(-1);error_end(si->call_expr);
 			}
 			return ResolvedType();
 		}
+
 	}
-	dbg(printf("=====struct init & desired type..=====\n"));
-	dbg(desiredType->dump_if(0));
-	dbg(sd->dump(0));
+	dbg3(printf("=====struct init & desired type..=====\n"));
+	dbg3(desiredType->dump_if(0));
+	dbg3(sd->dump(0));
 	// if its in place..
 	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
 	if (local_struct_def){
@@ -680,7 +676,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 			}
 			field=sd->fields[field_index++];
 			this->value.push_back(a);
-			dbg(field->dump(0));dbg(printf("\n --set_to--> \n"));dbg(a->dump());dbg(newline(0));
+			dbg3(field->dump(0));dbg(printf("\n --set_to--> \n"));dbg(a->dump());dbg(newline(0));
 			a->resolve(sc,field->type(),flags); // todo, need generics!
 			t=a->type();
 			propogate_type(flags,a,field->type_ref(),a->type_ref());

@@ -394,14 +394,13 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 			flush_op_stack(node,operators,operands);
 			was_operand=false;
 		}
-		else if (src.eat_if(DOUBLE_COLON)){
-			auto open_tp=src.eat_if(LT,OPEN_BRACKET);
+		else if (src.eat_if(DOUBLE_COLON)||src.peek_tok()==OPEN_TYPARAM){ // eg array::<int,5>
+			auto open_tp=src.eat_if(LT,OPEN_BRACKET,OPEN_TYPARAM);
 			if (open_tp && was_operand){
-				auto opb=operands.back();
-				auto t=new Type(opb->pos, opb->name);
-				parse_typeparams_given(src,t,close_of(open_tp));
-				opb->set_type(t);
-				dbg(t->dump(-1));dbg(newline(1));
+				auto id=pop(operands)->as_ident();
+				if (!id){error(src.pos,"::<TypeParams> must follow identifier");}
+				auto itw=parse_tparams_for_ident(src,id,close_of(open_tp));
+				operands.push_back(itw);
 			} else {
 				error(src.pos,"::<TypeParams> must follow identifier");
 			}
@@ -697,6 +696,15 @@ void parse_typeparams_given(TokenStream& src, Type* addto, int close){
 		addto->push_back(tp);
 		src.eat_if(COMMA);
 	}
+}
+IdentWithTParams* parse_tparams_for_ident(TokenStream& src,ExprIdent* id,int close){
+	auto iwt=new IdentWithTParams(id->pos,id);
+	while (!src.eat_if(close)){
+		auto tp=parse_type(src,COMMA,iwt);
+		iwt->given_tparams.push_back(tp);
+		src.eat_if(COMMA);
+	}
+	return iwt;
 }
 
 ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* force_inherit);

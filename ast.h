@@ -152,13 +152,16 @@ struct ExprIdent :Expr{
 	void		recurse(std::function<void(Node*)>&) override;
 };
 // Identifier with given type-parameters
-struct IdentWithTParams : Expr{
+struct IdentWithTParams : ExprIdent{
 	ExprIdent*			ident;
 	vector<TParamVal*>	given_tparams;
 	void		dump(int depth)const override;
 	Node*		clone()const override;
+	Type*		make_type(Scope* sc) const;
 	void		translate_typeparams(const TypeParamXlat& tpx) override;
 	void		recurse(std::function<void(Node*)>&) override;
+	Node*		get_elem_node(int index)override;
+	int			get_elem_count()const override;
 	IdentWithTParams(SrcPos src, ExprIdent* ident);
 	const char*	kind_str()const override		{return"ident<..>";}
 };

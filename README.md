@@ -103,7 +103,8 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
  * compare with other languages, converge with whichever mainstream option is closer, take inspiration..
   * C++17,21.. of course.
   * Rust - first non-C++ language I've wanted to use.
-  * blows' ".jai" "language for games" - most similar stated goal, but maybe different preferences
+  * blows' ".jai" "language for games"
+   * most similar stated goal, but maybe different preferences
   * 'SugarCpp' - an interesting transpiler
   * D - never grabbed me for some reason, but has many features of interest 
    * (tends to focus on gc, and doesn't have expression syntax?)
@@ -114,7 +115,7 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
  * Features inspired by Rust & other languages:
   * 2 way inference
   * expression oriented syntax
-   * completed by adding  for-else loop,"break expressions".
+    * completed by adding  for-else loop,"break expressions".
   * ADTs (possibly implement as sugar for dynamic_cast<>?)
   * optional trait bounds on templates? (bounds replace SFINAE?)
   * rust-like trait-objects - (vtable*,data*) - replaces multiple-inheritance
