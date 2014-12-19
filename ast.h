@@ -27,6 +27,8 @@ struct Pattern : Node {
 	CgValue	compile_condition(CodeGen& cg,Scope* sc);
 	CgValue compile_bind(CodeGen& cg, Scope* sc);
 	void	recurse(std::function<void(Node*)>& f);
+	Name	as_name()const;
+
 };
 
 // Type Parameter, actually Template Parameter as we generalize it.

@@ -16,7 +16,7 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
-/*
+
 	{
 		"basic enum+match",__FILE__,__LINE__,
 		"enum Foo{ 									\n"
@@ -30,7 +30,7 @@ CompilerTest g_Tests[]={
 		"	0										\n"
 		"}"
 	},
- */
+ 
 	{
 		"struct default constructor",__FILE__,__LINE__,
 		"struct Extents(min:float,max:float){ \n"

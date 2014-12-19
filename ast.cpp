@@ -24,6 +24,9 @@ Pattern* Pattern::get_elem(int i){
 	}
 	return s;
 }
+Name Pattern::as_name()const{
+	return this->name;
+}
 
 ResolvedType
 Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
@@ -36,7 +39,12 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
 	} else if (this->name==PATTERN_BIND){
 		// get or create var here
-		this->sub->next->resolve_with_type(sc,rhs,flags);
+		auto v=this->sub; auto p=v->next;
+		p->resolve_with_type(sc,rhs,flags);
+		if (!v->type()&&p->type()){
+			v->set_type((Type*)(p->type()->clone()));
+		}
+		v->resolve_with_type(sc,p->type(),flags);
 		return propogate_type(flags, (Node*)this, this->sub->type_ref(), this->sub->next->type_ref());
 	}
 	else if (this->name==TUPLE){
@@ -61,15 +69,30 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		}
 	} // else its a var of given type, or just a constant?
 	else{
+		if (auto sd=sc->find_struct(this))
+		{
+			this->set_struct_type(sd);
+		}else
 		// TODO named-constants
 		// TODO boolean true/false
 		// TODO nullptr
 		if (is_number(this->name)){
 			if (!this->type()) {this->set_type(Type::get_int());}
 			return ResolvedType();
+		}
+		else
+		if (this->name==PLACEHOLDER){
+			this->set_type(rhs);
+			return ResolvedType();
+			
 		} else {
 			// TODO - scala style quoted variable for comparison
 			auto v=sc->create_variable(this,this->name,Local);
+			if (!this->def){
+				dbg2(dbprintf("pattern match created var %s:",this->name_str())); dbg2(this->type()->dump_if(-1));dbg(newline(0));
+				this->set_def(v);
+			}
+			
 			return propogate_type_fwd(flags, this, rhs, v->type_ref());
 		}
 	}
@@ -104,7 +127,8 @@ void Pattern::dump(int depth)const{
 		}
 		return;
 	} else if (name==PATTERN_BIND){
-		sub->dump(-1);dbprintf("@"); sub->next->dump_if(-1);
+		sub->dump(-1);dbprintf("@");
+		sub->next->dump_if(-1);
 	} else if(name==RANGE || name==RANGE_LT||name==RANGE_LE){
 		sub->dump(-1);dbprintf("..");sub->next->dump(-1);
 	}else
@@ -116,7 +140,7 @@ void Pattern::dump(int depth)const{
 		}
 		dbprintf(")");
 	}
-	if (this->type()) {dbprintf(":"); this->type()->dump_if(-1);}
+	if (this->type()) {dbprintf(":"); this->type()->dump_if(-1);dbprintf(" ");}
 }
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
