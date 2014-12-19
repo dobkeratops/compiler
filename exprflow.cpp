@@ -219,6 +219,43 @@ void ExprMatch::recurse(std::function<void(Node*)>& f){
 		a->recurse(f);
 	this->type()->recurse(f);
 }
+CgValue
+ExprMatch::compile(CodeGen& cg, Scope* sc){
+	// TODO - dedicated with one set of phi-nodes at the end.
+	// this is RETARDED!!!
+	// TODO - turn some cases into binary-chop (no 'if-guards' & single value test)
+	// TODO - turn some cases into vtable.
+	auto match_val = this->expr->compile(cg,sc);
+	return compile_match_arm(cg, sc, this->expr, match_val, this->arms);
+}
+
+ResolvedType
+ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
+	// the whole block gets a scope
+	auto match_sc=outer_sc->make_inner_scope(&this->scope,outer_sc->owner_fn,this);
+
+	this->expr->resolve(match_sc,nullptr,flags);
+	propogate_type_fwd(flags,this, desired, this->type_ref());
+
+	for (auto a=arms; a;a=a->next ) {
+		
+		// every arm gets a scope
+		auto arm_sc=outer_sc->make_inner_scope(&a->scope,match_sc->owner_fn,this);
+
+		// setup the types: expression has same type as match patterns;
+		propogate_type(flags, (Node*)this, this->expr->type_ref(), a->pattern->type_ref());
+		a->pattern->resolve_with_type(a->scope, this->expr->type(), flags);
+		a->cond->resolve_if(a->scope, Type::get_bool(),flags);
+		a->body->resolve(a->scope, this->type(), flags);
+		
+		//all arms outputs have same typeas the whole output
+		propogate_type(flags,this, a->body->type_ref(),this->type_ref());
+		propogate_type(flags,this, a->body->type_ref(),a->type_ref());
+		
+	}
+	return propogate_type_fwd(flags,this, desired, this->type_ref());
+}
+
 void MatchArm::dump(int depth)const{
 	auto d1=depth>=0?depth+1:depth;
 	newline(depth);
@@ -245,13 +282,4 @@ CgValue MatchArm::compile_bind(CodeGen &cg, Scope *sc, Expr *match_expr, CgValue
 	return CgValue();
 }
 
-CgValue
-ExprMatch::compile(CodeGen& cg, Scope* sc){
-	// TODO - dedicated with one set of phi-nodes at the end.
-	// this is RETARDED!!!
-	// TODO - turn some cases into binary-chop (no 'if-guards' & single value test)
-	// TODO - turn some cases into vtable.
-	auto match_val = this->expr->compile(cg,sc);
-	return compile_match_arm(cg, sc, this->expr, match_val, this->arms);
-}
 

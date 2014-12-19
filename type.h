@@ -22,6 +22,7 @@ struct Type : ExprDef {
 	//		auto tc=new Type(origin,c); auto tb=new Type(origin,b); tb->push_back(tc); push_back(tb);
 	//	}
 	Type(ExprStructDef* sd);
+	Type(SrcPos sp,ExprStructDef* sd):Type(sd){pos=sp;}
 	Type(Name outer, ExprStructDef* inner);
 	Type(Node* origin,Name i);
 	Type(Name i,SrcPos sp);

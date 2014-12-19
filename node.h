@@ -18,6 +18,8 @@ public:
 	ExprDef*	def=0;		// definition of the entity here. (function call, struct,type,field);
 	Node*		next_of_def=0;
 	void set_def(ExprDef* d);
+	void set_struct_type(ExprDef* d);
+
 	void clear_def();
 	virtual void dump(int depth=0) const;
 	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};

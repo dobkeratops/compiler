@@ -26,6 +26,13 @@ void Node::set_def(ExprDef *d){
 		def=d;
 	}
 }
+void Node::set_struct_type(ExprDef* sd){
+	
+	if (!this->type())
+		this->set_type(new Type(sd->as_struct_def()));
+	if (!this->def)
+		this->set_def(sd);
+}
 void Node::set_type(const Type* t)
 {	::verify(t);
 	if (this->m_type){

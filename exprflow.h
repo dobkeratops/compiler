@@ -70,9 +70,10 @@ struct ExprFor :  ExprFlow {
 /// rust match, doesn't work yet - unlikely to support everything it does
 /// C++ featureset extended with 2way inference can emulate match like boost variant but improved.
 struct ExprMatch : ExprFlow {
+	Scope* 	scope=0;
 	const char*		kind_str() const {return "match";}
 	CgValue			compile(CodeGen& cg, Scope* sc);
-	ResolvedType	resolve(Scope* sc, Type* desired, int flags);
+	ResolvedType	resolve(Scope* sc, const Type* desired, int flags);
 	Expr*		expr=0;
 	MatchArm*	arms=0;
 	Node*	clone()const;
@@ -83,6 +84,7 @@ struct ExprMatch : ExprFlow {
 struct MatchArm : ExprScopeBlock {
 	/// if match expr satisfies the pattern,
 	///  binds variables from the pattern & executes 'expr'
+	Scope*		scope=0;
 	Pattern*	pattern=0;
 	Expr*		cond=0;
 	Expr*		body=0;
@@ -93,7 +95,7 @@ struct MatchArm : ExprScopeBlock {
 	CgValue		compile_check(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
 	// todo - as patterns exist elsewhere, so 'compile-bind might generalize'.
 	CgValue		compile_bind(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
-	ResolvedType	resolve(Scope* sc, Type* desired, int flags);
+//	ResolvedType	resolve(Scope* sc, const Type* desired, int flags); doesn't have resolve method because it takes 2 inputs.
 	void		recurse(std::function<void(Node*)>& f) override;
 };
 

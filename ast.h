@@ -23,7 +23,7 @@ struct Pattern : Node {
 	void	dump(int indent)const;
 	Node*	clone()const;
 	// if-let , args, or match arms would all call this.
-	void	resolve_with_type(Scope* sc, Type* rhs, int flags);
+	ResolvedType	resolve_with_type(Scope* sc, const Type* rhs, int flags);
 	CgValue	compile_condition(CodeGen& cg,Scope* sc);
 	CgValue compile_bind(CodeGen& cg, Scope* sc);
 	void	recurse(std::function<void(Node*)>& f);

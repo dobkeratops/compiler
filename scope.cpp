@@ -114,6 +114,8 @@ NamedItems* Scope::get_named_items_local(Name name){
 	return ni;
 }
 NamedItems* Scope::find_named_items_local(Name name){
+	if (!this)
+		return nullptr;
 	for (auto ni=this->named_items;ni;ni=ni->next){
 		if (ni->name==name){return ni;}
 	}
@@ -295,6 +297,35 @@ ExprStructDef* Scope::find_struct_sub(Scope* original,const Type* t){
  */
 }
 
+void error_ambiguity(int flags, const Node* name_node, const Type *t,const ExprDef* d1, const ExprDef* d2){
+	if (!(flags & R_FINAL)){return;}
+	error_begin(name_node,"ambiguous matches (TODO implement namespacing)");
+	info(d1);
+	info(d2);
+	error_end(name_node);
+}
+
+ExprStructDef* Scope::find_inner_def(Scope* original,const Node* id, const Type* t,int flags){
+	ExprDef* r=nullptr;
+
+	for (auto sc=this; sc; sc=sc->parent_or_global()){
+		for (auto nmi=sc->named_items; nmi; nmi=nmi->next){
+			for (auto ns=nmi->structs; ns;ns=ns->next_of_name){
+				if (auto n=ns->scope->find_named_items_local(id->as_name())){
+					if (auto x=n->structs){ // TODO parameters!!!
+						if (r)
+							error_ambiguity(flags,id,t,(ExprDef*)x,r);
+						else r=x;
+					}
+				}
+			}
+		}
+	}
+	if (r) return r->as_struct_def();
+	// if not found, look deeper. shallowest matches always take precedence
+	// TODO
+	return r?r->as_struct_def():nullptr;
+}
 ExprStructDef* Scope::find_struct_named(Name name){
 	if (auto fn=this->find_named_items_local(name)){
 		for (auto st=fn->structs; st;st=st->next_of_name){
@@ -459,7 +490,9 @@ ExprStructDef* Scope::find_struct(const Node* node) {
 	if (auto sd=find_struct_sub_if(this,node->type())){
 		return sd;
 	}
-	return find_struct_named(node);
+	if (auto ns= find_struct_named(node))
+		return ns;
+	return this->find_inner_def(this, node, node->type(),0);
 }
 ExprStructDef* Scope::get_receiver() {
 	if (auto o=this->owner_fn)

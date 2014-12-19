@@ -16,6 +16,7 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
+/*
 	{
 		"basic enum+match",__FILE__,__LINE__,
 		"enum Foo{ 									\n"
@@ -24,11 +25,12 @@ CompilerTest g_Tests[]={
 		"	Qux,Boo \n"
 		"};						 					\n"
 		"fn main(argc:int,argv:**char)->int{		\n"
-		"	x=Bar{1,2};								\n"
-		"	z=match x; { a@Bar=>a.x, Baz(x,y) if x>10 =>y, Qux|Boo=>0, _=>0 };		\n"
+		"	x:=Bar{1,2};								\n"
+		"	z=match x { a@Bar=>a.x, Baz(x,y) if x>10 =>y, Qux|Boo=>0, _=>0 };		\n"
 		"	0										\n"
 		"}"
 	},
+ */
 	{
 		"struct default constructor",__FILE__,__LINE__,
 		"struct Extents(min:float,max:float){ \n"

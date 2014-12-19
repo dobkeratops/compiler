@@ -24,6 +24,58 @@ Pattern* Pattern::get_elem(int i){
 	}
 	return s;
 }
+
+ResolvedType
+Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
+	if (!rhs) // no input, can't do anything (todo-infer out from patterns)
+		return ResolvedType();
+	if (this->name==OR){
+		for (auto s=this->sub;s;s=s->next){
+			s->resolve_with_type(sc,rhs,flags);
+		}
+		return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
+	} else if (this->name==PATTERN_BIND){
+		// get or create var here
+		this->sub->next->resolve_with_type(sc,rhs,flags);
+		return propogate_type(flags, (Node*)this, this->sub->type_ref(), this->sub->next->type_ref());
+	}
+	else if (this->name==TUPLE){
+		auto subt=rhs->sub;
+		for (auto subp=this->sub; subp&&subt; subp=subp->next, subt=subt->next){
+			subp->resolve_with_type(sc,subt, flags);
+		}
+	} else if (this->name!=TUPLE && this->sub){ // Type(....)
+		auto sd=sc->find_struct_named(this->name);// todo tparams from rhs, if given
+		if (sd){
+			int i=0; auto subp=this->sub;
+			// todo - sub types should resolve?!
+			for (; i<sd->fields.size() && subp; i++,subp=subp->next){
+				subp->resolve_with_type(sc,sd->fields[i]->type(),flags);
+			}
+			if (!this->def){
+				this->set_def(sd);
+			}
+			if (!this->type()){
+				this->set_type(new Type(this->pos, sd));
+			}
+		}
+	} // else its a var of given type, or just a constant?
+	else{
+		// TODO named-constants
+		// TODO boolean true/false
+		// TODO nullptr
+		if (is_number(this->name)){
+			if (!this->type()) {this->set_type(Type::get_int());}
+			return ResolvedType();
+		} else {
+			// TODO - scala style quoted variable for comparison
+			auto v=sc->create_variable(this,this->name,Local);
+			return propogate_type_fwd(flags, this, rhs, v->type_ref());
+		}
+	}
+	return ResolvedType();
+}
+
 void Pattern::push_back(Pattern* newp){
 	if (!newp) return;
 	Pattern **pp=&sub;
@@ -53,19 +105,18 @@ void Pattern::dump(int depth)const{
 		return;
 	} else if (name==PATTERN_BIND){
 		sub->dump(-1);dbprintf("@"); sub->next->dump_if(-1);
-		return;
 	} else if(name==RANGE || name==RANGE_LT||name==RANGE_LE){
 		sub->dump(-1);dbprintf("..");sub->next->dump(-1);
-		return;
 	}else
 		dbprintf(str(name));
-	if (this->sub){
+	if (this->sub && name!=PATTERN_BIND && name!=RANGE){
 		dbprintf("(");
 		for (auto s=this->sub;s;s=s->next){
 			s->dump(d2);if (s->next)dbprintf(",");
 		}
 		dbprintf(")");
 	}
+	if (this->type()) {dbprintf(":"); this->type()->dump_if(-1);}
 }
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
@@ -108,15 +159,21 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
 	else if (!scope->find_named_items_rec(this->name)){
+		// from an inner scope? caution here - it must count ambiguity- give lambda..
+		if (auto def=scope->find_inner_def(scope,this,this->type(),flags)){
+			this->set_struct_type(def);
+			return propogate_type_fwd(flags,this, desired,this->type_ref());
+		}
+		
 		// didn't find it yet, can't do anything
 		if (flags & R_FINAL){
 			//			if (g_verbose){
 			//				g_pRoot->as_block()->scope->dump(0);
 			//			}
 			scope->find_variable_rec(this->name); // look for scope variable..
-#if DEBUG >=2
-			scope->dump(0);
-#endif
+
+			dbg2(scope->dump(0));
+			
 			auto thisptr=scope->find_variable_rec(THIS);
 			if (thisptr){
 				auto recv=scope->get_receiver();
@@ -136,7 +193,7 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 					}
 				}
 			}
-			error_begin(this,"\'%s\' undeclared identifier",str(this->name));
+			error_begin(this,"\'%s\' undeclared id",str(this->name));
 			assist_find_symbol(this,scope,this->name);
 			error_end(this);
 		}
