@@ -196,6 +196,7 @@ CgValue compile_match_arm(CodeGen& cg, Scope* sc,Expr* match_expr, CgValue match
 		return arm->body->compile(cg,sc);
 	}
 	auto armsc=arm->get_scope();
+	emit_local_vars(cg,arm,nullptr, armsc);
 	return cg.emit_if_sub(
 						  arm,
 						  sc,
@@ -237,7 +238,7 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 	this->expr->resolve(match_sc,nullptr,flags);
 	propogate_type_fwd(flags,this, desired, this->type_ref());
 
-	for (auto a=arms; a;a=a->next ) {
+	for (auto a=this->arms; a;a=a->next ) {
 		
 		// every arm gets a scope
 		auto arm_sc=outer_sc->make_inner_scope(&a->scope,match_sc->owner_fn,this);

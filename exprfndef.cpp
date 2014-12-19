@@ -424,9 +424,11 @@ Expr*			ExprFnDef::last_expr()const{
 
 void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 	auto ofp=cg.ofp;
-	for (auto cp=fn->captures; cp;cp=cp->next_of_from){
-		cp->reg_name=next_reg_name(cp->tyname(), &cg.m_next_reg);
-		cg.emit_alloca_type(cp, cp->type()->deref_all());
+	if (fn){
+		for (auto cp=fn->captures; cp;cp=cp->next_of_from){
+			cp->reg_name=next_reg_name(cp->tyname(), &cg.m_next_reg);
+			cg.emit_alloca_type(cp, cp->type()->deref_all());
+		}
 	}
 	for (auto v=sc->vars; v;v=v->next_of_scope){
 		if (!v->type()) {

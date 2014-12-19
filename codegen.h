@@ -253,6 +253,7 @@ struct LoopPhiVar {
 	RegisterName reg_start;
 	RegisterName reg_end;
 };
+extern void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc);
 
 void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, Name l_end, bool extra);
 

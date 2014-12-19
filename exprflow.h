@@ -91,6 +91,7 @@ struct MatchArm : ExprScopeBlock {
 	MatchArm*	next=0;
 	void		dump(int depth)const;
 	Node*		clone() const;
+	Scope*		get_scope()override{return this->scope;}
 	void		translate_typeparams(const TypeParamXlat& tpx){}
 	CgValue		compile_check(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
 	// todo - as patterns exist elsewhere, so 'compile-bind might generalize'.
