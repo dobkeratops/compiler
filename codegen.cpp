@@ -445,7 +445,8 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,
 	
 	this->emit_i32_lit(field_index);
 	this->emit_ins_end();
-	return CgValue(0,field_type,areg);
+	auto ret= CgValue(0,field_type,areg);
+	return ret;
 }
 CgValue CodeGen::emit_assign(const CgValue& dst, const CgValue& src){
 	return dst.store(*this, this->load(src));
@@ -1011,6 +1012,17 @@ CgValue CodeGen::emit_cast_to_type(const CgValue&lhs_val, const Type* rhst){
 //	auto lhst=lhs_val.type;
 	return emit_cast_reg(lhs_reg.reg, lhs_val.type, rhst);
 }
+
+CgValue CodeGen::emit_cast_ref(CgValue src, const Type* rhst){
+	ASSERT(src.addr);
+	auto dstr=this->next_reg();
+	emit_ins_begin(dstr, "bitcast");
+	emit_type_reg(src.type,true,src.addr);
+	emit_separator(" to ");
+	emit_type(rhst,true);
+	emit_ins_end();
+	return CgValue(0,rhst,dstr);
+}
 CgValue CodeGen::emit_cast_reg(RegisterName srcr,const  Type* lhst, const Type* rhst)
 {
 	if (lhst->type()->is_equal(rhst))
@@ -1473,11 +1485,9 @@ void CgValue::dump()const {
 CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* to_type,const Scope* sc) {
 	/// TODO: make it clear, this is a helper, not overloaded per back-end
 	// no need to convert..
-#if DEBUG>=2
-	dbprintf("\nconvert type:- \n");
-	src0.dump();dbprintf("\n --to--> \n");
-	to_type->dump(-1);dbprintf("\n");
-#endif
+	dbg(dbprintf("\nconvert type:- \n"));
+	dbg(src0.dump());dbg(dbprintf("\n --to--> \n"));
+	dbg(to_type->dump(-1));dbg(dbprintf("\n"));
 	CgValue src=src0;
 	if (src0.type->is_equal(to_type,false)){
 		if (src0.reg && src0.elem>=0 && !src0.addr)
@@ -1492,11 +1502,10 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 	if (src.type->name==REF && to_type->name!=REF){
 		src=src.load(*this);
 	}
-#if DEBUG>=2
-	dbprintf("\n after 'ref'->'value' src is");
-	src.dump();newline(0);
-	dbprintf("\n");
-#endif
+		
+	dbg(dbprintf("\n after 'ref'->'value' src is"));
+	dbg(src.dump());dbg(newline(0));
+	dbg(dbprintf("\n"));
 
 	// We must convert..
 	// is it a trivial pointer conversion?
@@ -1530,6 +1539,11 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 			error(n,"\ncan't convert,bug\n");
 		}
 		return src.load(*this);
+	}
+	
+	// lazy reference can still be casted.
+	if (!src0.type->is_pointer_or_ref() && src0.addr && src0.reg==0){
+		return this->emit_cast_ref(src,to_type);
 	}
 
 	dbprintf("\ntried to convert:-\n");

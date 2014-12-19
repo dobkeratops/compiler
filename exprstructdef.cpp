@@ -406,6 +406,10 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 			cg.emit_type(fi->type(), false);
 		};
 		cg.emit_struct_def_end();
+		
+		for( auto sub:st->structs){
+			sub->compile(cg,sc);
+		}
 	}
 	return CgValue();	// todo: could return symbol? or its' constructor-function?
 }

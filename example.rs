@@ -205,7 +205,6 @@ fn main(argc:int,argv:**char)->int{
 
 	let foo=ret_anon_struct();
 	printf("anon struct fields= %d %d\n",foo.x, foo.y);
- 
 	// type inference with polymorphic lambdas
 	// could overload 'match' to supply different combinations of types
 	// C++ equivalent doesn't seem to match all template args.

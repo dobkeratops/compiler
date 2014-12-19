@@ -223,21 +223,28 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 		auto b=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
 		auto var=v->def->as_variable();
 		CgValue(var).store(cg, cg.emit_conversion((Node*)ptn, val, var->type(), sc));// coercion?
+
 		return b;
 	}
 	if (ptn->name==OR || ptn->name==TUPLE ||ptn->sub){// iterate components...
+		int index;
 		CgValue ret;
-		int index=0;
+		CgValue	val2=val;
 		Name op;
-		if (ptn->name==OR) {op=LOG_OR;}
-		else if(ptn->name==TUPLE){op=LOG_AND;}
+		if (ptn->name==OR) {op=LOG_OR;index=0;}
+		else if(ptn->name==TUPLE){op=LOG_AND;index=0;}
 		else{
 			auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
 			auto sd=ptn->def->as_struct_def();
+			index=sd->first_user_field_index();
 			ret=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
+			val2=cg.emit_conversion((Node*)ptn,val, ptn->type(),sc);
+			dbg2(val2.type->dump(0));dbg2(newline(0));
 		}
+		//todo - this part moves to bind if not or/tople
 		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
-			auto b=this->compile_condition(cg, sc, subp, cg.emit_getelementref(val,0, index,subp->type()));
+			auto elem=ptn->name!=OR?cg.emit_getelementref(val2,0, index,subp->type()):val;
+			auto b=this->compile_condition(cg, sc, subp, elem);
 			if (op){
 				if (!ret.is_valid()) ret=b;
 				else ret=cg.emit_instruction(op,ret,b);
@@ -246,6 +253,8 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 		return ret;
 	}
 	else if (auto var=ptn->def->as_variable()){
+		dbg(dbprintf("bind %s :",var->name_str()));dbg(var->type()->dump_if(-1));dbg(newline(0));
+		dbg(dbprintf("given val :",var->name_str()));dbg(val.type->dump_if(-1));dbg(newline(0));dbg(ptn->type()->dump_if(-1));dbg(newline(0));
 		CgValue(var).store(cg, val);
 		return cg.emit_bool(true);
 	}else
@@ -286,6 +295,7 @@ CgValue MatchArm::compile(CodeGen& cg, Scope* sc){
 	);
 	return ret;
 }
+
 CgValue
 ExprMatch::compile(CodeGen& cg, Scope* sc){
 	// TODO - dedicated with one set of phi-nodes at the end.
@@ -304,8 +314,6 @@ ExprMatch::compile(CodeGen& cg, Scope* sc){
 	return r;
 }
 
-
-
 ResolvedType
 ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 	// the whole block gets a scope
@@ -320,7 +328,8 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 		auto arm_sc=outer_sc->make_inner_scope(&a->scope,match_sc->owner_fn,this);
 		a->match_owner=this;
 		// setup the types: expression has same type as match patterns;
-		propogate_type(flags, (Node*)this, this->expr->type_ref(), a->pattern->type_ref());
+		//*dont* push the type onto the arms, because variants cast to subtypes.
+		//propogate_type(flags, (Node*)this, this->expr->type_ref(), a->pattern->type_ref());
 		a->pattern->resolve_with_type(a->scope, this->expr->type(), flags);
 		a->cond->resolve_if(a->scope, Type::get_bool(),flags);
 		a->body->resolve(a->scope, this->type(), flags);

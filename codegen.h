@@ -197,6 +197,7 @@ public:
 	void emit_branch(CgValue cond, Name label_then, Name label_else);
 	CgValue emit_cast_raw(const CgValue&lhsv, const Type* rhse);
 	CgValue emit_cast(const CgValue&lhsv, Expr* rhse);
+	CgValue emit_cast_ref(CgValue src, const Type* rhst);
 	CgValue emit_cast_to_type(const CgValue&lhs_val, const Type* rhst);
 	CgValue emit_cast_to_i8ptr(const CgValue& val);
 	CgValue emit_cast_from_i8ptr(const CgValue& val,const Type* totype);

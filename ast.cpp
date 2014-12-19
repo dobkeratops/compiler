@@ -55,13 +55,15 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		for (auto subp=this->sub; subp&&subt; subp=subp->next, subt=subt->next){
 			subp->resolve_with_type(sc,subt, flags);
 		}
-	} else if (this->name!=TUPLE && this->sub){ // Type(....)
+	} else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring
 		auto sd=sc->find_struct_type(this,rhs);// todo tparams from rhs, if given
 		if (sd){
 			int i=sd->first_user_field_index(); auto subp=this->sub;
 			// todo - sub types should resolve?!
 			for (; i<sd->fields.size() && subp; i++,subp=subp->next){
-				subp->resolve_with_type(sc,sd->fields[i]->type(),flags);
+				auto ft=sd->fields[i]->type();
+				subp->set_type(ft);
+				subp->resolve_with_type(sc,ft,flags);
 			}
 			this->set_struct_type(sd);
 		}
