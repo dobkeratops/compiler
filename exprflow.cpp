@@ -222,8 +222,9 @@ void ExprMatch::recurse(std::function<void(Node*)>& f){
 void MatchArm::dump(int depth)const{
 	auto d1=depth>=0?depth+1:depth;
 	newline(depth);
-	this->pattern->dump(d1);
-	newline(depth);dbprintf("=>");
+	this->pattern->dump(-1);
+	if (this->cond) {dbprintf("if"); this->cond->dump(-1000);}
+	dbprintf("=>");
 	this->body->dump(d1);
 	
 }

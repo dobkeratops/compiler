@@ -1,4 +1,4 @@
-#include "ast.h"
+	#include "ast.h"
 #include "semantics.h"
 #include "parser.h"
 #include "error.h"
@@ -105,7 +105,11 @@ ExprMatch* parse_match(TokenStream& src){
 		a->pos=src.pos;
 		*pp=a;
 		pp=&a->next;
-		a->pattern=parse_pattern(src,FAT_ARROW,0);
+		int close=0;
+		a->pattern=parse_pattern(src,FAT_ARROW,IF,&close);
+		if (close==IF){
+			a->cond=parse_block(src,FAT_ARROW,COMMA,0);
+		}
 		a->body=parse_expr(src);
 		auto tok=src.expect(COMMA,CLOSE_BRACE);
 		if (tok==CLOSE_BRACE)
@@ -117,33 +121,52 @@ ExprMatch* parse_match(TokenStream& src){
 // todo: we're not sure we need a whole other parser
 // couldn't expressions,types,patterns all use the same gramar & parser,
 // & just interpret the nodes differently?
-Pattern* parse_pattern(TokenStream& src,int close,int close2=0){
-	Pattern* p=new Pattern(src.pos,0); p->pos=src.pos;auto first=p;p->name=0;
+Pattern* parse_pattern(TokenStream& src,int close,int close2,int* close_tok, Pattern* owner){
+	// yikes, this is a total mess
+	Pattern* prev=0;
 	while (auto t=src.eat_tok()){
-		if (t==close || t==close2) break;
+		if (t==close || t==close2) {if (close_tok){*close_tok=(int)t;}break;}
 		if (t==OPEN_PAREN){
-			if (!p->name){
-				// tuple..
-				p->name=TUPLE;
+			if (!prev) {
+				prev=new Pattern(src.pos, TUPLE);
 			}
-			p->sub=parse_pattern(src,CLOSE_PAREN,0);
+			parse_pattern(src,CLOSE_PAREN,0,close_tok,prev);
 		}
 		// todo - range ".."
 		// todo - slice patterns
 		else if (t==LET_ASSIGN || t==DECLARE_WITH_TYPE || t== ASSIGN ||t==PATTERN_BIND){ // todo its @ in scala,rust
 			auto np=new Pattern(src.prev_pos,PATTERN_BIND);
-			np->sub = p;
-			first=np; // assert only once
+			if (owner){ error(src.pos,"pattern bind @ can only be first eg x@whatever(..)");}
+			
+			np->push_back(prev);
+			parse_pattern(src,close,close2, close_tok, np);
+			return np;
 		}
-		else if (t==COMMA){
-			p=p->next=new Pattern(src.pos,0);
-		} else if (t==OR && close!=CLOSE_PAREN){ // todo - bit more elaborate. should be ANY(....)  distinct from TUPLE(...)
-			p=p->next=new Pattern(src.pos,0);
+		else if (t==COMMA){ // continue a tuple..
+			if (!owner){
+				error(src.pos,", in pattern must be within tuple (,,) or destructure ident(,,) ident{,,}");
+			}
+		} else if (t==OR){ // todo - bit more elaborate. should be ANY(....)  distinct from TUPLE(...)
+			if (owner){error(src.pos,"TODO ( | | ), only  | | | works right now");}
+			if (!prev){error(src.pos,"in pattern | must seperate options eg a|b|c..");}
+			auto np=new Pattern(src.pos,OR);
+			np->push_back(prev);
+			np->push_back(parse_pattern(src,close,close2,close_tok,nullptr));
+			if (owner) {
+				owner->push_back(prev);prev=0;
+			}
+			else { return np; }
 		} else{
-			p->name=t;
+			if (prev){
+				if (owner) owner->push_back(prev);
+				else {error(src.pos,"trying to seperate pattern in context where it doesn't work yet");
+				}
+			}
+			prev=new Pattern(src.pos,t);
 		}
 	}
-	return first;
+	if (owner&&prev)owner->push_back(prev);
+	return (owner)?nullptr:prev;
 }
 
 // default ++p  is {next(p); p}
@@ -531,7 +554,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		// final expression is also returnvalue,
 		flush_op_stack(node,operators,operands);
 	} else if (node->is_compound_expression() &&
-			   close!=OPEN_BRACE)// not a if ...{  or match...{ etc
+			   close!=OPEN_BRACE&& close!=FAT_ARROW)// not a if ...{  or match...{  match..if ..=>{}etc
 	{
 		node->argls.push_back(new ExprLiteral(src.prev_pos));
 	}

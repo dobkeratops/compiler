@@ -20,11 +20,12 @@ CompilerTest g_Tests[]={
 		"basic enum+match",__FILE__,__LINE__,
 		"enum Foo{ 									\n"
 		"	Bar{x:int,y:int},							\n"
-		"	Baz{x:float,y:float}						\n"
+		"	Baz{x:float,y:float},						\n"
+		"	Qux,Boo \n"
 		"};						 					\n"
 		"fn main(argc:int,argv:**char)->int{		\n"
 		"	x=Bar{1,2};								\n"
-		"	z=match x; { a@Bar=>a.x, _=>0 };		\n"
+		"	z=match x; { a@Bar=>a.x, Baz(x,y) if x>10 =>y, Qux|Boo=>0, _=>0 };		\n"
 		"	0										\n"
 		"}"
 	},

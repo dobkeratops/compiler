@@ -25,16 +25,19 @@ Pattern* Pattern::get_elem(int i){
 	return s;
 }
 void Pattern::push_back(Pattern* newp){
+	if (!newp) return;
 	Pattern **pp=&sub;
 	while (auto p=*pp){pp=&p->next;}
 	*pp=newp;
 }
 void Pattern::push_child(Pattern* newp) {
+	if (!newp) return;
 	auto p=this;
 	for (; p->sub; p=p->sub){};
 	p->sub=newp;
 }
 void Pattern::dump(int depth)const{
+	int d2=depth>=0?depth+1:depth;
 	newline(depth);
 	if (name==TUPLE){
 	}else
@@ -48,6 +51,9 @@ void Pattern::dump(int depth)const{
 			if (s->next)dbprintf("|");
 		}
 		return;
+	} else if (name==PATTERN_BIND){
+		sub->dump(-1);dbprintf("@"); sub->next->dump_if(-1);
+		return;
 	} else if(name==RANGE || name==RANGE_LT||name==RANGE_LE){
 		sub->dump(-1);dbprintf("..");sub->next->dump(-1);
 		return;
@@ -56,7 +62,7 @@ void Pattern::dump(int depth)const{
 	if (this->sub){
 		dbprintf("(");
 		for (auto s=this->sub;s;s=s->next){
-			s->dump(depth);if (s->next)dbprintf(",");
+			s->dump(d2);if (s->next)dbprintf(",");
 		}
 		dbprintf(")");
 	}
