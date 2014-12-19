@@ -53,19 +53,14 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 			subp->resolve_with_type(sc,subt, flags);
 		}
 	} else if (this->name!=TUPLE && this->sub){ // Type(....)
-		auto sd=sc->find_struct_named(this->name);// todo tparams from rhs, if given
+		auto sd=sc->find_struct_type(this,rhs);// todo tparams from rhs, if given
 		if (sd){
 			int i=0; auto subp=this->sub;
 			// todo - sub types should resolve?!
 			for (; i<sd->fields.size() && subp; i++,subp=subp->next){
 				subp->resolve_with_type(sc,sd->fields[i]->type(),flags);
 			}
-			if (!this->def){
-				this->set_def(sd);
-			}
-			if (!this->type()){
-				this->set_type(new Type(this->pos, sd));
-			}
+			this->set_struct_type(sd);
 		}
 	} // else its a var of given type, or just a constant?
 	else{

@@ -494,6 +494,12 @@ ExprStructDef* Scope::find_struct(const Node* node) {
 		return ns;
 	return this->find_inner_def(this, node, node->type(),0);
 }
+ExprStructDef* Scope::find_struct_type(const Node* node,const Type *t) {
+	if (auto x=this->find_struct_name_type_if(this,node->as_name(),t))
+		return x;
+	return find_struct(node);
+}
+
 ExprStructDef* Scope::get_receiver() {
 	if (auto o=this->owner_fn)
 		if (auto f=o->as_fn_def())

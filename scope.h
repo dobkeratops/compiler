@@ -71,6 +71,7 @@ public:
 	ExprStructDef*	find_struct_named(Name name);
 	ExprStructDef*	find_struct_named(const Node* node){return find_struct_named(node->as_name());}
 	ExprStructDef*	find_struct(const Node* node);
+	ExprStructDef*	find_struct_type(const Node* node,const Type* t);
 	ExprFnDef*	find_unique_fn_named(const Node* name_node,int flags=0, const Type* fn_type=nullptr); // todo: replace with fn type.
 	ExprFnDef*	find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags);
 	void	add_struct(ExprStructDef*);
