@@ -205,6 +205,8 @@ void ExprMatch::recurse(std::function<void(Node*)>& f){
 		a->recurse(f);
 	this->type()->recurse(f);
 }
+
+
 CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, CgValue val){
 	// emit a condition to check if the runtime value  fits this pattern.
 	// TODO-short-curcuiting - requires flow JumpToElse.
@@ -212,17 +214,6 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 	// single variable bind.
 	if (ptn->name==PLACEHOLDER){
 		return cg.emit_bool(true);
-	}
-	if (ptn->name==OR || ptn->name==TUPLE){// iterate components...
-		CgValue tmp;
-		int index=0;
-		auto op=(ptn->name==OR)?LOG_OR:LOG_AND;// for a tuple all must match
-		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
-			auto b=this->compile_condition(cg, sc, subp, cg.emit_getelementref(val,0, index,subp->type()));
-			if (!tmp.is_valid()) tmp=b;
-			else tmp=cg.emit_instruction(op,tmp,b);
-		}
-		return tmp;
 	}
 	if (ptn->name==PATTERN_BIND){
 		auto v=ptn->get_elem(0);
@@ -234,6 +225,26 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 		CgValue(var).store(cg, cg.emit_conversion((Node*)ptn, val, var->type(), sc));// coercion?
 		return b;
 	}
+	if (ptn->name==OR || ptn->name==TUPLE ||ptn->sub){// iterate components...
+		CgValue ret;
+		int index=0;
+		Name op;
+		if (ptn->name==OR) {op=LOG_OR;}
+		else if(ptn->name==TUPLE){op=LOG_AND;}
+		else{
+			auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
+			auto sd=ptn->def->as_struct_def();
+			ret=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
+		}
+		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
+			auto b=this->compile_condition(cg, sc, subp, cg.emit_getelementref(val,0, index,subp->type()));
+			if (op){
+				if (!ret.is_valid()) ret=b;
+				else ret=cg.emit_instruction(op,ret,b);
+			}
+		}
+		return ret;
+	}
 	else if (auto var=ptn->def->as_variable()){
 		CgValue(var).store(cg, val);
 		return cg.emit_bool(true);
@@ -242,7 +253,8 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 	if (auto lit=ptn->def->as_literal()){
 		return	cg.emit_instruction(EQ, CgValue(lit), val);
 	}
-	
+	ptn->dump(0);
+	error(ptn,"uncompiled node");
 	return CgValue();
 }
 CgValue MatchArm::compile_bind_locals(CodeGen &cg, Scope *sc, const Pattern *p, CgValue val)	{
@@ -250,7 +262,11 @@ CgValue MatchArm::compile_bind_locals(CodeGen &cg, Scope *sc, const Pattern *p, 
 	//ASSERT(0&&"TODO");
 	return CgValue();
 }
-CgValue compile_match_arm(CodeGen& cg, Scope* sc,const Expr* match_expr, CgValue match_val, MatchArm* arm){
+CgValue MatchArm::compile(CodeGen& cg, Scope* sc){
+	cg.emit_comment("}Match Arm{");
+	if (!this) return CgValue();
+	auto match_val=this->match_owner->match_val;
+	auto arm=this;
 	if (!arm->next){
 		// error check. we just ignore condition. TypeChecker should hack checked it's exhaustive
 		arm->compile_bind_locals(cg,sc,arm->pattern,match_val);
@@ -278,8 +294,14 @@ ExprMatch::compile(CodeGen& cg, Scope* sc){
 	// TODO - turn some cases into binary-chop (no 'if-guards' & single value test)
 	// TODO - turn some cases into vtable.
 	// TODO - extract common conditions.
+	cg.emit_comment("{Compile Match Expression");
 	auto match_val = this->expr->compile(cg,sc);
-	return compile_match_arm(cg, sc, this->expr, match_val, this->arms);
+	cg.emit_comment("Match Arms {");
+	this->match_val=match_val;	// TODO this is a bit messy. the match arms get a backpointer
+								// The alternative is to add an extra value passed along expressions which most compile methods ignore.
+	auto r= this->arms->compile(cg, sc);
+	cg.emit_comment("}Match Arms}");
+	return r;
 }
 
 
@@ -296,7 +318,7 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 		
 		// every arm gets a scope
 		auto arm_sc=outer_sc->make_inner_scope(&a->scope,match_sc->owner_fn,this);
-
+		a->match_owner=this;
 		// setup the types: expression has same type as match patterns;
 		propogate_type(flags, (Node*)this, this->expr->type_ref(), a->pattern->type_ref());
 		a->pattern->resolve_with_type(a->scope, this->expr->type(), flags);

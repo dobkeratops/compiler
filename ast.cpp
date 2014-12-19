@@ -19,16 +19,12 @@ Node*Pattern::clone() const {
 }
 Pattern* Pattern::get_elem(int i){
 	auto s=sub;
-	for (; s && i>0; s=s->next,i--){
-		s=s->next;
-	}
+	for (; s && i>0; s=s->next,i--){}
 	return s;
 }
 const Pattern* Pattern::get_elem(int i) const{
 	auto s=sub;
-	for (; s && i>0; s=s->next,i--){
-		s=s->next;
-	}
+	for (; s && i>0; s=s->next,i--){}
 	return s;
 }
 Name Pattern::as_name()const{
