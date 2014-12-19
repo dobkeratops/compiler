@@ -155,18 +155,13 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 		auto t=call_args[i]->get_type();
 		if (t && !new_fn->args[i]->type())	{
 			new_fn->args[i]->set_type((Type*)t->clone());
-#if DEBUG>=2
-			dbprintf("arg %s:",new_fn->args[i]->name_str());t->dump(-1);
-			dbprintf("\n");
-#endif
 		}
 	}
+	dbg2(new_fn->dump_signature());
 	if (return_type && !new_fn->return_type()){
 		new_fn->ret_type=const_cast<Type*>(return_type);
 	}
-#if DEBUG >=2
-	return_type->dump_if(-1);
-#endif
+	dbg2(return_type->dump_if(-1));
 	verify_all();
 	
 	//auto callsiteb=dynamic_cast<const ExprBlock*>(pcallsite);
@@ -187,34 +182,26 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	new_fn->instance_of = srcfn;
 	new_fn->resolved=false;
 	
-#if DEBUG>=2
-	dbprintf("arg types after instancing\n");
-	for (auto i=0; i<new_fn->args.size() && i<call_args.size(); i++){
-		auto t=new_fn->args[i];
-		dbprintf("arg ");t->dump(-1);
-		dbprintf("\n");
-		
-	}
-#endif
+	dbg2(printf("arg types after instancing\n"));
+	dbg2(new_fn->dump_signature());
 	
 	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type ininstantiation too
 	//	new_fn->dump(0);
 	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
 	new_fn->fn_type->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
-#if DEBUG >=2
+
 	dbg_fnmatch("%s return type=\n",new_fn->name_str());
-	srcfn->type()->dump_if(-1);
+	dbg2(srcfn->type()->dump_if(-1));
 	dbg_fnmatch(" from ");
-	new_fn->type()->dump_if(-1000);
+	dbg2(new_fn->type()->dump_if(-1000));
 	dbg_fnmatch("\n");
-	new_fn->fn_type->dump_if(-1);
+	dbg2(new_fn->fn_type->dump_if(-1));
 	dbg_fnmatch("\nlast expression:");
-	new_fn->last_expr()->dump_if(0);
+	dbg2(new_fn->last_expr()->dump_if(0));
 	dbg_fnmatch("\nlast expression type:");
-	new_fn->last_expr()->type()->dump_if(0);
+	dbg2(new_fn->last_expr()->type()->dump_if(0));
 	dbg_fnmatch("\n");
-	new_fn->fn_type->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
-#endif
+	dbg2(new_fn->fn_type->resolve(src_fn_owner,return_type,flags));//todo: we can use output type
 
 	verify_all();
 	return new_fn;	// welcome new function!
@@ -297,11 +284,11 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		if (this->body){
 			auto ret=this->body->resolve(sc, this->ret_type, flags);
 			propogate_type(flags, (const Node*)this,this->ret_type,this->body->type_ref());
-#if DEBUG>=2
-			this->ret_type->dump_if(-1);
-			this->body->type()->dump_if(-1);
-			newline(0);
-#endif
+
+			dbg2(this->ret_type->dump_if(-1));
+			dbg2(this->body->type()->dump_if(-1));
+			dbg2(newline(0));
+
 			//			this->ret_type=ret.type;
 			
 			propogate_type(flags, (const Node*)this, ret,this->ret_type);
@@ -411,12 +398,11 @@ const ExprFnDef* ExprStructDef::find_function_for_vtable(Name n, const Type* sig
 	for (auto f:this->functions){
 		if (f->name!=n) continue;
 		dbg_vtable("try vtable fn %s.%s\n",str(name),str(f->name));
-#if DEBUG>=2
-		f->fn_type->dump(-1);
+		dbg2(f->fn_type->dump(-1));
 		dbg_vtable("\n vs ");
-		sig->dump(-1);
+		dbg2(sig->dump(-1));
 		dbg_vtable("\n");
-#endif
+
 		if (f->fn_type->is_equal(sig,false,this->name)) /// TODO only 'this' other params should be specific should coerce
 			return f;
 	}
@@ -537,7 +523,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 
 
 CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiver, ExprBlock* e){
-	// [3.1]evaluate arguments
+	// [1.1]evaluate arguments
 	vector<CgValue> l_args;
 	
 	// process function argumetns & load
@@ -557,24 +543,20 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		l_args.push_back(reg /*cg.load(reg,arg->type()) Old behaviour - autoload args. not now because we have REF args*/);
 	}
 	
-	//[3.2] evaluate call object..
+	//[1.2] evaluate call object..
 	auto call_fn=e->get_fn_call();
 	cg.emit_comment("fncall %s", call_fn?str(call_fn->name):e->call_expr->name_str());
 	
-	// [3.3] argument conversions..
+	//[1.3] argument conversions..
 	auto coerce_args=[&](const Type* fn_type){
 		// todo - should not be needed
 		const_cast<Type*>(fn_type)->resolve(sc, nullptr, 0);
 		auto ai=0;
-#if DEBUG>=2
-		fn_type->dump(-1);newline(0);
-#endif
+		dbg2(fn_type->dump(-1);newline(0));
 		auto fn_arg=fn_type->fn_args_first();
 		int i=0;
 		for (; fn_arg; i++,fn_arg=fn_arg->next){
-#if DEBUG>=2
-			dbprintf("arg %d \n", i);fn_arg->dump(-1);newline(0);
-#endif
+			dbg2(printf("arg %d \n", i);dbg2(fn_arg->dump(-1)));dbg2(newline(0));
 			auto ae=i==0&&receiver?receiver:e->argls[i-(receiver?1:0)];
 			auto r=cg.emit_conversion(ae,l_args[i], fn_arg,sc);
 			l_args[i]=r;
@@ -586,7 +568,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			l_args[i]=r;
 		}
 	};
-	
+
 	auto l_emit_arg_list=[&](CgValue env_ptr){
 		cg.emit_args_begin();
 		if(env_ptr.is_valid()){
@@ -598,8 +580,9 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		cg.emit_args_end();
 	};
 	
-	//[3.4] make the call..
+	//[1.4] make the call..
 	if (e->call_expr->is_function_name()) {
+		//[1.4.1] Calls where the fn name is a compile time symbol
 		auto fn_name=e->call_expr->name;
 		ExprStructDef* vts=nullptr;
 		ArgDef* vtable_fn=nullptr;
@@ -623,6 +606,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			vtable_fn=vts->try_find_field(fn_name);
 		}
 		if (vtable_fn) {
+			// [1.4.1] vtable call TODO also check for __data_ptr for 'trait-objects'
 			// we have a vcall, so now emit it..
 			// load the vtable
 			dbg_vcall("emit vcall %p %s.%s\n",vts, str(vts->name),str(vtable_fn->name_str()));
@@ -634,14 +618,14 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			return cg.emit_call_end();
 			
 		} else {
-			//[3.3.1] Direct Call
+			//[1.4.2] Direct Call
 			coerce_args(call_fn->type());
 			cg.emit_call_begin(CgValue(call_fn));
 			l_emit_arg_list(CgValue());
 			return cg.emit_call_end();
 		}
 	} else {
-		//[3.3.2] Indirect Call... Function Object
+		//[1.4.2] Indirect Call... Function Object
 		auto fn_obj = e->call_expr->compile(cg, sc);
 		auto call_t=e->call_expr->type();
 		coerce_args(call_t);
@@ -659,7 +643,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			return cg.emit_call_end();
 		}
 	}
-	
+
 	return CgValue();
 }
 

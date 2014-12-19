@@ -8,8 +8,29 @@
 
 typedef Type TParamVal;
 
+/// Pattern eg arguments or pattern matching, if-let
+/// simplest must behave like 'ident'
+struct Pattern : Node {
+	ResolvedType	resolve(Scope* sc, Type* desired, int flags){ASSERT(0 && "dont resolve pattern"); return ResolvedType();}
+	Pattern* next=0;
+	Pattern* sub=0;
+	Pattern(SrcPos _pos, Name n){pos=_pos,name=n;}
+	int	get_elem_count();
+	Pattern*	get_elem(int i);
+	Pattern*	get_elem(int i,int ii){return get_elem(i)->get_elem(ii);}
+	void	push_back(Pattern* p);
+	void	push_child(Pattern* p);
+	void	dump(int indent)const;
+	Node*	clone()const;
+	// if-let , args, or match arms would all call this.
+	void	resolve_with_type(Scope* sc, Type* rhs, int flags);
+	CgValue	compile_condition(CodeGen& cg,Scope* sc);
+	CgValue compile_bind(CodeGen& cg, Scope* sc);
+	void	recurse(std::function<void(Node*)>& f);
+};
+
 // Type Parameter, actually Template Parameter as we generalize it.
-struct Expr : public Node{					// anything yielding a value
+struct Expr : public Node{					// anythifng yielding a value
 public:
 };
 
@@ -18,14 +39,7 @@ struct ExprStructDef;
 struct ExprScopeBlock : Expr{
 	Scope*		scope=0;
 };
-/// TODO a pattern might become different to Expr
-/// simplest must behave like 'ident'
-struct Pattern : Node {
-	ResolvedType	resolve(Scope* sc, Type* desired, int flags){ASSERT(0 && "dont resolve pattern"); return ResolvedType();}
-	Pattern* next=0;
-	Pattern* sub=0;
-	Node*	clone()const;
-};
+
 /// any node that is a Definition, maintains list of refs
 struct ExprDef :Expr{
 	Node*	refs=0;
@@ -198,6 +212,7 @@ struct CaptureVars : ExprDef{
 	int				get_elem_count() const override;
 	void		recurse(std::function<void(Node*)>&) override;
 };
+
 
 
 

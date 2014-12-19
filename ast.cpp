@@ -6,6 +6,61 @@
 #include "codegen.h"
 #include "assist.h"
 
+void Pattern::recurse(std::function<void(Node*)>& f){
+	if (!this) return;
+	for (auto p=sub;p;p=p->next)
+		p->recurse(f);
+}
+Node*Pattern::clone() const {
+	auto np=new Pattern(pos,name);
+	np->next=(Pattern*)np->clone_if();// todo not recursive!! .. but patterns are small.
+	np->sub=(Pattern*)np->clone_if();
+	return np;
+}
+Pattern* Pattern::get_elem(int i){
+	auto s=sub;
+	for (; s && i>0; s=s->next,i--){
+		s=s->next;
+	}
+	return s;
+}
+void Pattern::push_back(Pattern* newp){
+	Pattern **pp=&sub;
+	while (auto p=*pp){pp=&p->next;}
+	*pp=newp;
+}
+void Pattern::push_child(Pattern* newp) {
+	auto p=this;
+	for (; p->sub; p=p->sub){};
+	p->sub=newp;
+}
+void Pattern::dump(int depth)const{
+	newline(depth);
+	if (name==TUPLE){
+	}else
+	if (name==REF){
+		dbprintf("&");
+	}else if (name==PTR){
+		dbprintf("*");
+	}else if (name==OR){
+		for (auto s=this->sub;s;s=s->next){
+			s->dump(-1);
+			if (s->next)dbprintf("|");
+		}
+		return;
+	} else if(name==RANGE || name==RANGE_LT||name==RANGE_LE){
+		sub->dump(-1);dbprintf("..");sub->next->dump(-1);
+		return;
+	}else
+		dbprintf(str(name));
+	if (this->sub){
+		dbprintf("(");
+		for (auto s=this->sub;s;s=s->next){
+			s->dump(depth);if (s->next)dbprintf(",");
+		}
+		dbprintf(")");
+	}
+}
 ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
 	if (this->is_placeholder()) {
@@ -363,12 +418,7 @@ Node* IdentWithTParams::clone()const {
 	}
 	return (Node*) iwt;
 }
-Node*Pattern::clone() const {
-	auto np=new Pattern(); np->pos=pos;
-	np->next=(Pattern*)np->clone_if();// todo not recursive!!
-	np->sub=(Pattern*)np->clone_if();
-	return np;
-}
+
 void Name::translate_typeparams(const TypeParamXlat& tpx) {
 	auto index=tpx.typeparam_index(*this);
 	if (index>=0){
@@ -465,6 +515,7 @@ CgValue CaptureVars::compile(CodeGen& cg, Scope* outer_scope){
 	cp->type()->sub->set_struct_def((ExprStructDef*) cp);
 	return CgValue(this);
 }
+
 
 
 

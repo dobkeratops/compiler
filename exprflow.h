@@ -76,6 +76,7 @@ struct ExprMatch : ExprFlow {
 	Expr*		expr=0;
 	MatchArm*	arms=0;
 	Node*	clone()const;
+	void	dump(int depth)const;
 	void	recurse(std::function<void(Node*)>& f)override;
 };
 
@@ -86,7 +87,7 @@ struct MatchArm : ExprScopeBlock {
 	Expr*		cond=0;
 	Expr*		body=0;
 	MatchArm*	next=0;
-	void		dump(int depth);
+	void		dump(int depth)const;
 	Node*		clone() const;
 	void		translate_typeparams(const TypeParamXlat& tpx){}
 	CgValue		compile_check(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);

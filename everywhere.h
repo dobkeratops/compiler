@@ -230,8 +230,10 @@ template<class T> void next(T*& n){if (n) n=n->next;}
 #define WRITE_LHS 0x1000
 #define WRITE_RHS 0x2000
 #define WRITE (WRITE_LHS|WRITE_RHS)
-#define READ_LHS 0x4000
-#define READ_RHS 0x8000
+#define READ_LHS 		0x4000
+#define READ_RHS 		0x8000
+// eg a..b a..<b etc
+#define RANGE_OP		0x10000
 #define READ (READ_LHS|READ_RHS)
 #define MODIFY (READ_LHS|WRITE_LHS|READ_RHS|WRITE_RHS)
 #define RWFLAGS (WRITE_LHS|READ_LHS|WRITE_RHS|READ_RHS)
@@ -239,10 +241,10 @@ extern int operator_flags(Name n);
 bool isSymbolStart(char c);
 extern int g_raw_types[];
 #define RT_FLOATING 0x4000
-#define RT_INTEGER 0x8000
-#define RT_SIGNED 0x2000
-#define RT_POINTER 0x1000
-#define RT_SIMD 0x1000
+#define RT_INTEGER 	0x8000
+#define RT_SIGNED 	0x2000
+#define RT_POINTER 	0x1000
+#define RT_SIMD 	0x10000
 #define RT_SIZEMASK 0x0ff;
 // todo, for consistency make <X> and ?prefix version of all operators, not just a few special cased.
 enum Token {

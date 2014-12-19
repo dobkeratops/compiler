@@ -93,8 +93,12 @@ LLVMType Node::get_type_llvm() const
 
 ExprMatch* parse_match(TokenStream& src){
 	auto m=new ExprMatch(); m->pos=src.pos;
-	m->expr=parse_expr(src);
-	src.expect(OPEN_BRACE);
+	
+	m->expr=parse_block(src,OPEN_BRACE,COMMA,0);
+	// todo, copied form parse_if , but it seems to turn it into a compound block, why?
+	
+//	m->expr=parse_expr(src);
+//	src.expect(OPEN_BRACE);
 	MatchArm** pp=&m->arms;
 	while (src.peek_tok()!=CLOSE_BRACE){
 		auto a=new MatchArm();
@@ -114,7 +118,7 @@ ExprMatch* parse_match(TokenStream& src){
 // couldn't expressions,types,patterns all use the same gramar & parser,
 // & just interpret the nodes differently?
 Pattern* parse_pattern(TokenStream& src,int close,int close2=0){
-	Pattern* p=new Pattern(); p->pos=src.pos;auto first=p;p->name=0;
+	Pattern* p=new Pattern(src.pos,0); p->pos=src.pos;auto first=p;p->name=0;
 	while (auto t=src.eat_tok()){
 		if (t==close || t==close2) break;
 		if (t==OPEN_PAREN){
@@ -127,15 +131,14 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2=0){
 		// todo - range ".."
 		// todo - slice patterns
 		else if (t==LET_ASSIGN || t==DECLARE_WITH_TYPE || t== ASSIGN ||t==PATTERN_BIND){ // todo its @ in scala,rust
-			auto np=new Pattern;
-			np->name=PATTERN_BIND;
+			auto np=new Pattern(src.prev_pos,PATTERN_BIND);
 			np->sub = p;
 			first=np; // assert only once
 		}
 		else if (t==COMMA){
-			p=p->next=new Pattern();
+			p=p->next=new Pattern(src.pos,0);
 		} else if (t==OR && close!=CLOSE_PAREN){ // todo - bit more elaborate. should be ANY(....)  distinct from TUPLE(...)
-			p=p->next=new Pattern();
+			p=p->next=new Pattern(src.pos,0);
 		} else{
 			p->name=t;
 		}
@@ -527,7 +530,9 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 	if (operands.size()){
 		// final expression is also returnvalue,
 		flush_op_stack(node,operators,operands);
-	} else if (node->is_compound_expression()){
+	} else if (node->is_compound_expression() &&
+			   close!=OPEN_BRACE)// not a if ...{  or match...{ etc
+	{
 		node->argls.push_back(new ExprLiteral(src.prev_pos));
 	}
 	verify(node->get_type());

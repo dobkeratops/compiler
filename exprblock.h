@@ -20,6 +20,7 @@ struct ExprBlock :public ExprScopeBlock{
 	// these are supposed to be mutually exclusive substates, this would be an enum ideally.
 	ExprBlock(){};
 	ExprBlock(const SrcPos& p);
+	// TODO: move these into dedicated nodes, starting with 'structInitializer' which will give us ScalaDefaultConstructor.
 	bool	is_compound_expression()const	{return !call_expr && !index(name);}
 	bool	is_tuple()const					{return !call_expr && this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
 	bool	is_struct_initializer()const	{return this->bracket_type==OPEN_BRACE && (this->delimiter==COMMA||this->delimiter==0);}
@@ -38,6 +39,7 @@ struct ExprBlock :public ExprScopeBlock{
 	Name		get_fn_name() const;
 	void		dump(int depth) const;
 	Node*		clone() const;
+	Node*		clone_sub() const;
 	bool		is_undefined()const;
 	void		create_anon_struct_initializer();
 	void			clear_reg()				{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); reg_name=0;};
@@ -55,5 +57,15 @@ struct ExprBlock :public ExprScopeBlock{
 	int	get_elem_count()const override{return this->argls.size();}
 	Node*	get_elem_node(int i) override{return this->argls[i];}
 	void		recurse(std::function<void(Node*)>&) override;
+};
+
+/// Where Block - eg 'a where{b;c;d;}' === '{b;c;d;return a}'
+struct ExprWhere : ExprBlock {
+	const char* kind_str() const  override		{return "where";}
+	ResolvedType resolve(Scope* scope, const Type* desired, int flags);
+	void	dump(int depth) const;
+	CgValue compile(CodeGen& cg, Scope* sc);
+	ExprBlock* 		as_block() override 	{return nullptr;}
+	Node*		clone() const;
 };
 

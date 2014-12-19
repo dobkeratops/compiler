@@ -16,7 +16,18 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
-	
+	{
+		"basic enum+match",__FILE__,__LINE__,
+		"enum Foo{ 									\n"
+		"	Bar{x:int,y:int},							\n"
+		"	Baz{x:float,y:float}						\n"
+		"};						 					\n"
+		"fn main(argc:int,argv:**char)->int{		\n"
+		"	x=Bar{1,2};								\n"
+		"	z=match x; { a@Bar=>a.x, _=>0 };		\n"
+		"	0										\n"
+		"}"
+	},
 	{
 		"struct default constructor",__FILE__,__LINE__,
 		"struct Extents(min:float,max:float){ \n"
@@ -553,7 +564,7 @@ void run_tests(){
 		printf("\nRunning Test[%d]: %s\n\n",index,t->name);
 		char* output=0;
 		auto ret=
-		compile_and_run(t->source,t->name, tmp,B_DEFS|B_TYPES|B_RUN, t->expected_output?&output:nullptr);
+		compile_and_run(t->source,t->name, tmp,B_AST|B_DEFS|B_TYPES|B_RUN, t->expected_output?&output:nullptr);
 		if (!t->should_fail && ret!=0) {
 			printf("\n test %s failed\n", t->name);
 			exit(-1);

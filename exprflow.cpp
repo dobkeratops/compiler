@@ -203,12 +203,29 @@ CgValue compile_match_arm(CodeGen& cg, Scope* sc,Expr* match_expr, CgValue match
 						  [&]{arm->compile_bind(cg,armsc,match_expr,match_val);return arm->body->compile(cg,armsc);},
 						  arm->next);
 }
+void ExprMatch::dump(int depth)const{
+	newline(depth); dbprintf("match "); this->expr->dump(-1000);dbprintf("{");
+	for (auto ma=this->arms; ma;ma=ma->next){
+		ma->dump(depth>=0?depth+1:-1);
+		if (ma->next) dbprintf(",");
+	}
+	newline(depth);dbprintf("}");
+	
+}
 void ExprMatch::recurse(std::function<void(Node*)>& f){
 	if (!this)return;
 	this->expr->recurse(f);
 	for (auto a=this->arms;a;a=a->next)
 		a->recurse(f);
 	this->type()->recurse(f);
+}
+void MatchArm::dump(int depth)const{
+	auto d1=depth>=0?depth+1:depth;
+	newline(depth);
+	this->pattern->dump(d1);
+	newline(depth);dbprintf("=>");
+	this->body->dump(d1);
+	
 }
 void MatchArm::recurse(std::function<void(Node *)> &f){
 	if (!this)return;
