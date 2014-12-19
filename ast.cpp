@@ -24,6 +24,13 @@ Pattern* Pattern::get_elem(int i){
 	}
 	return s;
 }
+const Pattern* Pattern::get_elem(int i) const{
+	auto s=sub;
+	for (; s && i>0; s=s->next,i--){
+		s=s->next;
+	}
+	return s;
+}
 Name Pattern::as_name()const{
 	return this->name;
 }
@@ -326,6 +333,12 @@ size_t ExprLiteral::strlen() const{
 		return ::strlen(this->u.val_str);
 	else return 0;
 }
+ExprLiteral::ExprLiteral(bool b) {
+	set_type(new Type(this,BOOL));
+	type_id=T_BOOL;
+	u.val_bool=b;
+}
+
 ExprLiteral::ExprLiteral(const SrcPos& s) {
 	pos=s;
 	this->owner_scope=0;

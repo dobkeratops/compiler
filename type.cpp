@@ -318,7 +318,7 @@ bool Type::is_complex()const{
 	return false;
 }
 // todo table of each 'intrinsic type', and pointer to it
-Type* g_bool,*g_void,*g_void_ptr,*g_int,*g_auto;
+Type* g_bool,*g_void,*g_void_ptr,*g_int,*g_i32,*g_auto;
 Type* Type::get_bool(){
 	/// todo type hash on inbuilt indices
 	if (g_bool)return g_bool;
@@ -336,6 +336,10 @@ Type* Type::get_void(){
 Type* Type::get_int(){
 	if (g_int)return g_int;
 	return (g_int=new Type(nullptr,INT));
+}
+Type* Type::get_i32(){
+	if (g_i32)return g_i32;
+	return (g_i32=new Type(nullptr,I32));
 }
 Type* Type::get_void_ptr(){
 	if (g_void_ptr)return g_void_ptr;

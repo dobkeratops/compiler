@@ -104,6 +104,7 @@ struct Type : ExprDef {
 	static Type*	get_void();
 	static Type*	get_void_ptr();
 	static Type*	get_int();
+	static Type*	get_i32();
 	Node*	clone() const;
 	void	set_struct_def(ExprStructDef* sd);
 	void	clear_struct_def();

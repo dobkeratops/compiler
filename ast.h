@@ -18,6 +18,8 @@ struct Pattern : Node {
 	int	get_elem_count();
 	Pattern*	get_elem(int i);
 	Pattern*	get_elem(int i,int ii){return get_elem(i)->get_elem(ii);}
+	const Pattern*	get_elem(int i)const ;
+	const Pattern*	get_elem(int i,int ii)const{return get_elem(i)->get_elem(ii);}
 	void	push_back(Pattern* p);
 	void	push_child(Pattern* p);
 	void	dump(int indent)const;
@@ -74,6 +76,7 @@ struct ExprLiteral : ExprDef {
 	union  {int val_int; int val_uint; float val_float; void* val_ptr;bool val_bool; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
 	void dump(int depth) const;
+	ExprLiteral(bool b);
 	ExprLiteral(const SrcPos&s);
 	ExprLiteral(const SrcPos&s,float f);
 	ExprLiteral(const SrcPos&s,int i);
@@ -88,6 +91,7 @@ struct ExprLiteral : ExprDef {
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	void translate_typeparams(const TypeParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc);
+	ExprLiteral* as_literal() override{ return this;};
 };
 
 /// 'ArgDef' used for function arguments and struct-fields.

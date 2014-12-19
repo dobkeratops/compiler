@@ -189,21 +189,6 @@ Node* MatchArm::clone()const{
 	return a;
 }
 
-CgValue compile_match_arm(CodeGen& cg, Scope* sc,Expr* match_expr, CgValue match_val, MatchArm* arm){
-	if (!arm->next){
-		// error check. we just ignore condition. error should assert its non exhaustive
-		arm->compile_bind(cg,sc,match_expr,match_val);
-		return arm->body->compile(cg,sc);
-	}
-	auto armsc=arm->get_scope();
-	emit_local_vars(cg,arm,nullptr, armsc);
-	return cg.emit_if_sub(
-						  arm,
-						  sc,
-						  [&]{return arm->compile_check(cg,armsc, match_expr, match_val);},
-						  [&]{arm->compile_bind(cg,armsc,match_expr,match_val);return arm->body->compile(cg,armsc);},
-						  arm->next);
-}
 void ExprMatch::dump(int depth)const{
 	newline(depth); dbprintf("match "); this->expr->dump(-1000);dbprintf("{");
 	for (auto ma=this->arms; ma;ma=ma->next){
@@ -220,15 +205,84 @@ void ExprMatch::recurse(std::function<void(Node*)>& f){
 		a->recurse(f);
 	this->type()->recurse(f);
 }
+CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, CgValue val){
+	// emit a condition to check if the runtime value  fits this pattern.
+	// TODO-short-curcuiting - requires flow JumpToElse.
+
+	// single variable bind.
+	if (ptn->name==PLACEHOLDER){
+		return cg.emit_bool(true);
+	}
+	if (ptn->name==OR || ptn->name==TUPLE){// iterate components...
+		CgValue tmp;
+		int index=0;
+		auto op=(ptn->name==OR)?LOG_OR:LOG_AND;// for a tuple all must match
+		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
+			auto b=this->compile_condition(cg, sc, subp, cg.emit_getelementref(val,0, index,subp->type()));
+			if (!tmp.is_valid()) tmp=b;
+			else tmp=cg.emit_instruction(op,tmp,b);
+		}
+		return tmp;
+	}
+	if (ptn->name==PATTERN_BIND){
+		auto v=ptn->get_elem(0);
+		auto p=ptn->get_elem(1);
+		auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
+		auto sd=p->def->as_struct_def();
+		auto b=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
+		auto var=v->def->as_variable();
+		CgValue(var).store(cg, cg.emit_conversion((Node*)ptn, val, var->type(), sc));// coercion?
+		return b;
+	}
+	else if (auto var=ptn->def->as_variable()){
+		CgValue(var).store(cg, val);
+		return cg.emit_bool(true);
+	}else
+	// single value
+	if (auto lit=ptn->def->as_literal()){
+		return	cg.emit_instruction(EQ, CgValue(lit), val);
+	}
+	
+	return CgValue();
+}
+CgValue MatchArm::compile_bind_locals(CodeGen &cg, Scope *sc, const Pattern *p, CgValue val)	{
+	
+	//ASSERT(0&&"TODO");
+	return CgValue();
+}
+CgValue compile_match_arm(CodeGen& cg, Scope* sc,const Expr* match_expr, CgValue match_val, MatchArm* arm){
+	if (!arm->next){
+		// error check. we just ignore condition. TypeChecker should hack checked it's exhaustive
+		arm->compile_bind_locals(cg,sc,arm->pattern,match_val);
+		return arm->body->compile(cg,sc);
+	}
+	auto armsc=arm->get_scope();
+	emit_local_vars(cg,arm,nullptr, armsc);
+	auto ret=cg.emit_if_sub
+	(
+		arm,
+		sc,
+		[&]{return arm->compile_condition(cg,armsc, arm->pattern, match_val);},
+		[&]{
+			arm->compile_bind_locals(cg,armsc,arm->pattern,match_val);
+			return arm->body->compile(cg,armsc);},
+		arm->next
+	);
+	return ret;
+}
 CgValue
 ExprMatch::compile(CodeGen& cg, Scope* sc){
 	// TODO - dedicated with one set of phi-nodes at the end.
 	// this is RETARDED!!!
+	// There are many ways match could be optimized.
 	// TODO - turn some cases into binary-chop (no 'if-guards' & single value test)
 	// TODO - turn some cases into vtable.
+	// TODO - extract common conditions.
 	auto match_val = this->expr->compile(cg,sc);
 	return compile_match_arm(cg, sc, this->expr, match_val, this->arms);
 }
+
+
 
 ResolvedType
 ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
@@ -272,16 +326,6 @@ void MatchArm::recurse(std::function<void(Node *)> &f){
 	this->cond->recurse(f);
 	this->pattern->recurse(f);
 	this->type()->recurse(f);
-}
-CgValue MatchArm::compile_check(CodeGen &cg, Scope *sc, Expr *match_expr, CgValue match_val){
-	// emit a condition to check if the runtime value 'match_val' fits this pattern.
-	ASSERT(0&&"TODO");
-	return CgValue();
-}
-CgValue MatchArm::compile_bind(CodeGen &cg, Scope *sc, Expr *match_expr, CgValue match_val)	{
-	// extract local variables from the pattern...
-	ASSERT(0&&"TODO");
-	return CgValue();
 }
 
 

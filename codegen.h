@@ -160,12 +160,20 @@ public:
 	void emit_instruction_sub(Name opname,const Type* type,  RegisterName dstr,CgValue src1);
 	CgValue emit_instruction(Name opname,const Type* type,  Name outname,CgValue src1);
 	CgValue emit_instruction(Name opname,const Type* type,  Name outname,CgValue src1,CgValue src2);
+	CgValue emit_instruction(Name opname,const Type* type,	CgValue src1,CgValue src2);
+	CgValue emit_instruction(Name opname,CgValue src1,CgValue src2);
 	CgValue emit_instruction_reg_i32(Name opname,const Type* type,  Name outname,CgValue src1,int val);
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
 	void emit_int_lit(Name type, int value);
 	void emit_int_lit(const Type* type, int value);
 	void emit_i32_reg(Name reg);
+	// Construction of a single value.
+	CgValue  emit_i32(int val);
+	CgValue  emit_voidptr(void*);
+	CgValue  emit_i64(int val);
+	CgValue emit_float(float val);
+	CgValue emit_bool(bool val);
 	void emit_operand_literal(const CgValue& cg,const ExprLiteral* lit);
 	CgValue emit_make_literal(ExprLiteral* l);
 	RegisterName	emit_extractvalue(RegisterName dst,const Type* type,RegisterName src,int index);

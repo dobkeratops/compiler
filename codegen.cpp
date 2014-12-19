@@ -403,6 +403,12 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 	}
 	return dst;
 }
+CgValue CodeGen::emit_loadelement(const CgValue &src, Name n){
+	auto sd=src.type->deref_all()->struct_def();
+	auto i=sd->get_elem_index(n);
+	return emit_getelementref(src.load(*this), 0, i, sd->get_elem_type(i));
+}
+
 CgValue CodeGen::emit_getelementref(const CgValue &src, Name n,const Type* t){
 	auto i=src.type->deref_all()->struct_def()->get_elem_index(n);
 	return emit_getelementref(src.load(*this), 0, i,t);
@@ -444,6 +450,21 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,
 CgValue CodeGen::emit_assign(const CgValue& dst, const CgValue& src){
 	return dst.store(*this, this->load(src));
 }
+CgValue CodeGen::emit_i32(int v){
+	auto reg=this->next_reg();
+	emit_ins_begin(reg,"or");
+	emit_i32_lit(0);
+	emit_comma();
+	emit_txt("%d",v);
+	emit_ins_end();
+	return	CgValue(reg,Type::get_i32());
+}
+ExprLiteral* g_lit_bool;
+CgValue CodeGen::emit_bool(bool v){
+	if (!g_lit_bool) g_lit_bool=new ExprLiteral(v);
+	return CgValue(g_lit_bool);
+}
+
 CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 	auto ltn=lit->type()->name;
 	auto outr=this->next_reg();
@@ -459,8 +480,6 @@ CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 		emit_txt("=undef\n");
 		return CgValue(outr,lit->type());
 	}
-
-
 	if (ltn==BOOL){
 		emit_ins_begin(outr,"or");
 		emit_int_lit(I8,ltn==BOOL_TRUE?1:0);
@@ -468,10 +487,7 @@ CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 		emit_txt("%d",lit->u.val_bool?1:0);
 	}
 	if (ltn==INT){
-		emit_ins_begin(outr,"or");
-		emit_i32_lit(0);
-		emit_comma();
-		emit_txt("%d",lit->u.val_int);
+		return emit_i32(lit->u.val_int);
 	}
 	else if(ltn==FLOAT){
 		// todo, i guess we're goint to have t make a global constants table
@@ -723,6 +739,13 @@ CgValue CodeGen::emit_instruction(Name opname,const Type* type,Name outname, CgV
 	return CgValue(dstr, type);
 }
 CgValue CodeGen::emit_instruction(Name opname,const Type* type,Name outname,  CgValue src1,CgValue src2){
+	return emit_instruction(opname, type, src1, src2);
+}
+CgValue CodeGen::emit_instruction(Name opname,CgValue src1,CgValue src2){
+	auto src=this->load(src1);
+	return emit_instruction(opname, src.type, src, this->load(src2));
+}
+CgValue CodeGen::emit_instruction(Name opname,const Type* type,  CgValue src1,CgValue src2){
 	ASSERT(type!=0);
 	auto r1=this->load(src1);
 	auto r2=this->load(src2);

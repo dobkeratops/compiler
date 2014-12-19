@@ -23,8 +23,6 @@ fn something(f:float){
 // more specific overloads are always used in preference if given
 
 fn lerp(a,b,f)=(b-a)*f+a;
-
-//  single expression fn sugar '='
 fn invlerp(x0,x1,x)=(x-a)/(x1-x0);
 
 //  declare a function taking a closure:
@@ -36,7 +34,7 @@ fn take_closure(funcp:|int|){
 	funcp(10);
 }
 
-// more expression sugar ..sort salient info on one line
+// 'where' expression sugar ..sort salient info on one line
 fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
 	ofsx:=x-x0;dx:=x1-x0;dy:=y1-y0;
 };

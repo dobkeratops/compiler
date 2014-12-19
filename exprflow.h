@@ -93,9 +93,9 @@ struct MatchArm : ExprScopeBlock {
 	Node*		clone() const;
 	Scope*		get_scope()override{return this->scope;}
 	void		translate_typeparams(const TypeParamXlat& tpx){}
-	CgValue		compile_check(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
+	CgValue		compile_condition(CodeGen& cg, Scope* sc, const Pattern* match_expr,CgValue match_val);
 	// todo - as patterns exist elsewhere, so 'compile-bind might generalize'.
-	CgValue		compile_bind(CodeGen& cg, Scope* sc, Expr* match_expr,CgValue match_val);
+	CgValue		compile_bind_locals(CodeGen& cg, Scope* sc, const Pattern* match_expr,CgValue match_val);
 //	ResolvedType	resolve(Scope* sc, const Type* desired, int flags); doesn't have resolve method because it takes 2 inputs.
 	void		recurse(std::function<void(Node*)>& f) override;
 };
