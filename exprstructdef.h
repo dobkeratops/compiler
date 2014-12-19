@@ -9,9 +9,11 @@ struct ExprStructDef: ExprDef {
 	// it'll want TypeParams aswell.
 	Name mangled_name=0;
 	Name vtable_name=0;
+	int		discriminant=0;
 	bool is_compiled=false;
-	bool is_enum_=false;
-	bool is_enum() { return is_enum_;}
+	bool m_is_variant=false;
+	bool m_is_enum=false;
+	bool is_enum() { return m_is_enum;}
 	vector<TParamDef*>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	vector<Type*>		instanced_types;
 	vector<ArgDef*>			fields;
@@ -58,6 +60,8 @@ struct ExprStructDef: ExprDef {
 	}
 	size_t		alignment() const			{size_t max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
+	void			set_discriminant(int value){discriminant=value;m_is_variant=true;}
+	void			set_variant_of(ExprStructDef* owner, int index){set_discriminant(index); ASSERT(inherits==0); inherits=owner;}
 	void			dump(int depth)const;
 	void			dump_instances(int depth)const;
 	size_t			size() const;
@@ -90,7 +94,7 @@ struct EnumDef  : ExprStructDef {
 	//	virtual void translate_typeparams(const TypeParamXlat& tpx);
 	Node* clone()const;
 	const char* kind_str()const{return "enum";}
-	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
+	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){m_is_enum=true;};
 	CgValue compile(CodeGen& cg, Scope* sc); // different compile behaviour: discriminant+opaque
 };
 

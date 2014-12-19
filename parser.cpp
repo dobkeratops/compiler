@@ -839,17 +839,26 @@ EnumDef* parse_enum(TokenStream& src) {
 	if (!src.eat_if(OPEN_BRACE))
 		return ed;
 	// todo: type-params.
+	int index=0;		// TODO: computed discriminants; it will have to be subindex+expression
 	while ((tok=src.eat_tok())!=NONE){
 		auto subpos=src.pos;
 		if (tok==CLOSE_BRACE){break;}
 		// got an ident, now what definition follows.. =value, {fields}, (types), ..
 		if (src.peek_tok()==OPEN_BRACE){
-			ed->structs.push_back(parse_struct_body(src,subpos,tok,nullptr));
+			auto sd=parse_struct_body(src,subpos,tok,nullptr);
+			sd->set_variant_of(ed,index++);
+			ed->structs.push_back(sd);
+			
 		} else if (src.peek_tok()==OPEN_BRACKET){
-			ed->structs.push_back(parse_tuple_struct_body(src,subpos,tok));
+			auto sd=parse_tuple_struct_body(src,subpos,tok);
+			sd->set_variant_of(ed,index++);
+			ed->structs.push_back(sd);
 		} else if (src.eat_if(ASSIGN)){
 			auto lit=parse_literal(src); lit->name=tok;
 			ed->literals.push_back(lit);
+			index=lit->u.val_int;
+		} else {
+			ed->literals.push_back(new ExprLiteral(src.prev_pos,index++));
 		}
 		src.eat_if(COMMA); src.eat_if(SEMICOLON);
 	}

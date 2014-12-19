@@ -69,7 +69,7 @@ const char* g_token_str[]={
 	",",";",";;",
 	"...","..","..<","..>","..>=","..<=",
 	"_","",
-	"\"C\"","__vtable_ptr","__env_ptr","__env_i8_ptr",
+	"\"C\"","__vtable_ptr","__env_ptr","__discriminant","__env_i8_ptr",
 	NULL,
 };
 const char* g_operator_symbol[]={
@@ -131,7 +131,7 @@ int g_tok_info[]={
 	0,
 	0,0,
 	0, //placeholder
-	0,0,0,0,0
+	0,0,0,0,0,0
 };
 
 const char* operator_symbol(Name ok);

@@ -144,6 +144,9 @@ void ExprStructDef::recurse(std::function<void (Node *)> & f){
 }
 
 Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
+	d->discriminant=discriminant;
+	d->m_is_enum=m_is_enum;
+	d->m_is_variant=m_is_variant;
 	for (auto tp:this->typeparams){auto ntp=(TParamDef*)tp->clone();
 		d->typeparams.push_back(ntp);}
 	for (auto a:this->args) {d->args.push_back((ArgDef*)a->clone());}
@@ -253,6 +256,9 @@ void ExprStructDef::dump(int depth) const{
 		dbprintf("(");for (auto a:this->args)	{a->dump(-1);dbprintf(",");};dbprintf(")");
 	}
 	dbprintf("{");
+	if (this->m_is_variant!=-1){
+		newline(depth);dbprintf("__discriminant=%d ",this->discriminant);
+	}
 	for (auto m:this->literals)	{m->dump(depth2);}
 	for (auto m:this->fields)	{m->dump(depth2);}
 	for (auto s:this->structs)	{s->dump(depth2);}
