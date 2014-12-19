@@ -27,6 +27,7 @@ struct ExprStructDef: ExprDef {
 	vector<TypeDef*>		typedefs;
 	vector<ArgDef*>			args;		// default constructor form
 	ExprBlock*				body=0;		// for default constructor form.
+	int 	first_user_field_index()const;
 	Type*	inherits_type=0;
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.

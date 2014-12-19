@@ -177,6 +177,7 @@ public:
 	// lazy load/store of abstract CgValue (ref or register)
 	CgValue store(const CgValue& dst, const CgValue& src);//{return dst.store(*this,src);};
 	CgValue store(const CgValue& dst);//{return dst.store(*this);};
+	CgValue emit_store_i32(const CgValue& dst,int val);//{return dst.store(*this);};	void	emit_operand(const CgValue& val);
 	void	emit_operand(const CgValue& val);
 	void emit_fn_ptr(Name n);
 	void emit_fn(Name n);

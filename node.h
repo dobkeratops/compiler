@@ -84,6 +84,7 @@ public:
 	virtual const Type* get_elem_type(int index)const {error(this,"tried to get elem on name=%s kind=%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name get_elem_name(int index)const {return const_cast<Node*>(this)->get_elem_node(index)->name;}
 	virtual int get_elem_index(Name name){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return -1;}
+	int get_elem_index(Name name)const{return const_cast<Node*>(this)->get_elem_index(name);}
 	virtual int get_elem_count()const{return 0;}
 	virtual size_t alignment()const {return 16;} // unless you know more..
 	virtual Node*	get_elem_node(int index){

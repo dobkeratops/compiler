@@ -268,6 +268,7 @@ void MatchArm::dump(int depth)const{
 void MatchArm::recurse(std::function<void(Node *)> &f){
 	if (!this)return;
 	this->body->recurse(f);
+	this->cond->recurse(f);
 	this->pattern->recurse(f);
 	this->type()->recurse(f);
 }

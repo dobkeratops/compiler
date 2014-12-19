@@ -507,6 +507,16 @@ CgValue CodeGen::emit_store(RegisterName reg,const Type* type, RegisterName addr
 	emit_ins_end();
 	return CgValue(0,type,addr);
 }
+CgValue CodeGen::emit_store_i32(const CgValue& dst,int value){
+	auto r=next_reg();
+	ASSERT(dst.addr && "store requires a reference destination");
+	emit_ins_begin_name("store");
+	emit_i32_lit(value);
+	emit_type_operand(dst);
+	emit_txt(", align 8");
+	emit_ins_end();
+	return dst;
+}
 
 CgValue CodeGen::emit_store_global(CgValue dst,Name globalvar){
 	auto r=next_reg();

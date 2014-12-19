@@ -270,6 +270,16 @@ void ExprStructDef::dump(int depth) const{
 		((Node*)this->body)->dump(depth);
 	}
 }
+int ExprStructDef::first_user_field_index() const{
+	int i=0;
+	while (i<this->fields.size()){
+		if (this->fields[i]->name!=__VTABLE_PTR && this->fields[i]->name!=__DISCRIMINANT){
+			return i;
+		}
+		i++;
+	}
+	return i;
+}
 
 ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
 
@@ -279,6 +289,14 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 	}
 
 	if (!this->is_generic()){
+		if (this->m_is_variant){
+			if (!this->fields.size()||this->fields.front()->name!=__DISCRIMINANT){
+				this->fields.insert(
+								this->fields.begin(),
+								new ArgDef(pos,__DISCRIMINANT,new Type(this->pos,I32)));
+			}
+		}
+
 		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
 		for (auto m:fields)			{m->resolve(sc,nullptr,flags&~R_FINAL);}
 		for (auto m:static_fields)	{m->resolve(sc,nullptr,flags);}

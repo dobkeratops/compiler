@@ -347,6 +347,12 @@ CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
 		// can we trust llvm to cache the small cases in reg..
 		if (e->argls.size()!=si.value.size())
 			dbprintf("warning StructInitializer vs argls mismatch, %d,%d\n",e->argls.size(),si.value.size());
+		auto sd=si.get_struct_def();
+		if (sd->m_is_variant){
+			auto ni=sd->get_elem_index(__DISCRIMINANT);
+			auto dis=struct_val.get_elem_index(cg,ni);
+			cg.emit_store_i32(dis, sd->discriminant);
+		}
 		for (int i=0; i<e->argls.size() && i<si.value.size();i++) {
 			auto rvalue=si.value[i]->compile(cg,sc);
 			auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);

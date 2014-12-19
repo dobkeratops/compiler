@@ -36,6 +36,8 @@ struct FnName;
 struct StructInitializer{ // named initializer
 	ExprBlock*		si; // struct_intializer
 	Scope*			sc;
+	ExprStructDef*	struct_def=0;
+	ExprStructDef*	get_struct_def(){return struct_def;}
 	vector<int>		field_indices;
 	vector<ArgDef*> field_refs;
 	vector<Expr*>	value;

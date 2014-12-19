@@ -648,13 +648,15 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 
 	si->call_expr->def=sd;
 	si->def=sd;
+	this->struct_def=sd;
 	// assignment forms are expected eg MyStruct{x=...,y=...,z=...} .. or can we have MyStruct{expr0,expr1..} equally?
 	//int next_field_index=0;
 	// todo:infer generic typeparams - adapt code for functioncall. we have struct fields & struct type-params & given expressions.
 	int named_field_index=-1;
 	// todo encapsulate StructInitializer to reuse logic for codegen
 	field_indices.reserve(si->argls.size());
-	int field_index=0;
+	//step past the hidden automatically setup fields
+	int field_index=sd->first_user_field_index();
 	for (auto i=0; i<si->argls.size(); i++)  {
 		auto a=si->argls[i];
 		auto op=dynamic_cast<ExprOp*>(a);

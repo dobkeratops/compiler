@@ -484,6 +484,10 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
 						auto vtref=cg.emit_getelementref(reg,__VTABLE_PTR);
 						cg.emit_store_global(vtref, st->vtable_name );
 					}
+					if (st->m_is_variant){
+						auto dref=cg.emit_getelementref(reg,__DISCRIMINANT);
+						cg.emit_store_i32(dref, st->discriminant );
+					}
 					return b->compile_sub(cg,sc,reg.reg);
 				} else if (b->is_subscript()){ // new Foo[5] makes 5 foos; [5,6,7] is like new int[3],(fill..)
 					if (b->argls.size()==1){
