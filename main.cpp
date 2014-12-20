@@ -3,6 +3,7 @@
 #include "semantics.h"
 #include "parser.h"
 #include "codegen.h"
+#include "compile.h"
 #include "run_test.h"
 #include "exprblock.h"
 #include <unistd.h>
@@ -52,7 +53,7 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 	}
 	node->resolve(&global,nullptr,flags&(B_EXECUTABLE|B_RUN|B_LLVM)?R_FINAL:0);// if we just want to dump/search, we dont fail for final errors.
 	if (flags & B_LLVM) {
-		output_code(stdout, &global);
+		output_code(stdout, &global,0,EMIT_ALL);
 	}
 	printf("%x\n",flags);
 	if (outname && (flags & (B_EXECUTABLE|B_RUN|B_LLVM))){

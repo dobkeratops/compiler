@@ -33,8 +33,17 @@ Name Pattern::as_name()const{
 
 ResolvedType
 Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
-	if (!rhs) // no input, can't do anything (todo-infer out from patterns)
+	if (!this)
 		return ResolvedType();
+	if (!rhs ) // no input, can't do anything (todo-infer out from patterns)
+		return ResolvedType();
+	if (this->name==PTR){
+		if (rhs->name==PTR){
+			auto ret=sub->resolve_with_type(sc, rhs->sub, flags);
+			this->set_type(new Type(this,PTR,sub->type()));
+			return ret;
+		}
+	}
 	if (this->name==OR){
 		for (auto s=this->sub;s;s=s->next){
 			s->resolve_with_type(sc,rhs,flags);
@@ -42,7 +51,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
 	} else if (this->name==PATTERN_BIND){
 		// get or create var here
-		auto v=this->sub; auto p=v->next;
+		auto v=this->sub; auto p=v->next; ASSERT(p);
 		p->resolve_with_type(sc,rhs,flags);
 		if (!v->type()&&p->type()){
 			v->set_type((Type*)(p->type()->clone()));

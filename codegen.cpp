@@ -405,6 +405,9 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 }
 CgValue CodeGen::emit_loadelement(const CgValue &src, Name n){
 	auto sd=src.type->deref_all()->struct_def();
+	if (!sd){
+		dbprintf("struct not found ont type %s\n",str(src.type->name));src.type->dump_if(0);newline(0);
+	}
 	auto i=sd->get_elem_index(n);
 	return emit_getelementref(src.load(*this), 0, i, sd->get_elem_type(i));
 }
@@ -1523,10 +1526,12 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 			src=src0.load(*this);
 		}
 	}
-	if (src.type->name==REF && to_type->name!=REF){
+	if ((src.type->name==REF && to_type->name!=REF) ||(src0.type->is_pointer_or_ref() && src0.addr && src0.reg==0)
+		){
 		src=src.load(*this);
 	}
-		
+	
+
 	dbg(dbprintf("\n after 'ref'->'value' src is"));
 	dbg(src.dump());dbg(newline(0));
 	dbg(dbprintf("\n"));
@@ -1566,7 +1571,10 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 	}
 	
 	// lazy reference can still be casted.
-	if (!src0.type->is_pointer_or_ref() && src0.addr && src0.reg==0){
+	if (src.type->is_pointer()&& to_type->is_pointer()){
+		return this->emit_cast_to_type(src,to_type);
+	}
+	if (src.addr && src.reg==0){
 		return this->emit_cast_ref(src,to_type);
 	}
 

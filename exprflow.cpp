@@ -212,6 +212,9 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 	// TODO-short-curcuiting - requires flow JumpToElse.
 
 	// single variable bind.
+	if (ptn->name==PTR ||ptn->name==REF){
+		return compile_condition(cg, sc, ptn->sub, val.deref_op(cg));
+	}
 	if (ptn->name==PLACEHOLDER){
 		return cg.emit_bool(true);
 	}
@@ -219,7 +222,8 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 		auto v=ptn->get_elem(0);
 		auto p=ptn->get_elem(1);
 		auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
-		auto sd=p->def->as_struct_def();
+		auto ps=p->type()->is_pointer_or_ref()?p->sub:p;
+		auto sd=ps->def->as_struct_def();
 		auto b=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
 		auto var=v->def->as_variable();
 		CgValue(var).store(cg, cg.emit_conversion((Node*)ptn, val, var->type(), sc));// coercion?
@@ -235,7 +239,8 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 		else if(ptn->name==TUPLE){op=LOG_AND;index=0;}
 		else{
 			auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
-			auto sd=ptn->def->as_struct_def();
+			auto ptns=ptn->type()->is_pointer_or_ref()?ptn->sub:ptn;
+			auto sd=ptns->def->as_struct_def();
 			index=sd->first_user_field_index();
 			ret=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
 			val2=cg.emit_conversion((Node*)ptn,val, ptn->type(),sc);

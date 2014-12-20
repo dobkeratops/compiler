@@ -256,7 +256,7 @@ void ExprStructDef::dump(int depth) const{
 		dbprintf("(");for (auto a:this->args)	{a->dump(-1);dbprintf(",");};dbprintf(")");
 	}
 	dbprintf("{");
-	if (this->m_is_variant!=-1){
+	if (this->m_is_variant){
 		newline(depth);dbprintf("__discriminant=%d ",this->discriminant);
 	}
 	for (auto m:this->literals)	{m->dump(depth2);}
@@ -289,7 +289,7 @@ ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int
 	}
 
 	if (!this->is_generic()){
-		if (this->m_is_variant){
+		if (this->m_is_variant || this->m_is_enum){
 			if (!this->fields.size()||this->fields.front()->name!=__DISCRIMINANT){
 				this->fields.insert(
 								this->fields.begin(),
@@ -400,6 +400,10 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 		// todo: step back thru the hrc to find overrides
 		if (this->vtable)
 			compile_vtable_data(cg, this,sc, this->vtable);
+		// compile inner structs. eg struct Scene{struct Mesh,..} struct Scene uses Mesh..
+		for( auto sub:st->structs){
+			sub->compile(cg,sc);
+		}
 		
 		cg.emit_struct_def_begin(st->get_mangled_name());
 		for (auto fi: st->fields){
@@ -407,16 +411,13 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 		};
 		cg.emit_struct_def_end();
 		
-		for( auto sub:st->structs){
-			sub->compile(cg,sc);
-		}
 	}
 	return CgValue();	// todo: could return symbol? or its' constructor-function?
 }
 
-CgValue EnumDef::compile(CodeGen &cg, Scope *sc){
-	return CgValue();
-}
+//CgValue EnumDef::compile(CodeGen &cg, Scope *sc){
+//	return CgValue();
+//}
 
 
 

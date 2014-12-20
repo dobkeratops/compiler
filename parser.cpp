@@ -126,6 +126,15 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int* close_tok, Pat
 	Pattern* prev=0;
 	while (auto t=src.eat_tok()){
 		if (t==close || t==close2) {if (close_tok){*close_tok=(int)t;}break;}
+		if (t==PTR || t==REF || t==MUL || t==ADDR){ // todo: is_prefix
+			if (t==MUL) t=PTR;
+			if (t==ADDR) t=REF;
+			if (prev){ error(src.pos,"ptr/ref operator must be prefix in pattern");}
+			auto np=new Pattern(src.pos, t);
+			parse_pattern(src,close,close2,close_tok,np);
+			if (owner)owner->push_back(np);
+			return np;
+		}
 		if (t==OPEN_PAREN){
 			if (!prev) {
 				prev=new Pattern(src.pos, TUPLE);
@@ -140,6 +149,7 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int* close_tok, Pat
 			
 			np->push_back(prev);
 			parse_pattern(src,close,close2, close_tok, np);
+			np->dump(0);newline(0);
 			return np;
 		}
 		else if (t==COMMA){ // continue a tuple..

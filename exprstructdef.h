@@ -96,7 +96,7 @@ struct EnumDef  : ExprStructDef {
 	Node* clone()const;
 	const char* kind_str()const{return "enum";}
 	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){m_is_enum=true;};
-	CgValue compile(CodeGen& cg, Scope* sc); // different compile behaviour: discriminant+opaque
+	//CgValue compile(CodeGen& cg, Scope* sc); // different compile behaviour: discriminant+opaque
 };
 
 /// a rust 'Trait' is a struct with only virtual functions

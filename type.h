@@ -17,6 +17,7 @@ struct Type : ExprDef {
 	void push_back(Type* t);
 	virtual const char* kind_str()const;
 	Type(Node* origin, Name outer, Type* inner):Type(origin,outer){ push_back(inner);}
+	Type(Node* origin, Name outer, const Type* inner):Type(origin,outer,const_cast<Type*>(inner)){}
 	Type(Node* origin,Name a,Name b): Type(origin,a, new Type(origin,b)){}
 	Type(Node* origin,Name a,Name b,Name c): Type(origin,a,new Type(origin,b,c)){}
 	//		auto tc=new Type(origin,c); auto tb=new Type(origin,b); tb->push_back(tc); push_back(tb);
