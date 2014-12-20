@@ -140,6 +140,7 @@ public:
 	void emit_ins_begin_sub();
 	void emit_undef();
 	CgValue emit_alloca_type(Expr* holder, const Type* t);
+	CgValue emit_alloca(const Type* t){return emit_alloca_type(nullptr,t);}
 	RegisterName  emit_ins_begin(RegisterName reg, const char* op);
 	void emit_ins_name(const char* txt);
 	void emit_ins_begin_name(const char* txt);
@@ -234,8 +235,8 @@ public:
 
 	// IF,FOR are part of the codegen interface to swap C/LLVM backends
 	CgValue emit_for(ExprFor* f,Expr* init,Expr* cond, Expr* incr, Expr* body, Expr* else_block);
-	CgValue emit_if(Node* n, Expr* cond, Expr* body, Expr* else_block);
-	CgValue emit_if_sub(Node* n, Scope* sc,std::function<CgValue()> f_cond, std::function<CgValue()> f_body, Expr* else_block);
+	CgValue emit_if(Node* n, Expr* cond, Expr* body, Expr* else_block, Type* ret_t);
+	CgValue emit_if_sub(Node* n, Scope* sc,std::function<CgValue()> f_cond, std::function<CgValue()> f_body, Expr* else_block, Type* ret_t);
 	CgValue emit_break(CgValue v,int levels);
 	CgValue emit_continue(int levels);
 	void 	emit_call_begin(const CgValue& call_expr);

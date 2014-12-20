@@ -128,7 +128,7 @@ void ExprIf::recurse(std::function<void(Node*)>& f){
 
 CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
 	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
-	return cg.emit_if(this, this->cond, this->body, this->else_block);
+	return cg.emit_if(this, this->cond, this->body, this->else_block, this->type());
 }
 
 void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
@@ -296,7 +296,8 @@ CgValue MatchArm::compile(CodeGen& cg, Scope* sc){
 		[&]{
 			arm->compile_bind_locals(cg,armsc,arm->pattern,match_val);
 			return arm->body->compile(cg,armsc);},
-		arm->next
+		arm->next,
+	 	this->type()
 	);
 	return ret;
 }

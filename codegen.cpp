@@ -850,7 +850,7 @@ void CodeGen::emit_fn_cast_global(Name n,const Type* srct, const Type *dstt){
 
 CgValue CodeGen::emit_alloca_type(Expr* holder, const Type* t) {
 	if (t->is_void()){
-		emit_comment("void value not allocated for %d",holder->pos.line);
+		if (holder)emit_comment("void value not allocated for %d",holder->pos.line);
 		return CgValue();
 	}
 	RegisterName r= holder?holder->get_reg(*this, false):next_reg();
@@ -1182,12 +1182,13 @@ void CodeGen::emit_function_type(ExprFnDef* fn_node){
 	emit_function_signature(fn_node,EmitType);
 }
 
-CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()> f_cond, std::function<CgValue()> f_compile_body, Expr* else_block){
+CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()> f_cond, std::function<CgValue()> f_compile_body, Expr* else_block,Type* ret_type){
 	// TODO: Collect phi-nodes for anything modified inside.
 	auto curr_fn=cg.curr_fn;
 	//auto ifn=this;
 	
 	RegisterName outname=cg.next_reg();
+	auto retvalref = cg.emit_alloca(ret_type);
 	auto condition=f_cond();//cond->compile(cg,sc);
 	int index=cg.m_next_reg++;
 	auto label_if=cg.gen_label("if",index);
@@ -1197,11 +1198,15 @@ CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()>
 		cg.emit_branch(condition,label_if,label_else);
 		cg.emit_label(label_if);
 		auto if_result=f_compile_body();//body->compile(cg,sc);
-		if (if_result.is_valid())if_result=cg.load(if_result,0);
+		if (if_result.is_valid()){
+			if_result=cg.load(if_result,0);
+		}
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_else);
 		auto else_result=else_block->compile(cg,sc);
-		if (else_result.is_valid())else_result=cg.load(else_result,0);
+		if (else_result.is_valid()){
+			else_result=cg.load(else_result,0);
+		}
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		// phi node picks result, conditional assignment
@@ -1228,13 +1233,17 @@ CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()>
 	}
 }
 
-CgValue CodeGen::emit_if_sub(Node* if_node, Scope* s, function<CgValue()> fcond, function<CgValue()> fbody, Expr* else_block){
-	return emit_if_llvm(*this,if_node,if_node->get_scope(), fcond,fbody,else_block);
+CgValue CodeGen::emit_if_sub(Node* if_node, Scope* s, function<CgValue()> fcond, function<CgValue()> fbody, Expr* else_block,Type* ret_t){
+	return emit_if_llvm(*this,if_node,if_node->get_scope(), fcond,fbody,else_block,ret_t);
 }
-CgValue CodeGen::emit_if(Node* if_node, Expr* cond, Expr* body, Expr* else_block){
+CgValue CodeGen::emit_if(Node* if_node, Expr* cond, Expr* body, Expr* else_block,Type* ret_t){
 	// this intermediate looks redundant but its' for swapping in C backend later..
 	auto sc=if_node->get_scope();
-	return this->emit_if_sub(if_node,sc , [&]()->CgValue{return cond->compile(*this,sc);}, [&]()->CgValue{return body->compile(*this,sc);}, else_block);
+	return this->emit_if_sub
+	(	if_node,sc ,
+		[&]()->CgValue{return cond->compile(*this,sc);},
+	 	[&]()->CgValue{return body->compile(*this,sc);},
+	 	else_block,ret_t);
 }
 
 /*
