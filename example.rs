@@ -115,7 +115,9 @@ fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 	u.tag=0;
 }
 
+
 fn main(argc:int,argv:**char)->int{
+
 	printf("example program ./hello.rpp compiled & run by default makefile\n");
 
 	// closure syntax stolen from Rust |args,..|{body...}

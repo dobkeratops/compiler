@@ -13,7 +13,7 @@ Dont have a name yet hence 'hack'..
 #### Currently supports:-
 
  * most C operators, functions, structs,if-else, 
-  * (todo ++/--,use &p[i] instead of ptr arithmetic)
+  * (todo ++/--;and currently &p[i] instead of ptr arithmetic)
  * 'everything is an expression' syntax
  * C for loops + break../else{..} expressions
  * function overloading+UFCS
@@ -29,7 +29,7 @@ Dont have a name yet hence 'hack'..
 
 #### WIP
  * rust-style enum/match. Compiles without crashing,need to test cases..
- * WIP ..HKT (template-template parameters)
+ * HKT (template-template parameters)
   * .. not extensively tested
 
 example source..

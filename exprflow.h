@@ -77,7 +77,8 @@ struct ExprMatch : ExprFlow {
 	ResolvedType	resolve(Scope* sc, const Type* desired, int flags);
 	Expr*		expr=0;
 	MatchArm*	arms=0;
-	Node*	clone()const;
+	Node*	clone()const{ return this->clone_into(new ExprMatch);}
+	Node*	clone_into(ExprMatch* ) const;
 	void	dump(int depth)const;
 	void	recurse(std::function<void(Node*)>& f)override;
 };
@@ -92,7 +93,7 @@ struct MatchArm : ExprScopeBlock {
 	Expr*		body=0;
 	MatchArm*	next=0;
 	void		dump(int depth)const;
-	Node*		clone() const;
+	Node*		clone() const override;
 	Scope*		get_scope()override{return this->scope;}
 	void		translate_typeparams(const TypeParamXlat& tpx){}
 	CgValue		compile_condition(CodeGen& cg, Scope* sc, const Pattern* match_expr,CgValue match_val);
@@ -103,6 +104,12 @@ struct MatchArm : ExprScopeBlock {
 //	ResolvedType	resolve(Scope* sc, const Type* desired, int flags); doesn't have resolve method because it takes 2 inputs.
 	void		recurse(std::function<void(Node*)>& f) override;
 	const char*		kind_str() const {return "match arm";}
+};
+
+struct ExprIfLet : ExprMatch{	// sugar for match 1arm. parses+prints different. eval the same
+	void		dump(int depth)const;
+	Node*		clone() const override {return this->clone_into(new ExprIfLet);}
+	const char*		kind_str() const {return "kind str";}
 };
 
 

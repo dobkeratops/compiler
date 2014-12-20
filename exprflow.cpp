@@ -7,6 +7,8 @@ void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{
 	else_block->find_vars_written_if(s,vars);
 }
 
+
+
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
 	init->resolve_if(sc,0,flags);
@@ -173,17 +175,15 @@ CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
 
 
 Node*
-ExprMatch::clone()const{
-	auto m=new ExprMatch();
+ExprMatch::clone_into(ExprMatch* m)const{
 	m->pos=pos;
 	m->expr=(Expr*)expr->clone_if();
 	m->arms=(MatchArm*)arms->clone_if();
 	return m;
 }
 Node* MatchArm::clone()const{
-	auto a=new MatchArm();
+	auto a=new MatchArm;
 	a->pos=pos;
-	
 	a->body=(Expr*)body->clone();
 	a->next=(MatchArm*)next->clone_if();//TODO not recursive ffs.
 	return a;
@@ -363,6 +363,21 @@ void MatchArm::recurse(std::function<void(Node *)> &f){
 	this->cond->recurse(f);
 	this->pattern->recurse(f);
 	this->type()->recurse(f);
+}
+
+void ExprIfLet::dump(int depth)const{
+	newline(depth);dbprintf("if let ");
+	this->arms->pattern->dump(-1);
+	dbprintf("=");
+	this->expr->dump(-1); dbprintf("{");
+	this->arms->body->dump(depth+1);
+	dbprintf("}");
+	newline(depth);
+	if (this->arms->next){
+		newline(depth);dbprintf("else{");
+		this->arms->next->body->dump(depth+1);
+		newline(depth);dbprintf("}");
+	}
 }
 
 

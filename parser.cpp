@@ -910,9 +910,12 @@ ExprFor* parse_for(TokenStream& src){
 // exact c parser
 // add := gets rid of auto noise
 // add postfix : alternate functoin syntax
-ExprIf* parse_if(TokenStream& src){
+Expr* parse_if(TokenStream& src){
 	// TODO: assignments inside the 'if ..' should be in-scope
 	// eg if (result,err)=do_something(),err==ok {....}  else {...}
+	if (src.eat_if(LET)){
+		return parse_if_let(src);
+	}
 	auto p=new ExprIf(src.pos);
 	//	p->cond=parse_block(src, OPEN_BRACE, 0, 0);
 	p->cond=parse_block(src,OPEN_BRACE,COMMA,0);
@@ -931,11 +934,27 @@ ExprIf* parse_if(TokenStream& src){
 	if (p->cond) verify(p->cond->get_type());
 	if (p->body) verify(p->body->get_type());
 	if (p->else_block) verify(p->else_block->get_type());
-	return p;
+	return (Expr*)p;
 }
+Expr* parse_if_let(TokenStream& src){
+	auto iflet=new ExprIfLet;
+	MatchArm* arm=new MatchArm(); // if-let is a single match arm with different syntax.
+	iflet->arms=arm;
+	int close=0;
+	arm->pattern=parse_pattern(src,ASSIGN,0,&close);
 
-
-
+	iflet->expr=parse_block(src,OPEN_BRACE,COMMA,nullptr);
+	arm->body = parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
+	// 'else' if effectively an arm with _=>{}
+	if (src.eat_if(ELSE)){
+		auto else_arm=new MatchArm();
+		else_arm->pattern=new Pattern(src.pos,PLACEHOLDER);
+		src.expect(OPEN_BRACE);
+		else_arm->body=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
+		arm->next=else_arm;
+	}
+	return (Expr*) iflet;
+}
 
 
 
