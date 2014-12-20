@@ -17,20 +17,20 @@ Dont have a name yet hence 'hack'..
  * 'everything is an expression' syntax
  * C for loops + break../else{..} expressions
  * function overloading+UFCS
+ * limited operator overloading (no conversions yet)
  * Forward+Reverse Type Inference within functions, 
-  * forward between functions -by virtue of adhoc templates
+  * forward between functions -by adhoc templates
  * stack-based closures 
   * (workaround: if need escape,use a class)
  * templated functions & structs
- * WIP ..HKT (template-template parameters)
-  * .. not extensively tested
  * new/delete ,and a ordered or named struct field initializer
  * limited C++-style internal vtables & single inheritance
- * limited operator overloading (no conversions yet)
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 #### WIP
- * rust like enum/match. Compiles &runs without crashing,need to test cases..
+ * rust-style enum/match. Compiles without crashing,need to test cases..
+ * WIP ..HKT (template-template parameters)
+  * .. not extensively tested
 
 example source..
 https://github.com/dobkeratops/compiler/blob/master/example.rs
@@ -50,7 +50,7 @@ Quite early days.
 
 Basically trying to combine everything I like from C++ & Rust, dropping what I dont like, plus what i've always missed.
 
-This could all be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects - retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? both go against the underlying design of either .
+This could all be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects - retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? 
 
 Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code;
 
@@ -64,7 +64,8 @@ It almost seems like a deliberate joke - how can a language run GameOfLife with 
 
 Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
-Rust on the other hand is too restrictive, in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. Traits are good but I'd prefer them optional & duck-typed. So somewhere between the two is my perfect language.
+Rust on the other hand is too restrictive; in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. Rust Traits are good but I'd prefer them optional & duck-typed.
+So somewhere between the two is my perfect language.
 
 This is probably all way beyond a 1man project but I'll see how far I can get. Perhaps I can just experiment and converge on whatever mainstream option is closest.
 
@@ -88,31 +89,33 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
 
  * Resyntax a significant subset of C++, in the spirit of SPECS; 
   * should be possible to non-destructively translate a subset back & forth.
-  * to eliminate the risk of transitition
-  * allow use with,& in, established C++ libraries & sourcebases
+    * to eliminate the risk of transitition
+    * allow use with,& in, established C++ libraries & sourcebases
   * self host by translating own source, be mindful of c++ subset used to write this
-  * context free grammar
+  * 'C++ with context free grammar'
 
  * graph like/relative module import: 
   * any file in a project should work as the root for its own tests
   * No committing to heirachical structure
-   * dont need to commit to 'crate roots', change library granularity
-   * relative namespace search (to avoid any absolute root), just warn about ambiguity
-   * overloading is,IMO, like 'tagging'. find more ways to leverage/improve that.
+    * dont need to commit to 'crate roots', change library granularity
+    * relative namespace search (to avoid any absolute root), just warn about ambiguity
+    * overloading is,IMO, like non hierachical 'tagging'.
+      *find more ways to leverage/improve that, eg keyword args drasticly reduce ambiguity
 
  * add alternate parser that can directly read subset of C++ headers ?
      (or adapt a rust community tool for C++ -> rust translation..)
 
  * compare with other languages, converge with whichever mainstream option is closer, take inspiration..
   * C++17,21.. of course.
-  * Rust - first non-C++ language I've wanted to use.
-  * blows' ".jai" "language for games"
+  * Rust - first non-C++ language I've actually wanted to use.
+  * Jonathan Blows' ".jai" "language for games"
     * most similar stated goal, but maybe different preferences
-  * 'SugarCpp' - an interesting transpiler
-  * D - never grabbed me for some reason, but has many features of interest 
+    * was inspiration to start
+  * 'SugarCpp' - an interesting transpiler, looks very practical
+  * D - never grabbed me for some reason, but has many features of interest eg UFCS
     * (tends to focus on gc, and doesn't have expression syntax?)
   * disqualified by CG, but still interesting:-
-    * Julia - focus on multimethods & interactivity
+    * Julia - focus on overloading/multimethods & interactivity
     * Go - adhoc duck-type interface gather, simple but practical
 
  * Features inspired by Rust & other languages:
