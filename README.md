@@ -13,7 +13,7 @@ Dont have a name yet hence 'hack'..
 #### Currently supports:-
 
  * most C operators, functions, structs,if-else, 
-  *(todo ++/--,use &p[i] instead of ptr arithmetic)
+  * (todo ++/--,use &p[i] instead of ptr arithmetic)
  * 'everything is an expression' syntax
  * C for loops + break../else{..} expressions
  * function overloading+UFCS
@@ -107,13 +107,13 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
   * C++17,21.. of course.
   * Rust - first non-C++ language I've wanted to use.
   * blows' ".jai" "language for games"
-   * most similar stated goal, but maybe different preferences
+    * most similar stated goal, but maybe different preferences
   * 'SugarCpp' - an interesting transpiler
   * D - never grabbed me for some reason, but has many features of interest 
-   * (tends to focus on gc, and doesn't have expression syntax?)
+    * (tends to focus on gc, and doesn't have expression syntax?)
   * disqualified by CG, but still interesting:-
-   * Julia - focus on multimethods & interactivity
-   * Go - adhoc duck-type interface gather, simple but practical
+    * Julia - focus on multimethods & interactivity
+    * Go - adhoc duck-type interface gather, simple but practical
 
  * Features inspired by Rust & other languages:
   * 2 way inference
