@@ -56,7 +56,7 @@ Rust has many inspiring features but is a departure from C++ lacking features li
 
 I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code.
 
-Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* is what yields working code... there is still so much you still can't verify at compile time.
+Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* is what yields working code... there is still so much you still can't express in a typesystem or verify at compile time.
 
 I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating.(I have worked mostly on platforms where vtables were unacceptable). 
 
@@ -64,7 +64,8 @@ It almost seems like a deliberate joke - how can a language run GameOfLife with 
 
 Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
-Rust on the other hand is too restrictive; in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. Rust Traits are good but I'd prefer them optional & duck-typed.
+Rust on the other hand is too restrictive; in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. Rust Traits are good but I'd prefer them optional & duck-typed. Rusts philosophy edges toward verbosity,'costs must be explicit' -IMO costs should be deterministic sure, but typing more for slow code doesn't make it faster- it wastes time on setup,tools,tests.. What is important is expressivity, ability to write optimal code more elegantly.
+
 So somewhere between the two is my perfect language.
 
 This is probably all way beyond a 1man project but I'll see how far I can get. Perhaps I can just experiment and converge on whatever mainstream option is closest.
