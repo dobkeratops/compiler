@@ -91,7 +91,9 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 		return propogate_type_fwd(flags, this, desired, this->type_ref());
 	}
-	
+	if (op_ident==FIELD_ASSIGN){
+		error(this,"field-assign operator not handled, should only appear in struct-initializer (TODO: keyword args)");
+	}
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==DECLARE_WITH_TYPE) {
 		if (op_ident==LET_ASSIGN){
 			ASSERT(this->lhs && this->rhs);

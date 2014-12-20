@@ -1,8 +1,7 @@
 #!hack -r
 
 // Uses .rs extention for syntax highlighting, but this is NOT Rust source.
-//
-// omit function body to declare prototypes for external linking,"C" linkage optional, otherwise its' a C++ name-mangle with overloaded types.
+
 struct FILE;
 extern"C"fn printf(s:str,...)->int;
 extern"C"fn fopen(d:*char,z:*char)->*FILE;
@@ -10,26 +9,13 @@ extern"C"fn fclose(d:*FILE)->int;
 extern"C"fn fread(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn fwrite(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn sqrt(f:float)->float;
-// stolen from rust: function syntax 'fn <function name>(args) optional return value {body}
-// however ommitting return value means infer it, not 'void' 
-
-fn something(f:float){
-}
 
 // typeparameter sugar -omitted types get typeparams automatically,
-// eg
-// template<class A,class B,class F>
-//    auto lerp(A a,B b, F f){return (b-a)*f+a;}
-// more specific overloads are always used in preference if given
 
 fn lerp(a,b,f)=(b-a)*f+a;
 fn invlerp(x0,x1,x)=(x-a)/(x1-x0);
 
-//  declare a function taking a closure:
-//	syntax copied from Rust.
-//  represented as a pair of pointers (function*, environment*)
-//  raw C like functions are currently written fn(int)->void 
-
+//  closure arguments declared like rust
 fn take_closure(funcp:|int|){
 	funcp(10);
 }
@@ -39,13 +25,9 @@ fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
 	ofsx:=x-x0;dx:=x1-x0;dy:=y1-y0;
 };
 
-
 // HKT-HigherKindedTypes, 'template-template parameters' 
 // - adhoc synax is less verbose than C++ .. 
-// might want more specific declaration but
-// does the use in the parameter list say enough?
 
-// c++ refs for 1st param work for autoderef
 fn map<V,A,B>(src:&V<A>, f:|*A|->B)-> V<B>{ 
 	let result=reserve(src.size());
 	for index:=0; index<src.size(); index+=1 {
@@ -54,21 +36,17 @@ fn map<V,A,B>(src:&V<A>, f:|*A|->B)-> V<B>{
 	result
 }
 
-
 // struct declarations like Rust.  fieldname:Type,...
-
 struct Foo {
 	vx:int, vy:int, vz:int
 }
 struct Vec3{ vx:float,vy:float,vz:float};
 
-// adhoc overloading like C++. 
-//(no conversions yet,might rely on inference using output type?)
-// thanks to Rust-like 'fn' we dont need another keyword 'operator'?
+// adhoc overloading like C++. (fn keyword allows operators as names)
 fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
 
-//single-expression syntax seems nice for math functions & simple constructors
-fn -(a:&Vec3,b:&Vec3)= Vec3{vx=a.vx-b.vx,vy=a.vy-b.vy,vz=a.vz-b.vz};
+//single-expression syntax with struct-constructors
+fn -(a:&Vec3,b:&Vec3)= Vec3{vx:a.vx-b.vx,vy:a.vy-b.vy,vz:a.vz-b.vz};
 fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx + a.vy*b.vy + a.vz*b.vz;
 fn *(a:&Vec3,f:float)=Vec3{a.vx*f,a.vy*f,a.vz*f};
 // eg cross product with less nesting.
@@ -81,34 +59,18 @@ fn length(a:&Vec3)=sqrt(a|a);
 fn normalize(a:&Vec3)=a*(1.0/length(a));
 
 // bilerp implemented using generic 'lerp' defined above
-// it will just instance it for 'Vec3' because it's got + * -
-// like C++.
-// this could have been totally generic too.
 fn bilerp(a0:&Vec3,b0:&Vec3,a1:&Vec3,b1:&Vec3,u:float,v:float)=lerp(lerp(a0,a1,u),lerp(b0,b1,u),v);
 
 // internal vtables
-// simplified implementation - base must describe whole vtable layout
-// 'inherited' types overide base class functions & can override eachother.
-// this language does not focus on class-heirachies
-// other mechanisms to follow (trait objects) 
-// & switch-like dispatch can be done with templates.
-//
-// performance code sorts by type anyway.
-//
-// have implemented this for eventual self-hosting.. the compiler in C++ uses them.
+// simplified -'base class' must describe entire layout.
 
 struct IBaz {
 	// sugar: with other qualifiers, 'fn' is optional,assumed.
 	virtual foo(){}  
 	virtual bar(){}  
 }
-// in a 'trait', functions default to 'virtual'.
-//struct IBar {
-//	fn bar(selfptr){}     
-//}
 
-// open overloading like C++; most specific function is matched at callsite
-// f:&Foo means parameter 'f' , reference to Foo.. 
+// adhoc overloading like C++; most specific function is matched at callsite
 
 fn something_foo(f:*Foo){
 	printf("something_foo with 1 arg overloaded\n");
@@ -127,15 +89,7 @@ fn something(f:float,x){
 	printf("something(float, auto)\n");
 }
 
-// this isn't a union yet, its just  test to show the type-inference
-// can handle getting a 'tag' from methods matching type X or Y
-// will probably introduce propper tagged unions like Rust, 
-// but want the template engine able to handle rolling pleasant custom variants
-// (TODO: max[sizeof[X],sizeof[Y]] operators in template engine..)
-//
-// raw pointers can implement anything.. variants could be in precompiled
-// datastructures with variable size, or they could be an tag+owned-pointer
-
+// tagged-union implemented using templates.(TODO, actual union type)
 struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is convention
 	tag:int,
 	x:X,y:Y,
@@ -192,10 +146,7 @@ fn main(argc:int,argv:**char)->int{
 	// alternate syntax for declaring  a new uninitialized variable of type
 	v=:Union<float,int>;
 
-	// calls to templated functions .. setting value & tag of the variant
-	// using UFCS.. 'setv' declared as a freefunction.
-	// (perhaps it would be more elegant to implement assignment op overload
-	// for emulating variants better..)
+	// calls to templated functions,& using UFCS.. test'variant' template..
 	u.setv(2.0);
 	u.setv(5);
 
@@ -206,12 +157,8 @@ fn main(argc:int,argv:**char)->int{
 	let foo=ret_anon_struct();
 	printf("anon struct fields= %d %d\n",foo.x, foo.y);
 	// type inference with polymorphic lambdas
-	// could overload 'match' to supply different combinations of types
-	// C++ equivalent doesn't seem to match all template args.
-	// as far as i've tried it.. you always need to specify 
-	// a parameter manually
+	// unlike C++, the output type of the lambdas infers 'R' here
 
-//	let pu=&u;
 	let z=u.match_with(
 		|x:*int|{printf("union was set to int %d\n",*x);15},
 		|x:*float|{printf("union was set to float %.3f\n",*x);17}
@@ -220,14 +167,9 @@ fn main(argc:int,argv:**char)->int{
 
 	// C-like for loops minus parens, compulsory {}
 	// handles simple cases without needing a whole iterator library
-	//
-	// enhanced with expression syntax: break <expr> , else {expr}
-	// type of 'value' is infered from the break/else expressions
-	// for-else completes rusts' "everything-is-an-expression" philosophy
+	// enhanced with 'break'-'else' expressions
 
-	let acc=0;
-	//:= from 'go', x:=y is a shortcut for let x:=y 
-	// get 'value' from loop return..
+	acc:=0;	//:= from 'go', x:=y is a shortcut for let x:=y 
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		acc+=i;
 		for k:=0; k<10; k+=1 {
@@ -239,31 +181,26 @@ fn main(argc:int,argv:**char)->int{
 		}
 		if j==6 {break 66;} // break with return expression.
 	}else{
-		// for..else block called if no 'break'. 
-		// else blocks needed to complete loops as expressions.
+		// 'else' called if no break, needed for return value
 		printf("loop exit fine\n"); 
 		44
 	};
 	printf("loop return value = %d\n",value);
 	
-	
-	// Struct initializers...
 
-	let fv=Foo{vx=13,vy=14,vz=15}; // initialize struct on stack, named fields
+	let fv=Foo{vx:13,vy:14,vz:15}; // initialize struct on stack, named fields
 
 	something_foo(&fv,&fv);
 	printf("fv.vx=%d\n",fv.vx);
 
-	let fv2=new Foo{vx=23,vy=24,vz=25}; // struct allocate & init
+	let fv2=new Foo{vx:23,vy:24,vz:25}; // struct allocate & init
 	something_foo(fv2);
 
 	let fv3=new Foo{31,32,33}; // struct initializer, sequential
 	something_foo(fv3);
 
 	// Test UFCS+overloading .. see definitions of foo_bar below.
-	// if designing a language in a vacuum , I would have done 100% UFCS
-	// there are 'member-functions' purely 
-	// to ease translation/interfacing to & from C++.
+	// real member functions are for vtable layout & C++ compatability
 
 	foo_bar(fv3,0.4);
 	fv3.foo_bar(fv3,77);
@@ -271,8 +208,7 @@ fn main(argc:int,argv:**char)->int{
 
 	// test arrays and ptrs work
 	// 'x as *T' for raw pointer casts, like C (T*)x
-	// unsafe like C. safety can come later
-	// whats most important now is the elegant mechanisms for avoiding raw ptrs
+	// &p[index] used for pointer offsetting, no ptr+ofs yet.
 
 	let my_array:array<int,512>;   // like C++ array<int,512>
 	let q=my_array[1];
@@ -291,20 +227,20 @@ fn main(argc:int,argv:**char)->int{
 	do_something(pbaz1 as*IBaz);//TODO autocoerce to base type
 	do_something(pbaz2 as*IBaz);
 
-	// Expression syntax stolen from rust.
-	// if..else.. has a return value;more flexible than ternary op
-	// because it uses compound statements
-	// frees up '?' for other use, eg optional types..(TODO arbitrary operators)
-	// last expression in the compound blocks is return value from block
-
+	// if-else expressions like Rust.
 	let x1=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >=2",argc);2};
 	printf("\n**Hello World** %d %d\n", x1, y );
 
-	// last statement is a return value. 
-	// takes some getting used to but makes semicolons significant and
-	// interacts very well with expression syntax generally.
+	// last statement is a return value, like Rust. significant semicolons
 
 	0
+}
+
+fn tuple_test2()->(int,float,int){	// tuples for multiple return,like Rust
+	(12,23.0,34)
+}
+fn tuple_test(){	// rturn type inference
+	(12,23,34)
 }
 
 fn do_something(p:*IBaz){
@@ -313,9 +249,7 @@ fn do_something(p:*IBaz){
 }
 
 // implementing vtable based 'classes', like C++
-// TODO handle rust/go style trait-objects to complement.
-// dont need C++ multiple-inheritance.
-// 
+// only single-inheritance planned.
 
 struct Qux : IBaz {
 	x:int;
@@ -336,12 +270,6 @@ struct Bar : IBaz {
 		printf("hello from Bar.bar this.y=%d\n",y);
 	}
 }
-fn tuple_test(){	// rturn type inference
-	(12,23,34)
-}
-fn tuple_test2()->(int,float,int){
-	(12,23.0,34)
-}
 // multiple *named* return values as anonymous struct
 // need to write 'struct' because type-context doesn't  include braces
 // if we name it, it doesn't go into any scope at the minute.
@@ -351,7 +279,7 @@ fn ret_anon_struct()->struct{x:int, y:int}{
 	r.x=88;
 	r.y=99;
 	r
-	//could also write _{88,99}
+	//could also write _{x:88,y:99}
 }
 fn foo_bar(i:int){
 }

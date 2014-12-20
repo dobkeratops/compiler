@@ -60,7 +60,7 @@ const char* g_token_str[]={
 	"&","|","^","%","<<",">>","?:","?>","?<",					//bitwise
 	"<",">","<=",">=","==","!=",		//compares
 	"&&","||",		//logical
-	"=",":=","=:","@",
+	"=",":=","=:","@",".:=",
 	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
 	".=","?=",	// linklist follow ptr.=next
 	"++","--","++","--", //inc/dec
@@ -81,7 +81,7 @@ const char* g_operator_symbol[]={
 	"op_add","op_sub","op_mul","op_div",
 	"bit_and","bit_or","bit_xor","op_mod","op_shl","op_shr","if_else","op_max","op_min","op_lt","op_gt","op_le","op_ge","op_eq","op_ne",
 	"log_and","log_or",
-	"assign","let_assign","assign_colon","pattern_bind",
+	"assign","let_assign","assign_colon","pattern_bind","field_assign",
 	"assign_add","assign_sub","assign_mul","assign_div","assign_and","assign_or","assign_xor","assign_mod","assign_shl","assign_shr",
 	"assign_dot","maybe_assign",
 	"post_inc","post_dec","pre_inc","pre_dec",
@@ -120,7 +120,7 @@ int g_tok_info[]={
 	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,READ|9,READ|9,READ|9,	//bitwise
 	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,	// COMPARES
 	READ|13,READ|14,	//logical
-	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,0, // assignment
+	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,0,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
 	
 	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16, // assign-op
 	WRITE_LHS|READ|ASSOC|16, // dot-assign

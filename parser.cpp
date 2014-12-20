@@ -352,10 +352,10 @@ ExprBlock* ExprBlock_alloc(SrcPos& pos){
 		return new ExprBlock(pos);
 }
 
-ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
+ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 	// shunting yard expression parser+dispatch to other contexts
 	ExprBlock *node=ExprBlock_alloc(src.pos);
-	node->call_expr=op;
+	node->call_expr=outer_op;
 	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
 	vector<SrcOp> operators;
@@ -484,10 +484,10 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 		} else if (src.eat_if(OPEN_BRACE)){
 			//			error(operands.back()?operands.back():node,"struct initializer");
 			if (was_operand){// struct initializer
-				auto ident=pop(operands);
-				auto si=parse_block(src,CLOSE_BRACE,COMMA,ident);
+				auto sname=pop(operands);
+				auto si=parse_block(src,CLOSE_BRACE,COMMA,sname);
 				operands.push_back(si);
-				si->set_type(ident->get_type()); //eg ident might have typeparams.struct init uses given type
+				si->set_type(sname->get_type()); //eg ident might have typeparams.struct init uses given type
 				dbg(operands.back()->dump(0));
 			}
 			else{//progn aka scope block with return value.
@@ -514,6 +514,12 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 				operands.push_back(parse_closure(src,OR));
 			} else
 				if (is_operator(tok)) {
+					// struct initializer
+					if (close==CLOSE_BRACE && delim==COMMA && outer_op){// todo field-init operator
+						if (tok==COLON || tok==ASSIGN)
+							tok=FIELD_ASSIGN;
+					}
+					
 					if (was_operand) tok=get_infix_operator(tok);
 					else tok=get_prefix_operator(tok);
 					
@@ -547,7 +553,6 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* op) {
 							operands.push_back(t);
 							was_operand=true;
 						}
-					
 						else{
 							operators.push_back(SrcOp{tok,pos});
 							was_operand=false;

@@ -662,7 +662,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 		auto op=dynamic_cast<ExprOp*>(a);
 		ArgDef* field=nullptr;
 		Type*t = nullptr;
-		if (op&&(op->name==ASSIGN||op->name==COLON||op->name==LET_ASSIGN)){
+		if (op&&(op->name==FIELD_ASSIGN)){
 			field=sd->find_field(op->lhs);
 			op->rhs->resolve(sc,field->type(),flags); // todo, need type params fwd here!
 			propogate_type(flags,op,op->lhs->type_ref(),op->rhs->type_ref());
