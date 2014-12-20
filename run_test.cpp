@@ -16,14 +16,6 @@ struct CompilerTest {
 // that sets up global stuff for it.
 
 CompilerTest g_Tests[]={
-/*	{
-		"if - else if -",__FILE__,__LINE__,
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	x:=if argc>1 {10}else if argc>2{20} else {30};"
-		"	0	}						\n"
-		,nullptr
-	},
-*/
 	{
 		"basic enum+match",__FILE__,__LINE__,
 		"enum Foo{ 									\n"
@@ -32,10 +24,10 @@ CompilerTest g_Tests[]={
 		"	Qux,Boo \n"
 		"};						 					\n"
 		"fn main(argc:int,argv:**char)->int{		\n"
-		"	sx:=new Bar{10,20};								\n"
+		"	sx:=new Bar{15,25};								\n"
 		"	sy:=new Baz{10.0,20.0};								\n"
 		"	z1:=match sy {									\n"
-//		"		a@*Bar=>a.x, 							\n"
+		"		a@*Bar=>a.x as float, 							\n"
 		"		*Baz(vx,vy) =>vx+vy, 				\n"
 		//"		Qux|Boo=>0, \n"
 		"		_=>0.0					\n"
@@ -155,6 +147,13 @@ CompilerTest g_Tests[]={
 		// expected result
 		"u.tag=0 a=10\n"
 		"u.tag=1\n"
+	},
+	{
+		"if - else if -",__FILE__,__LINE__,
+		"fn main(argc:int,argv:**char)->int{\n"
+		"	x:=if argc>1 {10}else if argc>2{20} else {30};"
+		"	0	}						\n"
+		,nullptr
 	},
 
 	{

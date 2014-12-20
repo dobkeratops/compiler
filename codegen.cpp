@@ -1200,17 +1200,19 @@ CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()>
 		auto if_result=f_compile_body();//body->compile(cg,sc);
 		if (if_result.is_valid()){
 			if_result=cg.load(if_result,0);
+			retvalref.store(cg,if_result);
 		}
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_else);
 		auto else_result=else_block->compile(cg,sc);
 		if (else_result.is_valid()){
 			else_result=cg.load(else_result,0);
+			retvalref.store(cg,else_result);
 		}
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		// phi node picks result, conditional assignment
-		if (if_result.is_valid() && else_result.is_valid()){
+/*		if (if_result.is_valid() && else_result.is_valid()){
 			cg.emit_ins_begin(outname,"phi");
 			cg.emit_type(if_result);
 			cg.emit_separator("");
@@ -1218,15 +1220,21 @@ CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()>
 			cg.emit_phi_reg_label(else_result.reg,label_else);
 			cg.emit_ins_end();
 		}
+
 		auto return_type=ifn->get_type();
 		return CgValue(outname,return_type);
+ */
+		return retvalref;
 	}
 	else {
 		/// TODO: ensure  if ... else if ... typechecks ok.
 		cg.emit_branch(condition,label_if,label_endif);
 		cg.emit_label(label_if);
 		auto ifblock=f_compile_body();//body->compile(cg,sc);
-		if (ifblock.is_valid()) ifblock=cg.load(ifblock);
+		if (ifblock.is_valid()) {
+			ifblock=cg.load(ifblock);
+//			retvalref.store(cg,) no return possible for single case , but should we use auto null for this?
+		}
 		cg.emit_branch(label_endif);
 		cg.emit_label(label_endif);
 		return CgValue();
