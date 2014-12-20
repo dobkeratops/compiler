@@ -165,11 +165,13 @@ public:
 	CgValue emit_instruction_reg_i32(Name opname,const Type* type,  Name outname,CgValue src1,int val);
 	void emit_separator(const char* txt);
 	void emit_i32_lit(int index);
+	void emit_u32_lit(int index);
 	void emit_int_lit(Name type, int value);
 	void emit_int_lit(const Type* type, int value);
 	void emit_i32_reg(Name reg);
 	// Construction of a single value.
 	CgValue  emit_i32(int val);
+	CgValue  emit_u32(int val);
 	CgValue  emit_voidptr(void*);
 	CgValue  emit_i64(int val);
 	CgValue emit_float(float val);
@@ -186,6 +188,7 @@ public:
 	CgValue store(const CgValue& dst, const CgValue& src);//{return dst.store(*this,src);};
 	CgValue store(const CgValue& dst);//{return dst.store(*this);};
 	CgValue emit_store_i32(const CgValue& dst,int val);//{return dst.store(*this);};	void	emit_operand(const CgValue& val);
+	CgValue emit_store_u32(const CgValue& dst,int val);//{return
 	void	emit_operand(const CgValue& val);
 	void emit_fn_ptr(Name n);
 	void emit_fn(Name n);

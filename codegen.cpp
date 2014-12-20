@@ -460,6 +460,16 @@ CgValue CodeGen::emit_i32(int v){
 	emit_ins_end();
 	return	CgValue(reg,Type::get_i32());
 }
+CgValue CodeGen::emit_u32(int v){
+	auto reg=this->next_reg();
+	emit_ins_begin(reg,"or");
+	emit_u32_lit(0);
+	emit_comma();
+	emit_txt("%d",v);
+	emit_ins_end();
+	return	CgValue(reg,Type::get_u32());
+}
+
 ExprLiteral* g_lit_bool;
 CgValue CodeGen::emit_bool(bool v){
 	if (!g_lit_bool) g_lit_bool=new ExprLiteral(v);
@@ -530,7 +540,17 @@ CgValue CodeGen::emit_store_i32(const CgValue& dst,int value){
 	emit_ins_begin_name("store");
 	emit_i32_lit(value);
 	emit_type_operand(dst);
-	emit_txt(", align 8");
+	emit_txt(", align 4");
+	emit_ins_end();
+	return dst;
+}
+CgValue CodeGen::emit_store_u32(const CgValue& dst,int value){
+	auto r=next_reg();
+	ASSERT(dst.addr && "store requires a reference destination");
+	emit_ins_begin_name("store");
+	emit_u32_lit(value);
+	emit_type_operand(dst);
+	emit_txt(", align 4");
 	emit_ins_end();
 	return dst;
 }
@@ -1335,6 +1355,10 @@ void CodeGen::emit_int_lit(const Type* t, int value) {
 void CodeGen::emit_i32_lit(int index) {
 	emit_comma();
 	emit_txt("i32 %d",index);
+}
+void CodeGen::emit_u32_lit(int index) {
+	emit_comma();
+	emit_txt("u32 %d",index);
 }
 
 void CodeGen::emit_i32_reg(Name reg) {

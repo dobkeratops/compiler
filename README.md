@@ -13,7 +13,7 @@ Dont have a name yet hence 'hack'..
 #### Currently supports:-
 
  * most C operators, functions, structs,if-else, 
-  *(todo ++/--,and use &p[i] instead of ptr arithmetic)
+  *(todo ++/--,use &p[i] instead of ptr arithmetic)
  * 'everything is an expression' syntax
  * C for loops + break../else{..} expressions
  * function overloading+UFCS
@@ -29,6 +29,9 @@ Dont have a name yet hence 'hack'..
  * limited operator overloading (no conversions yet)
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
+#### WIP
+ * rust like enum/match in progress, but it doesn't work yet, still debugging
+
 example source..
 https://github.com/dobkeratops/compiler/blob/master/example.rs
 
@@ -38,7 +41,7 @@ Quite early days.
 #### Long Term Goals / project pillars :-
 
  * a systems language, 'for games'. no GC,zero overhead principle.
- * significant C++ subset resyntaxed
+ * significant C++ subset resyntaxed, intended for transpiling both ways 
  * open-world polymorphism
  * add Rust/functional language inspired features
  * features for parallelism, GPGPU programming
