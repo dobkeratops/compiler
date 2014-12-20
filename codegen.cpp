@@ -1182,67 +1182,54 @@ void CodeGen::emit_function_type(ExprFnDef* fn_node){
 	emit_function_signature(fn_node,EmitType);
 }
 
-CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()> f_cond, std::function<CgValue()> f_compile_body, Expr* else_block,Type* ret_type){
+CgValue emit_if_else_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()> f_cond, std::function<CgValue()> f_compile_body, std::function<CgValue()> f_compile_else,Type* ret_type){
 	// TODO: Collect phi-nodes for anything modified inside.
 	auto curr_fn=cg.curr_fn;
 	//auto ifn=this;
 	
-	RegisterName outname=cg.next_reg();
 	auto retvalref = cg.emit_alloca(ret_type);
 	auto condition=f_cond();//cond->compile(cg,sc);
 	int index=cg.m_next_reg++;
 	auto label_if=cg.gen_label("if",index);
 	auto label_endif=cg.gen_label("endif",index);
-	if (else_block){
-		auto label_else=cg.gen_label("else",index);
-		cg.emit_branch(condition,label_if,label_else);
-		cg.emit_label(label_if);
-		auto if_result=f_compile_body();//body->compile(cg,sc);
-		if (if_result.is_valid()){
-			if_result=cg.load(if_result,0);
-			retvalref.store(cg,if_result);
-		}
-		cg.emit_branch(label_endif);
-		cg.emit_label(label_else);
-		auto else_result=else_block->compile(cg,sc);
-		if (else_result.is_valid()){
-			else_result=cg.load(else_result,0);
-			retvalref.store(cg,else_result);
-		}
-		cg.emit_branch(label_endif);
-		cg.emit_label(label_endif);
-		// phi node picks result, conditional assignment
-/*		if (if_result.is_valid() && else_result.is_valid()){
-			cg.emit_ins_begin(outname,"phi");
-			cg.emit_type(if_result);
-			cg.emit_separator("");
-			cg.emit_phi_reg_label(if_result.reg,label_if);
-			cg.emit_phi_reg_label(else_result.reg,label_else);
-			cg.emit_ins_end();
-		}
+	auto label_else=cg.gen_label("else",index);
 
-		auto return_type=ifn->get_type();
-		return CgValue(outname,return_type);
- */
-		return retvalref;
+	cg.emit_branch(condition,label_if,label_else);
+	cg.emit_label(label_if);
+	auto if_result=f_compile_body();//body->compile(cg,sc);
+	if (if_result.is_valid()){
+		if_result=cg.load(if_result,0);
+		retvalref.store(cg,if_result);
 	}
-	else {
-		/// TODO: ensure  if ... else if ... typechecks ok.
-		cg.emit_branch(condition,label_if,label_endif);
-		cg.emit_label(label_if);
-		auto ifblock=f_compile_body();//body->compile(cg,sc);
-		if (ifblock.is_valid()) {
-			ifblock=cg.load(ifblock);
-//			retvalref.store(cg,) no return possible for single case , but should we use auto null for this?
-		}
-		cg.emit_branch(label_endif);
-		cg.emit_label(label_endif);
-		return CgValue();
+	cg.emit_branch(label_endif);
+	cg.emit_label(label_else);
+	auto else_result=f_compile_else();
+	if (else_result.is_valid()){
+		else_result=cg.load(else_result,0);
+		retvalref.store(cg,else_result);
 	}
+	cg.emit_branch(label_endif);
+	cg.emit_label(label_endif);
+	return retvalref;
 }
-
-CgValue CodeGen::emit_if_sub(Node* if_node, Scope* s, function<CgValue()> fcond, function<CgValue()> fbody, Expr* else_block,Type* ret_t){
-	return emit_if_llvm(*this,if_node,if_node->get_scope(), fcond,fbody,else_block,ret_t);
+/*
+CgValue emit_if_llvm(CodeGen& cg, Node* ifn, Scope* sc, std::function<CgValue()>,std::function<CgValue()> f_compile_body, CgValue else_val, Type* ret_type)
+{
+		/// TODO: ensure  if ... else if ... typechecks ok.
+	cg.emit_branch(condition,label_if,label_endif);
+	cg.emit_label(label_if);
+	auto ifblock=f_compile_body();//body->compile(cg,sc);
+	if (ifblock.is_valid()) {
+		ifblock=cg.load(ifblock);
+//			retvalref.store(cg,) no return possible for single case , but should we use auto null for this?
+	}
+	cg.emit_branch(label_endif);
+	cg.emit_label(label_endif);
+	return CgValue();
+}
+*/
+CgValue CodeGen::emit_if_sub(Node* if_node, Scope* s, function<CgValue()> fcond, function<CgValue()> fbody, function<CgValue()> else_block, Type* ret_t){
+	return emit_if_else_llvm(*this,if_node,if_node->get_scope(), fcond, fbody, else_block,ret_t);
 }
 CgValue CodeGen::emit_if(Node* if_node, Expr* cond, Expr* body, Expr* else_block,Type* ret_t){
 	// this intermediate looks redundant but its' for swapping in C backend later..
@@ -1251,7 +1238,8 @@ CgValue CodeGen::emit_if(Node* if_node, Expr* cond, Expr* body, Expr* else_block
 	(	if_node,sc ,
 		[&]()->CgValue{return cond->compile(*this,sc);},
 	 	[&]()->CgValue{return body->compile(*this,sc);},
-	 	else_block,ret_t);
+		[&]()->CgValue{if (else_block)return else_block->compile(*this,sc);else return CgValue();},
+	 	ret_t);
 }
 
 /*

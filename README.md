@@ -30,7 +30,7 @@ Dont have a name yet hence 'hack'..
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
 #### WIP
- * rust like enum/match in progress, but it doesn't work yet, still debugging
+ * rust like enum/match. Compiles &runs without crashing,need to test cases..
 
 example source..
 https://github.com/dobkeratops/compiler/blob/master/example.rs

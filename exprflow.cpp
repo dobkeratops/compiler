@@ -296,7 +296,7 @@ CgValue MatchArm::compile(CodeGen& cg, Scope* sc){
 		[&]{
 			arm->compile_bind_locals(cg,armsc,arm->pattern,match_val);
 			return arm->body->compile(cg,armsc);},
-		arm->next,
+		[&]{return arm->next->compile(cg,armsc);},
 	 	this->type()
 	);
 	return ret;
