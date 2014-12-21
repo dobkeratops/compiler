@@ -206,7 +206,10 @@ int StringTable::get_index(const char* str, const char* end,char flag) {
 	names.insert(std::make_pair(s,nextId));
 	index_to_name.resize(nextId+1);
 	index_to_name[nextId]=s;
+	int r;
+	if (1==sscanf(str,"%d",&r)) flag|=StringTable::Number;
 	flags.resize(nextId+1); flags[nextId]=flag;
+
 	if (verbose)
 		dbprintf("insert[%d]%s\n",nextId,index_to_name[nextId].c_str());
 	return	nextId++;

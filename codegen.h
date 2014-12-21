@@ -173,12 +173,12 @@ public:
 	void emit_int_lit(const Type* type, int value);
 	void emit_i32_reg(Name reg);
 	// Construction of a single value.
-	CgValue  emit_i32(int val);
-	CgValue  emit_u32(int val);
-	CgValue  emit_voidptr(void*);
-	CgValue  emit_i64(int val);
-	CgValue emit_float(float val);
-	CgValue emit_bool(bool val);
+	CgValue  emit_val_i32(int val);
+	CgValue  emit_val_u32(int val);
+	CgValue  emit_val_voidptr(void*);
+	CgValue  emit_val_i64(int val);
+	CgValue emit_val_float(float val);
+	CgValue emit_val_bool(bool val);
 	void emit_operand_literal(const CgValue& cg,const ExprLiteral* lit);
 	CgValue emit_make_literal(ExprLiteral* l);
 	RegisterName	emit_extractvalue(RegisterName dst,const Type* type,RegisterName src,int index);

@@ -191,6 +191,17 @@ fn main(argc:int,argv:**char)->int{
 
 	let foo=ret_anon_struct();
 	printf("anon struct fields= %d %d\n",foo.x, foo.y);
+
+	// rust style matching
+	for x:=0; x<10; x+=1b{
+		match x {
+			2 ..4=>printf("%d inrange 2-4\n",x),
+			5|7|9=>printf("%d odd\n",x),
+				_=>printf("%d ...\n",x)
+		};
+	};
+
+
 	// type inference with polymorphic lambdas
 	// unlike C++, the output type of the lambdas infers 'R' here
 

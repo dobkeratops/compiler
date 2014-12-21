@@ -110,6 +110,7 @@ ExprMatch* parse_match(TokenStream& src){
 		if (close==IF){
 			a->cond=parse_block(src,FAT_ARROW,COMMA,0);
 		}
+		dbg(dbprintf("%s \n",str(src.peek_tok())));
 		a->body=parse_expr(src);
 		auto tok=src.expect(COMMA,CLOSE_BRACE);
 		if (tok==CLOSE_BRACE)
@@ -148,19 +149,45 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 			parse_pattern(src,close,close2,close3,out_close_tok,np);
 			if (owner)owner->push_back(np);
 			return np;
-		}
+
+//			if (owner){
+//				owner->push_back(np);
+//				return nullptr;
+//			}else
+//				return np;
+//		}else
+		}else
 		if (t==OPEN_PAREN){
 			if (!prev) {
 				prev=new Pattern(src.pos, TUPLE);
 			}
 			int close=0;
-			parse_pattern(src,CLOSE_PAREN,0,0,&close,prev);
+			auto np=parse_pattern(src,CLOSE_PAREN,0,0,&close,prev);
+			// maybe more eg (e,f)|(c,d)|(a,b)
+			//if (owner){
+			//	owner->push_back(prev);prev=0;}
+		}else
+ 
+		if (t==RANGE){
+			if(!prev){
+				error(src.prev_pos,"range needs preceeding value eg a..b");
+			}
+			auto np=new Pattern(src.prev_pos,RANGE);
+			np->push_back(prev);
+			np->push_back(parse_pattern(src,close,close2,close3,nullptr,nullptr));
+	
+			if (owner){
+				owner->push_back(np);prev=0;
+			}
+			else prev=np;
 		}
 		// todo - range ".."
 		// todo - slice patterns
 		else if (t==PATTERN_BIND){ // todo its @ in scala,rust
 			auto np=new Pattern(src.prev_pos,PATTERN_BIND);
-			if (owner){ error(src.pos,"pattern bind @ can only be first eg x@whatever(..)");}
+			if (owner){
+				error(src.pos,"pattern bind @ can only be first eg x@whatever(..)");
+			}
 			
 			np->push_back(prev);
 			parse_pattern(src,close,close2,close3,out_close_tok, np);
@@ -175,8 +202,12 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 				owner->push_back(prev);prev=nullptr;
 			}
 		} else if (t==OR){ // todo - bit more elaborate. should be ANY(....)  distinct from TUPLE(...)
-			if (owner){error(src.pos,"TODO ( | | ), only  | | | works right now");}
-			if (!prev){error(src.pos,"in pattern | must seperate options eg a|b|c..");}
+			if (owner){
+				error(src.pos,"TODO ( | | ), only  | | | works right now");
+			}
+			if (!prev){
+				error(src.pos,"in pattern | must seperate options eg a|b|c..");
+			}
 			auto np=new Pattern(src.pos,OR);
 			np->push_back(prev);
 			np->push_back(parse_pattern(src,close,close2,close3,out_close_tok,nullptr));
@@ -186,14 +217,18 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 			else { return np; }
 		} else{
 			if (prev){
-				if (owner) owner->push_back(prev);
-				else {error(src.pos,"trying to seperate pattern in context where it doesn't work yet");
+				if (owner){
+					owner->push_back(prev);
+				}
+				else {
+					error(src.pos,"trying to seperate pattern in context where it doesn't work yet");
 				}
 			}
 			prev=new Pattern(src.pos,t);
 		}
 	}
-	if (owner&&prev)owner->push_back(prev);
+	if (owner&&prev)
+		owner->push_back(prev);
 	return (owner)?nullptr:prev;
 }
 

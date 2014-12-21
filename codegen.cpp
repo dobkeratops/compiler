@@ -460,7 +460,7 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,
 CgValue CodeGen::emit_assign(const CgValue& dst, const CgValue& src){
 	return dst.store(*this, this->load(src));
 }
-CgValue CodeGen::emit_i32(int v){
+CgValue CodeGen::emit_val_i32(int v){
 	auto reg=this->next_reg();
 	emit_ins_begin(reg,"or");
 	emit_i32_lit(0);
@@ -469,7 +469,7 @@ CgValue CodeGen::emit_i32(int v){
 	emit_ins_end();
 	return	CgValue(reg,Type::get_i32());
 }
-CgValue CodeGen::emit_u32(int v){
+CgValue CodeGen::emit_val_u32(int v){
 	auto reg=this->next_reg();
 	emit_ins_begin(reg,"or");
 	emit_u32_lit(0);
@@ -480,7 +480,7 @@ CgValue CodeGen::emit_u32(int v){
 }
 
 ExprLiteral* g_lit_bool;
-CgValue CodeGen::emit_bool(bool v){
+CgValue CodeGen::emit_val_bool(bool v){
 	if (!g_lit_bool) g_lit_bool=new ExprLiteral(v);
 	return CgValue(g_lit_bool);
 }
@@ -519,7 +519,7 @@ CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 //		emit_txt("%d",lit->u.val_bool?1:0);
 	}
 	else if (ltn==INT){
-		return emit_i32(lit->u.val_int);
+		return emit_val_i32(lit->u.val_int);
 	}
 	else if(ltn==FLOAT){
 		// todo, i guess we're goint to have t make a global constants table

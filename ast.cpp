@@ -163,7 +163,7 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 		return ptn->sub->compile(cg, sc, val.is_valid()?val.deref_op(cg):val);
 	}
 	if (ptn->name==PLACEHOLDER){
-		return cg.emit_bool(true);
+		return cg.emit_val_bool(true);
 	}
 	if (ptn->name==PATTERN_BIND){
 		auto v=ptn->get_elem(0);
@@ -171,13 +171,24 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 		auto disr=val.is_valid()?cg.emit_loadelement(val, __DISCRIMINANT):val;
 		auto ps=p->type()->is_pointer_or_ref()?p->sub:p;
 		auto sd=ps->def->as_struct_def();
-		auto b=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
+		auto b=cg.emit_instruction(EQ, disr, cg.emit_val_i32(sd->discriminant));
 		auto var=v->def->as_variable();
 		if (val.is_valid())
 			CgValue(var).store(cg, cg.emit_conversion((Node*)ptn, val, var->type(), sc));// coercion?
 		
 		return b;
 	}
+	else if (ptn->name==RANGE || ptn->name==RANGE_LT){
+		auto sp=ptn->sub;
+		auto lo=sp->compile(cg,sc,CgValue());
+		auto hi=sp->next->compile(cg,sc,CgValue());
+		return	cg.emit_instruction(
+									AND,Type::get_bool(),
+									cg.emit_instruction(GE,val,lo),
+									cg.emit_instruction(ptn->name==RANGE?LE:LT,val,hi)
+									);
+	}
+	else
 	if (ptn->name==OR || ptn->name==TUPLE ||ptn->sub){// iterate components...
 		int index;
 		CgValue ret;
@@ -190,7 +201,7 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 			auto ptns=ptn->type()->is_pointer_or_ref()?ptn->sub:ptn;
 			auto sd=ptns->def->as_struct_def();
 			index=sd->first_user_field_index();
-			ret=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
+			ret=cg.emit_instruction(EQ, disr, cg.emit_val_i32(sd->discriminant));
 			if (val.is_valid())
 				val2=cg.emit_conversion((Node*)ptn,val, ptn->type(),sc);
 			dbg2(val2.type->dump(0));dbg2(newline(0));
@@ -199,19 +210,13 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
 			auto elem=ptn->name!=OR?cg.emit_getelementref(val2,0, index,subp->type()):val;
 			auto b=subp->compile(cg, sc, elem);
+			if (ptn->name==OR){ b= cg.emit_instruction(EQ,b,val);}
 			if (op){
 				if (!ret.is_valid()) ret=b;
-				else ret=cg.emit_instruction(op,ret,b);
+				else ret=cg.emit_instruction(op,Type::get_bool(),ret,b);
 			}
 		}
 		return ret;
-	}
-	else if (ptn->name==RANGE){
-		return	cg.emit_instruction(
-									AND,
-									cg.emit_instruction(GE,val,ptn->sub->compile(cg,sc,CgValue())),
-									cg.emit_instruction(LE,val,ptn->sub->compile(cg,sc,CgValue()))
-									);
 	}
 	else if (ptn->def){
 		if (auto var=ptn->def->as_variable()){
@@ -224,12 +229,16 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 			dbg(dbprintf("given val :",var->name_str()));dbg(val.type->dump_if(-1));dbg(newline(0));dbg(ptn->type()->dump_if(-1));dbg(val.dump());dbg(newline(0));
 			if (val.is_valid())
 				varr.store(cg, val);
-			return cg.emit_bool(true);
+			return cg.emit_val_bool(true);
 		}else
 			// single value
 			if (auto lit=ptn->def->as_literal()){
 				return	cg.emit_instruction(EQ, CgValue(lit), val);
 			}
+	}
+	if (is_number(this->name)){
+	// its a constant or number
+		return cg.emit_val_i32(getNumberInt(this->name));
 	}
 	dbg(ptn->dump(0));
 	dbg(dbprintf("uncompiled node %s\n",str(ptn->name)));
