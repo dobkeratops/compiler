@@ -1570,7 +1570,6 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 
 }
 
-
 void compile_raw_vtable(CodeGen& cg, ExprStructDef* sd){
 	// raw vtable looks more like what clang spits out, but we want static fields & more metadata
 	cg.emit_txt("@%s = private unnamed_addr",str(sd->vtable_name));

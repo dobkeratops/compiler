@@ -37,6 +37,10 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		return ResolvedType();
 	if (!rhs ) // no input, can't do anything (todo-infer out from patterns)
 		return ResolvedType();
+	if (this->name==EXPRESSION){
+		((Node*)(this->sub))->resolve(sc,rhs,flags);
+		return propogate_type(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
+	}
 	if (this->name==PTR){
 		if (rhs->name==PTR){
 			auto ret=sub->resolve_with_type(sc, rhs->sub, flags);
@@ -78,10 +82,23 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		}
 	} // else its a var of given type, or just a constant?
 	else{
-		if (auto sd=sc->find_struct(this))
+		propogate_type_fwd(flags, (Node*)this, rhs,this->type_ref());
+		dbg(dbprintf("matching pattern %s with..",str(this->name)));dbg(rhs->dump(-1));dbg(newline(0));
+		if (auto sd=sc->find_struct_name_type_if(sc,this->name,this->type()))
 		{
 			this->set_struct_type(sd);
-		}else
+			return ResolvedType();
+		}
+		if (auto sd=sc->find_struct_named(this->name)){
+			this->set_struct_type(sd);
+			return ResolvedType();
+		}
+		if (auto sd=sc->find_inner_def_named(sc,this, 0)){
+
+			this->set_struct_type(sd);
+			return ResolvedType();
+		}
+
 		// TODO named-constants
 		// TODO boolean true/false
 		// TODO nullptr
@@ -106,6 +123,86 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		}
 	}
 	return ResolvedType();
+}
+
+CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
+	auto ptn=this;
+	// emit a condition to check if the runtime value  fits this pattern.
+	// TODO-short-curcuiting - requires flow JumpToElse.
+	
+	// single variable bind.
+	if (ptn->name==EXPRESSION){
+		auto rhs=ptn->sub->compile(cg,sc,CgValue());
+		if (val.is_valid()){
+			return cg.emit_instruction(EQ, rhs, val);
+		} else
+			return rhs;
+	}
+	if (ptn->name==PTR ||ptn->name==REF){
+		return ptn->sub->compile(cg, sc, val.deref_op(cg));
+	}
+	if (ptn->name==PLACEHOLDER){
+		return cg.emit_bool(true);
+	}
+	if (ptn->name==PATTERN_BIND){
+		auto v=ptn->get_elem(0);
+		auto p=ptn->get_elem(1);
+		auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
+		auto ps=p->type()->is_pointer_or_ref()?p->sub:p;
+		auto sd=ps->def->as_struct_def();
+		auto b=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
+		auto var=v->def->as_variable();
+		CgValue(var).store(cg, cg.emit_conversion((Node*)ptn, val, var->type(), sc));// coercion?
+		
+		return b;
+	}
+	if (ptn->name==OR || ptn->name==TUPLE ||ptn->sub){// iterate components...
+		int index;
+		CgValue ret;
+		CgValue	val2=val;
+		Name op;
+		if (ptn->name==OR) {op=LOG_OR;index=0;}
+		else if(ptn->name==TUPLE){op=LOG_AND;index=0;}
+		else{
+			auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
+			auto ptns=ptn->type()->is_pointer_or_ref()?ptn->sub:ptn;
+			auto sd=ptns->def->as_struct_def();
+			index=sd->first_user_field_index();
+			ret=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
+			val2=cg.emit_conversion((Node*)ptn,val, ptn->type(),sc);
+			dbg2(val2.type->dump(0));dbg2(newline(0));
+		}
+		//todo - this part moves to bind if not or/tople
+		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
+			auto elem=ptn->name!=OR?cg.emit_getelementref(val2,0, index,subp->type()):val;
+			auto b=subp->compile(cg, sc, elem);
+			if (op){
+				if (!ret.is_valid()) ret=b;
+				else ret=cg.emit_instruction(op,ret,b);
+			}
+		}
+		return ret;
+	}
+	else if (ptn->name==RANGE){
+		return	cg.emit_instruction(
+									AND,
+									cg.emit_instruction(GE,val,ptn->sub->compile(cg,sc,CgValue())),
+									cg.emit_instruction(LE,val,ptn->sub->compile(cg,sc,CgValue()))
+									);
+	}
+	else if (auto var=ptn->def->as_variable()){
+		dbg(dbprintf("bind %s :",var->name_str()));dbg(var->type()->dump_if(-1));dbg(newline(0));
+		dbg(dbprintf("given val :",var->name_str()));dbg(val.type->dump_if(-1));dbg(newline(0));dbg(ptn->type()->dump_if(-1));dbg(newline(0));
+		CgValue(var).store(cg, val);
+		return cg.emit_bool(true);
+	}else
+		// single value
+		if (auto lit=ptn->def->as_literal()){
+			return	cg.emit_instruction(EQ, CgValue(lit), val);
+		}
+	ptn->dump(0);
+	error(ptn,"uncompiled node %s",str(ptn->name));
+	return CgValue();
 }
 
 void Pattern::push_back(Pattern* newp){

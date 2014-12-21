@@ -126,6 +126,13 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int* close_tok, Pat
 	Pattern* prev=0;
 	while (auto t=src.eat_tok()){
 		if (t==close || t==close2) {if (close_tok){*close_tok=(int)t;}break;}
+		if (!prev && t==PATTERN_BIND){//backticks would be better since this can be @
+			auto np=new Pattern(src.pos, EXPRESSION);
+			np->push_back((Pattern*)parse_expr(src));// TODO, this is dodgy- subtype is not pattern. we're counting on Pattern to know. we'd need to derive PatternExpression.
+			if (owner)owner->push_back(np);
+			return np;
+			
+		}
 		if (t==PTR || t==REF || t==MUL || t==ADDR){ // todo: is_prefix
 			if (t==MUL) t=PTR;
 			if (t==ADDR) t=REF;

@@ -13,6 +13,51 @@ struct CompilerTest {
 
 
 CompilerTest g_Tests[]={
+
+
+	{	"elaborate match example",__FILE__,__LINE__,R"====(
+
+		struct FILE;
+		extern"C"fn printf(s:str,...)->int;
+		extern"C"fn fopen(d:*char,z:*char)->*FILE;
+		extern"C"fn fclose(d:*FILE)->int;
+		extern"C"fn fread(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
+		extern"C"fn fwrite(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
+		extern"C"fn sqrt(f:float)->float;
+		
+		struct Vec3<T>{vx:T,vy:T,vz:T};
+		fn + <T>(a:&Vec3<T>,b:&Vec3<T>)=Vec3::<T>{vx:a.vx+b.vx,vy:a.vy+b.vy,vz:a.vz+b.vz};
+		fn - <T>(a:&Vec3<T>,b:&Vec3<T>)=Vec3::<T>{vx:a.vx-b.vx,vy:a.vy-b.vy,vz:a.vz-b.vz};
+		
+		enum Shape {
+			Sphere{s_centre:Vec3<float>,s_radius:float},
+			Cuboid{c_min:Vec3<float>,c_max:Vec3<float>}
+		};
+		
+		fn shape_vol(s:*Shape)->float= match s{
+			*Sphere(my_centre, my_radius)=>{4.0/3.0*3.142* my_radius*my_radius*my_radius},
+			//	*Cuboid(v_min, v_max)=>{ d:=v_max-v_min; d.vx*d.vy*d.vz},
+			_ =>0.0
+		};
+		
+		fn main(argc:int, argv:**char)->int{
+			let v0 = Vec3::<float>{1.0,2.0,3.0};
+			let v1 = Vec3::<float>{1.0,2.0,3.0};
+			let v2=v0+v1;
+			
+			let s1=new Sphere{Vec3::<float>{1.0,1.0,1.0},1.0};
+			let s2=new Cuboid{Vec3::<float>{1.0,1.0,1.0},Vec3::<float>{2.0,2.0,2.0}};
+			let sv1=shape_vol(s1 as *Shape);
+			let sv2=shape_vol(s2 as *Shape);
+			
+			0
+		}
+		)===="
+		,nullptr
+	},
+
+	
+	
 	{	"basic enum+match",__FILE__,__LINE__,R"====(
 		
 		fn"C" printf(s:str,...)->int;
@@ -39,7 +84,9 @@ CompilerTest g_Tests[]={
 		)===="
 		,nullptr
 	},
+	
 
+	
 
 	{	"type sugar",__FILE__,__LINE__,R"====(
 		struct Foo{x:int};

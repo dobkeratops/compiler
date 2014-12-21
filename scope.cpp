@@ -326,6 +326,28 @@ ExprStructDef* Scope::find_inner_def(Scope* original,const Node* id, const Type*
 	// TODO
 	return r?r->as_struct_def():nullptr;
 }
+ExprStructDef* Scope::find_inner_def_named(Scope* original,Node* id_name,int flags){
+	ExprDef* r=nullptr;
+	
+	for (auto sc=this; sc; sc=sc->parent_or_global()){
+		for (auto nmi=sc->named_items; nmi; nmi=nmi->next){
+			for (auto ns=nmi->structs; ns;ns=ns->next_of_name){
+				if (auto n=ns->scope->find_named_items_local(id_name->name)){
+					if (auto x=n->structs){ // TODO parameters!!!
+						if (r)
+							error_ambiguity(flags,id_name,id_name->type(),(ExprDef*)x,r);
+						else r=x;
+					}
+				}
+			}
+		}
+	}
+	if (r) return r->as_struct_def();
+	// if not found, look deeper. shallowest matches always take precedence
+	// TODO
+	return r?r->as_struct_def():nullptr;
+}
+
 ExprStructDef* Scope::find_struct_named(Name name){
 	if (auto fn=this->find_named_items_local(name)){
 		for (auto st=fn->structs; st;st=st->next_of_name){
@@ -336,7 +358,9 @@ ExprStructDef* Scope::find_struct_named(Name name){
 	}
 	if (auto p=parent_or_global())
 		return p->find_struct_named(name);
-	else return nullptr;
+	else
+
+	 return nullptr;
 }
 
 void Scope::add_fn(ExprFnDef* fnd){

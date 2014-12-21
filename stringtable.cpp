@@ -60,7 +60,7 @@ const char* g_token_str[]={
 	"&","|","^","%","<<",">>","?:","?>","?<",					//bitwise
 	"<",">","<=",">=","==","!=",		//compares
 	"&&","||",		//logical
-	"=",":=","=:","@",".:=",
+	"=",":=","=:","@","",".:=",
 	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
 	".=","?=",	// linklist follow ptr.=next
 	"++","--","++","--", //inc/dec
@@ -69,7 +69,7 @@ const char* g_token_str[]={
 	",",";",";;",
 	"...","..","..<","..>","..>=","..<=",
 	"_","",
-	"\"C\"","__vtable_ptr","__data_ptr","__parent_ptr","__env_ptr","__discriminant","__env_i8_ptr","__vector","__string","__unique_ptr","__dictionary","__gc_ptr",
+	"\"C\"","__vtable_ptr","__data_ptr","__parent_ptr","__env_ptr","__discriminant","__env_i8_ptr","__vector","__string","__unique_ptr","__dictionary","__gc_ptr","",
 	NULL,
 };
 const char* g_operator_symbol[]={
@@ -120,7 +120,7 @@ int g_tok_info[]={
 	READ|8,READ|7,READ|8,READ|6,READ|9,READ|9,READ|9,READ|9,READ|9,	//bitwise
 	READ|8,READ|8,READ|8,READ|8,READ|9,READ|9,	// COMPARES
 	READ|13,READ|14,	//logical
-	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,0,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
+	WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,WRITE_LHS|READ_RHS|ASSOC|16,0,0,WRITE_LHS|READ_RHS|ASSOC|16, // assignment
 	
 	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16, // assign-op
 	WRITE_LHS|READ|ASSOC|16, // dot-assign
@@ -131,7 +131,7 @@ int g_tok_info[]={
 	0,
 	0,0,
 	0, //placeholder
-	0,0,0,0,0,0,0,0,0,0,0,0,0
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0
 };
 
 const char* operator_symbol(Name ok);
