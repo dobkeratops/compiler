@@ -29,17 +29,16 @@ CompilerTest g_Tests[]={
 		fn + <T>(a:&Vec3<T>,b:&Vec3<T>)=Vec3::<T>{vx:a.vx+b.vx,vy:a.vy+b.vy,vz:a.vz+b.vz};
 		fn - <T>(a:&Vec3<T>,b:&Vec3<T>)=Vec3::<T>{vx:a.vx-b.vx,vy:a.vy-b.vy,vz:a.vz-b.vz};
 		
-		enum Shape {
-			Sphere(Vec3<float>,float),
-//			Sphere{s_centre:Vec3<float>,s_radius:float},
-			Cuboid{c_min:Vec3<float>,c_max:Vec3<float>}
-		};
-		
 		fn shape_vol(s:*Shape)->float= match s{
 			*Sphere(my_centre, my_radius)=>{4.0/3.0*3.142* my_radius*my_radius*my_radius},
 			*Cuboid(v_min, v_max)=>{ d:=v_max-v_min; d.vx*d.vy*d.vz},
 			_ =>0.0
 		};
+		enum Shape {
+			Sphere(Vec3<float>,float),
+			Cuboid{c_min:Vec3<float>,c_max:Vec3<float>}
+		};
+		
 		
 		fn main(argc:int, argv:**char)->int{
 			let v0 = Vec3::<float>{1.0,2.0,3.0};

@@ -415,10 +415,10 @@ size_t Type::size() const{
 ExprStructDef* Type::get_struct_autoderef()const{
 	auto p=this;
 //	while (p && !p->is_struct()){
-	while (p->is_qualifier_or_ptr_or_ref()){
+	while (p && p->is_qualifier_or_ptr_or_ref()){
 		p=p->sub;
 	}
-	return p->struct_def();
+	return p?p->struct_def():nullptr;
 }
 ExprStructDef* Type::get_receiver()const
 {

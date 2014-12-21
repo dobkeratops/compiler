@@ -20,6 +20,20 @@ fn take_closure(funcp:|int|){
 	funcp(10);
 }
 
+// Rust style match
+fn shape_vol(s:*Shape)->float= match s{
+	*Sphere(my_centre, my_radius)=>{
+		printf("match sphere vol\n");
+		4.0/3.0*3.142* my_radius*my_radius*my_radius
+	},
+	*Cuboid(vmin, vmax)=>{
+		printf("match cuboid vol\n");
+		d:=vmax-vmin; d.vx*d.vy*d.vz 
+	},
+	*Cylinder(radius,height)=>3.142*radius*radius+height,
+	_ =>{printf("shape error\n");0.0}
+};
+
 // 'where' expression sugar ..sort salient info on one line
 fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
 	ofsx:=x-x0;dx:=x1-x0;dy:=y1-y0;
@@ -70,19 +84,12 @@ struct IBaz {
 	virtual bar(){}  
 }
 
+
 // Rust style enum
 enum Shape {
 	Sphere(Vec3,float),
 	Cuboid{min:Vec3,max:Vec3},
 	Cylinder(float,float),
-};
-
-// Rust style match
-fn shape_vol(s:*Shape)->float= match s{
-	*Sphere(my_centre, my_radius)=>{printf("match sphere vol\n");4.0/3.0*3.142* my_radius*my_radius*my_radius},
-	*Cuboid(vmin, vmax)=>{ printf("match cuboid vol\n");d:=vmax-vmin; d.vx*d.vy*d.vz },
-	*Cylinder(radius,height)=>3.142*radius*radius+height,
-	_ =>{printf("shape error\n");0.0}
 };
 
 // adhoc overloading like C++; most specific function is matched at callsite
