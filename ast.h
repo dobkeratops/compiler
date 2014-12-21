@@ -25,8 +25,11 @@ struct Pattern : Node {
 	Node*	clone()const;
 	// if-let , args, or match arms would all call this.
 	ResolvedType	resolve_with_type(Scope* sc, const Type* rhs, int flags);
-	CgValue	compile_condition(CodeGen& cg,Scope* sc);
-	CgValue compile_bind(CodeGen& cg, Scope* sc);
+	CgValue	compile(CodeGen& cg, Scope* sc, CgValue input) override;
+	// subroutines of pattern compile, allows seperation into if (cond){bind..}
+	// brute force just uses 'compile' and hopes llvm can optimize..
+	CgValue	compile_condition(CodeGen& cg,Scope* sc, CgValue input);
+	CgValue compile_bind(CodeGen& cg, Scope* sc, CgValue input);
 	void	recurse(std::function<void(Node*)>& f);
 	Name	as_name()const;
 

@@ -206,13 +206,14 @@ void ExprMatch::recurse(std::function<void(Node*)>& f){
 }
 
 
-CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, CgValue val){
+CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
+	auto ptn=this;
 	// emit a condition to check if the runtime value  fits this pattern.
 	// TODO-short-curcuiting - requires flow JumpToElse.
 
 	// single variable bind.
 	if (ptn->name==PTR ||ptn->name==REF){
-		return compile_condition(cg, sc, ptn->sub, val.deref_op(cg));
+		return ptn->sub->compile(cg, sc, val.deref_op(cg));
 	}
 	if (ptn->name==PLACEHOLDER){
 		return cg.emit_bool(true);
@@ -248,7 +249,7 @@ CgValue MatchArm::compile_condition(CodeGen &cg, Scope *sc, const Pattern *ptn, 
 		//todo - this part moves to bind if not or/tople
 		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
 			auto elem=ptn->name!=OR?cg.emit_getelementref(val2,0, index,subp->type()):val;
-			auto b=this->compile_condition(cg, sc, subp, elem);
+			auto b=subp->compile(cg, sc, elem);
 			if (op){
 				if (!ret.is_valid()) ret=b;
 				else ret=cg.emit_instruction(op,ret,b);
@@ -291,7 +292,7 @@ CgValue MatchArm::compile(CodeGen& cg, Scope* sc, CgValue input){
 	(
 		arm,
 		sc,
-		[&]{return arm->compile_condition(cg,armsc, arm->pattern, match_val);},
+		[&]{return arm->pattern->compile(cg,armsc, match_val);},
 		[&]{
 			arm->compile_bind_locals(cg,armsc,arm->pattern,match_val);
 			return arm->body->compile(cg,armsc,CgValue());},

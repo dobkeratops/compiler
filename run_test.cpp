@@ -13,6 +13,32 @@ struct CompilerTest {
 
 
 CompilerTest g_Tests[]={
+	{	"basic enum+match",__FILE__,__LINE__,R"====(
+		
+		fn"C" printf(s:str,...)->int;
+		enum Foo{
+			Bar{x:int,y:int},
+			Baz{x:float,y:float,z:int},
+			Qux,Boo
+		};
+		fn main(argc:int,argv:**char)->int{
+		sx:=new Bar{15,25};
+		sy:=new Baz{10.0,20.0,55};
+		z1:=match sy {
+			a@*Bar=>{printf("match with bar\n");a.x as float},
+			*Baz(vx,vy,vz) =>{printf("match with baz z=%d\n",vz);vx+vy},
+			//"		Qux|Boo=>0, \n"
+			_=>0.0
+		};
+		z2:=match sx {
+			a@*Bar=>{printf("match with bar x=%d y=%d\n",a.x,a.y);a.x},
+			_=>0
+		};
+			0
+		}
+		)===="
+		,nullptr
+	},
 
 
 	{	"type sugar",__FILE__,__LINE__,R"====(
@@ -32,31 +58,6 @@ CompilerTest g_Tests[]={
 			0	}
 		)===="
 		,nullptr,true
-	},
-	{	"basic enum+match",__FILE__,__LINE__,R"====(
-		
-		enum Foo{
-			Bar{x:int,y:int},
-			Baz{x:float,y:float},
-			Qux,Boo
-		};
-		fn main(argc:int,argv:**char)->int{
-			sx:=new Bar{15,25};
-			sy:=new Baz{10.0,20.0};
-			z1:=match sy {
-				a@*Bar=>a.x as float,
-				*Baz(vx,vy) =>vx+vy,
-		//"		Qux|Boo=>0, \n"
-				_=>0.0
-			};
-			z2:=match sx {
-				a@*Bar=>a.x,
-				_=>0
-			};
-			0
-		}
-		)===="
-		,nullptr
 	},
  
 	{	"struct default constructor",__FILE__,__LINE__,R"====(
@@ -353,10 +354,10 @@ CompilerTest g_Tests[]={
 
 	{	"internal vtable",__FILE__,__LINE__,R"====(
 		
-		fn"C" printf(s:str,...)->int;
+		fn"C" printf(s:*char,...)->int;
 		struct Foo {
 			x:int,y:int,
-			virtual v_foo(){printf(\"Foo.foo x=%d %p\n",x,*(this as**void));},
+			virtual v_foo(){printf("Foo.foo x=%d %p\n",x,*(this as**void));},
 			virtual bar(){printf("Foo.bar\n");},
 			virtual baz(){printf("Foo.baz\n");},
 		}
