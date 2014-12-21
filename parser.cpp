@@ -124,8 +124,15 @@ ExprMatch* parse_match(TokenStream& src){
 Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out_close_tok, Pattern* owner){
 	// yikes, this is a total mess
 	Pattern* prev=0;
-	while (auto t=src.eat_tok()){
-		if (t==close || t==close2||t==close3) {if (out_close_tok){*out_close_tok=(int)t;}break;}
+	while (auto t=src.peek_tok()){
+		dbg(dbprintf("%s\n",str(t)));
+		if (t==close || t==close2||t==close3) {
+			if (out_close_tok){
+				*out_close_tok=(int)src.eat_tok();
+			}
+			break;
+		}
+		t=src.eat_tok();
 		if (!prev && t==PATTERN_BIND){//backticks would be better since this can be @
 			auto np=new Pattern(src.pos, EXPRESSION);
 			np->push_back((Pattern*)parse_expr(src));// TODO, this is dodgy- subtype is not pattern. we're counting on Pattern to know. we'd need to derive PatternExpression.
@@ -146,7 +153,8 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 			if (!prev) {
 				prev=new Pattern(src.pos, TUPLE);
 			}
-			parse_pattern(src,CLOSE_PAREN,0,0,out_close_tok,prev);
+			int close=0;
+			parse_pattern(src,CLOSE_PAREN,0,0,&close,prev);
 		}
 		// todo - range ".."
 		// todo - slice patterns
@@ -206,8 +214,9 @@ ExprFnDef* parse_fn_args(TokenStream& src,int close){
 	auto *fndef=new ExprFnDef(src.prev_pos);
 	fndef->m_closure=true;
 	Name tok;
+	int i=0;
 	while (src.peek_tok()!=close) {
-		auto arg=parse_arg(src,close);
+		auto arg=parse_arg(i++,src,close);
 		fndef->args.push_back(arg);
 		src.eat_if(COMMA);
 	}
@@ -216,12 +225,13 @@ ExprFnDef* parse_fn_args(TokenStream& src,int close){
 }
 void parse_fn_args_ret(ExprFnDef* fndef,TokenStream& src,int close){
 	Name tok;
+	int i=0;
 	while ((tok=src.peek_tok())!=NONE) {
 		if (tok==ELIPSIS){
 			fndef->variadic=true; src.eat_tok(); src.expect(close); break;
 		}
 		if (src.eat_if(close)){break;}
-		auto arg=parse_arg(src,close);
+		auto arg=parse_arg(i++,src,close);
 		fndef->args.push_back(arg);
 		src.eat_if(COMMA);
 	}
@@ -753,10 +763,19 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 	// todo: pointers, adresses, arrays..
 	return ret;
 }
-ArgDef* parse_arg(TokenStream& src, int close) {
-	auto argname=(src.peek_tok()==COLON)?PLACEHOLDER:src.eat_ident();
+// example syntaxes
+// (x,y,z):(int,int,int)=(1,2,3)
+// (x,y,z):(int,int,int)
+// foo:int
+// todo:
+ArgDef* parse_arg(int index,TokenStream& src, int close) {
+	if (src.peek_tok()==close){src.eat_tok();return nullptr;}
+	auto ptn=parse_pattern(src,COLON,COMMA,close);
+	auto argname=orelse(ptn->as_just_name(),getNumberIndex(index));
+	//auto argname=(src.peek_tok()==COLON)?PLACEHOLDER:src.eat_ident();
 	if (argname==close) return nullptr;
 	auto a=new ArgDef(src.pos,argname);
+	a->pattern=ptn;
 	a->pos=src.pos;
 	if (src.eat_if(COLON)) {
 		a->type()=parse_type(src,close,a);
@@ -837,8 +856,9 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	// todo, namespace it FFS.
 	vector<ArgDef*> args;
 	if (src.eat_if(OPEN_PAREN)){ // constructor args eg struct Foo(x,y,z){field1=x+y,..}
+		int i=0;
 		while (!src.eat_if(CLOSE_PAREN)){
-			args.push_back(parse_arg(src,0));
+			args.push_back(parse_arg(i++,src,0));
 			src.eat_if(COMMA);
 		}
 	}
@@ -864,6 +884,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	sd->args=args;
 	// todo: type-params.
 	Name tok;
+	int f_index=0;
 	while ((tok=src.peek_tok())!=NONE){
 		if (tok==CLOSE_BRACE){src.eat_tok(); break;}
 		if (src.eat_if(STRUCT)) {
@@ -876,12 +897,12 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 			}
 			sd->virtual_functions.push_back(parse_fn(src,sd,true));
 		} else if (auto cmd=src.eat_if(STATIC)){
-			auto arg=parse_arg(src,CLOSE_PAREN);
+			auto arg=parse_arg(f_index++,src,CLOSE_BRACE);
 			if (src.eat_if(VIRTUAL)){
 				sd->static_virtual.push_back(arg);
 			} else sd->static_fields.push_back(arg);
 		} else {
-			auto arg=parse_arg(src,CLOSE_PAREN);
+			auto arg=parse_arg(f_index++,src,CLOSE_BRACE);
 			sd->fields.push_back(arg);
 		}
 		src.eat_if(COMMA); src.eat_if(SEMICOLON);

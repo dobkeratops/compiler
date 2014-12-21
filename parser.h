@@ -22,7 +22,7 @@ TypeDef*	parse_typedef(TokenStream&src);
 ExprOp*		parse_flow(TokenStream& src,Name flow);
 ExprOp*		parse_let(TokenStream& src);
 Expr*		parse_match_arm(TokenStream& src);
-ArgDef*		parse_arg(TokenStream& src, int close);
+ArgDef*		parse_arg(int index,TokenStream& src, int close);
 void		parse_typeparams_def(TokenStream& src,vector<TParamDef*>& out,int close);
 void		parse_typeparams_given(TokenStream& src, Type* add_here, int close);
 IdentWithTParams*		parse_tparams_for_ident(TokenStream& src,ExprIdent* id,int close);

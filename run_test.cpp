@@ -13,6 +13,33 @@ struct CompilerTest {
 
 
 CompilerTest g_Tests[]={
+	{	"pattern fn args",__FILE__,__LINE__,R"====(
+		fn"C" printf(s:str,...)->int;
+		fn foo((x,y):(int,int)){
+			printf("args %d %d\n",x,y);
+			0;
+		}
+		fn main(argc:int, argv:**char)->int{
+			foo((11,22));
+			0
+		},
+		)====",
+		nullptr
+	},
+
+	{	"return anon struct infered type",__FILE__,__LINE__,R"====(
+		fn foobar()->struct {x,y}{
+			_{88,99}
+		}
+		
+		fn main(argc:int,argv:**char)->int{
+			let q=foobar();
+			let w=q.x;
+			0	}
+		)===="
+		,nullptr
+	},
+
 	{	"HKT (template template parameters)",__FILE__,__LINE__, R"====(
 		
 		fn map[C,T,Y](src:C[T],f:|T|->Y)->C[Y]{
@@ -292,18 +319,6 @@ CompilerTest g_Tests[]={
 			printf("p.x=%d",p.x);
 		}
 		)"
-		,nullptr
-	},
-	{	"return anon struct infered type",__FILE__,__LINE__,R"====(
-
-		fn main(argc:int,argv:**char)->int{
-			let q=foobar();
-			let w=q.x;
-			0	}
-		fn foobar()->struct {x,y}{
-			_{88,99}
-		}
-		)===="
 		,nullptr
 	},
 	{	"anon struct infered types later..",__FILE__,__LINE__,R"====(

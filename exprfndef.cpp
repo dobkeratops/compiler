@@ -242,6 +242,9 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 	definer_scope->add_fn(this);
 	this->set_receiver_if_unset(recs);
 	auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
+
+
+
 	if (definer_scope->capture_from){
 		sc->capture_from=definer_scope->capture_from; // this is an 'inner function' (lambda, or local)
 	}
@@ -329,7 +332,14 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		this->fn_type->set_fn_details(arglist,ret_t,recs);
 	}
 	// update any 'fn_type args' that were newly resolved.. corner case we found!
-	
+	// propogate args in patterns.. with given too?
+	for (auto x:this->args){
+		dbg(x->dump(0))
+		;
+		if (x->pattern && this->scope)
+			x->pattern->resolve(this->scope,x->type(),flags);
+	}
+
 
 	if (true|| !this->is_generic()){
 		
@@ -514,6 +524,14 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 		if (cp){
 			cp->reg_name=cp->get_reg_new(cg);
 			cp->reg_name =cg.emit_cast_reg(__ENV_I8_PTR, cg.i8ptr(),cp->type()).reg;
+		}
+	}
+	// bind arguments to patterns
+	
+	for (auto arg:fn_node->args){
+		if (arg->pattern && arg->name!=arg->pattern->as_just_name()){
+			dbg(printf("arg %s bind to ",str(arg->name)));dbg(arg->pattern->dump_if(0));dbg(newline(0));
+			arg->pattern->compile(cg,scope, scope->find_scope_variable(arg->name)->compile(cg,scope,CgValue()));
 		}
 	}
 	

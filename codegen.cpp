@@ -207,9 +207,9 @@ CgValue CodeGen::load(const CgValue& v,const Type* result_type) {
 		} else{
 			// elem acess
 			auto r=cg.next_reg();
-			cg.emit_ins_begin(r,"extractelement");
+			cg.emit_ins_begin(r,"extractvalue");
 			cg.emit_type_reg(v.type,false,v.reg);
-			cg.emit_i32_lit(v.elem);
+			cg.emit_txt(",%d",v.elem);
 			cg.emit_ins_end();
 			return CgValue(r,v.type->get_elem(v.elem));
 		}
@@ -442,10 +442,8 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,
 	if (!sd){
 		dbprintf("\nsomething wrong:-\n");
 		dbprintf("%s\n",src.type->name_str());
-		src.type->dump(0);
-		if (src.type->def)
-			src.type->def->dump(0);
-		src.type->deref_all()->dump(0);
+		src.dump();
+		src.type->def->dump_if(0);
 		ASSERT(0 && "something wrong");
 	}
 	auto field_type=sd->get_elem_type(field_index);//fields[field_index]->type();

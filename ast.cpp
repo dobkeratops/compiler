@@ -215,14 +215,10 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 	}
 	else if (ptn->def){
 		if (auto var=ptn->def->as_variable()){
-			// todo encapsulate variable compile
-			CgValue varr;
-			if (auto cp=var->capture_in){
-				varr=CgValue(cp->reg_name,cp->type(),0,var->capture_index);
-			} else
-				varr=CgValue(var);
-
+			auto varr=var->compile(cg,sc,CgValue());
 			
+			
+
 			
 			dbg(dbprintf("bind %s :",var->name_str()));dbg(var->type()->dump_if(-1));dbg(newline(0));
 			dbg(dbprintf("given val :",var->name_str()));dbg(val.type->dump_if(-1));dbg(newline(0));dbg(ptn->type()->dump_if(-1));dbg(val.dump());dbg(newline(0));
@@ -391,7 +387,9 @@ CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc, CgValue){
 		return CgValue();
 	}
 	else if (auto cp=var->capture_in){
-		return CgValue(cp->reg_name,cp->type(),0,var->capture_index);
+//		return CgValue(cp->reg_name,cp->type(),0,var->capture_index);
+
+		return var->compile(cg,sc,CgValue());
 	}
 	if (var && var!=n->def){
 		error(n,"var/def out of sync %s %s\n",n->name_str(),var->name_str());
@@ -522,6 +520,20 @@ ExprLiteral::~ExprLiteral(){
 		free((void*)u.val_str);
 	}
 }
+/*if (auto cp=var->capture_in){
+	varr=CgValue(cp->reg_name,cp->type(),0,var->capture_index);
+} else
+varr=CgValue(var);
+
+return CgValue(cp->reg_name,cp->type(),0,var->capture_index);
+ */
+
+CgValue Variable::compile(CodeGen& cg, Scope* sc, CgValue input){
+	if (auto cp=this->capture_in){
+		return CgValue(cp->reg_name,cp->type(),0,this->capture_index);
+	} else
+		return CgValue(this);
+}
 
 void Variable::dump(int depth) const{
 	newline(depth);dbprintf("%s",getString(name));
@@ -546,16 +558,20 @@ ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	if (this->type()){
 		this->type()->resolve(sc,desired,flags);
 	}
+//	if (this->pattern)
+//		this->pattern->resolve(sc,this->type(),flags);
 	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
 	return ResolvedType(this->type(), ResolvedType::COMPLETE);
 }
 void ArgDef::recurse(std::function<void(Node*)>&f){
 	this->type()->recurse(f);
+	this->pattern->recurse(f);
 	this->default_expr->recurse(f);
 }
 
 void ArgDef::dump(int depth) const {
 	newline(depth);dbprintf("%s",getString(name));
+	this->pattern->dump_if(-1);
 	if (this->type()) {dbprintf(":");type()->dump(-1);}
 	if (default_expr) {dbprintf("=");default_expr->dump(-1);}
 }
@@ -589,7 +605,9 @@ ExprLiteral::clone() const{
 Node*
 ArgDef::clone() const{
 	if (!this) return nullptr;
-	return new ArgDef(this->pos,this->name, (Type*)this->type()->clone_if(),(Expr*)this->default_expr->clone_if());
+	auto ad=new ArgDef(this->pos,this->name, (Type*)this->type()->clone_if(),(Expr*)this->default_expr->clone_if());
+	ad->pattern=(Pattern*)this->pattern->clone_if();
+	return ad;
 }
 
 Node*

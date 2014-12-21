@@ -34,7 +34,8 @@ struct Pattern : Node {
 	void	translate_typeparams(const TypeParamXlat& xlat);
 	const char* kind_str()const{return "pattern";}
 	Name	as_name()const;
-
+	bool	is_just_ident()const{return this->sub==nullptr;}
+	Name	as_just_name()const{if (this){return this->sub==nullptr?this->name:0;}else return 0;}
 };
 
 // Type Parameter, actually Template Parameter as we generalize it.
@@ -102,6 +103,8 @@ struct ExprLiteral : ExprDef {
 /// both have form ident:type=<default expr>
 struct ArgDef :ExprDef{
 	Scope*	owner=0;
+	Pattern*	pattern=0;
+	Expr*		default_expr=0;
 	void set_owner(Scope* s){
 		ASSERT(owner==0 ||owner==s);
 		this->owner=s;}
@@ -109,7 +112,6 @@ struct ArgDef :ExprDef{
 	ArgDef*		next_of_name=0;
 	uint32_t	size_of,offset;
 	//Type* type=0;
-	Expr*		default_expr=0;
 	//Type* get_type()const {return type;}
 	//void set_type(Type* t){verify(t);type=t;}
 	//Type*& type_ref(){return type;}
@@ -152,6 +154,8 @@ struct Variable : ExprDef{
 	Variable*	as_variable() {return this;}
 	const Variable*	as_variable() const {return this;}
 	void dump(int depth) const;
+	CgValue		compile(CodeGen&cg, Scope* sc, CgValue input) override;
+	const char* kind_str()const{return "variable";}
 };
 
 struct ExprIdent :Expr{

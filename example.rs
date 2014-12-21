@@ -238,7 +238,7 @@ fn main(argc:int,argv:**char)->int{
 	// real member functions are for vtable layout & C++ compatability
 
 	foo_bar(fv3,0.4);
-	fv3.foo_bar(fv3,77);
+	fv3.foo_bar(fv3,(77,88,99));
 	fv3.foo_bar(fv3,fv3);
 
 	// test arrays and ptrs work
@@ -323,8 +323,8 @@ fn foo_bar(p:*void){
 fn foo_bar(p:*Foo,f:float){
 	printf("2arg foo_bar %p %f\n",p,f);
 }
-fn foo_bar(p:*Foo,q:*Foo,i:int){
-	printf("3arg foo_bar %p %d\n",p,i);
+fn foo_bar(p:*Foo,q:*Foo,(i,j,k):(int,int,int)){
+	printf("3arg foo_bar with tuple destructure %p %d %d %d\n",p,i,j,k);
 }
 fn foo_bar(p:*Foo,q:*Foo,w:*Foo){
 	printf("3ptr foo_bar %p %p\n",p,w);
