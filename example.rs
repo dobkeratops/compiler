@@ -70,6 +70,21 @@ struct IBaz {
 	virtual bar(){}  
 }
 
+// Rust style enum
+enum Shape {
+	Sphere(Vec3,float),
+	Cuboid{min:Vec3,max:Vec3},
+	Cylinder(float,float),
+};
+
+// Rust style match
+fn shape_vol(s:*Shape)->float= match s{
+	*Sphere(my_centre, my_radius)=>{printf("match sphere vol\n");4.0/3.0*3.142* my_radius*my_radius*my_radius},
+	*Cuboid(vmin, vmax)=>{ printf("match cuboid vol\n");d:=vmax-vmin; d.vx*d.vy*d.vz },
+	*Cylinder(radius,height)=>3.142*radius*radius+height,
+	_ =>{printf("shape error\n");0.0}
+};
+
 // adhoc overloading like C++; most specific function is matched at callsite
 
 fn something_foo(f:*Foo){
@@ -134,6 +149,15 @@ fn main(argc:int,argv:**char)->int{
 	let v0=Vec3{1.0,0.0,0.0};
 	let v1=Vec3{0.0,1.0,0.0};
 	let v2=v0+v1;
+
+	// Demo rust-style enums
+	let s1=new Sphere{Vec3{1.0,1.0,1.0},1.0};
+	let s2=new Cuboid{Vec3{1.0,1.0,1.0},Vec3{2.0,2.0,2.0}};
+	let sv1=shape_vol(s1 as *Shape);
+	let sv2=shape_vol(s2 as *Shape);
+
+
+
 	// let for introducing variable, rather than just ident:T
 	// :T would be used as a type-assertion
 	// its still possible Rust might change to ':' for 'as'?

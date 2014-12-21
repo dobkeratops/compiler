@@ -16,6 +16,7 @@ Dont have a name yet hence 'hack'..
   * (todo ++/--;and currently &p[i] instead of ptr arithmetic)
  * 'everything is an expression' syntax
  * C for loops + break../else{..} expressions
+ * some rust-like enum/Match, (see limits..WIP)
  * function overloading+UFCS
  * limited operator overloading (no conversions yet)
  * Forward+Reverse Type Inference within functions, 
@@ -27,8 +28,9 @@ Dont have a name yet hence 'hack'..
  * limited C++-style internal vtables & single inheritance
  * emits LLVM sourcecode, compiled by clang, links with C/C++ ecosystem.
 
+
 #### WIP
- * rust-style enum/match. Compiles without crashing,need to test cases..
+ * *rust-style enum/match- stack case,base padding. What works now is dynamically allocated.
  * HKT (template-template parameters)
   * .. not extensively tested
 

@@ -758,6 +758,15 @@ ArgDef* parse_arg(TokenStream& src, int close) {
 	}
 	return a;
 }
+// for tuple struct. makes a mess of our idea for scala style constructpr
+// unless we can find a way to build the type..
+// need 2 token lookahead
+ArgDef* parse_arg_anon(TokenStream& src, int close) {
+	auto a=new ArgDef(src.pos,0);
+	a->pos=src.pos;
+	a->type()=parse_type(src,close,a);
+	return a;
+}
 void parse_typeparams_def(TokenStream& src,vector<TParamDef*>& out,int close) {
 	while (!src.eat_if(close)){
 		//		if (src.eat_if(CLOSE_BRACKET)) break;
@@ -803,11 +812,15 @@ ExprStructDef* parse_struct(TokenStream& src) {
 // TODO: are struct,trait,enum actually all the same thing with a different 'default'
 ExprStructDef* parse_tuple_struct_body_sub(TokenStream& src, ExprStructDef* sd){
 	Name tok;
+	int i=0;
 	while ((tok=src.peek_tok())!=NONE){
 		if (tok==CLOSE_PAREN){src.eat_tok(); break;}
-		sd->fields.push_back(new ArgDef(src.prev_pos,0,parse_type(src,0,sd)));
+		sd->fields.push_back(new ArgDef(src.prev_pos,getNumberIndex(i),parse_type(src,0,sd)));
 		src.eat_if(COMMA); src.eat_if(SEMICOLON);
+		i++;
 	}
+	dbg(printf("parsed tuple struct\n"));
+	dbg(sd->dump(0));dbg(newline(0));
 	return sd;
 }
 
@@ -897,12 +910,13 @@ EnumDef* parse_enum(TokenStream& src) {
 		auto subpos=src.pos;
 		if (tok==CLOSE_BRACE){break;}
 		// got an ident, now what definition follows.. =value, {fields}, (types), ..
-		if (src.peek_tok()==OPEN_BRACE){
+		auto peektok=src.peek_tok();
+		if (peektok==OPEN_BRACE){
 			auto sd=parse_struct_body(src,subpos,tok,nullptr);
 			sd->set_variant_of(ed,index++);
 			ed->structs.push_back(sd);
 			
-		} else if (src.peek_tok()==OPEN_BRACKET){
+		} else if (peektok==OPEN_PAREN){
 			auto sd=parse_tuple_struct_body(src,subpos,tok);
 			sd->set_variant_of(ed,index++);
 			ed->structs.push_back(sd);
