@@ -17,7 +17,9 @@ fn main(argc:int, argv:**char)->int{
 	let v0 = Vec3::<float>{1.0,2.0,3.0};
 	let v1 = Vec3::<float>{1.0,2.0,3.0};
 	let v2=v0+v1;
-
+	let aaa=(1,(5,6),3,4);
+	let (_,(a,b),c)=aaa;
+	printf("%d %d %d %d\n",a,b,c);
 
 	0
 }

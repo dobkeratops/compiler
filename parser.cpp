@@ -163,6 +163,9 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 			if (!owner){
 				error(src.pos,", in pattern must be within tuple (,,) or destructure ident(,,) ident{,,}");
 			}
+			if (prev && owner){
+				owner->push_back(prev);prev=nullptr;
+			}
 		} else if (t==OR){ // todo - bit more elaborate. should be ANY(....)  distinct from TUPLE(...)
 			if (owner){error(src.pos,"TODO ( | | ), only  | | | works right now");}
 			if (!prev){error(src.pos,"in pattern | must seperate options eg a|b|c..");}
