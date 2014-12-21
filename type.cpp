@@ -343,7 +343,7 @@ Type* Type::get_i32(){
 }
 Type* Type::get_u32(){
 	if (g_u32)return g_u32;
-	return (g_u32=new Type(nullptr,U32));
+	return (g_u32=new Type(nullptr,I32));
 }
 Type* Type::get_void_ptr(){
 	if (g_void_ptr)return g_void_ptr;
@@ -376,7 +376,7 @@ size_t Type::alignment() const{
 	if (this->struct_def()){
 		return this->struct_def()->alignment();
 	}
-	return align?align:4;
+	return align;
 }
 
 size_t Type::size() const{

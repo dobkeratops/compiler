@@ -11,87 +11,120 @@ struct CompilerTest {
 	bool		should_fail;
 };
 
-// every file is an implicitly a function aswell taking no args
-// when imported, a module inserts a call to that function.
-// that sets up global stuff for it.
-
 CompilerTest g_Tests[]={
-	{
-		"basic enum+match",__FILE__,__LINE__,
-		"enum Foo{ 									\n"
-		"	Bar{x:int,y:int},							\n"
-		"	Baz{x:float,y:float},						\n"
-		"	Qux,Boo \n"
-		"};						 					\n"
-		"fn main(argc:int,argv:**char)->int{		\n"
-		"	sx:=new Bar{15,25};								\n"
-		"	sy:=new Baz{10.0,20.0};								\n"
-		"	z1:=match sy {									\n"
-		"		a@*Bar=>a.x as float, 							\n"
-		"		*Baz(vx,vy) =>vx+vy, 				\n"
+	{	"traits",__FILE__,__LINE__,R"(
+
+		fn"C" printf(s:str,...)->int;
+		struct Foo{
+			fn something(){
+				printf("hello world 1\n");
+			}
+		};
+		fn something(f:&Foo){
+			printf("hello world 2\n");
+		}
+		fn main(argc:int,argv:**char)->int{
+			let x:Foo;
+			x.something();
+			0
+		}
+		)"
+		,nullptr
+	},
+
+	{	"type sugar",__FILE__,__LINE__,R"(
+		
+		fn main(argc:int,argv:**char)->int{
+			let a:[int];
+			let b:[int*4];
+			let c:[int:string];
+			let d:~str;
+			let e:~[int];
+			let f:~int;
+			0	}
+		)"
+		,nullptr,true
+	},
+	{	"basic enum+match",__FILE__,__LINE__,R"(
+		
+		enum Foo{
+			Bar{x:int,y:int},
+			Baz{x:float,y:float},
+			Qux,Boo
+		};
+		fn main(argc:int,argv:**char)->int{
+			sx:=new Bar{15,25};
+			sy:=new Baz{10.0,20.0};
+			z1:=match sy {
+				a@*Bar=>a.x as float,
+				*Baz(vx,vy) =>vx+vy,
 		//"		Qux|Boo=>0, \n"
-		"		_=>0.0					\n"
-		"	};										\n"
-		"	z2:=match sx {							\n"
-		"		a@*Bar=>a.x, 						\n"
-		"		_=>0					\n"
-		"	};										\n"
-		"	0										\n"
-		"}"
+				_=>0.0
+			};
+			z2:=match sx {
+				a@*Bar=>a.x,
+				_=>0
+			};
+			0
+		}
+		)"
+		,nullptr
 	},
  
-	{
-		"struct default constructor",__FILE__,__LINE__,
-		"struct Extents(min:float,max:float){ \n"
-		"	centre:float=sum/2,				\n"
-		"	size:float	=diff/2				\n"
-		"} where {							\n"
-		"	sum:=min+max;					\n"
-		"	size:=max-min;					\n"
-		"}\n"
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	0	}					\n"
+	{	"struct default constructor",__FILE__,__LINE__,R"(
+		
+		struct Extents(min:float,max:float){
+			centre:float=sum/2,
+			size:float	=diff/2
+		} where {
+			sum:=min+max;
+			size:=max-min;
+		}
+		fn main(argc:int,argv:**char)->int{
+			0	}
+		)"
 		,nullptr
 	},
 
-	{
-		"templated struct initializer+overload",__FILE__,__LINE__,
+	{	"templated struct initializer+overload",__FILE__,__LINE__,R"(
 		
-		"struct Vec3<T>{ x:T,y:T,z:T};\n"
-		"fn + <T>(a:&Vec3<T>,b:&Vec3<T>)=\n"
-		"	Vec3::<T>{x=a.x+b.x, y=a.y+b.y, z=a.z+b.z};\n"
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	let v1=Vec3::<float>{0.0,1.0,2.0};		\n"
-		"	let v2=Vec3::<float>{2.0,1.0,0.0};		\n"
-		"	v3:=v1+v2;				\n"
-		"	0	}					\n"
-		,nullptr
+		struct Vec3<T>{ x:T,y:T,z:T};
+		fn + <T>(a:&Vec3<T>,b:&Vec3<T>)=
+			Vec3::<T>{x=a.x+b.x, y=a.y+b.y, z=a.z+b.z};
+		fn main(argc:int,argv:**char)->int{
+			let v1=Vec3::<float>{0.0,1.0,2.0};
+			let v2=Vec3::<float>{2.0,1.0,0.0};
+			v3:=v1+v2;
+			0
+		}
+		)",nullptr
 	},
-	{
-		"WIP, overloads with mixed types",__FILE__,__LINE__,
-		
-		"struct Vec3{ vx:float,vy:float,vz:float};"
-		"extern\"C\"fn sqrt(f:float)->float;"
-		"fn *(a:&Vec3,f:float)=Vec3{vx=a.vx*f,vy=a.vy*f,vz=a.vz*f};"
-		"fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx+a.vy*b.vy+a.vz*b.vz;"
-		"fn inv_length(a:&Vec3)=1.0/sqrt(a|a);"
-		"fn mul_vec(a:&Vec3)=a*inv_length(a);"
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	0	}	\n"
-		,nullptr
+	{	"WIP, overloads with mixed types",__FILE__,__LINE__,R"(
+
+		struct Vec3{ vx:float,vy:float,vz:float};
+		extern"C"fn sqrt(f:float)->float;
+		fn *(a:&Vec3,f:float)=Vec3{vx=a.vx*f,vy=a.vy*f,vz=a.vz*f};
+		fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx+a.vy*b.vy+a.vz*b.vz;
+		fn inv_length(a:&Vec3)=1.0/sqrt(a|a);
+		fn mul_vec(a:&Vec3)=a*inv_length(a);
+		fn main(argc:int,argv:**char)->int{
+			0
+		}
+		)",nullptr
 	},
 	
-	{
-		"basic operator overload",__FILE__,__LINE__,
-		"fn\"C\" printf(s:str,...)->int;		\n"
-		"struct Vec3{ x:float,y:float,z:float};	\n"
-		"fn +(a:&Vec3,b:&Vec3)=Vec3{a.x+b.x, a.y+b.y, a.z+b.z};"
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	let v0=Vec3{1.0,2.0,3.0};	\n"
-		"	let v1=Vec3{2.0,2.0,4.0};	\n"
-		"	let v2:Vec3;			\n"
-		"	v2=v0+v1;				\n"
-		"	0	}	\n"
+	{	"basic operator overload",__FILE__,__LINE__,R"(
+		
+		fn"C" printf(s:str,...)->int;
+		struct Vec3{ x:float,y:float,z:float};
+		fn +(a:&Vec3,b:&Vec3)=Vec3{a.x+b.x, a.y+b.y, a.z+b.z};
+		fn main(argc:int,argv:**char)->int{
+			let v0=Vec3{1.0,2.0,3.0};
+			let v1=Vec3{2.0,2.0,4.0};
+			let v2:Vec3;
+			v2=v0+v1;
+			0	}
+		)"
 		,nullptr
 	},
 /*
@@ -110,463 +143,488 @@ CompilerTest g_Tests[]={
 		,nullptr
 	},
 */
-	{
-		"closures",__FILE__,__LINE__,
-		/*1*/ 	"fn\"C\" printf(s:str,...)->int;  							\n"
-		/*10*/	"fn take_closure(pfunc:|int|->void){ pfunc(5);}\n"
-		/*  */	"fn main(argc:int, argv:**char)->int{		\n"
-		/*  */	"	y:=11;z:=12;w:=0; y+=10;w+=7;			\n"
-		/*51*/	"	take_closure()do x{yy:=y;printf(\"closure x=%d captured y=%d z=%d yy=%d\\n\",x,y,z,yy);}\n"
-		"printf(\"y=%d z=%d w=%d\\n\",y+=90,z,w);\n"
-		/*17*/	"	0\n"
-		/*20*/  "}														\n"
-		,
+	{	"closures",__FILE__,__LINE__,R"(
+
+		fn"C" printf(s:str,...)->int;
+		fn take_closure(pfunc:|int|->void){ pfunc(5);}
+		fn main(argc:int, argv:**char)->int{
+			y:=11;z:=12;w:=0; y+=10;w+=7;
+			take_closure()do x{yy:=y;printf("closure x=%d captured y=%d z=%d yy=%d\n",x,y,z,yy);}
+			printf("y=%d z=%d w=%d\n",y+=90,z,w);
+			0
+		}
+		)",
 		// Result
 		"closure x=5 captured y=21 z=12 yy=21\n"
 		"y=111 z=12 w=7\n"
 	},
 
-	{
-		"type parameter inference UFCS autoref",__FILE__,__LINE__,
-		/* 1*/ "struct Union<A,B>{a:A,b:B, tag:int};		\n"
-		/* 2*/ "fn setv[A,B](u:&Union[A,B], v:A)->void{		\n"
-		/* 3*/ "	u.a=v; u.tag=0; 						\n"
-		/* 4*/ "}											\n"
-		/* 5*/ "fn setv[A,B](u:&Union[A,B], v:B)->void{		\n"
-		/* 6*/ "	u.b=v; u.tag=1; 						\n"
-		/* 7*/ "}											\n"
-		/* 8*/ "fn main(argc:int, argv:**char)->int{		\n"
-		/* 9*/ "	u=:Union[int,float];					\n"
-		/*10*/ "	u.setv(10)								\n"
-		/*11*/ "	printf(\"u.tag=%d a=%d\\n\",u.tag,u.a);			\n"
-		/*12*/ "	setv(u,10.0)	;						\n"
-		/*13*/ "	printf(\"u.tag=%d\\n\",u.tag);				\n"
-		/*14*/ "	0}										\n"
-		/*15*/ "fn\"C\" printf(s:str,...)->int;					\n"
-		,
+	{	"type parameter inference UFCS autoref",__FILE__,__LINE__,R"(
+		
+		struct Union<A,B>{a:A,b:B, tag:int};
+		fn setv[A,B](u:&Union[A,B], v:A)->void{
+			u.a=v; u.tag=0;
+		}
+		fn setv[A,B](u:&Union[A,B], v:B)->void{
+			u.b=v; u.tag=1;
+		}
+		fn main(argc:int, argv:**char)->int{
+			u=:Union[int,float];
+			u.setv(10);
+			printf("u.tag=%d a=%d\n",u.tag,u.a);
+			setv(u,10.0)	;
+			printf("u.tag=%d\n",u.tag);
+			0}
+		fn"C" printf(s:str,...)->int;
+		)",
 		// expected result
 		"u.tag=0 a=10\n"
 		"u.tag=1\n"
 	},
-	{
-		"if - else if -",__FILE__,__LINE__,
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	x:=if argc>1 {10}else if argc>2{20} else {30};"
-		"	0	}						\n"
-		,nullptr
-	},
-
-	{
-		"pass anon struct to adhoc template fn",__FILE__,__LINE__,
-		"fn\"C\" printf(s:str,...)->int;		\n"
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	let q:struct{x:int};				\n"
-		"	q.x=10;					\n"
-		"	foobar(&q);			\n"
-		"	0	}						\n"
-		"fn foobar(p){	\n"
-		"	printf(\"p.x=%d\",p.x);	\n"
-		"}\n"
-		,nullptr
-	},
-	{
-		"return anon struct infered type",__FILE__,__LINE__,
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	let q=foobar();				\n"
-		"	let w=q.x;					\n"
-		"	0	}						\n"
-		"fn foobar()->struct {x,y}{	\n"
-		"	_{88,99}	\n"
-		"}\n"
-		,nullptr
-	},
-	{
-		"anon struct infered types later..",__FILE__,__LINE__,
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	let q=foobar();				\n"
-		"	let q.x=1.0;					\n"
-		"	let q.y=2.0;					\n"
-		"	0	}						\n"
-		"fn foobar()->struct {x,y}{	\n"
-		"	_{}\n"
-		"}\n"
-		,nullptr
-	},
-	{
-		"anon struct infer type",__FILE__,__LINE__,
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	let q:struct{x,y};	\n"
-		"	q.x=1.0;					\n"
-		"	q.y=1.0;					\n"
-		"	0	}						\n"
-		,nullptr
-	},
-	
-	{
-		"multiple return",__FILE__,__LINE__,
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	let q=foobar();				\n"
-		"	0	}\n"
-		"fn foobar()->(int,float,int){	\n"
-		"	(1,2.0,3)	\n"
-		"}\n"
-		,nullptr
-	},
-	{	"multi feature test 2",__FILE__,__LINE__,
+	{	"if - else if -",__FILE__,__LINE__,R"(
 		
-		"fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{\n"
-		"	let result=init();\n"
-		"	for index:=0; index<src.size(); index+=1 {\n"
-		"		push_back(&result, f(get(src,index)));\n"
-		"	}\n"
-		"	result \n"
-		"}\n"
-		"fn\"C\" printf(s:str,...)->int;\n"
-		"fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{\n"
-		" if u.tag==0 { fx(&u.x)}\n"
-		" else { fy(&u.y)}\n"
-		"}\n"
-		"fn main(argc:int,argv:**char)->int{\n"
-		"fv:=Foo{vx=13,vy=14,vz=15};\n"
-		" u=:Union[int,float];\n"
-		" setv(&u,0.0);\n"
-		" setv(&u,0);\n"
-		" z:=debugme(&u,											\n"
-		"	|x:*int|{printf(\"union was set to int\\n\");10},	\n"
-		"	|x:*float|{printf(\"union was set to float\\n\");12}	\n"
-		"	);												\n"
-		"printf(\"map union returns %d\\n\", z);						\n"
-		"	xs=:array[int,512];\n"
-		"q:=xs[1]; p1:=&xs[1];\n"
-		"	xs[2]=000;\n"
-		"	xs[2]+=400;\n"
-		"	*p1=30;\n"
-		"z:=5;\n"
-		"y:=xs[1]+z+xs[2];\n"
-		"x:=0;\n"
-		"	something_foo(&fv,&fv);\n"
-		"	for i:=0,j:=0; i<10; i+=1,j+=10 {\n"
-		"		x+=i;\n"
-		"		printf(\"i,j=%d,%d,x=%d\\n\",i,j,x);\n"
-		"	}else{\n"
-		"		printf(\"loop exit fine\\n\");\n"
-		"	}\n"
-		"		something_foo(&fv);\n"
-		"		something(&fv);\n"
-		"		take_closure(|x|{printf(\"closure says %d %d\\n\",x,y);})\n"
-		"		\n"
-		"		x:=if argc<2{printf(\"<2\");1}else{printf(\">2\");2};\n"
-		"		printf(\"yada yada yada\\n\");\n"
-		"		printf(\"\\nHello World %d\n\", y );\n"
-		"		0\n"
-		"		}\n"
-		"fn lerp(a,b,f)->float{(b-a)*f+a};\n"
-		"fn foo(a:*char)->void;\n"
-		"struct Foo {\n"
-		"vx:int, vy:int, vz:int\n"
-		"}\n"
-		"fn something_foo(f:*Foo){\n"
-		"	printf(\"f.x= %d\\n\", f.vx);\n"
-		"}\n"
-		"fn something_foo(f:*Foo,x:*Foo){\n"
-		"	printf(\"something_foo with 2 args overloaded\\n\");\n"
-		"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx,f.vy,f.vz);\n"
-		"}\n"
-		"fn something(f:*Foo){\n"
-		"	printf(\"f.x= %d,.y= %d,.z= %d\\n\", f.vx, f.vy, f.vz);\n"
-		"}\n"
-		"fn something(f:float){\n"
-		"}\n"
-		"fn something(f:float,x){\n"
-		"}\n"
-		"fn take_closure(funcp:(int)->void){\n"
-		"	funcp(10);\n"
-		"}\n"
-		"struct Union[X,Y]{\n"
-		"tag:int,\n"
-		"x:X,y:Y,\n"
-		"};\n"
-		"fn setv[X,Y](u:*Union[X,Y],x:Y)->void{\n"
-		" printf(\"setv Y\\n\");\n"
-		"}\n"
-		"fn setv[X,Y](u:*Union[X,Y],x:X)->void{\n"
-		" printf(\"setv X\\n\");\n"
-		"}\n"
-		,
+		fn main(argc:int,argv:**char)->int{
+			x:=if argc>1 {10}else if argc>2{20} else {30};
+			0	}
+		)"
+		,nullptr
+	},
+
+	{	"pass anon struct to adhoc template fn",__FILE__,__LINE__,R"(
+		
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int,argv:**char)->int{
+			let q:struct{x:int};
+			q.x=10;
+			foobar(&q);
+			0
+		}
+		fn foobar(p){
+			printf("p.x=%d",p.x);
+		}
+		)"
+		,nullptr
+	},
+	{	"return anon struct infered type",__FILE__,__LINE__,R"(
+
+		fn main(argc:int,argv:**char)->int{
+			let q=foobar();
+			let w=q.x;
+			0	}
+		fn foobar()->struct {x,y}{
+			_{88,99}
+		}
+		)"
+		,nullptr
+	},
+	{	"anon struct infered types later..",__FILE__,__LINE__,R"(
+		
+		fn main(argc:int,argv:**char)->int{
+			let q=foobar();
+			let q.x=1.0;
+			let q.y=2.0;
+			0
+		}
+		fn foobar()->struct {x,y}{
+			_{}
+		}
+		)",nullptr
+	},
+	{	"anon struct infer type",__FILE__,__LINE__,R"(
+		
+		fn main(argc:int,argv:**char)->int{
+			let q:struct{x,y};
+			q.x=1.0;
+			q.y=1.0;
+			0	}
+		)",nullptr
+	},
+	{	"multiple return",__FILE__,__LINE__,R"(
+
+		fn main(argc:int,argv:**char)->int{
+			let q=foobar();
+			0	}
+		fn foobar()->(int,float,int){
+			(1,2.0,3)
+		}
+		)",nullptr
+	},
+	{	"multi feature test 2",__FILE__,__LINE__,R"(
+		
+		fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{
+			let result=init();
+			for index:=0; index<src.size(); index+=1 {
+				push_back(&result, f(get(src,index)));
+			}
+			result
+		}
+		fn"C" printf(s:str,...)->int;
+		fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{
+			if u.tag==0 { fx(&u.x)}
+			else { fy(&u.y)}
+		}
+		fn main(argc:int,argv:**char)->int{
+			fv:=Foo{vx=13,vy=14,vz=15};
+			u=:Union[int,float];
+			setv(&u,0.0);
+			setv(&u,0);
+			z:=debugme(&u,
+				|x:*int|	{printf("union was set to int\n");10},
+				|x:*float|	{printf("union was set to float\n");12}
+			);
+			printf("map union returns %d\n", z);
+			xs=:array[int,512];
+			q:=xs[1]; p1:=&xs[1];
+			xs[2]=000;
+			xs[2]+=400;
+			*p1=30;
+			z:=5;
+			y:=xs[1]+z+xs[2];
+			x:=0;
+			something_foo(&fv,&fv);
+			for i:=0,j:=0; i<10; i+=1,j+=10 {
+				x+=i;
+				printf("i,j=%d,%d,x=%d\n",i,j,x);
+			}else{
+				printf("loop exit fine\n");
+			}
+			something_foo(&fv);
+			something(&fv);
+			take_closure(|x|{printf("closure says %d %d\n",x,y);})
+
+			x:=if argc<2{printf("<2");1}else{printf(">2");2};
+			printf("yada yada yada\n");
+			printf("\nHello World %d\n", y );
+			0
+		}
+		fn lerp(a,b,f)->float{(b-a)*f+a};
+		fn foo(a:*char)->void;
+		struct Foo {
+		vx:int, vy:int, vz:int
+		}
+		fn something_foo(f:*Foo){
+			printf("f.x= %d\n", f.vx);
+		}
+		fn something_foo(f:*Foo,x:*Foo){
+			printf("something_foo with 2 args overloaded\n");
+			printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
+		}
+		fn something(f:*Foo){
+			printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
+		}
+		fn something(f:float){
+		}
+		fn something(f:float,x){
+		}
+		fn take_closure(funcp:(int)->void){
+			funcp(10);
+		}
+		struct Union[X,Y]{
+			tag:int,
+			x:X,y:Y,
+		};
+		fn setv[X,Y](u:*Union[X,Y],x:Y)->void{
+			printf("setv Y\n");
+		}
+		fn setv[X,Y](u:*Union[X,Y],x:X)->void{
+			printf("setv X\n");
+		}
+
+		)",
 		nullptr
 	},
-	
 
-	{
-		"tuples",__FILE__,__LINE__,
-		"fn main(argc:int,argv:**char)->int{\n"
-		"	let x=(1,0.0,3);			\n"
-		"	let q=x.1;				\n"
-		"	0	"
-		"}"
+	{	"tuples",__FILE__,__LINE__,R"(
+
+		fn main(argc:int,argv:**char)->int{
+			let x=(1,0.0,3);
+			let q=x.1;
+			0
+		}
+		)"
 		,nullptr
 	},
-	{
-		"for  else, nested break",__FILE__,__LINE__,
-		/*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
-		/*2*/	"fn main(argc:int, argv:**char)->int{	\n"
-		/*4*/	"	v:=for i:=0;i<10;i+=1 {	\n"
-				"		for j:=0; j<10; j+=1 {"
-		/*8*/	"			if j==5 {break break 44;}				\n"
-		/*9*/	"		}									\n"
-		/*9*/	"	}									\n"
-		/*10*/	"	else{								\n"
-		/*11*/	"		printf(\"loop complete i=%d\\n\",i);55\n"
-		/*12*/	"	}									\n"
-		/*13*/	"	printf(\"loop ret=%d\\n\",v);	\n"
-		/*14*/	"	0									\n"
-		/*15*/	"}\n",
-		"loop ret=44\n"
+	{	"for  else, nested break",__FILE__,__LINE__,R"(
+
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int, argv:**char)->int{
+			v:=for i:=0;i<10;i+=1 {
+				for j:=0; j<10; j+=1 {
+					if j==5 {break break 44;}
+				}
+			}
+			else{
+				printf("loop complete i=%d\n",i);55
+			}
+			printf("loop ret=%d\n",v);
+			0
+		}
+		)"
+		,"loop ret=44\n"
 	},
 
-	{
-		"internal vtable",__FILE__,__LINE__,
-		"fn\"C\" printf(s:str,...)->int;				\n"
-		"struct Foo {									\n"
-		"	x:int,y:int,								\n"
-		"	virtual v_foo(){printf(\"Foo.foo x=%d %p\\n\",x,*(this as**void));},		\n"
-		"	virtual bar(){printf(\"Foo.bar\\n\");},		\n"
-		"	virtual baz(){printf(\"Foo.baz\\n\");},		\n"
-		"}\n"
-		"struct Bar : Foo{									\n"
-		"	x:int,y:int,								\n"
-		"	fn v_foo(){printf(\"Bar.foo x=%d\\n\",x);},		\n"
-		"	fn bar(){printf(\"Bar.bar\\n\");},		\n"
-		"	fn baz(){printf(\"Bar.baz\\n\");},		\n"
-		"}\n"
-		"fn main(argc:int, argv:**char)->int{	\n"
-		"	x1:= new Foo{x=10,y=0};				\n"
-		"	x2:= new Bar{x=20,y=0};				\n"
-		"	take_interface(x2 as*Foo);					\n"
-		"	x1.v_foo();							\n"
-		"	take_interface(x1);					\n"
-		"	0									\n"
-		"}\n"
-		"fn take_interface(pf:*Foo){\n"
-		"   pf.v_foo()\n"
-		"}\n"
+	{	"internal vtable",__FILE__,__LINE__,R"(
+		
+		fn"C" printf(s:str,...)->int;
+		struct Foo {
+			x:int,y:int,
+			virtual v_foo(){printf(\"Foo.foo x=%d %p\n",x,*(this as**void));},
+			virtual bar(){printf("Foo.bar\n");},
+			virtual baz(){printf("Foo.baz\n");},
+		}
+		struct Bar : Foo{
+			x:int,y:int,
+			fn v_foo(){printf("Bar.foo x=%d\n",x);},
+			fn bar(){printf("Bar.bar\n");},
+			fn baz(){printf("Bar.baz\n");},
+		}
+		fn main(argc:int, argv:**char)->int{
+			x1:= new Foo{x=10,y=0};
+			x2:= new Bar{x=20,y=0};
+			take_interface(x2 as*Foo);
+			x1.v_foo();
+			take_interface(x1);
+			0
+		}
+		fn take_interface(pf:*Foo){
+		   pf.v_foo()
+		}
+		)"
 		,nullptr
 	},
 
-	{
-		"member function+ufcs",__FILE__,__LINE__,
+	{	"member function+ufcs",__FILE__,__LINE__,R"(
 		// SOURCECODE
-		/*1*/  "fn\"C\" printf(s:str,...)->int;  			\n"
-		/*2*/  "struct Foo{									\n"
-		/*3*/  "	q:int,									\n"
-		/*4*/  "	fn method()->float{						\n"
-		/*5*/  "		printf(\"Foo.q=%d\\n\",q);2.0		\n"
-		/*6*/  "	}										\n"
-		/*7*/  "}											\n"
-		/*9*/	"fn main()->int{											\n"
-		/*10*/	"	x:=Foo{5}; px:=&x;				\n"
-		/*11*/	"	printf(\"member function test..\n\",x.q);			\n"
-		/*12*/	"	   px.func1();											\n"
-		/*12*/	"	px.func1(5);											\n"
-		/*13*/	"	px.method();										\n"
-		/*14*/	"	0													\n"
-		/*15*/  "}														\n"
-		/*8*/ "fn func1(f:*Foo){printf(\"func1 says q=%d\\n\",f.q);}	\n"
-		/*8*/ "fn func1(f:*Foo,x:int){printf(\"func1 says q=%d x=%d\\n\",f.q,x);}	\n"
-		,
-		nullptr
+		fn"C" printf(s:str,...)->int;
+		struct Foo{
+			q:int,
+			fn method()->float{
+				printf("Foo.q=%d\n",q);2.0
+			}
+		}
+		fn main()->int{
+			x:=Foo{5}; px:=&x;
+			printf("member function test..\n",x.q);
+			px.func1();
+			px.func1(5);
+			px.method();
+			0
+		}
+		fn func1(f:*Foo){printf("func1 says q=%d\n",f.q);}
+		fn func1(f:*Foo,x:int){printf("func1 says q=%d x=%d\n",f.q,x);}
+		)"
+		,nullptr
 	},
 
-	{
-		"struct new",__FILE__,__LINE__,
-		/* 2*/ "	struct FooStruct{x:int,y:int};			\n"
-		/* 3*/	"fn main(argc:int, argv:**char)->int{		\n"
-		/* 4*/	"	x:=new FooStruct{1,2};\n"
-		/* 5*/	"	0\n"
-		/* 6*/  "}											\n",
-		nullptr
+	{	"struct new",__FILE__,__LINE__,R"(
+
+		struct FooStruct{x:int,y:int};
+		fn main(argc:int, argv:**char)->int{
+			x:=new FooStruct{1,2};
+			0
+		}
+		)"
+		,nullptr
+	},
+	{	"pointer to bool ",__FILE__,__LINE__, R"(
+
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int,argv:**char)->int{
+			let bool_from_ptr1:bool	= argv;
+			printf("bool val %d\n",bool_from_ptr1);
+			0
+		}
+		)"
+	},
+	{	"bool values ",__FILE__,__LINE__,R"(
+
+		fn main(argc:int,argv:**char)->int{
+			let bool_val:bool=argc>4;
+			0
+		}
+		)"
 	},
 
-	{	"pointer to bool ",__FILE__,__LINE__,
-		"fn\"C\" printf(s:str,...)->int;		\n"
-		"fn main(argc:int,argv:**char)->int{	\n"
-		"	let bool_from_ptr1:bool	= argv;		\n"
-		"	printf(\"bool val %d\\n\",bool_from_ptr1);"
-		"  0}										\n"
-	},
-	{	"bool values ",__FILE__,__LINE__,
-		"fn main(argc:int,argv:**char)->int{	\n"
-		"	let bool_val:bool=argc>4;			\n"
-		"  0}									\n"
-	},
+	{	"bool coersions ",__FILE__,__LINE__,R"(
 
-	{	"bool coersions ",__FILE__,__LINE__,
-		"fn\"C\" printf(s:str,...)->int;		\n"
-		"fn main(argc:int,argv:**char)->int{	\n"
-		"	let zeroi32:int=0;					\n"
-		"	let vali32:int=100;					\n"
-		"	let vali64:int=vali32;				\n"
-		"	let valbool1:bool=vali32;			\n"
-		"	let valbool2:bool=zeroi32;			\n"
-		"	let valbool2:bool=argv;			\n"
-		"	let my_ptr:*int	= nullptr;			\n"
-		"	let bool_from_ptr1:bool	= nullptr;		\n"
-		"	let bool_from_ptr2:bool	= &vali32;		\n"
-		"	printf(\"%d %d %d %d\\n\",zeroi32,vali32,vali64,valbool1,valbool2,my_ptr,bool_from_ptr1,bool_from_ptr2);				\n"
-		"  0}										\n"
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int,argv:**char)->int{
+			let zeroi32:int=0;
+			let vali32:int=100;
+			let vali64:int=vali32;
+			let valbool1:bool=vali32;
+			let valbool2:bool=zeroi32;
+			let valbool2:bool=argv;
+			let my_ptr:*int	= nullptr;
+			let bool_from_ptr1:bool	= nullptr;
+			let bool_from_ptr2:bool	= &vali32;
+			printf("%d %d %d %d\n",zeroi32,vali32,vali64,valbool1,valbool2,my_ptr,bool_from_ptr1,bool_from_ptr2);
+			0
+		}
+		")
 	},
-	{
-		"let",__FILE__,__LINE__,
-/* 1*/	"fn main(argc:int, argv:**char)->int{		\n"
-/* 2*/	"	let x=2;		\n"
-		"	y:=3;			\n"
-		"	let z=x+y;		\n"
-/* 5*/	"	0				\n"
-/* 6*/  "}					\n",
+	{	"let",__FILE__,__LINE__,R"(
+
+		fn main(argc:int, argv:**char)->int{
+			let x=2;
+			y:=3;
+			let z=x+y;
+			0
+		},
+		)",
 		nullptr
 	},
-	{
-		"struct",__FILE__,__LINE__,
-/* 2*/ "	struct FooStruct{x:int,y:int};			\n"
-/* 3*/	"fn main(argc:int, argv:**char)->int{		\n"
-/* 4*/	"	x:=FooStruct{1,2};\n"
-/* 5*/	"	0\n"
-/* 6*/  "}											\n",
+	{	"struct",__FILE__,__LINE__,R"(
+
+		struct FooStruct{x:int,y:int};
+			fn main(argc:int, argv:**char)->int{
+			x:=FooStruct{1,2};
+			0
+		},
+		)",nullptr
+	},
+	{	"if expression",__FILE__,__LINE__,R"(
+
+		extern"C" fn printf(s:str,...)->int;
+		fn main(argc:int, argv:**char)->int{
+			x:=if argc<3{printf(\"if\");4} else{printf(\"else\");3};
+			0
+		)",
 		nullptr
 	},
-	{
-		"if expression",__FILE__,__LINE__,
-/*1*/	"extern \"C\" fn printf(s:str,...)->int;	\n"
-/*2*/	"fn main(argc:int, argv:**char)->int{	\n"
-/*3*/	"  x:=if argc<3{printf(\"if\");4} else{printf(\"else\");3};				\n"
-/*4*/	"	0									\n"
-/*5*/	"}\n",
-		nullptr
+	{	"voidptr auto coercion ",__FILE__,__LINE__,R"(
+		
+		struct FILE;
+		fn voidpf(d:*void)->int{0};
+		fn voidpfr(p:**char)->*void{p as*void};
+		fn main(argc:int,argv:**char)->int{
+			voidpf(argv);
+			x:=voidpfr(argv);
+		  0
+		}
+		)"
 	},
-	{"voidptr auto coercion ",__FILE__,__LINE__,
-		"struct FILE;							\n"
-		"fn voidpf(d:*void)->int{0};			\n"
-		"fn voidpfr(p:**char)->*void{p as*void};\n"
-		"fn main(argc:int,argv:**char)->int{	\n"
-		"	voidpf(argv);						\n"
-		"	x:=voidpfr(argv);					\n"
-		"  0}"
+	{	"adhoc template",__FILE__,__LINE__,R"(
+
+		fn lerp(a,b,f){(b-a)*f+a};
+		fn main(argc:int,argv:**char)->int{
+			x:=lerp(0.0,10.0,0.5);
+		  0
+		}
+		)"
 	},
-	{"adhoc template",__FILE__,__LINE__,
-		"fn lerp(a,b,f){(b-a)*f+a};		\n"
-		"fn main(argc:int,argv:**char)->int{	\n"
-		"	x:=lerp(0.0,10.0,0.5);"
-		"  0}"
+	{	"let array",__FILE__,__LINE__, R"(
+
+		fn main(argc:int, argv:**char)->int{
+			let xs:array[int,10];
+			let ptr1={&xs[1]};
+			ptr1[1]=5;
+			0
+		},
+		)"
+		,nullptr
 	},
-	{
-		"let array",__FILE__,__LINE__,
-		"fn main(argc:int, argv:**char)->int{	\n"
-		"	let xs:array[int,10];				\n"
-		"	let ptr1={&xs[1]};					\n"
-		"	ptr1[1]=5;							\n"
-		"	0									\n"
-		"}										\n",
-		nullptr
+	{	"HKT (template template parameters)",__FILE__,__LINE__, R"(
+
+		fn map[C,T,Y](src:C[T],f:|T|->Y)->C[Y]{
+			let result;
+			result
+		}
+		struct Vec[T]{data:*T,num:int}
+		fn main(argc:int, argv:**char)->int{
+			let vec:Vec[int];
+			let vec2=map(vec,|x|{0.0});
+			0
+		}											,
+		)"
+		,nullptr
 	},
-	{
-		"HKT (template template parameters)",__FILE__,__LINE__,
-		"fn map[C,T,Y](src:C[T],f:|T|->Y)->C[Y]{	\n"
-		"	let result;								\n"
-		"	result									\n"
-		"}											\n"
-		"											\n"
-		"struct Vec[T]{data:*T,num:int}				\n"
-		"fn main(argc:int, argv:**char)->int{		\n"
-		"	let vec:Vec[int];						\n"
-		"	let vec2=map(vec,|x|{0.0});				\n"
-		"	0										\n"
-		"}											\n",
-		nullptr
-	},
-	{
-	"member functions+UFCS",__FILE__,__LINE__,
-	// SOURCECODE
-/*1*/  "fn\"C\" printf(s:str,...)->int;  			\n"
-/*2*/  "struct Foo{									\n"
-/*3*/  "	q:int,									\n"
-/*4*/  "	fn method()->float{						\n"
-/*5*/  "		printf(\"Foo.q=%d\\n\",q);2.0		\n"
-/*6*/  "	}										\n"
-/*7*/  "}											\n"
-/*8*/  "struct Bar{									\n"
-/*9*/  "	w:int,									\n"
-/*10*/ "	fn method()->float{						\n"
-/*11*/ "		printf(\"Bar.w=%d\\n\",w);2.0		\n"
-/*12*/ "	}													\n"
-/*13*/ "}														\n"
-/*14*/ "fn func1(f:*Foo){printf(\"func1 says q=%d\\n\",f.q);}	\n"
-/*14*/ "fn main()->int{											\n"
-/*15*/ "	x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;				\n"
-/*16*/ "	printf(\"member function test..\n\",x.q);			\n"
-/*17*/	"	px.func1();											\n"
-/*18*/	"	px.method();										\n"
-/*19*/	"	py.method();										\n"
-/*20*/	"	0													\n"
-/*20*/  "}														\n"
-	,
-	// RESULT
-"member function test..\n"
-"func1 says q=5\n"
-"Foo.q=5\n"
-"Bar.w=17\n"
-},
-	{
-		"allocation",__FILE__,__LINE__,
-/*1*/ 	"fn\"C\" printf(s:str,...)->int;  			\n"
-/*2*/	"struct Foo{x:int,y:int};				\n"
-/*3*/	"fn main(argc:int, argv:**char)->int{	\n"
-/*4*/	"	pfoo:= new Foo{4,5};			\n"
-/*5*/	"	pfoos:= new Foo[10];			\n"
-/*6*/	"	pfoos[1].x=10;					\n"
-/*7*/	"	printf(\"new foo %p x,y=%d,%d array alloc=%p\\n\",pfoo,pfoo.x,pfoo.y,pfoos);			\n"
-/*8*/	"	delete pfoo;					\n"
-/*9*/	"	0\n"
-/*10*/  "}														\n",
-		nullptr
+	{	"member functions+UFCS",__FILE__,__LINE__, R"(
+		//SOURCE
+		fn\"C" printf(s:str,...)->int;
+		struct Foo{
+			q:int,
+			fn method()->float{
+				printf("Foo.q=%d\n",q);2.0
+			}
+		}
+		struct Bar{
+			w:int,
+			fn method()->float{
+				printf("Bar.w=%d\n",w);2.0
+			}
+		}
+		fn func1(f:*Foo){printf("func1 says q=%d\n",f.q);}
+		fn main()->int{
+			x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;
+			printf("member function test..\n",x.q);
+			px.func1();
+			px.method();
+			py.method();
+			0
+		}
+
+		)"
+		,// EXPECTED RESULT
+		"member function test..\n"
+		"func1 says q=5\n"
+		"Foo.q=5\n"
+		"Bar.w=17\n"
 	},
 	{
-		"for  else loop",__FILE__,__LINE__,
-/*1*/	"fn\"C\" printf(s:str,...)->int;				\n"
-/*2*/	"fn main(argc:int, argv:**char)->int{	\n"
-/*3*/	"	i:=5; b:=argc<9;						\n"
-/*4*/	"	v:=for i:=0,j:=0;		\n"
-/*5*/	"			i<10;			\n"
-/*6*/	"			i+=1,j+=7 {	\n"
-/*7*/	"		printf(\"for loop i=%d j=%d\\n\",i,j);	\n"
-/*8*/	"		if i==5 {break 44;}						\n"
-/*9*/	"	}									\n"
-/*10*/	"	else{								\n"
-/*11*/	"		printf(\"loop complete i=%d\\n\",i);55\n"
-/*12*/	"	}									\n"
-/*13*/	"	printf(\"loop ret=%d; outer scope i=%d\\n\",v,i);	\n"
-/*14*/	"	0									\n"
-/*15*/	"}\n",
-		nullptr
+		"allocation",__FILE__,__LINE__,R"(
+		fn"C" printf(s:str,...)->int;
+		struct Foo{x:int,y:int};
+		fn main(argc:int, argv:**char)->int{
+			pfoo:= new Foo{4,5};
+			pfoos:= new Foo[10];
+			pfoos[1].x=10;
+			printf("new foo %p x,y=%d,%d array alloc=%p\n",pfoo,pfoo.x,pfoo.y,pfoos);
+			delete pfoo;
+			0
+		},
+		)"
+		,nullptr
 	},
 	{
-		"type parameter inference",__FILE__,__LINE__,
-/* 1*/ "struct Union<A,B>{a:A,b:B, tag:int};		\n"
-/* 2*/ "fn setv[A,B](u:*Union[A,B], v:A)->void{		\n"
-/* 3*/ "	u.a=v; u.tag=0; 						\n"
-/* 4*/ "}											\n"
-/* 5*/ "fn setv[A,B](u:*Union[A,B], v:B)->void{		\n"
-/* 6*/ "	u.b=v; u.tag=1; 						\n"
-/* 7*/ "}											\n"
-/* 8*/ "fn main(argc:int, argv:**char)->int{		\n"
-/* 9*/ "	u=:Union[int,float];					\n"
-/*10*/ "	setv(&u,10)								\n"
-/*11*/ "	printf(\"u.tag=%d\\n\",u.tag);			\n"
-/*12*/ "	setv(&u,10.0)	;						\n"
-/*13*/ " printf(\"u.tag=%d\\n\",u.tag);				\n"
-/*14*/ "	0}										\n"
-/*15*/ "fn\"C\" printf(s:str,...)->int;					\n"
-		,
-		// expected result
+		"for  else loop",__FILE__,__LINE__,R"(
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int, argv:**char)->int{
+			i:=5; b:=argc<9;
+			v:=for i:=0,j:=0;
+				i<10;
+				i+=1,j+=7 {
+				printf("for loop i=%d j=%d\n",i,j);
+				if i==5 {break 44;}
+			}
+			else{
+				printf("loop complete i=%d\n",i);55
+			}
+			printf("loop ret=%d; outer scope i=%d\n",v,i);
+			0
+		},
+		)"
+		,nullptr
+	},
+	{
+		"type parameter inference",__FILE__,__LINE__,R"(
+		struct Union<A,B>{a:A,b:B, tag:int};
+		fn setv[A,B](u:*Union[A,B], v:A)->void{
+			u.a=v; u.tag=0;
+		}
+		fn setv[A,B](u:*Union[A,B], v:B)->void{
+			u.b=v; u.tag=1;
+		}
+		fn main(argc:int, argv:**char)->int{
+			u=:Union[int,float];
+			setv(&u,10)
+			printf("u.tag=%d\n",u.tag);
+			setv(&u,10.0)	;
+			printf("u.tag=%d\n",u.tag);
+		0}
+		fn"C" printf(s:str,...)->int;
+		)"
+		,// expected result
 		"u.tag=0\n"
 		"u.tag=1\n"
 	},

@@ -351,7 +351,6 @@ ExprBlock* ExprBlock_alloc(SrcPos& pos){
 //	else
 		return new ExprBlock(pos);
 }
-
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 	// shunting yard expression parser+dispatch to other contexts
 	ExprBlock *node=ExprBlock_alloc(src.pos);
@@ -674,13 +673,42 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 			return fn_type;
 		}
 	} else {
-		// prefixes in typegrammar - pointers
-		if (tok==MUL){
+		// prefixes in typegrammar - pointers &more
+		if (tok==OPTION){
+			ret=new Type(owner,OPTION);
+			ret->sub=parse_type(src,close,owner);
+		}
+		else if (tok==COMPLEMENT){ //~str= ~[T]=vector [float*4] array [T]=slice [K:V]=dictionary
+			// todo, user def types remapped according to typedefs
+			auto x=parse_type(src,close,owner);
+			if (x->name==SLICE){
+				x->name=VECTOR;
+			} else if (x->name==STR ){
+				x->name=STRING;
+			} else{
+				x=new Type(x, UNIQUE_PTR,x);
+			}
+			ret=x;
+		}
+		else if (tok==OPEN_BRACKET){
+			auto x=parse_type(src,0,owner);
+			if (src.eat_if(COLON)){
+				auto y=parse_type(src,0,owner);
+				ret=new Type(x,DICTIONARY,x,y);
+			} else if (src.eat_if(MUL)){
+				auto y=parse_type(src,0,owner);
+				ret=new Type(x,ARRAY,x,y);
+				// calculated expression would have to be parenthesized.
+			} else {
+				ret=new Type(x,SLICE,x);
+			}
+			src.expect(CLOSE_BRACKET);
+		}
+		else if (tok==MUL){
 			ret=new Type(owner,PTR);
 			ret->sub=parse_type(src,close,owner);
 		}
-		else
-		if (tok==AND) {
+		else if (tok==AND) {
 			ret=new Type(owner,REF);
 			ret->sub=parse_type(src,close,owner);
 		}else {

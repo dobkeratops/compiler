@@ -112,4 +112,13 @@ struct ExprIfLet : ExprMatch{	// sugar for match 1arm. parses+prints different. 
 	const char*		kind_str() const {return "kind str";}
 };
 
+struct ExprWhileLet : ExprMatch{	// sugar for match 1arm. parses+prints different. eval the same
+	//void		dump(int depth)const;
+	//Node*		clone() const override {return this->clone_into(new ExprIfLet);}
+	Expr*	body=0;			// loop body.
+	Expr*	else_block=0;	// for expression-return
+	const char*		kind_str() const {return "kind str";}
+	CgValue			compile(CodeGen& cg, Scope* sc){error("todo, while-let support");return CgValue();}
+};
+
 

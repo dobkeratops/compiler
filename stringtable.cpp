@@ -64,12 +64,12 @@ const char* g_token_str[]={
 	"+=","-=","*=","/=","&=","|=","^=","%=","<<=",">>=", // assign-op
 	".=","?=",	// linklist follow ptr.=next
 	"++","--","++","--", //inc/dec
-	"-","*","&","!","~", // unary ops
+	"-","*","&","!","~","?", // unary ops
 	"*?","*!","&?","~[]","[]","&[]","??","<?>","<*>","<+>","<-->","</>","?->", // special pointers?
 	",",";",";;",
 	"...","..","..<","..>","..>=","..<=",
 	"_","",
-	"\"C\"","__vtable_ptr","__data_ptr","__parent_ptr","__env_ptr","__discriminant","__env_i8_ptr",
+	"\"C\"","__vtable_ptr","__data_ptr","__parent_ptr","__env_ptr","__discriminant","__env_i8_ptr","__vector","__string","__unique_ptr","__dictionary","__gc_ptr",
 	NULL,
 };
 const char* g_operator_symbol[]={
@@ -85,7 +85,7 @@ const char* g_operator_symbol[]={
 	"assign_add","assign_sub","assign_mul","assign_div","assign_and","assign_or","assign_xor","assign_mod","assign_shl","assign_shr",
 	"assign_dot","maybe_assign",
 	"post_inc","post_dec","pre_inc","pre_dec",
-	"negate","deref","not","complement",
+	"negate","deref","not","complement","option",
 	"opt_ptr","own_ptr","maybe_ref","own_vector","slice","slice_ref", "double_question_mark","tag_question_mark","tag_mul","tag_add","tag_sub","tag_div","maybe_arrow",
 	"comma","semicolon","doublesemicolon","ellipsis","dotdot",
 	"range_lt","range_gt","range_ge","range_le",
@@ -125,13 +125,13 @@ int g_tok_info[]={
 	WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16,WRITE_LHS|READ|ASSOC|16, // assign-op
 	WRITE_LHS|READ|ASSOC|16, // dot-assign
 	MODIFY|PREFIX|UNARY|2,MODIFY|PREFIX|UNARY|2,MODIFY|UNARY|ASSOC|3,MODIFY|UNARY|ASSOC|3, // post/pre inc/dec
-	READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3, //unary ops
+	READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3, //unary ops
 	READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3,READ|UNARY|ASSOC|3, /// special pointers
 	0,0,17, // delim
 	0,
 	0,0,
 	0, //placeholder
-	0,0,0,0,0,0,0,0
+	0,0,0,0,0,0,0,0,0,0,0,0,0
 };
 
 const char* operator_symbol(Name ok);

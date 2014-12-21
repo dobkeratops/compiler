@@ -8,7 +8,6 @@ void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{
 }
 
 
-
 ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
 	init->resolve_if(sc,0,flags);

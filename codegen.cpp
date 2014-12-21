@@ -5,6 +5,7 @@
 #include "exprstructdef.h"
 /// details of compiling LLVM
 /// CodeGen is planned to be an interface, slot in 'CodeGenLLVM' / 'CodeGenC'
+size_t g_DefaultAlignment=4;
 
 typedef LLVMOp LLVMOp2[2];
 LLVMOp2 g_llvm_ops[]= {
@@ -855,7 +856,7 @@ CgValue CodeGen::emit_alloca_type(Expr* holder, const Type* t) {
 	}
 	RegisterName r= holder?holder->get_reg(*this, false):next_reg();
 	emit_ins_begin(r,"alloca"); emit_type(t,false);
-	emit_txt(", align %zu", t->alignment());
+	emit_txt(", align %zu", orelse(t->alignment(),g_DefaultAlignment));
 	emit_ins_end();
 	return CgValue(0,t, r);
 }

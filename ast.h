@@ -4,9 +4,8 @@
 #include "stringtable.h"
 #include "node.h"
 
-
-
 typedef Type TParamVal;
+
 
 /// Pattern eg arguments or pattern matching, if-let
 /// simplest must behave like 'ident'
