@@ -1,7 +1,8 @@
 #include "stringtable.h"
+// todo, sizes in bits, not bytes
 int g_size_of[]={
 	0,
-	4,4,8,1,2,4,8,1,2,4,8,16,1,
+	4,4,8,1,2,4,8,1,2,4,8,16,1,1,
 	2,4,8,161,8,0,-1,-1,-1,8,8,8
 };
 int g_raw_types[]={
@@ -17,7 +18,8 @@ int g_raw_types[]={
 	4|RT_INTEGER,
 	8|RT_INTEGER,
 	16|RT_INTEGER,
-	1|RT_INTEGER,
+	1|RT_INTEGER,//bool
+	1|RT_INTEGER,// regbool
 	2|RT_FLOATING,//half
 	4|RT_FLOATING,
 	8|RT_FLOATING,
@@ -38,7 +40,7 @@ int g_raw_types[]={
 };
 const char* g_token_str[]={
 	"",
-	"int","uint","size_t","i8","i16","i32","i64","u8","u16","u32","u64","u128","bool",
+	"int","uint","size_t","i8","i16","i32","i64","u8","u16","u32","u64","u128","bool","reg_bool",
 	"half","float","double","float4",
 	"char","str","void","voidptr","one","zero","nullptr","true","false",
 	"auto","ptr","ref","Self",
@@ -100,7 +102,7 @@ const char* operator_symbol(Name tok){
 
 int g_tok_info[]={
 	0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,// int types
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,// int types
 	0,0,0,0,  //floats
 	0,0,0,0,0,0,0,0,0,
 	0,0,0,0,

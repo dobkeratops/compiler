@@ -98,22 +98,32 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		if (op_ident==LET_ASSIGN){
 			ASSERT(this->lhs && this->rhs);
 			rhs->resolve(sc,desired,flags);
+			dbg(lhs->dump(0));dbg(printf(".let="));
+			dbg(rhs->dump(0));dbg(newline(0));
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			if (desired) {
 				desired->dump(-1);
 			}
 			auto rhs_t = rhs->get_type();
-			auto new_var=sc->create_variable(this,vname,Local);
-			lhs->set_def(new_var);
-			new_var->force_type_todo_verify(rhs_t);
-			if (rhs_t){
-			lhs->set_type(rhs_t);
-			this->set_type(rhs_t);
+			if (lhs->as_ident()){
+				auto new_var=sc->create_variable(this,vname,Local);
+				lhs->set_def(new_var);
+				if (rhs_t){
+					lhs->set_type(rhs_t);
+					this->set_type(rhs_t);
+				}
 			}
+			
+			//new_var->force_type_todo_verify(rhs_t);
+			lhs->resolve(sc,rhs->type(),flags);
 			propogate_type_fwd(flags, this, desired, lhs->type_ref());
 			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 		}
 		else if (op_ident==DECLARE_WITH_TYPE){ // create a var, of given type,like let lhs:rhs;
+			const Type* tt=rhs?rhs->as_type():nullptr; if (!tt) tt=this->type(); if (!tt) tt=desired;
+			lhs->resolve(sc, tt,flags);
+			if (!lhs->is_ident())
+				return propogate_type(flags, this, lhs->type_ref(),type_ref());
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			// todo: get this in the main parser
 			auto lhsi=expect_cast<ExprIdent>(lhs);
@@ -134,6 +144,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			if (auto t=v->get_type()) {
 				sc->try_find_struct(t);// instantiate
 			}
+
 			return propogate_type(flags, this, v->type_ref(),type_ref());
 		}
 		else if (op_ident==ASSIGN){
@@ -437,33 +448,42 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 		return CgValue();
 	}
 	else if (e->lhs && e->rhs){
-		auto lhs=e->lhs->compile(cg,sc);
-		auto rhs=e->rhs->compile(cg,sc);
-		auto lhs_v=sc->find_variable_rec(e->lhs->name);
-		auto outname=lhs_v?lhs_v->name:opname;
+		auto rhs_v=e->rhs->compile(cg,sc);
+		auto lhs_var=sc->find_variable_rec(e->lhs->name);
+		auto outname=lhs_var?lhs_var->name:opname;
 		
 		if (opname==DECLARE_WITH_TYPE){ // do nothing-it was sema'sjob to create a variable.
-			ASSERT(sc->find_scope_variable(e->lhs->name));
-			return  CgValue(lhs_v);
+//			auto lhs_v=e->lhs->compile(cg,sc);
+//			ASSERT(sc->find_scope_variable(e->lhs->name));
+//			return  CgValue(lhs_var);
+			return e->lhs->compile(cg,sc,CgValue());
 		}
 		else if(opname==AS) {
 			// if (prim to prim) {do fpext, etc} else..
-			return cg.emit_cast(lhs,e);
+			auto lhs_v=e->lhs->compile(cg,sc);
+			return cg.emit_cast(lhs_v,e);
 		}
 		else
 			if (opname==LET_ASSIGN){// := Let-Assign *must* create a new variable,infer type.
-				return lhs.store(cg,rhs);
+				auto lhs_v=e->lhs->compile(cg,sc,rhs_v);
+				if (lhs->is_ident()){
+					return lhs_v.store(cg,rhs_v);
+				} else return lhs_v;
+				//return e->lhs->compile(cg,sc,rhs_v);
 			}
 			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_RHS)  && opname==ASSIGN){
-				auto r=cg.emit_conversion(e, rhs, e->type(),sc);
-				return lhs.store(cg,r);
+				auto lhs_v=e->lhs->compile(cg,sc);
+				auto r=cg.emit_conversion(e, rhs_v, e->type(),sc);
+				return lhs_v.store(cg,r);
 			}
 			else if ((opflags & RWFLAGS)==(WRITE_LHS|READ_LHS|READ_RHS) ){
-				auto result=cg.emit_instruction(opname,t?t:rhs.type, 0,lhs,rhs);
-				return lhs.store(cg,result);
+				auto lhs_v=e->lhs->compile(cg,sc);
+				auto result=cg.emit_instruction(opname,t?t:rhs_v.type, 0,lhs_v,rhs_v);
+				return lhs_v.store(cg,result);
 			}else {
+				auto lhs_v=e->lhs->compile(cg,sc);
 				// RISClike 3operand dst=op(src1,src2)
-				auto r=cg.emit_instruction(opname,e->get_type(),0,lhs,rhs);
+				auto r=cg.emit_instruction(opname,e->get_type(),0,lhs_v,rhs_v);
 				return r;
 			}
 	} else if (!e->lhs && e->rhs){ // prefix unary operators

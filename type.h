@@ -138,6 +138,7 @@ struct Type : ExprDef {
 	Name as_name()const override{
 		return this->name;
 	}
+	const Type* as_type()const{return this;}
 	ExprStructDef*	struct_def();
 	ExprStructDef*	struct_def() const;
 	

@@ -13,8 +13,8 @@ void Pattern::recurse(std::function<void(Node*)>& f){
 }
 Node*Pattern::clone() const {
 	auto np=new Pattern(pos,name);
-	np->next=(Pattern*)np->clone_if();// todo not recursive!! .. but patterns are small.
-	np->sub=(Pattern*)np->clone_if();
+	np->next=(Pattern*)next->clone_if();// todo not recursive!! .. but patterns are small.
+	np->sub=(Pattern*)sub->clone_if();
 	return np;
 }
 Pattern* Pattern::get_elem(int i){
@@ -30,19 +30,21 @@ const Pattern* Pattern::get_elem(int i) const{
 Name Pattern::as_name()const{
 	return this->name;
 }
+ResolvedType
+Pattern::resolve(Scope* sc, const Type* rhs, int flags){
+	return this->resolve_with_type(sc,rhs,flags);
+}
 
 ResolvedType
 Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	if (!this)
-		return ResolvedType();
-	if (!rhs ) // no input, can't do anything (todo-infer out from patterns)
 		return ResolvedType();
 	if (this->name==EXPRESSION){
 		((Node*)(this->sub))->resolve(sc,rhs,flags);
 		return propogate_type(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
 	}
 	if (this->name==PTR){
-		if (rhs->name==PTR){
+		if (rhs&&rhs->name==PTR){
 			auto ret=sub->resolve_with_type(sc, rhs->sub, flags);
 			this->set_type(new Type(this,PTR,sub->type()));
 			return ret;
@@ -52,7 +54,10 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		for (auto s=this->sub;s;s=s->next){
 			s->resolve_with_type(sc,rhs,flags);
 		}
-		return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
+		if (rhs)
+			return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
+		else
+			return ResolvedType();
 	} else if (this->name==PATTERN_BIND){
 		// get or create var here
 		auto v=this->sub; auto p=v->next; ASSERT(p);
@@ -64,8 +69,8 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		return propogate_type(flags, (Node*)this, this->sub->type_ref(), this->sub->next->type_ref());
 	}
 	else if (this->name==TUPLE){
-		auto subt=rhs->sub;
-		for (auto subp=this->sub; subp&&subt; subp=subp->next, subt=subt->next){
+		auto subt=rhs?rhs->sub:nullptr;
+		for (auto subp=this->sub; subp; subp=subp->next, subt?subt=subt->next:nullptr){
 			subp->resolve_with_type(sc,subt, flags);
 		}
 	} else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring
@@ -82,8 +87,9 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		}
 	} // else its a var of given type, or just a constant?
 	else{
-		propogate_type_fwd(flags, (Node*)this, rhs,this->type_ref());
-		dbg(dbprintf("matching pattern %s with..",str(this->name)));dbg(rhs->dump(-1));dbg(newline(0));
+		if (rhs)
+			propogate_type_fwd(flags, (Node*)this, rhs,this->type_ref());
+		dbg(dbprintf("matching pattern %s with..",str(this->name)));dbg(rhs->dump_if(-1));dbg(newline(0));
 		if (auto sd=sc->find_struct_name_type_if(sc,this->name,this->type()))
 		{
 			this->set_struct_type(sd);
@@ -118,18 +124,33 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 				dbg2(dbprintf("pattern match created var %s:",this->name_str())); dbg2(this->type()->dump_if(-1));dbg(newline(0));
 				this->set_def(v);
 			}
-			
-			return propogate_type_fwd(flags, this, rhs, v->type_ref());
+			if (rhs)
+				return propogate_type_fwd(flags, this, rhs, v->type_ref());
+			else
+				return ResolvedType();
 		}
 	}
 	return ResolvedType();
+}
+
+// TODO: we suspect this will be more complex, like Type translation (
+void Pattern::translate_typeparams(const TypeParamXlat& tpx){
+	this->type()->translate_typeparams_if(tpx);
+	this->def->translate_typeparams_if(tpx);
+	auto i=tpx.typeparam_index(this->name);
+	if (i>=0){
+		this->name=tpx.given_types[i]->name;
+	}
+	for (auto s=this->sub; s;s=s->next){
+		s->translate_typeparams(tpx);
+	}
 }
 
 CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 	auto ptn=this;
 	// emit a condition to check if the runtime value  fits this pattern.
 	// TODO-short-curcuiting - requires flow JumpToElse.
-	
+	dbg(val.dump());
 	// single variable bind.
 	if (ptn->name==EXPRESSION){
 		auto rhs=ptn->sub->compile(cg,sc,CgValue());
@@ -139,7 +160,7 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 			return rhs;
 	}
 	if (ptn->name==PTR ||ptn->name==REF){
-		return ptn->sub->compile(cg, sc, val.deref_op(cg));
+		return ptn->sub->compile(cg, sc, val.is_valid()?val.deref_op(cg):val);
 	}
 	if (ptn->name==PLACEHOLDER){
 		return cg.emit_bool(true);
@@ -147,12 +168,13 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 	if (ptn->name==PATTERN_BIND){
 		auto v=ptn->get_elem(0);
 		auto p=ptn->get_elem(1);
-		auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
+		auto disr=val.is_valid()?cg.emit_loadelement(val, __DISCRIMINANT):val;
 		auto ps=p->type()->is_pointer_or_ref()?p->sub:p;
 		auto sd=ps->def->as_struct_def();
 		auto b=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
 		auto var=v->def->as_variable();
-		CgValue(var).store(cg, cg.emit_conversion((Node*)ptn, val, var->type(), sc));// coercion?
+		if (val.is_valid())
+			CgValue(var).store(cg, cg.emit_conversion((Node*)ptn, val, var->type(), sc));// coercion?
 		
 		return b;
 	}
@@ -169,10 +191,11 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 			auto sd=ptns->def->as_struct_def();
 			index=sd->first_user_field_index();
 			ret=cg.emit_instruction(EQ, disr, cg.emit_i32(sd->discriminant));
-			val2=cg.emit_conversion((Node*)ptn,val, ptn->type(),sc);
+			if (val.is_valid())
+				val2=cg.emit_conversion((Node*)ptn,val, ptn->type(),sc);
 			dbg2(val2.type->dump(0));dbg2(newline(0));
 		}
-		//todo - this part moves to bind if not or/tople
+		//todo - this part moves to bind if not or/tuple
 		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
 			auto elem=ptn->name!=OR?cg.emit_getelementref(val2,0, index,subp->type()):val;
 			auto b=subp->compile(cg, sc, elem);
@@ -190,18 +213,30 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 									cg.emit_instruction(LE,val,ptn->sub->compile(cg,sc,CgValue()))
 									);
 	}
-	else if (auto var=ptn->def->as_variable()){
-		dbg(dbprintf("bind %s :",var->name_str()));dbg(var->type()->dump_if(-1));dbg(newline(0));
-		dbg(dbprintf("given val :",var->name_str()));dbg(val.type->dump_if(-1));dbg(newline(0));dbg(ptn->type()->dump_if(-1));dbg(newline(0));
-		CgValue(var).store(cg, val);
-		return cg.emit_bool(true);
-	}else
-		// single value
-		if (auto lit=ptn->def->as_literal()){
-			return	cg.emit_instruction(EQ, CgValue(lit), val);
-		}
-	ptn->dump(0);
-	error(ptn,"uncompiled node %s",str(ptn->name));
+	else if (ptn->def){
+		if (auto var=ptn->def->as_variable()){
+			// todo encapsulate variable compile
+			CgValue varr;
+			if (auto cp=var->capture_in){
+				varr=CgValue(cp->reg_name,cp->type(),0,var->capture_index);
+			} else
+				varr=CgValue(var);
+
+			
+			
+			dbg(dbprintf("bind %s :",var->name_str()));dbg(var->type()->dump_if(-1));dbg(newline(0));
+			dbg(dbprintf("given val :",var->name_str()));dbg(val.type->dump_if(-1));dbg(newline(0));dbg(ptn->type()->dump_if(-1));dbg(val.dump());dbg(newline(0));
+			if (val.is_valid())
+				varr.store(cg, val);
+			return cg.emit_bool(true);
+		}else
+			// single value
+			if (auto lit=ptn->def->as_literal()){
+				return	cg.emit_instruction(EQ, CgValue(lit), val);
+			}
+	}
+	dbg(ptn->dump(0));
+	dbg(dbprintf("uncompiled node %s\n",str(ptn->name)));
 	return CgValue();
 }
 

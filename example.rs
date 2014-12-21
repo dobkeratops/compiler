@@ -20,6 +20,12 @@ fn take_closure(funcp:|int|){
 	funcp(10);
 }
 
+// Rust style enum
+enum Shape {
+	Sphere(Vec3,float),
+	Cuboid{min:Vec3,max:Vec3},
+	Cylinder(float,float),
+};
 // Rust style match
 fn shape_vol(s:*Shape)->float= match s{
 	*Sphere(my_centre, my_radius)=>{
@@ -33,6 +39,7 @@ fn shape_vol(s:*Shape)->float= match s{
 	*Cylinder(radius,height)=>3.142*radius*radius+height,
 	_ =>{printf("shape error\n");0.0}
 };
+
 
 // 'where' expression sugar ..sort salient info on one line
 fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
@@ -85,12 +92,6 @@ struct IBaz {
 }
 
 
-// Rust style enum
-enum Shape {
-	Sphere(Vec3,float),
-	Cuboid{min:Vec3,max:Vec3},
-	Cylinder(float,float),
-};
 
 // adhoc overloading like C++; most specific function is matched at callsite
 
@@ -111,7 +112,9 @@ fn something(f:float,x){
 	printf("something(float, auto)\n");
 }
 
-// tagged-union implemented using templates.(TODO, actual union type)
+// tagged-union implemented using templates.
+// still has interesting possibilites that inbuilt enum doesn't
+// perhaps the actual enum/discriminant mechanism itself could be overloadable..
 struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is convention
 	tag:int,
 	x:X,y:Y,
@@ -176,8 +179,7 @@ fn main(argc:int,argv:**char)->int{
 	banana.uuu=50;
 	take_banana(&banana);
 
-	// alternate syntax for declaring  a new uninitialized variable of type
-	v=:Union<float,int>;
+	let v:Union<float,int>;
 
 	// calls to templated functions,& using UFCS.. test'variant' template..
 	u.setv(2.0);

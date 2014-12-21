@@ -10,7 +10,7 @@ typedef Type TParamVal;
 /// Pattern eg arguments or pattern matching, if-let
 /// simplest must behave like 'ident'
 struct Pattern : Node {
-	ResolvedType	resolve(Scope* sc, Type* desired, int flags){ASSERT(0 && "dont resolve pattern"); return ResolvedType();}
+	ResolvedType	resolve(Scope* sc, const Type* desired, int flags)override;
 	Pattern* next=0;
 	Pattern* sub=0;
 	Pattern(SrcPos _pos, Name n){pos=_pos,name=n;}
@@ -31,6 +31,8 @@ struct Pattern : Node {
 	CgValue	compile_condition(CodeGen& cg,Scope* sc, CgValue input);
 	CgValue compile_bind(CodeGen& cg, Scope* sc, CgValue input);
 	void	recurse(std::function<void(Node*)>& f);
+	void	translate_typeparams(const TypeParamXlat& xlat);
+	const char* kind_str()const{return "pattern";}
 	Name	as_name()const;
 
 };

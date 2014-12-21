@@ -106,7 +106,7 @@ ExprMatch* parse_match(TokenStream& src){
 		*pp=a;
 		pp=&a->next;
 		int close=0;
-		a->pattern=parse_pattern(src,FAT_ARROW,IF,&close);
+		a->pattern=parse_pattern(src,FAT_ARROW,IF,0, &close);
 		if (close==IF){
 			a->cond=parse_block(src,FAT_ARROW,COMMA,0);
 		}
@@ -121,11 +121,11 @@ ExprMatch* parse_match(TokenStream& src){
 // todo: we're not sure we need a whole other parser
 // couldn't expressions,types,patterns all use the same gramar & parser,
 // & just interpret the nodes differently?
-Pattern* parse_pattern(TokenStream& src,int close,int close2,int* close_tok, Pattern* owner){
+Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out_close_tok, Pattern* owner){
 	// yikes, this is a total mess
 	Pattern* prev=0;
 	while (auto t=src.eat_tok()){
-		if (t==close || t==close2) {if (close_tok){*close_tok=(int)t;}break;}
+		if (t==close || t==close2||t==close3) {if (out_close_tok){*out_close_tok=(int)t;}break;}
 		if (!prev && t==PATTERN_BIND){//backticks would be better since this can be @
 			auto np=new Pattern(src.pos, EXPRESSION);
 			np->push_back((Pattern*)parse_expr(src));// TODO, this is dodgy- subtype is not pattern. we're counting on Pattern to know. we'd need to derive PatternExpression.
@@ -138,7 +138,7 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int* close_tok, Pat
 			if (t==ADDR) t=REF;
 			if (prev){ error(src.pos,"ptr/ref operator must be prefix in pattern");}
 			auto np=new Pattern(src.pos, t);
-			parse_pattern(src,close,close2,close_tok,np);
+			parse_pattern(src,close,close2,close3,out_close_tok,np);
 			if (owner)owner->push_back(np);
 			return np;
 		}
@@ -146,16 +146,16 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int* close_tok, Pat
 			if (!prev) {
 				prev=new Pattern(src.pos, TUPLE);
 			}
-			parse_pattern(src,CLOSE_PAREN,0,close_tok,prev);
+			parse_pattern(src,CLOSE_PAREN,0,0,out_close_tok,prev);
 		}
 		// todo - range ".."
 		// todo - slice patterns
-		else if (t==LET_ASSIGN || t==DECLARE_WITH_TYPE || t== ASSIGN ||t==PATTERN_BIND){ // todo its @ in scala,rust
+		else if (t==PATTERN_BIND){ // todo its @ in scala,rust
 			auto np=new Pattern(src.prev_pos,PATTERN_BIND);
 			if (owner){ error(src.pos,"pattern bind @ can only be first eg x@whatever(..)");}
 			
 			np->push_back(prev);
-			parse_pattern(src,close,close2, close_tok, np);
+			parse_pattern(src,close,close2,close3,out_close_tok, np);
 			np->dump(0);newline(0);
 			return np;
 		}
@@ -168,7 +168,7 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int* close_tok, Pat
 			if (!prev){error(src.pos,"in pattern | must seperate options eg a|b|c..");}
 			auto np=new Pattern(src.pos,OR);
 			np->push_back(prev);
-			np->push_back(parse_pattern(src,close,close2,close_tok,nullptr));
+			np->push_back(parse_pattern(src,close,close2,close3,out_close_tok,nullptr));
 			if (owner) {
 				owner->push_back(prev);prev=0;
 			}
@@ -295,35 +295,37 @@ ExprFnDef* parse_closure(TokenStream&src,int close) {// eg |x|x*2
 
 ExprOp* parse_let(TokenStream& src) {
 	// TODO: parse_pattern - we DO want all the tuple assignment goodness
-	auto ident=src.eat_ident();
-	auto id=new ExprIdent(src.prev_pos,ident);
+//	auto ident=src.eat_ident();
+//	auto id=new ExprIdent(src.prev_pos,ident);
+	int closed;
+	auto ptn=parse_pattern(src, ASSIGN,COLON,SEMICOLON,&closed);
 	Type * t=nullptr;
 	Expr* init=nullptr;
-	if (src.eat_if(COLON)){
+	if (closed==COLON){//src.eat_if(COLON)){
 		t=parse_type(src,0,nullptr);
 	}
 	//nlet->lhs->set_type(t);// we dont need an operator, all nodes have type
 	
-	if (src.eat_if(ASSIGN)){
+	if (closed==ASSIGN||src.eat_if(ASSIGN)){
 		init=parse_expr(src);
 	}
 // cases..
 	if (!t && init){
 		auto nlet=new ExprOp(LET_ASSIGN,src.prev_pos);
-		nlet->lhs=id;
+		nlet->lhs=(Expr*)ptn;
 		nlet->rhs=init;
 		return nlet;
 	}
 	else if (t){
 		if (!init){
 			auto nlet=new ExprOp(DECLARE_WITH_TYPE,src.prev_pos);
-			nlet->lhs=id;
+			nlet->lhs=(Expr*)ptn;
 			nlet->rhs=t;
 			return nlet;
 		}
 		else{
 			auto nassign=new ExprOp(LET_ASSIGN,src.prev_pos);
-			nassign->lhs=id;
+			nassign->lhs=(Expr*)ptn;
 			nassign->rhs=new ExprOp(AS, src.prev_pos, init, Type::get_bool());
 			nassign->rhs->set_type(Type::get_bool());
 			return nassign;
@@ -332,11 +334,14 @@ ExprOp* parse_let(TokenStream& src) {
 	}
 	else{
 		auto nlet=new ExprOp(DECLARE_WITH_TYPE,src.prev_pos);
-		nlet->lhs=id;
+		nlet->lhs=(Expr*)ptn;
 		nlet->rhs=nullptr;//new Type(AUTO);
 		//error(nlet,"TODO - let <var with no type or init expr>\ntype inference should handle it but we must double check ..");
 		return nlet;
 	}
+	//else {
+	//	error(ptn,"error parsing let expression,unhandled case");
+	//}
 }
 
 Expr* expect_pop(TokenStream& src,vector<Expr*>& ops){
@@ -993,7 +998,7 @@ Expr* parse_if_let(TokenStream& src){
 	MatchArm* arm=new MatchArm(); // if-let is a single match arm with different syntax.
 	iflet->arms=arm;
 	int close=0;
-	arm->pattern=parse_pattern(src,ASSIGN,0,&close);
+	arm->pattern=parse_pattern(src,ASSIGN,0,0,&close);
 
 	iflet->expr=parse_block(src,OPEN_BRACE,COMMA,nullptr);
 	arm->body = parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);

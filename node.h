@@ -68,6 +68,7 @@ public:
 	CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_if(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
+	virtual const Type*			as_type()const	{return nullptr;}
 	virtual ExprIdent*			as_ident() 		{return nullptr;}
 	virtual ExprLiteral*		as_literal() 		{return nullptr;}
 	virtual const ExprIdent*	as_ident() const{return nullptr;}

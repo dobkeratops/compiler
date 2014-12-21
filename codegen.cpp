@@ -37,7 +37,7 @@ LLVMOp2 g_llvm_cmp_ops[]= {
 //};
 const char* g_llvm_type_str[]={
 	"i32","u32","i64",
-	"i8","i16","i32","i64","u8","u16","u32","u64","u128","i1",
+	"i8","i16","i32","i64","u8","u16","u32","u64","u128","i1","i1", //bool BOOL REG_BOOL
 	"half","float","double","< 4 x float >", "i8", "i8*","void","void*",
 	nullptr
 };
@@ -273,7 +273,14 @@ CgValue CodeGen::load(const CgValue& v,const Type* result_type) {
 		cg.emit_ins_end();
 		return CgValue(dstr,v.type);
 	}
-	ASSERT(v.reg && !v.addr);
+	if (!(v.reg && !v.addr)){
+		dbprintf("======\n");
+		v.dump();
+		newline(0);
+		v.type->dump_if(0);
+		error(0,"\n load - var broken \n");
+	}
+//	ASSERT(v.reg && !v.addr);
 	return v;
 }
 void CodeGen::emit_operand_literal(const CgValue& v, const ExprLiteral* lit) {
@@ -495,13 +502,25 @@ CgValue CodeGen::emit_make_literal(ExprLiteral *lit){
 		emit_txt("=undef\n");
 		return CgValue(outr,lit->type());
 	}
-	if (ltn==BOOL){
+	else if (ltn==BOOL){
 		emit_ins_begin(outr,"or");
-		emit_int_lit(I8,ltn==BOOL_TRUE?1:0);
+		emit_int_lit(BOOL,ltn==BOOL_TRUE?1:0);
 		emit_comma();
 		emit_txt("%d",lit->u.val_bool?1:0);
 	}
-	if (ltn==INT){
+	else if (lit->type_id==T_BOOL){
+		emit_ins_begin(outr,"or");
+		if (lit->u.val_bool){
+			emit_txt(" i1 1,1");
+		}
+		else
+			emit_txt(" i1 0,0");
+//		emit_bool(lit->u.val_bool);
+//		emit_int_lit(BOOL,ltn==BOOL_TRUE?1:0);
+//		emit_comma();
+//		emit_txt("%d",lit->u.val_bool?1:0);
+	}
+	else if (ltn==INT){
 		return emit_i32(lit->u.val_int);
 	}
 	else if(ltn==FLOAT){
@@ -678,8 +697,12 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 		if (t->is_complex()) {
 			emit_txt("%%%s", str(t->name));
 		}
-		else
+		else {
+			if (t->name==BOOL ||t->name==BOOL_TRUE||t->name==BOOL_FALSE||t->name==U8||t->name==I8){
+				dbg(dbprintf("\n"));
+			}
 			emit_txt("%s",t?get_llvm_type_str(t->name):"???");//,t.is_pointer?"*":"");
+		}
 	}
 	if (ref) emit_pointer_end();
 }
@@ -748,8 +771,10 @@ void CodeGen::emit_instruction_sub(Name opname,const Type* type,  RegisterName d
 	const LLVMOp* op=get_op_llvm(opname,type?type->name:VOID);
 	this->emit_reg(dstr);
 	emit_ins_name( op?op->op_signed:str(opname));
-	if (is_comparison(opname))
+	if (is_comparison(opname)){
+		dbg(dbprintf("cmopare resut=%s\n",str(type->name)));
 		emit_type(src1);
+	}
 	else{
 		emit_type(type,false);
 	}
@@ -1488,7 +1513,7 @@ void CgValue::dump()const {
 	dbprintf("reg=%s;",str(reg));
 	dbprintf("val=%p %s %s;",val,val?val->name_str():"",val?val->kind_str():"");
 	dbprintf("addr=%s;elem=%d;type:",str(addr),elem);
-	type->dump(-1);
+	type->dump_if(-1);
 	dbprintf(")");
 }
 

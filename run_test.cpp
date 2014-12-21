@@ -13,7 +13,88 @@ struct CompilerTest {
 
 
 CompilerTest g_Tests[]={
+	{	"HKT (template template parameters)",__FILE__,__LINE__, R"====(
+		
+		fn map[C,T,Y](src:C[T],f:|T|->Y)->C[Y]{
+			let result;
+			result
+		}
+		struct Vec[T]{data:*T,num:int}
+		fn main(argc:int, argv:**char)->int{
+			let vec:Vec[int];
+			let vec2=map(vec,|x|{0.0});
+			0
+		}											,
+		)===="
+		,nullptr
+	},
 
+	{	"let with pattern",__FILE__,__LINE__,R"====(
+		
+		fn main(argc:int, argv:**char)->int{
+			let x=(11,12,13);
+			let (a,b,c)=x;
+			0
+		},
+		)====",
+		nullptr
+	},
+	
+
+	{	"pointer to bool ",__FILE__,__LINE__, R"====(
+		
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int,argv:**char)->int{
+			let bool_from_ptr1:bool	= argv;
+			printf("bool val %d\n",bool_from_ptr1);
+			0
+		}
+		)===="
+	},
+
+	{	"let",__FILE__,__LINE__,R"====(
+		
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int, argv:**char)->int{
+			let x=2;
+			let y=3;
+			let z=x+y;
+			printf("x,y,z=%d,%d,%d,%d\n",x,y,z);
+			0
+		},
+		)====",
+		nullptr
+	},
+	{	"closures",__FILE__,__LINE__,R"(
+		
+		fn"C" printf(s:str,...)->int;
+		fn take_closure(pfunc:|int|->void){ pfunc(5);}
+		fn main(argc:int, argv:**char)->int{
+			let y=111; z:=333;w:=0; y+=10;w+=7;
+			take_closure()do x{let yy=y;printf("closure x=%d captured y=%d z=%d yy=%d\n",x,y,z,yy);}
+			printf("y=%d z=%d w=%d\n",y+=900,z,w);
+			0
+		}
+		)",
+		// Result
+		"closure x=5 captured y=121 z=333 yy=121\n"
+		"y=1021 z=333 w=7\n"
+	},
+
+	{	"basic operator overload",__FILE__,__LINE__,R"====(
+		
+		fn"C" printf(s:str,...)->int;
+		struct Vec3{ x:float,y:float,z:float};
+		fn +(a:&Vec3,b:&Vec3)=Vec3{a.x+b.x, a.y+b.y, a.z+b.z};
+		fn main(argc:int,argv:**char)->int{
+			let v0=Vec3{1.0,2.0,3.0};
+			let v1=Vec3{2.0,2.0,4.0};
+			let v2:Vec3;
+			v2=v0+v1;
+			0	}
+		)===="
+		,nullptr
+	},
 
 	{	"elaborate match example",__FILE__,__LINE__,R"====(
 
@@ -31,7 +112,7 @@ CompilerTest g_Tests[]={
 		
 		fn shape_vol(s:*Shape)->float= match s{
 			*Sphere(my_centre, my_radius)=>{4.0/3.0*3.142* my_radius*my_radius*my_radius},
-			*Cuboid(v_min, v_max)=>{ d:=v_max-v_min; d.vx*d.vy*d.vz},
+			*Cuboid(v_min, v_max)=>{ let d=v_max-v_min; d.vx*d.vy*d.vz},
 			_ =>0.0
 		};
 		enum Shape {
@@ -67,15 +148,15 @@ CompilerTest g_Tests[]={
 			Qux,Boo
 		};
 		fn main(argc:int,argv:**char)->int{
-		sx:=new Bar{15,25};
-		sy:=new Baz{10.0,20.0,55};
-		z1:=match sy {
+		let sx=new Bar{15,25};
+		let sy=new Baz{10.0,20.0,55};
+		let z1=match sy {
 			a@*Bar=>{printf("match with bar\n");a.x as float},
 			*Baz(vx,vy,vz) =>{printf("match with baz z=%d\n",vz);vx+vy},
 			//"		Qux|Boo=>0, \n"
 			_=>0.0
 		};
-		z2:=match sx {
+		let z2=match sx {
 			a@*Bar=>{printf("match with bar x=%d y=%d\n",a.x,a.y);a.x},
 			_=>0
 		};
@@ -87,25 +168,6 @@ CompilerTest g_Tests[]={
 	
 
 	
-
-	{	"type sugar",__FILE__,__LINE__,R"====(
-		struct Foo{x:int};
-		fn main(argc:int,argv:**char)->int{
-									// map these common types with typedefs.
-									//
-			let a:[int];			// __slice<int>
-			let b:[int*4];			// __array<int,4>
-			let c:[int:string];		// __dictionary<int,string>
-			let d:~str;				// __string
-			let e:~[int];			// __vector<int>
-			let f:~Foo;				// __unique_ptr<Foo>
-			let e:~[~Foo];			// __vector<__unique_ptr<Foo>>
-			//let f:?Foo;			// __option<Foo>
-			//let f:?~Foo;			// __option<__unique_ptr<Foo>>
-			0	}
-		)===="
-		,nullptr,true
-	},
  
 	{	"struct default constructor",__FILE__,__LINE__,R"====(
 		
@@ -113,8 +175,8 @@ CompilerTest g_Tests[]={
 			centre:float=sum/2,
 			size:float	=diff/2
 		} where {
-			sum:=min+max;
-			size:=max-min;
+			let sum=min+max;
+			let size=max-min;
 		}
 		fn main(argc:int,argv:**char)->int{
 			0	}
@@ -130,11 +192,31 @@ CompilerTest g_Tests[]={
 		fn main(argc:int,argv:**char)->int{
 			let v1=Vec3::<float>{0.0,1.0,2.0};
 			let v2=Vec3::<float>{2.0,1.0,0.0};
-			v3:=v1+v2;
+			let v3=v1+v2;
 			0
 		}
 		)====",nullptr
 	},
+	
+	{	"type sugar",__FILE__,__LINE__,R"====(
+		struct Foo{x:int};
+		fn main(argc:int,argv:**char)->int{
+			// map these common types with typedefs.
+			//
+			let a:[int];			// __slice<int>
+			let b:[int*4];			// __array<int,4>
+			let c:[int:string];		// __dictionary<int,string>
+			let d:~str;				// __string
+			let e:~[int];			// __vector<int>
+			let f:~Foo;				// __unique_ptr<Foo>
+			let g:~[~Foo];			// __vector<__unique_ptr<Foo>>
+			//let f:?Foo;			// __option<Foo>
+			//let f:?~Foo;			// __option<__unique_ptr<Foo>>
+			0	}
+		)===="
+		,nullptr,true
+	},
+
 	{	"WIP, overloads with mixed types",__FILE__,__LINE__,R"====(
 
 		struct Vec3{ vx:float,vy:float,vz:float};
@@ -149,20 +231,6 @@ CompilerTest g_Tests[]={
 		)====",nullptr
 	},
 	
-	{	"basic operator overload",__FILE__,__LINE__,R"====(
-		
-		fn"C" printf(s:str,...)->int;
-		struct Vec3{ x:float,y:float,z:float};
-		fn +(a:&Vec3,b:&Vec3)=Vec3{a.x+b.x, a.y+b.y, a.z+b.z};
-		fn main(argc:int,argv:**char)->int{
-			let v0=Vec3{1.0,2.0,3.0};
-			let v1=Vec3{2.0,2.0,4.0};
-			let v2:Vec3;
-			v2=v0+v1;
-			0	}
-		)===="
-		,nullptr
-	},
 /*
  // TODO fix this case. since working on operator overload cases, this ceased to work.
  
@@ -179,21 +247,6 @@ CompilerTest g_Tests[]={
 		,nullptr
 	},
 */
-	{	"closures",__FILE__,__LINE__,R"(
-
-		fn"C" printf(s:str,...)->int;
-		fn take_closure(pfunc:|int|->void){ pfunc(5);}
-		fn main(argc:int, argv:**char)->int{
-			y:=11;z:=12;w:=0; y+=10;w+=7;
-			take_closure()do x{yy:=y;printf("closure x=%d captured y=%d z=%d yy=%d\n",x,y,z,yy);}
-			printf("y=%d z=%d w=%d\n",y+=90,z,w);
-			0
-		}
-		)",
-		// Result
-		"closure x=5 captured y=21 z=12 yy=21\n"
-		"y=111 z=12 w=7\n"
-	},
 
 	{	"type parameter inference UFCS autoref",__FILE__,__LINE__,R"(
 		
@@ -205,7 +258,7 @@ CompilerTest g_Tests[]={
 			u.b=v; u.tag=1;
 		}
 		fn main(argc:int, argv:**char)->int{
-			u=:Union[int,float];
+			let u:Union[int,float];
 			u.setv(10);
 			printf("u.tag=%d a=%d\n",u.tag,u.a);
 			setv(u,10.0)	;
@@ -257,8 +310,8 @@ CompilerTest g_Tests[]={
 		
 		fn main(argc:int,argv:**char)->int{
 			let q=foobar();
-			let q.x=1.0;
-			let q.y=2.0;
+			q.x=1.0;
+			q.y=2.0;
 			0
 		}
 		fn foobar()->struct {x,y}{
@@ -285,91 +338,6 @@ CompilerTest g_Tests[]={
 		}
 		)====",nullptr
 	},
-	{	"multi feature test 2",__FILE__,__LINE__,R"====(
-		
-		fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{
-			let result=init();
-			for index:=0; index<src.size(); index+=1 {
-				push_back(&result, f(get(src,index)));
-			}
-			result
-		}
-		fn"C" printf(s:str,...)->int;
-		fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{
-			if u.tag==0 { fx(&u.x)}
-			else { fy(&u.y)}
-		}
-		fn main(argc:int,argv:**char)->int{
-			fv:=Foo{vx=13,vy=14,vz=15};
-			u=:Union[int,float];
-			setv(&u,0.0);
-			setv(&u,0);
-			z:=debugme(&u,
-				|x:*int|	{printf("union was set to int\n");10},
-				|x:*float|	{printf("union was set to float\n");12}
-			);
-			printf("map union returns %d\n", z);
-			xs=:array[int,512];
-			q:=xs[1]; p1:=&xs[1];
-			xs[2]=000;
-			xs[2]+=400;
-			*p1=30;
-			z:=5;
-			y:=xs[1]+z+xs[2];
-			x:=0;
-			something_foo(&fv,&fv);
-			for i:=0,j:=0; i<10; i+=1,j+=10 {
-				x+=i;
-				printf("i,j=%d,%d,x=%d\n",i,j,x);
-			}else{
-				printf("loop exit fine\n");
-			}
-			something_foo(&fv);
-			something(&fv);
-			take_closure(|x|{printf("closure says %d %d\n",x,y);})
-
-			x:=if argc<2{printf("<2");1}else{printf(">2");2};
-			printf("yada yada yada\n");
-			printf("\nHello World %d\n", y );
-			0
-		}
-		fn lerp(a,b,f)->float{(b-a)*f+a};
-		fn foo(a:*char)->void;
-		struct Foo {
-		vx:int, vy:int, vz:int
-		}
-		fn something_foo(f:*Foo){
-			printf("f.x= %d\n", f.vx);
-		}
-		fn something_foo(f:*Foo,x:*Foo){
-			printf("something_foo with 2 args overloaded\n");
-			printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
-		}
-		fn something(f:*Foo){
-			printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
-		}
-		fn something(f:float){
-		}
-		fn something(f:float,x){
-		}
-		fn take_closure(funcp:(int)->void){
-			funcp(10);
-		}
-		struct Union[X,Y]{
-			tag:int,
-			x:X,y:Y,
-		};
-		fn setv[X,Y](u:*Union[X,Y],x:Y)->void{
-			printf("setv Y\n");
-		}
-		fn setv[X,Y](u:*Union[X,Y],x:X)->void{
-			printf("setv X\n");
-		}
-
-		)====",
-		nullptr
-	},
-
 	{	"tuples",__FILE__,__LINE__,R"====(
 
 		fn main(argc:int,argv:**char)->int{
@@ -463,16 +431,6 @@ CompilerTest g_Tests[]={
 		)===="
 		,nullptr
 	},
-	{	"pointer to bool ",__FILE__,__LINE__, R"====(
-
-		fn"C" printf(s:str,...)->int;
-		fn main(argc:int,argv:**char)->int{
-			let bool_from_ptr1:bool	= argv;
-			printf("bool val %d\n",bool_from_ptr1);
-			0
-		}
-		)===="
-	},
 	{	"bool values ",__FILE__,__LINE__,R"====(
 
 		fn main(argc:int,argv:**char)->int{
@@ -499,17 +457,6 @@ CompilerTest g_Tests[]={
 			0
 		}
 		)===="
-	},
-	{	"let",__FILE__,__LINE__,R"====(
-
-		fn main(argc:int, argv:**char)->int{
-			let x=2;
-			y:=3;
-			let z=x+y;
-			0
-		},
-		)====",
-		nullptr
 	},
 	{	"struct",__FILE__,__LINE__,R"====(
 
@@ -558,21 +505,6 @@ CompilerTest g_Tests[]={
 			ptr1[1]=5;
 			0
 		},
-		)===="
-		,nullptr
-	},
-	{	"HKT (template template parameters)",__FILE__,__LINE__, R"====(
-
-		fn map[C,T,Y](src:C[T],f:|T|->Y)->C[Y]{
-			let result;
-			result
-		}
-		struct Vec[T]{data:*T,num:int}
-		fn main(argc:int, argv:**char)->int{
-			let vec:Vec[int];
-			let vec2=map(vec,|x|{0.0});
-			0
-		}											,
 		)===="
 		,nullptr
 	},
@@ -665,6 +597,92 @@ CompilerTest g_Tests[]={
 		"u.tag=0\n"
 		"u.tag=1\n"
 	},
+	{	"multi feature test 2",__FILE__,__LINE__,R"====(
+		
+		fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{
+			let result=init();
+			for index:=0; index<src.size(); index+=1 {
+				push_back(&result, f(get(src,index)));
+			}
+			result
+		}
+		fn"C" printf(s:str,...)->int;
+		fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{
+			if u.tag==0 { fx(&u.x)}
+			else { fy(&u.y)}
+		}
+		fn main(argc:int,argv:**char)->int{
+		fv:=Foo{vx=13,vy=14,vz=15};
+			u=:Union[int,float];
+			setv(&u,0.0);
+			setv(&u,0);
+		z:=debugme(&u,
+				   |x:*int|	{printf("union was set to int\n");10},
+				   |x:*float|	{printf("union was set to float\n");12}
+				   );
+			printf("map union returns %d\n", z);
+			xs=:array[int,512];
+		q:=xs[1]; p1:=&xs[1];
+			xs[2]=000;
+			xs[2]+=400;
+			*p1=30;
+		z:=5;
+		y:=xs[1]+z+xs[2];
+		x:=0;
+			something_foo(&fv,&fv);
+			for i:=0,j:=0; i<10; i+=1,j+=10 {
+				x+=i;
+				printf("i,j=%d,%d,x=%d\n",i,j,x);
+			}else{
+				printf("loop exit fine\n");
+			}
+			something_foo(&fv);
+			something(&fv);
+			take_closure(|x|{printf("closure says %d %d\n",x,y);})
+			
+		x:=if argc<2{printf("<2");1}else{printf(">2");2};
+			printf("yada yada yada\n");
+			printf("\nHello World %d\n", y );
+			0
+		}
+		fn lerp(a,b,f)->float{(b-a)*f+a};
+		fn foo(a:*char)->void;
+		struct Foo {
+		vx:int, vy:int, vz:int
+		}
+		fn something_foo(f:*Foo){
+			printf("f.x= %d\n", f.vx);
+		}
+		fn something_foo(f:*Foo,x:*Foo){
+			printf("something_foo with 2 args overloaded\n");
+			printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
+		}
+		fn something(f:*Foo){
+			printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
+		}
+		fn something(f:float){
+		}
+		fn something(f:float,x){
+		}
+		fn take_closure(funcp:(int)->void){
+			funcp(10);
+		}
+		struct Union[X,Y]{
+		tag:int,
+		x:X,y:Y,
+		};
+		fn setv[X,Y](u:*Union[X,Y],x:Y)->void{
+			printf("setv Y\n");
+		}
+		fn setv[X,Y](u:*Union[X,Y],x:X)->void{
+			printf("setv X\n");
+		}
+		
+		)====",
+		nullptr
+	},
+	
+
 	{
 		nullptr,nullptr,0,nullptr,nullptr
 	}

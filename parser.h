@@ -29,7 +29,7 @@ IdentWithTParams*		parse_tparams_for_ident(TokenStream& src,ExprIdent* id,int cl
 ExprStructDef*	parse_struct(TokenStream& src);
 ExprLiteral*	parse_literal(TokenStream& src);
 /// TODO - rust features..
-Pattern*	parse_pattern(TokenStream& src,int close, int close2=0,int*close_tok=0,Pattern* owner=0);
+Pattern*	parse_pattern(TokenStream& src,int close, int close2=0,int close3=0,int*close_tok=0,Pattern* owner=0);
 EnumDef*	parse_enum(TokenStream& src);
 TraitDef*	parse_trait(TokenStream& src);
 ExprMatch*	parse_match(TokenStream& src);

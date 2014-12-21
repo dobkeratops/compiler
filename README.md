@@ -15,8 +15,8 @@ Dont have a name yet hence 'hack'..
  * most C operators, functions, structs,if-else, 
   * (todo ++/--;and currently &p[i] instead of ptr arithmetic)
  * 'everything is an expression' syntax
+ * some rust-like enum/Match,  (see limits..WIP)
  * C for loops + break../else{..} expressions
- * some rust-like enum/Match, (see limits..WIP)
  * function overloading+UFCS
  * limited operator overloading (no conversions yet)
  * Forward+Reverse Type Inference within functions, 
@@ -30,7 +30,8 @@ Dont have a name yet hence 'hack'..
 
 
 #### WIP
- * *rust-style enum/match- stack case,base padding. What works now is dynamically allocated.
+ * rust-style enum/match- works with dynamic alloc; base lacks padding
+   * have tried to add scalas idea of being able to reference vars in patterns
  * HKT (template-template parameters)
   * .. not extensively tested
 
@@ -39,28 +40,32 @@ https://github.com/dobkeratops/compiler/blob/master/example.rs
 
 Quite early days.
 
+#### Long Term Goals / project pillars :-
+
+ * a systems language, 'for games'. no GC,zero overhead principle.
+ * significant C/C++ subset resyntaxed, intended for transpiling both ways 
+ * open-world polymorphism
+ * add Rust/functional language inspired features
+ * features for parallelism, shader+GPGPU programming ?
+ * a subset should make a passable embedded dynamic language
+  * (think of 1 language to handle the C++-&-embedded-Lua usecase. recover @ptr..)
+
 ### Short Term Priorities
 
  * solidify current features set (bugs, fix any oversights, cleanup)
  * complete feature set required for compiling own transpiled own source
-   * undecided-wait for a C++ -> Rust transpiler to appear and adapt it? or start one
+   * undecided-wait for a C++ -> Rust transpiler to appear and adapt it? or start one..
      * dont want to bite off more than I can chew
-     * sugar Cpp is another possibility for a tool wanting a transpiler.
- * solidify Rust enum/match - rusts 'coolest' feature most complimentary to C++.
+     * Sugar Cpp is a similar project that could use transpiling from C++.
+ * solidify Rust enum/match - rusts 'coolest' feature&most complimentary to C++.
+   * extend eg anon enums? overload '.discriminant()'?
  * intrinsic macros.. dump!() assert!() .. practicalities (dont need full macro system) etc
- * simplified module system
+ * a simplified module system
  * low priority: gradually expand C++ and Rust features set covered (trait objects, rust macros)
    * .. but get bits done when focussed on an area of overlap
+   * maybe aim to get all of Rust parsed, at least eg impl, lifetimes, even if not compiling
 
-#### Long Term Goals / project pillars :-
-
- * a systems language, 'for games'. no GC,zero overhead principle.
- * significant C++ subset resyntaxed, intended for transpiling both ways 
- * open-world polymorphism
- * add Rust/functional language inspired features
- * features for parallelism, GPGPU programming
- * a subset should make a passable embedded dynamic language
-  * (think of 1 language to handle the C++-&-embedded-Lua usecase. recover @ptr..)
+### Rationale
 
 Basically trying to combine everything I like from C++ & Rust, dropping what I dont like, plus what i've always missed.
 
@@ -70,15 +75,14 @@ Rust has many inspiring features but is a departure from C++ lacking features li
 
 I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code.
 
-Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* is what yields working code... there is still so much you still can't express in a typesystem or verify at compile time.
+Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* will still yield stability... there is still so much you still can't express in a typesystem or verify at compile time.
 
 I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating.(I have worked mostly on platforms where vtables were unacceptable). 
 
-It almost seems like a deliberate joke - how can a language run GameOfLife with compile time metaprogramming, parse ambiguous syntax with GLR, but NOT find definitions out of order?
-
 Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
-Rust on the other hand is too restrictive; in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. Rust Traits are good but I'd prefer them optional & duck-typed. Rusts philosophy edges toward verbosity,'costs must be explicit' -IMO costs should be deterministic sure, but typing more for slow code doesn't make it faster- it wastes time on setup,tools,tests.. What is important is expressivity, ability to write optimal code more elegantly.
+Rust on the other hand is a little too restrictive; in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. Rust Traits are good but I'd prefer them optional & duck-typed. Rusts philosophy edges toward verbosity,'costs must be explicit' -IMO costs should be deterministic sure, but typing more for slow code doesn't make it faster- it wastes time on setup,tools,tests.. What is important is expressivity, ability to write optimal code more elegantly.
+Rust has to *over-estimate* safety to be sure. Some performant patterns are still safe, without being compile-time provable. empirical tests are usually good enough.
 
 So somewhere between the two is my perfect language.
 
@@ -125,10 +129,12 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
   * Rust - first non-C++ language I've actually wanted to use.
   * Jonathan Blows' ".jai" "language for games"
     * most similar stated goal, but maybe different preferences
-    * was inspiration to start
+    * was inspiration to start this
+    * could just converge on it and keep our extra features?
   * 'SugarCpp' - an interesting transpiler, looks very practical
+    * accepts C++1y as starting point and just adds more.
   * D - never grabbed me for some reason, but has many features of interest eg UFCS
-    * (tends to focus on gc, and doesn't have expression syntax?)
+    * (tends to focus on gc? and doesn't have expression syntax?)
   * disqualified by CG, but still interesting:-
     * Julia - focus on overloading/multimethods & interactivity
     * Go - adhoc duck-type interface gather, simple but practical
