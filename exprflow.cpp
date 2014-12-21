@@ -127,9 +127,9 @@ void ExprIf::recurse(std::function<void(Node*)>& f){
 	this->type()->recurse(f);
 }
 
-CgValue ExprIf::compile(CodeGen& cg,Scope* sc, CgValue) {
+CgValue ExprIf::compile(CodeGen& cg,Scope* sc, CgValue input) {
 	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
-	return cg.emit_if(this, this->cond, this->body, this->else_block, this->type());
+	return cg.emit_if(this->get_scope(), input, this->cond, this->body, this->else_block, this->type());
 }
 
 void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
@@ -276,18 +276,20 @@ CgValue MatchArm::compile_bind_locals(CodeGen &cg, Scope *sc, const Pattern *p, 
 	//ASSERT(0&&"TODO");
 	return CgValue();
 }
-CgValue MatchArm::compile(CodeGen& cg, Scope* sc, CgValue input){
+CgValue MatchArm::compile(CodeGen& cg, Scope* sc, CgValue match_val){
+	auto arm=this;
 	cg.emit_comment("}Match Arm{");
 	if (!this) return CgValue();
-	auto match_val=this->match_owner->match_val;
-	auto arm=this;
+	//auto match_val=this->match_owner->match_val;
 	if (!arm->next){
 		// error check. we just ignore condition. TypeChecker should hack checked it's exhaustive
-		arm->compile_bind_locals(cg,sc,arm->pattern,match_val);
+		arm->pattern->compile(cg,sc,match_val);
 		return arm->body->compile(cg,sc);
 	}
 	auto armsc=arm->get_scope();
 	emit_local_vars(cg,arm,nullptr, armsc);
+	auto ret= cg.emit_if(arm->get_scope(), match_val, arm->pattern, arm->body, arm->next, arm->type());
+	/*
 	auto ret=cg.emit_if_sub
 	(
 		arm,
@@ -298,7 +300,7 @@ CgValue MatchArm::compile(CodeGen& cg, Scope* sc, CgValue input){
 			return arm->body->compile(cg,armsc,CgValue());},
 		[&]{return arm->next->compile(cg,armsc,input);},
 	 	this->type()
-	);
+	);*/
 	return ret;
 }
 
@@ -323,7 +325,7 @@ ExprMatch::compile(CodeGen& cg, Scope* sc,CgValue input){
 	cg.emit_comment("{Compile Match Expression");
 	auto match_val = this->expr->compile(cg,sc);
 	cg.emit_comment("Match Arms {");
-	this->match_val=match_val;	// TODO this is a bit messy. the match arms get a backpointer
+	//this->match_val=match_val;	// TODO this is a bit messy. the match arms get a backpointer
 								// The alternative is to add an extra value passed along expressions which most compile methods ignore.
 	auto r= this->arms->compile(cg, sc, match_val);
 	cg.emit_comment("}Match Arms}");

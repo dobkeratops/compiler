@@ -354,7 +354,7 @@ CompilerTest g_Tests[]={
 
 	{	"internal vtable",__FILE__,__LINE__,R"====(
 		
-		fn"C" printf(s:*char,...)->int;
+		fn"C" printf(s:str,...)->int;
 		struct Foo {
 			x:int,y:int,
 			virtual v_foo(){printf("Foo.foo x=%d %p\n",x,*(this as**void));},
@@ -383,24 +383,25 @@ CompilerTest g_Tests[]={
 	},
 
 	{	"member function+ufcs",__FILE__,__LINE__,R"====(
-		// SOURCECODE
 		fn"C" printf(s:str,...)->int;
 		struct Foo{
 			q:int,
-			fn method()->float{
-				printf("Foo.q=%d\n",q);2.0
+			fn my_method()->float{
+				printf("Foo.q=%d\n",q);
+				2.0
 			}
-		}
+		};
 		fn main()->int{
-			x:=Foo{5}; px:=&x;
+			x:=Foo{5};
+			px:=&x;
 			printf("member function test..\n",x.q);
 			px.func1();
 			px.func1(5);
-			px.method();
+			px.my_method();
 			0
-		}
-		fn func1(f:*Foo){printf("func1 says q=%d\n",f.q);}
-		fn func1(f:*Foo,x:int){printf("func1 says q=%d x=%d\n",f.q,x);}
+		};
+		fn func1(f:*Foo){printf("func1 says q=%d\n",f.q);};
+		fn func1(f:*Foo,x:int){printf("func1 says q=%d x=%d\n",f.q,x);};
 		)===="
 		,nullptr
 	},
@@ -476,7 +477,7 @@ CompilerTest g_Tests[]={
 
 		extern"C" fn printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
-			x:=if argc<3{printf(\"if\");4} else{printf(\"else\");3};
+			x:=if argc<3{printf("if");4} else{printf("else");3};
 			0
 		)====",
 		nullptr
@@ -530,7 +531,7 @@ CompilerTest g_Tests[]={
 	},
 	{	"member functions+UFCS",__FILE__,__LINE__, R"====(
 		//SOURCE
-		fn\"C" printf(s:str,...)->int;
+		fn"C" printf(s:str,...)->int;
 		struct Foo{
 			q:int,
 			fn method()->float{

@@ -71,7 +71,6 @@ struct ExprFor :  ExprFlow {
 /// C++ featureset extended with 2way inference can emulate match like boost variant but improved.
 struct ExprMatch : ExprFlow {
 	Scope* 	scope=0;
-	CgValue	match_val;
 	const char*		kind_str() const {return "match";}
 	CgValue			compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	ResolvedType	resolve(Scope* sc, const Type* desired, int flags);

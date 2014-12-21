@@ -38,6 +38,10 @@ void Node::set_type(const Type* t)
 	if (this->m_type){
 		if (this->m_type->is_equal(t))
 			return ;
+		if (!t){
+			ASSERT(0 && "use clear type");
+		}
+
 #if DEBUG>=2
 		dbprintf("changing type?\n");
 		this->m_type->dump(-1);newline(0);

@@ -250,7 +250,10 @@ ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,bool is_virtual) {
 
 	auto tok=src.eat_tok();
 	if (tok!=OPEN_PAREN) {
-		ASSERT(is_ident(tok)|| is_operator(tok));
+		if (!(is_ident(tok)|| is_operator(tok))){
+			dbprintf(str(tok));
+			error(src.prev_pos,"expected identifer or operator in fn def\n");
+		}
 		fndef->name=tok;
 		if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
 			parse_typeparams_def(src,fndef->typeparams,close_of(open));

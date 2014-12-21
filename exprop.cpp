@@ -106,8 +106,10 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			auto new_var=sc->create_variable(this,vname,Local);
 			lhs->set_def(new_var);
 			new_var->force_type_todo_verify(rhs_t);
+			if (rhs_t){
 			lhs->set_type(rhs_t);
 			this->set_type(rhs_t);
+			}
 			propogate_type_fwd(flags, this, desired, lhs->type_ref());
 			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 		}
