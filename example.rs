@@ -36,7 +36,7 @@ fn shape_vol(s:*Shape)->float= match s{
 		printf("match cuboid vol\n");
 		d:=vmax-vmin; d.vx*d.vy*d.vz 
 	},
-	*Cylinder(radius,height)=>3.142*radius*radius+height,
+	*Cylinder(radius,height)=>3.142*radius*radius*height,
 	_ =>{printf("shape error\n");0.0}
 };
 
