@@ -145,7 +145,7 @@ struct Type : ExprDef {
 	void			translate_typeparams(const TypeParamXlat& tpx) override;
 	virtual ResolvedType	resolve(Scope* s, const Type* desired,int flags);
 	virtual void verify();
-	CgValue	compile(CodeGen& cg, Scope* sc);
+	CgValue	compile(CodeGen& cg, Scope* sc, CgValue input) override;
 };
 void dump(const Type* a,const Type* b);
 bool type_params_eq(const vector<Type*>& a, const Type* tp);

@@ -106,22 +106,21 @@ void output_code(FILE* ofp, Scope* scope, int depth, int flags) {
 	if (flags & EMIT_STRUCT){
 		for (auto n=scope->named_items;n;n=n->next) {
 			for (auto s=n->structs; s;s=s->next_of_name) {
-				s->compile(cg, scope);
+				s->compile(cg, scope, CgValue());
 			}
 		}
 	}
 	if (flags & EMIT_FN){
 		for (auto n=scope->named_items;n;n=n->next) {
 			for(auto f=n->fn_defs; f; f=f->next_of_name){
-				f->compile(cg,scope);
+				f->compile(cg,scope, CgValue());
 			}
 		}
 	}
 	// compile child items last, as they depend on me.
 
 	for (auto sub=scope->child; sub; sub=sub->next) {
-		// todo - clarify better way, seem to get inner structs repeated here-thats' wrong
-		// inner-structs are already compiled by their owner.
+		// todo - clarify better way.
 		output_code(cg.ofp,sub,depth+1, flags &~EMIT_STRUCT);
 	}
 }

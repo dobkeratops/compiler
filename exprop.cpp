@@ -387,7 +387,7 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 	return false;
 }
 
-CgValue ExprOp::compile(CodeGen &cg, Scope *sc) {
+CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 	auto n=this;
 	auto e=this;
 	auto opname = e->name;

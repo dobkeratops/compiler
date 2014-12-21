@@ -68,7 +68,7 @@ struct  ExprFnDef : ExprDef {
 	bool	is_undefined()const	{return body==nullptr || body->is_undefined();};
 	bool	is_extern()const	{return body==nullptr;}
 	void	verify();
-	CgValue compile(CodeGen& cg, Scope* sc);
+	CgValue compile(CodeGen& cg, Scope* sc, CgValue input) override;
 	virtual Scope*	get_scope()				{return this->scope;}
 	void		recurse(std::function<void(Node*)>&) override;
 };

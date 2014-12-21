@@ -64,7 +64,8 @@ public:
 	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
 	virtual void recurse(std::function<void(Node* f)>& f){dbprintf("recurse not implemented for %s\n",this->kind_str());ASSERT(0&&"unimplemented recurse");};
 	
-	virtual CgValue compile(CodeGen& cg, Scope* sc);
+	virtual CgValue compile(CodeGen& cg, Scope* sc, CgValue input);
+	CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_if(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
 	virtual ExprIdent*			as_ident() 		{return nullptr;}

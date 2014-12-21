@@ -461,7 +461,7 @@ void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 }
 
 
-CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
+CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 	auto fn_node = this;
 	auto ofp=cg.ofp;
 	
@@ -475,7 +475,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 		cg.emit_comment("fn %s generic:-",getString(fn_node->get_mangled_name()));
 		for (auto f=fn_node->instances; f;f=f->next_instance){
 			cg.emit_comment("fn %s generic instance",getString(fn_node->get_mangled_name()));
-			f->compile(cg,outer_scope);
+			f->compile(cg,outer_scope,input);
 		}
 		return CgValue();
 	}
@@ -488,7 +488,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope){
 		cg.curr_fn=this;
 	}
 	for (auto cp=this->captures; cp;cp=cp->next_of_from){
-		cp->compile(cg,outer_scope);
+		cp->compile(cg,outer_scope,input);
 	}
 	
 	cg.emit_global_fn_ptr(fn_node->type(),fn_node->get_mangled_name());

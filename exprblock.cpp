@@ -313,7 +313,7 @@ void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
 }
 
 
-CgValue ExprBlock::compile(CodeGen& cg,Scope *sc) {
+CgValue ExprBlock::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	return compile_sub(cg,sc,0);
 }
 

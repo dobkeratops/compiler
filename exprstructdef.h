@@ -71,9 +71,10 @@ struct ExprStructDef: ExprDef {
 	void			inherit_from(Scope* sc, Type* base);
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
-	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
+	ResolvedType	resolve(Scope* scope, const Type* desired,int flags)override;
+	
 	void			roll_vtable();
-	CgValue compile(CodeGen& cg, Scope* sc);
+	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	const Type*			get_elem_type(int i)const{return this->fields[i]->type();}
 	Name			get_elem_name(int i)const {return this->fields[i]->name;}
 	int 			get_elem_index(Name name)const {int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}

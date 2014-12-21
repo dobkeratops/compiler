@@ -240,7 +240,7 @@ void ExprIdent::dump(int depth) const {
 	//	if (this->def) {dbprintf("(%s %d)",this->def->pos.line);}
 	if (auto t=this->get_type()) {dbprintf(":");t->dump(-1);}
 }
-CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc){
+CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc, CgValue){
 	auto n=this;
 	// Its' either a local, part of 'this', or in a capture...
 	auto var=sc->find_variable_rec(n->name);
@@ -283,7 +283,7 @@ void	ExprDef::remove_ref(Node* ref){
 	ref->def=0;
 }
 
-CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc) {
+CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc, CgValue ) {
 	return CgValue(this);
 }
 
@@ -604,7 +604,7 @@ void	CaptureVars::recurse(std::function<void(Node*)>&) {
 	// it contains references to variables, & links to its owner & context functions
 }
 
-CgValue CaptureVars::compile(CodeGen& cg, Scope* outer_scope){
+CgValue CaptureVars::compile(CodeGen& cg, Scope* outer_scope, CgValue){
 	auto cp=this;
 	cg.emit_struct_def_begin(cp->tyname());
 	decltype(cp->vars->capture_index) i=0;

@@ -337,7 +337,7 @@ void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef
 	// compile formatted vtable with additional data..
 	if (!vtable_layout->is_compiled){
 		// the vtable really is just a struct; eventually a macro system could generate
-		vtable_layout->compile(cg,sc);
+		vtable_layout->compile(cg,sc,CgValue());
 		vtable_layout->is_compiled=true;
 	}
 	dbg_vtable("compiling vtable for %s\n",sd->name_str());
@@ -362,7 +362,7 @@ void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef
 	cg.emit_ins_end();
 }
 
-CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
+CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 	auto st=this;
 	if (st->is_generic()) {	// emit generic struct instances
 		cg.emit_comment("instances of %s in %s %p",str(st->name), sc->name(),st);
@@ -378,7 +378,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 					goto cont;
 				}
 			}
-			ins->compile(cg, sc);
+			ins->compile(cg, sc,input);
 		cont:;
 		}
 	} else {
@@ -402,7 +402,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc) {
 			compile_vtable_data(cg, this,sc, this->vtable);
 		// compile inner structs. eg struct Scene{struct Mesh,..} struct Scene uses Mesh..
 		for( auto sub:st->structs){
-			sub->compile(cg,sc);
+			sub->compile(cg,sc,input);
 		}
 		
 		cg.emit_struct_def_begin(st->get_mangled_name());

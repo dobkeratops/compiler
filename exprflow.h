@@ -32,7 +32,7 @@ struct ExprIf :  ExprFlow {
 	ResolvedType	resolve(Scope* scope,const Type*,int flags) ;
 	void	find_vars_written(Scope* s,set<Variable*>& vars ) const override;
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
-	CgValue			compile(CodeGen& cg, Scope* sc);
+	CgValue	compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	Scope*	get_scope()	override			{return this->scope;}
 	void	recurse(std::function<void(Node*)>& f)override;
 };
@@ -61,7 +61,7 @@ struct ExprFor :  ExprFlow {
 	ResolvedType resolve(Scope* scope,const Type*,int flags);
 	void find_vars_written(Scope* s,set<Variable*>& vars ) const override;
 	void translate_typeparams(const TypeParamXlat& tpx) override;
-	CgValue compile(CodeGen& cg, Scope* sc);
+	CgValue compile(CodeGen&, Scope*,CgValue) override;
 	Expr*	loop_else_block()const override{return else_block;}
 	void	recurse(std::function<void(Node*)>& f)override;
 };
@@ -73,7 +73,7 @@ struct ExprMatch : ExprFlow {
 	Scope* 	scope=0;
 	CgValue	match_val;
 	const char*		kind_str() const {return "match";}
-	CgValue			compile(CodeGen& cg, Scope* sc);
+	CgValue			compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	ResolvedType	resolve(Scope* sc, const Type* desired, int flags);
 	Expr*		expr=0;
 	MatchArm*	arms=0;
@@ -99,7 +99,7 @@ struct MatchArm : ExprScopeBlock {
 	CgValue		compile_condition(CodeGen& cg, Scope* sc, const Pattern* match_expr,CgValue match_val);
 	// todo - as patterns exist elsewhere, so 'compile-bind might generalize'.
 	CgValue		compile_bind_locals(CodeGen& cg, Scope* sc, const Pattern* match_expr,CgValue match_val);
-	CgValue			compile(CodeGen& cg, Scope* sc);
+	CgValue			compile(CodeGen& cg, Scope* sc, CgValue input) override;
 
 //	ResolvedType	resolve(Scope* sc, const Type* desired, int flags); doesn't have resolve method because it takes 2 inputs.
 	void		recurse(std::function<void(Node*)>& f) override;
@@ -118,7 +118,7 @@ struct ExprWhileLet : ExprMatch{	// sugar for match 1arm. parses+prints differen
 	Expr*	body=0;			// loop body.
 	Expr*	else_block=0;	// for expression-return
 	const char*		kind_str() const {return "kind str";}
-	CgValue			compile(CodeGen& cg, Scope* sc){error("todo, while-let support");return CgValue();}
+	CgValue			compile(CodeGen& cg, Scope* sc,CgValue input) override{error("todo, while-let support");return CgValue();}
 };
 
 

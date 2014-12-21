@@ -37,6 +37,18 @@ https://github.com/dobkeratops/compiler/blob/master/example.rs
 
 Quite early days.
 
+### Short Term Priorities
+
+ * solidify current features set (bugs, fix any oversights, cleanup)
+ * complete feature set required for compiling own transpiled own source
+   * undecided-wait for a C++ -> Rust transpiler to appear and adapt it? or start one
+     * dont want to bite off more than I can chew
+     * sugar Cpp is another possibility for a tool wanting a transpiler.
+ * solidify Rust enum/match - rusts 'coolest' feature most complimentary to C++.
+ * intrinsic macros.. dump!() assert!() .. practicalities (dont need full macro system) etc
+ * simplified module system
+ * low priority: gradually expand C++ and Rust features set covered (trait objects, rust macros)
+   * .. but get bits done when focussed on an area of overlap
 
 #### Long Term Goals / project pillars :-
 

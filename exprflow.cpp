@@ -127,7 +127,7 @@ void ExprIf::recurse(std::function<void(Node*)>& f){
 	this->type()->recurse(f);
 }
 
-CgValue ExprIf::compile(CodeGen& cg,Scope*sc){
+CgValue ExprIf::compile(CodeGen& cg,Scope* sc, CgValue) {
 	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
 	return cg.emit_if(this, this->cond, this->body, this->else_block, this->type());
 }
@@ -166,7 +166,7 @@ void ExprFor::dump(int d) const {
 }
 
 
-CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc){
+CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc, CgValue input){
 	return cg.emit_for(this, this->init,this->cond, this->incr, this->body, this->else_block);
 }
 
@@ -275,7 +275,7 @@ CgValue MatchArm::compile_bind_locals(CodeGen &cg, Scope *sc, const Pattern *p, 
 	//ASSERT(0&&"TODO");
 	return CgValue();
 }
-CgValue MatchArm::compile(CodeGen& cg, Scope* sc){
+CgValue MatchArm::compile(CodeGen& cg, Scope* sc, CgValue input){
 	cg.emit_comment("}Match Arm{");
 	if (!this) return CgValue();
 	auto match_val=this->match_owner->match_val;
@@ -294,15 +294,25 @@ CgValue MatchArm::compile(CodeGen& cg, Scope* sc){
 		[&]{return arm->compile_condition(cg,armsc, arm->pattern, match_val);},
 		[&]{
 			arm->compile_bind_locals(cg,armsc,arm->pattern,match_val);
-			return arm->body->compile(cg,armsc);},
-		[&]{return arm->next->compile(cg,armsc);},
+			return arm->body->compile(cg,armsc,CgValue());},
+		[&]{return arm->next->compile(cg,armsc,input);},
 	 	this->type()
 	);
 	return ret;
 }
 
+// refactoring: To do this more cleanly,
+// we have to add an input-value to every '::compile' method - for most its' just void.
+// Perhaps there are other places where temporary variables can be eliminated?
+/*
+CgValue MatchArm::compile(CodeGen& cg, Scope* sc, CgValue input) {
+	auto armsc=arm->get_scope();
+	emit_local_vars(cg,arm,nullptr,armsc);
+	auto ret= cg.emit_if_sub(arm,sc, arm->pattern, arm->body, arm->next);
+}
+*/
 CgValue
-ExprMatch::compile(CodeGen& cg, Scope* sc){
+ExprMatch::compile(CodeGen& cg, Scope* sc,CgValue input){
 	// TODO - dedicated with one set of phi-nodes at the end.
 	// this is RETARDED!!!
 	// There are many ways match could be optimized.
@@ -314,7 +324,7 @@ ExprMatch::compile(CodeGen& cg, Scope* sc){
 	cg.emit_comment("Match Arms {");
 	this->match_val=match_val;	// TODO this is a bit messy. the match arms get a backpointer
 								// The alternative is to add an extra value passed along expressions which most compile methods ignore.
-	auto r= this->arms->compile(cg, sc);
+	auto r= this->arms->compile(cg, sc, match_val);
 	cg.emit_comment("}Match Arms}");
 	return r;
 }

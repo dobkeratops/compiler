@@ -89,7 +89,7 @@ struct ExprLiteral : ExprDef {
 	const char* as_str()const	{return type_id==T_CONST_STRING?u.val_str:"";}
 	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
 	void translate_typeparams(const TypeParamXlat& tpx);
-	CgValue compile(CodeGen& cg, Scope* sc);
+	CgValue compile(CodeGen& cg, Scope* sc, CgValue input) override;
 	ExprLiteral* as_literal() override{ return this;};
 };
 
@@ -166,7 +166,7 @@ struct ExprIdent :Expr{
 	bool		is_placeholder()const			{return name==PLACEHOLDER;}
 	bool		is_undefined()const				{return is_placeholder();}
 	void		translate_typeparams(const TypeParamXlat& tpx) override;
-	CgValue		compile(CodeGen&cg, Scope* sc) override;
+	CgValue		compile(CodeGen&cg, Scope* sc, CgValue input) override;
 	ResolvedType	resolve(Scope* scope, const Type* desired,int flags) override;
 	void		recurse(std::function<void(Node*)>&) override;
 };
@@ -207,7 +207,7 @@ struct CaptureVars : ExprDef{
 	ExprStructDef*	the_struct=0;
 	void 			coalesce_with(CaptureVars* other);
 	ExprStructDef*	get_struct();
-	CgValue			compile(CodeGen& cg, Scope* outer);
+	CgValue			compile(CodeGen& cg, Scope* outer,CgValue input) override;
 	Node* clone() const override{
 		dbprintf("warning todo template instatntiation of captures\n");
 		return nullptr;

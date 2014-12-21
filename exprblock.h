@@ -48,7 +48,7 @@ struct ExprBlock :public ExprScopeBlock{
 	const ExprBlock*		as_block() const override		{return this;};
 	Scope*	get_scope()	override			{return this->scope;}
 	void 			verify();
-	CgValue 		compile(CodeGen& cg, Scope* sc);
+	CgValue 		compile(CodeGen& cg, Scope* sc, CgValue) override;
 	CgValue 		compile_sub(CodeGen& cg, Scope* sc,RegisterName dst);
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
@@ -64,7 +64,7 @@ struct ExprWhere : ExprBlock {
 	const char* kind_str() const  override		{return "where";}
 	ResolvedType resolve(Scope* scope, const Type* desired, int flags);
 	void	dump(int depth) const;
-	CgValue compile(CodeGen& cg, Scope* sc);
+	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	ExprBlock* 		as_block() override 	{return nullptr;}
 	Node*		clone() const;
 };

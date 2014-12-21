@@ -11,41 +11,29 @@ struct CompilerTest {
 	bool		should_fail;
 };
 
+
 CompilerTest g_Tests[]={
-	{	"traits",__FILE__,__LINE__,R"(
 
-		fn"C" printf(s:str,...)->int;
-		struct Foo{
-			fn something(){
-				printf("hello world 1\n");
-			}
-		};
-		fn something(f:&Foo){
-			printf("hello world 2\n");
-		}
-		fn main(argc:int,argv:**char)->int{
-			let x:Foo;
-			x.something();
-			0
-		}
-		)"
-		,nullptr
-	},
 
-	{	"type sugar",__FILE__,__LINE__,R"(
-		
+	{	"type sugar",__FILE__,__LINE__,R"====(
+		struct Foo{x:int};
 		fn main(argc:int,argv:**char)->int{
-			let a:[int];
-			let b:[int*4];
-			let c:[int:string];
-			let d:~str;
-			let e:~[int];
-			let f:~int;
+									// map these common types with typedefs.
+									//
+			let a:[int];			// __slice<int>
+			let b:[int*4];			// __array<int,4>
+			let c:[int:string];		// __dictionary<int,string>
+			let d:~str;				// __string
+			let e:~[int];			// __vector<int>
+			let f:~Foo;				// __unique_ptr<Foo>
+			let e:~[~Foo];			// __vector<__unique_ptr<Foo>>
+			//let f:?Foo;			// __option<Foo>
+			//let f:?~Foo;			// __option<__unique_ptr<Foo>>
 			0	}
-		)"
+		)===="
 		,nullptr,true
 	},
-	{	"basic enum+match",__FILE__,__LINE__,R"(
+	{	"basic enum+match",__FILE__,__LINE__,R"====(
 		
 		enum Foo{
 			Bar{x:int,y:int},
@@ -67,11 +55,11 @@ CompilerTest g_Tests[]={
 			};
 			0
 		}
-		)"
+		)===="
 		,nullptr
 	},
  
-	{	"struct default constructor",__FILE__,__LINE__,R"(
+	{	"struct default constructor",__FILE__,__LINE__,R"====(
 		
 		struct Extents(min:float,max:float){
 			centre:float=sum/2,
@@ -82,11 +70,11 @@ CompilerTest g_Tests[]={
 		}
 		fn main(argc:int,argv:**char)->int{
 			0	}
-		)"
+		)===="
 		,nullptr
 	},
 
-	{	"templated struct initializer+overload",__FILE__,__LINE__,R"(
+	{	"templated struct initializer+overload",__FILE__,__LINE__,R"====(
 		
 		struct Vec3<T>{ x:T,y:T,z:T};
 		fn + <T>(a:&Vec3<T>,b:&Vec3<T>)=
@@ -97,9 +85,9 @@ CompilerTest g_Tests[]={
 			v3:=v1+v2;
 			0
 		}
-		)",nullptr
+		)====",nullptr
 	},
-	{	"WIP, overloads with mixed types",__FILE__,__LINE__,R"(
+	{	"WIP, overloads with mixed types",__FILE__,__LINE__,R"====(
 
 		struct Vec3{ vx:float,vy:float,vz:float};
 		extern"C"fn sqrt(f:float)->float;
@@ -110,10 +98,10 @@ CompilerTest g_Tests[]={
 		fn main(argc:int,argv:**char)->int{
 			0
 		}
-		)",nullptr
+		)====",nullptr
 	},
 	
-	{	"basic operator overload",__FILE__,__LINE__,R"(
+	{	"basic operator overload",__FILE__,__LINE__,R"====(
 		
 		fn"C" printf(s:str,...)->int;
 		struct Vec3{ x:float,y:float,z:float};
@@ -124,7 +112,7 @@ CompilerTest g_Tests[]={
 			let v2:Vec3;
 			v2=v0+v1;
 			0	}
-		)"
+		)===="
 		,nullptr
 	},
 /*
@@ -205,7 +193,7 @@ CompilerTest g_Tests[]={
 		)"
 		,nullptr
 	},
-	{	"return anon struct infered type",__FILE__,__LINE__,R"(
+	{	"return anon struct infered type",__FILE__,__LINE__,R"====(
 
 		fn main(argc:int,argv:**char)->int{
 			let q=foobar();
@@ -214,10 +202,10 @@ CompilerTest g_Tests[]={
 		fn foobar()->struct {x,y}{
 			_{88,99}
 		}
-		)"
+		)===="
 		,nullptr
 	},
-	{	"anon struct infered types later..",__FILE__,__LINE__,R"(
+	{	"anon struct infered types later..",__FILE__,__LINE__,R"====(
 		
 		fn main(argc:int,argv:**char)->int{
 			let q=foobar();
@@ -228,18 +216,18 @@ CompilerTest g_Tests[]={
 		fn foobar()->struct {x,y}{
 			_{}
 		}
-		)",nullptr
+		)====",nullptr
 	},
-	{	"anon struct infer type",__FILE__,__LINE__,R"(
+	{	"anon struct infer type",__FILE__,__LINE__,R"====(
 		
 		fn main(argc:int,argv:**char)->int{
 			let q:struct{x,y};
 			q.x=1.0;
 			q.y=1.0;
 			0	}
-		)",nullptr
+		)====",nullptr
 	},
-	{	"multiple return",__FILE__,__LINE__,R"(
+	{	"multiple return",__FILE__,__LINE__,R"====(
 
 		fn main(argc:int,argv:**char)->int{
 			let q=foobar();
@@ -247,9 +235,9 @@ CompilerTest g_Tests[]={
 		fn foobar()->(int,float,int){
 			(1,2.0,3)
 		}
-		)",nullptr
+		)====",nullptr
 	},
-	{	"multi feature test 2",__FILE__,__LINE__,R"(
+	{	"multi feature test 2",__FILE__,__LINE__,R"====(
 		
 		fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{
 			let result=init();
@@ -330,21 +318,21 @@ CompilerTest g_Tests[]={
 			printf("setv X\n");
 		}
 
-		)",
+		)====",
 		nullptr
 	},
 
-	{	"tuples",__FILE__,__LINE__,R"(
+	{	"tuples",__FILE__,__LINE__,R"====(
 
 		fn main(argc:int,argv:**char)->int{
 			let x=(1,0.0,3);
 			let q=x.1;
 			0
 		}
-		)"
+		)===="
 		,nullptr
 	},
-	{	"for  else, nested break",__FILE__,__LINE__,R"(
+	{	"for  else, nested break",__FILE__,__LINE__,R"====(
 
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
@@ -359,11 +347,11 @@ CompilerTest g_Tests[]={
 			printf("loop ret=%d\n",v);
 			0
 		}
-		)"
+		)===="
 		,"loop ret=44\n"
 	},
 
-	{	"internal vtable",__FILE__,__LINE__,R"(
+	{	"internal vtable",__FILE__,__LINE__,R"====(
 		
 		fn"C" printf(s:str,...)->int;
 		struct Foo {
@@ -389,11 +377,11 @@ CompilerTest g_Tests[]={
 		fn take_interface(pf:*Foo){
 		   pf.v_foo()
 		}
-		)"
+		)===="
 		,nullptr
 	},
 
-	{	"member function+ufcs",__FILE__,__LINE__,R"(
+	{	"member function+ufcs",__FILE__,__LINE__,R"====(
 		// SOURCECODE
 		fn"C" printf(s:str,...)->int;
 		struct Foo{
@@ -412,21 +400,21 @@ CompilerTest g_Tests[]={
 		}
 		fn func1(f:*Foo){printf("func1 says q=%d\n",f.q);}
 		fn func1(f:*Foo,x:int){printf("func1 says q=%d x=%d\n",f.q,x);}
-		)"
+		)===="
 		,nullptr
 	},
 
-	{	"struct new",__FILE__,__LINE__,R"(
+	{	"struct new",__FILE__,__LINE__,R"====(
 
 		struct FooStruct{x:int,y:int};
 		fn main(argc:int, argv:**char)->int{
 			x:=new FooStruct{1,2};
 			0
 		}
-		)"
+		)===="
 		,nullptr
 	},
-	{	"pointer to bool ",__FILE__,__LINE__, R"(
+	{	"pointer to bool ",__FILE__,__LINE__, R"====(
 
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int,argv:**char)->int{
@@ -434,18 +422,18 @@ CompilerTest g_Tests[]={
 			printf("bool val %d\n",bool_from_ptr1);
 			0
 		}
-		)"
+		)===="
 	},
-	{	"bool values ",__FILE__,__LINE__,R"(
+	{	"bool values ",__FILE__,__LINE__,R"====(
 
 		fn main(argc:int,argv:**char)->int{
 			let bool_val:bool=argc>4;
 			0
 		}
-		)"
+		)===="
 	},
 
-	{	"bool coersions ",__FILE__,__LINE__,R"(
+	{	"bool coersions ",__FILE__,__LINE__,R"====(
 
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int,argv:**char)->int{
@@ -461,9 +449,9 @@ CompilerTest g_Tests[]={
 			printf("%d %d %d %d\n",zeroi32,vali32,vali64,valbool1,valbool2,my_ptr,bool_from_ptr1,bool_from_ptr2);
 			0
 		}
-		")
+		)===="
 	},
-	{	"let",__FILE__,__LINE__,R"(
+	{	"let",__FILE__,__LINE__,R"====(
 
 		fn main(argc:int, argv:**char)->int{
 			let x=2;
@@ -471,28 +459,28 @@ CompilerTest g_Tests[]={
 			let z=x+y;
 			0
 		},
-		)",
+		)====",
 		nullptr
 	},
-	{	"struct",__FILE__,__LINE__,R"(
+	{	"struct",__FILE__,__LINE__,R"====(
 
 		struct FooStruct{x:int,y:int};
 			fn main(argc:int, argv:**char)->int{
 			x:=FooStruct{1,2};
 			0
 		},
-		)",nullptr
+		)====",nullptr
 	},
-	{	"if expression",__FILE__,__LINE__,R"(
+	{	"if expression",__FILE__,__LINE__,R"====(
 
 		extern"C" fn printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
 			x:=if argc<3{printf(\"if\");4} else{printf(\"else\");3};
 			0
-		)",
+		)====",
 		nullptr
 	},
-	{	"voidptr auto coercion ",__FILE__,__LINE__,R"(
+	{	"voidptr auto coercion ",__FILE__,__LINE__,R"====(
 		
 		struct FILE;
 		fn voidpf(d:*void)->int{0};
@@ -502,18 +490,18 @@ CompilerTest g_Tests[]={
 			x:=voidpfr(argv);
 		  0
 		}
-		)"
+		)===="
 	},
-	{	"adhoc template",__FILE__,__LINE__,R"(
+	{	"adhoc template",__FILE__,__LINE__,R"====(
 
 		fn lerp(a,b,f){(b-a)*f+a};
 		fn main(argc:int,argv:**char)->int{
 			x:=lerp(0.0,10.0,0.5);
 		  0
 		}
-		)"
+		)===="
 	},
-	{	"let array",__FILE__,__LINE__, R"(
+	{	"let array",__FILE__,__LINE__, R"====(
 
 		fn main(argc:int, argv:**char)->int{
 			let xs:array[int,10];
@@ -521,10 +509,10 @@ CompilerTest g_Tests[]={
 			ptr1[1]=5;
 			0
 		},
-		)"
+		)===="
 		,nullptr
 	},
-	{	"HKT (template template parameters)",__FILE__,__LINE__, R"(
+	{	"HKT (template template parameters)",__FILE__,__LINE__, R"====(
 
 		fn map[C,T,Y](src:C[T],f:|T|->Y)->C[Y]{
 			let result;
@@ -536,10 +524,10 @@ CompilerTest g_Tests[]={
 			let vec2=map(vec,|x|{0.0});
 			0
 		}											,
-		)"
+		)===="
 		,nullptr
 	},
-	{	"member functions+UFCS",__FILE__,__LINE__, R"(
+	{	"member functions+UFCS",__FILE__,__LINE__, R"====(
 		//SOURCE
 		fn\"C" printf(s:str,...)->int;
 		struct Foo{
@@ -564,7 +552,7 @@ CompilerTest g_Tests[]={
 			0
 		}
 
-		)"
+		)===="
 		,// EXPECTED RESULT
 		"member function test..\n"
 		"func1 says q=5\n"
@@ -572,7 +560,7 @@ CompilerTest g_Tests[]={
 		"Bar.w=17\n"
 	},
 	{
-		"allocation",__FILE__,__LINE__,R"(
+		"allocation",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		struct Foo{x:int,y:int};
 		fn main(argc:int, argv:**char)->int{
@@ -583,11 +571,11 @@ CompilerTest g_Tests[]={
 			delete pfoo;
 			0
 		},
-		)"
+		)===="
 		,nullptr
 	},
 	{
-		"for  else loop",__FILE__,__LINE__,R"(
+		"for  else loop",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
 			i:=5; b:=argc<9;
@@ -603,11 +591,11 @@ CompilerTest g_Tests[]={
 			printf("loop ret=%d; outer scope i=%d\n",v,i);
 			0
 		},
-		)"
+		)===="
 		,nullptr
 	},
 	{
-		"type parameter inference",__FILE__,__LINE__,R"(
+		"type parameter inference",__FILE__,__LINE__,R"====(
 		struct Union<A,B>{a:A,b:B, tag:int};
 		fn setv[A,B](u:*Union[A,B], v:A)->void{
 			u.a=v; u.tag=0;
@@ -623,7 +611,7 @@ CompilerTest g_Tests[]={
 			printf("u.tag=%d\n",u.tag);
 		0}
 		fn"C" printf(s:str,...)->int;
-		)"
+		)===="
 		,// expected result
 		"u.tag=0\n"
 		"u.tag=1\n"
@@ -632,7 +620,47 @@ CompilerTest g_Tests[]={
 		nullptr,nullptr,0,nullptr,nullptr
 	}
 };
-
+CompilerTest g_todo[]={
+	{	"trait objects TODO",__FILE__,__LINE__,R"====(
+		// TOD.O. part of the plan but low priority.
+		// C++ single-inheritance classes + Enums cover enough.
+		// do want to be able to instantiate a C++ style class as a trait object for rust-interop
+		//
+		// trait declarations alone for bounded polymorphism would be helpful.
+		fn"C" printf(s:str,...)->int;
+		struct Foo{
+		x:int
+		};
+		trait Render{
+			fn render();// todo parse self
+		}
+		impl Render for Foo{
+			fn render(){	// todo parse self
+				printf("Foo render\n");
+			}
+		}
+		fn something(f:&Foo){
+			printf("hello world 2\n");
+		}
+		fn main(argc:int,argv:**char)->int{
+			let x:Foo;
+			//should desugar:
+			// let pr={let x:*__trait_object<Render>;
+			// x.__vtable_ptr=Foo__Render__vtable;
+			// x.__data_ptr=(new Foo{..}) a i8*;
+			// x}
+			// need to adjust 'vcall' mechanism , if '__data_ptr' is found
+			// trait-object's "&Self" could actually be an i8*, which it must recast itself?
+			let pr=new Foo as *Render;
+			x.something();
+			x.render();
+			
+			0
+		}
+		)===="
+		,nullptr,true
+	},
+};
 
 void run_tests(){
 	int index=0;

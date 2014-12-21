@@ -944,7 +944,7 @@ CgValue emit_for_llvm(CodeGen& cg, ExprFor* e_for, Expr* e_init,Expr* e_cond, Ex
 	auto l_init=cg.gen_label("init",index);
 	cg.emit_branch(l_init);
 	cg.emit_label(l_init);
-	auto init=nf->init->compile(cg,sc);
+	auto init=nf->init->compile(cg,sc, CgValue());
 	
 	set<Variable*> emit_vars;
 	set<Variable*> else_vars;

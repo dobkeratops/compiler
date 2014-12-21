@@ -79,15 +79,20 @@ RegisterName Node::get_reg_new(CodeGen& cg) {
 
 CgValue Node::compile_if(CodeGen& cg, Scope* sc){
 	if (this)
-		return this->compile(cg,sc);
+		return this->compile(cg,sc,CgValue());
 	else
 		return CgValueVoid();
 }
 
-CgValue Node::compile(CodeGen& cg, Scope* sc){
+CgValue Node::compile(CodeGen&, Scope*,CgValue in){
 	error(this,"compile not implemented for %s",this->kind_str());
-	return CgValue();
+	return in;
 }
+CgValue Node::compile(CodeGen& cg, Scope* sc){
+	// most common case is no input value, input is added for 'match' & 'switch'.
+	return this->compile(cg,sc,CgValue());
+}
+
 
 CgValue Node::codegen(CodeGen& cg, bool just_contents) {
 	dbprintf("TODO refactor codegen to use this virtual. warning codegen not implemented for %s\n",this->kind_str());
