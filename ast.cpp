@@ -50,6 +50,12 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 			return ret;
 		}
 	}
+	if (this->name==IF){// guarded.
+		ASSERT(sub->next);
+		sub->next->resolve(sc, nullptr, flags);
+		sub->resolve_with_type(sc, rhs, flags);
+		return propogate_type(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
+	}
 	if (this->name==OR){
 		for (auto s=this->sub;s;s=s->next){
 			s->resolve_with_type(sc,rhs,flags);
@@ -187,6 +193,9 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 									cg.emit_instruction(GE,val,lo),
 									cg.emit_instruction(ptn->name==RANGE?LE:LT,val,hi)
 									);
+	}
+	if (ptn->name==IF){
+		return cg.emit_instruction(AND,sub->compile(cg,sc,val),sub->next->compile(cg,sc,CgValue()));
 	}
 	else
 	if (ptn->name==OR || ptn->name==TUPLE ||ptn->sub){// iterate components...

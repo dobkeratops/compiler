@@ -107,10 +107,15 @@ ExprMatch* parse_match(TokenStream& src){
 		pp=&a->next;
 		a->pattern=parse_pattern(src,FAT_ARROW,IF,0);
 		if (src.eat_if(IF)){
-			a->cond=parse_block(src,FAT_ARROW,COMMA,0);
+			// todo , slightly hacky , pattern/expr mess; would be cleaner with GuardedPattern but verbose
+			auto ifpat=new Pattern(src.prev_pos,IF);
+			ifpat->push_back(a->pattern);
+			auto cond=(Pattern*)parse_block(src,FAT_ARROW,COMMA,0);
+			ifpat->push_back(cond);
+			a->pattern=ifpat;
 		}
 		dbg(dbprintf("%s \n",str(src.peek_tok())));
-		src.expect(FAT_ARROW);
+		src.eat_if(FAT_ARROW);
 		a->body=parse_expr(src);
 		auto tok=src.expect(COMMA,CLOSE_BRACE);
 		if (tok==CLOSE_BRACE)

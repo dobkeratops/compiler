@@ -13,14 +13,15 @@ struct CompilerTest {
 
 
 CompilerTest g_Tests[]={
-	{	"nested patterns",__FILE__,__LINE__,R"====(
+	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
-			for y:=0; y<6; y+=1{
-				for x:=0; x<6; x+=1{
+			for y:=0; y<8; y+=1{
+				for x:=0; x<8; x+=1{
 					match (x,y){
-						(1|4,_)=>printf("X"),
-						(_,1|4)=>printf("Y"),
+						(2|5,_)=>printf("X"),
+						(_,2|5)=>printf("Y"),
+						_ if x==y || (7-x)==y =>printf("o"),
 						_=>printf(".")
 					};
 				}

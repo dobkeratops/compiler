@@ -193,12 +193,13 @@ fn main(argc:int,argv:**char)->int{
 	printf("anon struct fields= %d %d\n",foo.x, foo.y);
 
 	// rust style matching
-	for y:=0; y<6; y+=1{
-		for x:=0; x<6; x+=1{
+	for y:=0; y<8; y+=1{
+		for x:=0; x<8; x+=1{
 			match (x,y){
-				(0|5,_)=>printf("X"),
-				(_,1|4)=>printf("Y"),
-				_=>printf(".")
+				(2|5,_)					=>printf("X"),
+				(_,2|5)					=>printf("Y"),
+				_ if x==y || (7-x)==y	=>printf("o"),
+				_						=>printf(".")
 			};
 		};
 		printf("\n");
