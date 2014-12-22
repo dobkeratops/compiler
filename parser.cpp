@@ -922,7 +922,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	int f_index=0;
 	while ((tok=src.peek_tok())!=NONE){
 		// allow writing struct Foo{ .bar:int, .baz:int} for easy search
-		if (tok==DOT){ src.eat_tok();src=src.peek_tok();}
+		if (tok==DOT){ src.eat_tok();tok=src.peek_tok();}
 		if (tok==CLOSE_BRACE){src.eat_tok(); break;}
 		if (src.eat_if(STRUCT)) {
 			sd->structs.push_back(parse_struct(src));
