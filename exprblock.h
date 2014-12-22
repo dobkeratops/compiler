@@ -14,7 +14,7 @@ struct ExprBlock :public ExprScopeBlock{
 	short	delimiter=0;//COMMA, SEMICOLON,SPACES?
 	
 	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...} call_expr[argls..] call_expr{argls}
-	vector<Expr*>	argls;
+	Vec<Expr*>	argls;
 	//ExprFnDef*	call_target=0;
 	ExprBlock*	next_of_call_target=0;	// to walk callers to a function
 	// these are supposed to be mutually exclusive substates, this would be an enum ideally.

@@ -7,6 +7,8 @@
 struct SrcOp{ Name op; SrcPos pos;};
 template<typename T>
 T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
+template<typename T>
+T pop(Vec<T>& v){ ASSERT(v.size()>0); return v.pop_back();}
 void dump(vector<Expr*>& v);
 extern Node* g_pRoot;	// temporary hack
 // todo: plugin arch? Node::parse(), dispatch on registered keywords?

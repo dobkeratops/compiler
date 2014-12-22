@@ -283,6 +283,7 @@ enum Token {
 	MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,SLICE_REF,DOUBLE_QUESTION_MARK,TAG_QUESTION_MARK,TAG_MUL,TAG_ADD,TAG_SUB,TAG_DIV, MAYBE_ARROW,
 	COMMA,SEMICOLON,DOUBLE_SEMICOLON,
 	// after these indices, comes indents
+	
 	ELIPSIS,RANGE, RANGE_LT,RANGE_GT,RANGE_GE,RANGE_LE,
 	PLACEHOLDER,UNDERSCORE=PLACEHOLDER,
 	IDENT,
@@ -303,6 +304,7 @@ enum TypeId{
 };
 extern bool g_lisp_mode;
 // module base: struct(holds fns,structs), function(local fns), raw module.
+extern const char* g_operator_symbol[];
 
 
 struct ResolvedType{
@@ -323,6 +325,142 @@ struct ResolvedType{
 	ResolvedType(const Type* t, int s):ResolvedType(t,(Status)s){}
 	//operator Type* ()const {return type;}
 	//operator bool()const { return status==COMPLETE && type!=0;}
+};
+
+// simplified vector<T> easier to debug,
+// break dependance on C++stdlib for easier transpile.
+
+template<typename T>
+struct Slice{		// does not own
+	T* data;
+	int num;
+	T& operator[](int i){ return data[i];}
+	const T& operator[](int i)const {return data[i];}
+	int size(){return num;}
+	~Slice();
+	Slice(T* d,int n):data(d),num(n){}
+	template<typename F>
+	void foreach(F& f){ for (int i=0; i<num; i++){ f(data[i]);};}
+	T* begin(){return data;}
+	T* end(){return data+num;}
+	const T* begin()const{return data;}
+	const T* end()const {return data+num;}
+	Slice<T> slice(int s,int e){return Slice(data+s,e-s);}
+};
+template<typename T>
+struct Vec{
+	T* data=nullptr;
+	int32_t	num=0;// fills a 32gb machine fine.
+	int32_t	cap=0;
+	T& operator[](int i){
+		dbg(ASSERT(i>=0&&i<=num));return data[i];
+	}
+	const T& operator[](int i)const{
+		dbg(ASSERT(i>=0&&i<=num));return data[i];
+	}
+	void resize_sub(int newsize,int newcap){
+		ASSERT(newcap>=newsize);
+		int i;
+		for (i=newsize;i<num;i++){
+			data[i].~T();
+		}
+		realloc_sub(newcap);
+		for (i=num;i<newsize;i++){
+			new(&data[i]) T();
+		}
+		num=newsize;
+	}
+	void resize(int newsize){
+		if (newsize!=num){
+			return resize_sub(newsize,newsize>cap?(cap?cap*2:newsize):(newsize<(cap/2)?(cap/2):cap));
+		}
+	}
+	int32_t size()const {return num;}
+	T* begin(){return data;}
+	T* end(){return data+num;}
+	const T* begin()const {return data;}
+	const T* end()const {return data+num;}
+	T& back(){ASSERT(num>0);return data[num-1];}
+	const T& back()const {ASSERT(num>0);return data[num-1];}
+	T& front() {ASSERT(num>0);return data[0];}
+	const T& front()const {ASSERT(num>0);return data[0];}
+	// todo && moves
+	T pop(){return pop_back();}// at most efficient place
+	void push(T src){return push_back(src);}// at most efficient place
+	T pop_back(){
+		ASSERT(num>0);
+		T ret=data[num-1];
+		resize(num-1);
+		return ret;
+	}
+	T pop_front(){
+		ASSERT(num>0);
+		T ret=data[0];
+		for (int i=1; i<num; i++) data[i-1]=data[i];
+		return ret;
+	}
+	void insert(int pos,T item){
+		resize(num+1);
+		for (int i=num-1; i>pos; i++){
+			data[i]=data[i-1];
+		}
+		ASSERT(pos<num);
+		data[pos]=item;
+	}
+	T remove(int pos){
+		ASSERT(num>0);
+		auto x=data[pos];
+		for (int i=pos; i<num-1; i++) data[i]=data[i+1];
+		return x;
+	}
+	T remove_swap_back(int pos){
+		ASSERT(num>0);
+		auto x=data[pos];
+		data[pos]=back();
+		resize(num-1);
+		return x;
+	}
+	inline void push_front(T item){
+		insert(0,item);
+		resize(num-1);
+	}
+	inline void push_back(T item){
+		insert(num,item);
+	}
+	// grr. this is why we're writing new lang. want map((A)->B)->Vec<B>,filter etc
+	template<typename F>
+	void foreach(F& f){ for (int i=0; i<num; i++) f(data[i]);}
+	template<typename F>
+	void foreach(const F& f)const { for (int i=0; i<num; i++) f(data[i]);}
+	Slice<T> range(int s,int e){
+		return Slice<T>(data+s,e-s);
+	}
+	Slice<T> as_slice(){return range(0,num);}
+
+	void shrink_to_fit(){if (num!=cap)resize_sub(num,num);}
+	void reserve(int x){if (x!=cap){resize_sub(num,x);}}
+	~Vec(){
+		resize_sub(0,0);
+	}
+	Vec(){
+	}
+	void realloc_sub(int newcap){
+		if (cap!=newcap){
+			data=(T*)realloc(data,sizeof(T)*newcap);
+			cap=newcap;
+		}
+	}
+
+
+	template<typename B>
+	Vec(const Vec<B>& src){
+		realloc(src.size());
+		int i;
+		num=src.size();
+		for (i=0; i<src.size(); i++) {// invoke copy cons inplace
+			new(data[i]) T(src[i]);
+		}
+	}
 };
 
 

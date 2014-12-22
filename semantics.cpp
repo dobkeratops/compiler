@@ -302,6 +302,9 @@ void dump_typeparams(const vector<TParamDef*>& ts) {
 int num_known_arg_types(vector<Expr*>& args) {
 	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
 }
+int num_known_arg_types(Vec<Expr*>& args) {
+	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
+}
 
 //void match_generic_type_param_sub(const vector<TParamDef>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
 	

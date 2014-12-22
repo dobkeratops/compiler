@@ -11,7 +11,6 @@ struct CompilerTest {
 	bool		should_fail;
 };
 
-
 CompilerTest g_Tests[]={
 	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;

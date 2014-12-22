@@ -11,19 +11,19 @@ void dump(vector<Expr*>& v) {
 	}
 	dbprintf("\n");
 }
-void pop_operator_call( vector<SrcOp>& operators,vector<Expr*>& operands) {
+void pop_operator_call( Vec<SrcOp>& operators,Vec<Expr*>& operands) {
 	//takes the topmost operator from the operator stack
 	//creates an expression node calling it, consumes operands,
 	//places result on operand stack
 	
-	auto op=pop(operators);
+	auto op=operators.pop();
 	auto * p=new ExprOp(op.op,op.pos);
 	if (operands.size()>=2 && (arity(op.op)==2)){
-		auto arg1=pop(operands);
-		p->lhs=pop(operands);
+		auto arg1=operands.pop();
+		p->lhs=operands.pop();
 		p->rhs=arg1;
 	} else if (operands.size()>=1 && arity(op.op)==1){
-		p->rhs=pop(operands);
+		p->rhs=operands.pop();
 		//		p->argls.push_back(pop(operands));
 	} else{
 		//						printf("\noperands:");dump(operands);
@@ -34,13 +34,13 @@ void pop_operator_call( vector<SrcOp>& operators,vector<Expr*>& operands) {
 	operands.push_back((Expr*)p);
 }
 //   void fn(x:(int,int),y:(int,int))
-void flush_op_stack(ExprBlock* block, vector<SrcOp>& ops,vector<Expr*>& vals) {
+void flush_op_stack(ExprBlock* block, Vec<SrcOp>& ops,Vec<Expr*>& vals) {
 	while (ops.size()>0) pop_operator_call(ops,vals);
 	while (vals.size()) {
 		block->argls.push_back(pop(vals));
 	}
 }
-void flatten_stack(vector<SrcOp>& ops,vector<Expr*>& vals){
+void flatten_stack(Vec<SrcOp>& ops,Vec<Expr*>& vals){
 	while (vals.size()&&ops.size()) pop_operator_call(ops,vals);
 }
 
@@ -69,8 +69,8 @@ Expr* parse_expr(TokenStream&src) {
 }
 
 void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
-									vector<SrcOp>& operators,
-									vector<Expr*>& operands
+									Vec<SrcOp>& operators,
+									Vec<Expr*>& operands
 									
 									){
 	if (was_operand==true) {
@@ -391,12 +391,12 @@ ExprOp* parse_let(TokenStream& src) {
 	//}
 }
 
-Expr* expect_pop(TokenStream& src,vector<Expr*>& ops){
+Expr* expect_pop(TokenStream& src,Vec<Expr*>& ops){
 	if (!ops.size()){
 		error(src.pos,"expected operand first");
 		return nullptr;
 	}
-	auto p=ops.back(); ops.pop_back();
+	auto p=ops.back(); ops.pop();
 	return p;
 }
 void expect(TokenStream& src,bool expr,const char* msg){
@@ -419,8 +419,8 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 	node->call_expr=outer_op;
 	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
-	vector<SrcOp> operators;
-	vector<Expr*> operands;
+	Vec<SrcOp> operators;
+	Vec<Expr*> operands;
 	bool	was_operand=false;
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
@@ -536,7 +536,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 			}
 		} else if (src.eat_if(OPEN_BRACKET)){
 			if (was_operand){
-				operands.push_back(parse_block(src,CLOSE_BRACKET,COMMA,pop(operands)));
+				operands.push_back(parse_block(src,CLOSE_BRACKET,COMMA,operands.pop()));
 			} else {
 				error(operands.back()?operands.back():node,"TODO: array initializer");
 				operands.push_back(parse_block(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
@@ -545,7 +545,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 		} else if (src.eat_if(OPEN_BRACE)){
 			//			error(operands.back()?operands.back():node,"struct initializer");
 			if (was_operand){// struct initializer
-				auto sname=pop(operands);
+				auto sname=operands.pop_back();
 				auto si=parse_block(src,CLOSE_BRACE,COMMA,sname);
 				operands.push_back(si);
 				si->set_type(sname->get_type()); //eg ident might have typeparams.struct init uses given type
