@@ -10,10 +10,11 @@ extern"C"fn fread(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn fwrite(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn sqrt(f:float)->float;
 
-// typeparameter sugar -omitted types get typeparams automatically,
+// template typeparameter sugar - just omit types, and they get typeparams automatically
+// eg lerp<A,B,F>(a:A,b:B,f:F)... ; also single-expression sugar.
 
 fn lerp(a,b,f)=(b-a)*f+a;
-fn invlerp(x0,x1,x)=(x-a)/(x1-x0);
+fn invlerp(x0,x1,x)=(x-x0)/(x1-x0);
 
 //  closure arguments declared like rust
 fn take_closure(funcp:|int|){
@@ -28,11 +29,11 @@ enum Shape {
 };
 // Rust style match
 fn shape_vol(s:*Shape)->float= match s{
-	*Sphere(my_centre, my_radius)=>{
+	*Sphere(my_centre, my_radius)=>{	// destructuring like rust
 		printf("match sphere vol\n");
 		4.0/3.0*3.142* my_radius*my_radius*my_radius
 	},
-	*Cuboid(vmin, vmax)=>{
+	*Cuboid(vmin, vmax)=>{	// tuple-structs/named fields are generalized here.
 		printf("match cuboid vol\n");
 		d:=vmax-vmin; d.vx*d.vy*d.vz 
 	},
@@ -63,10 +64,10 @@ struct Foo {
 }
 struct Vec3{ vx:float,vy:float,vz:float};
 
-// adhoc overloading like C++. (fn keyword allows operators as names)
+// operator overloading like C++. (using fn keyword allows parsing operators as names)
 fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
 
-//single-expression syntax with struct-constructors
+//single-expression syntax with struct-constructors. Infering the return type when you can see it is pleasant.
 fn -(a:&Vec3,b:&Vec3)= Vec3{vx:a.vx-b.vx,vy:a.vy-b.vy,vz:a.vz-b.vz};
 fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx + a.vy*b.vy + a.vz*b.vz;
 fn *(a:&Vec3,f:float)=Vec3{a.vx*f,a.vy*f,a.vz*f};
@@ -84,6 +85,10 @@ fn bilerp(a0:&Vec3,b0:&Vec3,a1:&Vec3,b1:&Vec3,u:float,v:float)=lerp(lerp(a0,a1,u
 
 // internal vtables
 // simplified -'base class' must describe entire layout.
+// needed because the compiler uses C++ vtables & I want to self host by transpiling.
+// I wouldn't have bothered otherwise.
+// class heirachies & vtables are not the focus
+// ideally i'd just have UFCS and freefunctions
 
 struct IBaz {
 	// sugar: with other qualifiers, 'fn' is optional,assumed.
@@ -192,7 +197,7 @@ fn main(argc:int,argv:**char)->int{
 	let foo=ret_anon_struct();
 	printf("anon struct fields= %d %d\n",foo.x, foo.y);
 
-	// rust style matching
+	// rust style matching.. nesting destructuring with |, if guards
 	for y:=0; y<8; y+=1{
 		for x:=0; x<8; x+=1{
 			match (x,y){
@@ -206,8 +211,9 @@ fn main(argc:int,argv:**char)->int{
 	};
 
 
-	// type inference with polymorphic lambdas
-	// unlike C++, the output type of the lambdas infers 'R' here
+	// type inference with templates & lambdas
+	// unlike C++, the output type of the lambdas infer back to  'R' here
+	// in c++ you'd have  to specify the output type eg u.match_with<float>(....)
 
 	let z=u.match_with(
 		|x:*int|{printf("union was set to int %d\n",*x);15},
@@ -219,7 +225,9 @@ fn main(argc:int,argv:**char)->int{
 	// handles simple cases without needing a whole iterator library
 	// enhanced with 'break'-'else' expressions
 
-	acc:=0;	//:= from 'go', x:=y is a shortcut for let x:=y 
+	acc:=0;	
+	//:= from 'go', x:=y is a shortcut for let x:=y .
+	// still might be useful eg pattern-based let can't have a return value, := could.
 	value:=for i:=0,j:=0; i<10; i+=1,j+=10 {
 		acc+=i;
 		for k:=0; k<10; k+=1 {
