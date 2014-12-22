@@ -191,7 +191,7 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 	else
 	if (ptn->name==OR || ptn->name==TUPLE ||ptn->sub){// iterate components...
 		int index;
-		CgValue ret;
+		CgValue ret=CgValue();
 		CgValue	val2=val;
 		Name op;
 		if (ptn->name==OR) {op=LOG_OR;index=0;}
@@ -210,12 +210,17 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 		for (auto subp=ptn->sub; subp; subp=subp->next,index++){
 			auto elem=ptn->name!=OR?cg.emit_getelementref(val2,0, index,subp->type()):val;
 			auto b=subp->compile(cg, sc, elem);
-			if (ptn->name==OR){ b= cg.emit_instruction(EQ,b,val);}
+			if (ptn->name==OR || ptn->name==TUPLE){
+				//ASSERT(b.type->is_bool())
+			}
 			if (op){
-				if (!ret.is_valid()) ret=b;
-				else ret=cg.emit_instruction(op,Type::get_bool(),ret,b);
+				if (!ret.is_valid())
+					ret=b;
+				else
+					ret=cg.emit_instruction(op,Type::get_bool(),ret,b);
 			}
 		}
+		dbg(ret.dump());
 		return ret;
 	}
 	else if (ptn->def){
@@ -238,7 +243,11 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 	}
 	if (is_number(this->name)){
 	// its a constant or number
-		return cg.emit_val_i32(getNumberInt(this->name));
+		auto cmpval=cg.emit_val_i32(getNumberInt(this->name));
+		if (val.is_valid()){
+			return	cg.emit_instruction(EQ, cmpval, val);
+		}else
+			return cmpval;
 	}
 	dbg(ptn->dump(0));
 	dbg(dbprintf("uncompiled node %s\n",str(ptn->name)));

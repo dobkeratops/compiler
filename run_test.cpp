@@ -13,7 +13,71 @@ struct CompilerTest {
 
 
 CompilerTest g_Tests[]={
+	{	"nested patterns",__FILE__,__LINE__,R"====(
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int, argv:**char)->int{
+			for y:=0; y<6; y+=1{
+				for x:=0; x<6; x+=1{
+					match (x,y){
+						(1|4,_)=>printf("X"),
+						(_,1|4)=>printf("Y"),
+						_=>printf(".")
+					};
+				}
+				printf("\n");
+			};
+			0
+		},
+		)====",
+		nullptr
+	},
 	
+
+	{	"match val + ranges",__FILE__,__LINE__,R"====(
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int, argv:**char)->int{
+			for x:=0; x<100; x+=10{
+				match x{
+					20=>printf("one\n",x),
+					30 ..40=>printf("%d inrange 2-4\n",x),
+					50|70=>printf("%d inrange odd\n",x),
+					_=>printf("%d out of range\n",x)
+				};
+			};
+			0
+		},
+		)====",
+		nullptr
+	},
+
+	{	"basic enum+match",__FILE__,__LINE__,R"====(
+		
+		fn"C" printf(s:str,...)->int;
+		enum Foo{
+			Bar{x:int,y:int},
+			Baz{x:float,y:float,z:int},
+			Qux,Boo
+		};
+		fn main(argc:int,argv:**char)->int{
+			let sx=new Bar{15,25};
+			let sy=new Baz{10.0,20.0,55};
+			let z1=match sy {
+				a@*Bar=>{printf("match with bar\n");a.x as float},
+				*Baz(vx,vy,vz) =>{printf("match with baz z=%d\n",vz);vx+vy},
+				//"		Qux|Boo=>0, \n"
+				_=>0.0
+			};
+			let z2=match sx {
+				a@*Bar=>{printf("match with bar x=%d y=%d\n",a.x,a.y);a.x},
+				_=>0
+			};
+			0
+		}
+		)===="
+		,nullptr
+	},
+	
+
 	{	"elaborate match example",__FILE__,__LINE__,R"====(
 		
 		struct FILE;
@@ -71,21 +135,6 @@ CompilerTest g_Tests[]={
 		nullptr
 	},
 
-	{	"match ranges",__FILE__,__LINE__,R"====(
-		fn"C" printf(s:str,...)->int;
-		fn main(argc:int, argv:**char)->int{
-			for x:=0; x<10; x+=1{
-				match x{
-					2 ..4=>printf("%d inrange 2-4\n",x),
-					5|7=>printf("%d inrange odd\n",x),
-					_=>printf("%d out of range\n",x)
-				};
-			};
-			0
-		},
-		)====",
-		nullptr
-	},
 
 	{	"return anon struct infered type",__FILE__,__LINE__,R"====(
 		fn foobar()->struct {x,y}{
@@ -182,35 +231,7 @@ CompilerTest g_Tests[]={
 		)===="
 		,nullptr
 	},
-	
-	
-	{	"basic enum+match",__FILE__,__LINE__,R"====(
-		
-		fn"C" printf(s:str,...)->int;
-		enum Foo{
-			Bar{x:int,y:int},
-			Baz{x:float,y:float,z:int},
-			Qux,Boo
-		};
-		fn main(argc:int,argv:**char)->int{
-		let sx=new Bar{15,25};
-		let sy=new Baz{10.0,20.0,55};
-		let z1=match sy {
-			a@*Bar=>{printf("match with bar\n");a.x as float},
-			*Baz(vx,vy,vz) =>{printf("match with baz z=%d\n",vz);vx+vy},
-			//"		Qux|Boo=>0, \n"
-			_=>0.0
-		};
-		let z2=match sx {
-			a@*Bar=>{printf("match with bar x=%d y=%d\n",a.x,a.y);a.x},
-			_=>0
-		};
-			0
-		}
-		)===="
-		,nullptr
-	},
-	
+
 
 	
  

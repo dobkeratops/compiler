@@ -826,7 +826,7 @@ CgValue CodeGen::emit_instruction_reg_i32(Name opname,const Type* type,  Name ou
 RegisterName CodeGen::next_reg(Name name){
 	char rname[256];
 	const char* s=getString(name);
-	sprintf(rname, "r%d%s",this->m_next_reg++,isSymbolStart(s[0])?s:"rfv");
+	sprintf(rname, "r%d%s",this->m_next_reg++,isSymbolStart(s[0],0)?s:"rfv");
 	return getStringIndex(rname);
 }
 

@@ -10,12 +10,12 @@ template<typename T>
 T& operator<<(T& dst, const Foo& src) { dst<<src.bar; dst<<src.indices;return dst;};
 */
 extern SrcPos g_srcpos;	// hack sorry,
-bool isSymbolStart(char c);
-bool isSymbolCont(char c);
-bool isNumStart(char c);
-bool isNum(char c);
-bool isWhitespace(char c);
-bool isOperator(char c);
+bool isSymbolStart(char c,char c1);
+bool isSymbolCont(char c,char c1);
+bool isNumStart(char c,char c1);
+bool isNum(char c,char c1);
+bool isWhitespace(char c,char c1);
+bool isOperator(char c,char c1);
 int	close_of(int open);
 inline int	close_of(Name open){return close_of((int)open);}
 
@@ -39,6 +39,7 @@ struct IndentLevel{
 	}
 };
 struct Lexer {
+	// todo: we could avoid repeat nonsense, encapsulating 'terminator' in lexer. 'src.push_terminator(..)'/'pop terminator()'... 'if src.is_terminator() break'. 
 	char filename[512];
 	SrcPos	pos;
 	SrcPos	prev_pos;	// needed to correctly locate nodes after eat_tok()
@@ -57,7 +58,7 @@ struct Lexer {
 
 	void error(const char* str,...);
 	Lexer(const char* src,const char *filename_);
-	void advance_sub(bool (*sub)(char c));
+	void advance_sub(bool (*sub)(char c,char c1));
 	void advance_operator();
 	void advance_string(char quote);
 	bool is_comment(const char* c);

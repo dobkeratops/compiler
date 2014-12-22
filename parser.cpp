@@ -105,12 +105,12 @@ ExprMatch* parse_match(TokenStream& src){
 		a->pos=src.pos;
 		*pp=a;
 		pp=&a->next;
-		int close=0;
-		a->pattern=parse_pattern(src,FAT_ARROW,IF,0, &close);
-		if (close==IF){
+		a->pattern=parse_pattern(src,FAT_ARROW,IF,0);
+		if (src.eat_if(IF)){
 			a->cond=parse_block(src,FAT_ARROW,COMMA,0);
 		}
 		dbg(dbprintf("%s \n",str(src.peek_tok())));
+		src.expect(FAT_ARROW);
 		a->body=parse_expr(src);
 		auto tok=src.expect(COMMA,CLOSE_BRACE);
 		if (tok==CLOSE_BRACE)
@@ -122,15 +122,12 @@ ExprMatch* parse_match(TokenStream& src){
 // todo: we're not sure we need a whole other parser
 // couldn't expressions,types,patterns all use the same gramar & parser,
 // & just interpret the nodes differently?
-Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out_close_tok, Pattern* owner){
+Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3, Pattern* owner){
 	// yikes, this is a total mess
 	Pattern* prev=0;
 	while (auto t=src.peek_tok()){
 		dbg(dbprintf("%s\n",str(t)));
 		if (t==close || t==close2||t==close3) {
-			if (out_close_tok){
-				*out_close_tok=(int)src.eat_tok();
-			}
 			break;
 		}
 		t=src.eat_tok();
@@ -141,12 +138,12 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 			return np;
 			
 		}
-		if (t==PTR || t==REF || t==MUL || t==ADDR){ // todo: is_prefix
+		if (t==PTR || t==REF || t==MUL || t==ADDR || t==NOT){ // todo: is_prefix
 			if (t==MUL) t=PTR;
 			if (t==ADDR) t=REF;
 			if (prev){ error(src.pos,"ptr/ref operator must be prefix in pattern");}
 			auto np=new Pattern(src.pos, t);
-			parse_pattern(src,close,close2,close3,out_close_tok,np);
+			parse_pattern(src,close,close2,close3,np);
 			if (owner)owner->push_back(np);
 			return np;
 
@@ -155,17 +152,14 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 //				return nullptr;
 //			}else
 //				return np;
-//		}else
+//		}else 
 		}else
 		if (t==OPEN_PAREN){
 			if (!prev) {
 				prev=new Pattern(src.pos, TUPLE);
 			}
-			int close=0;
-			auto np=parse_pattern(src,CLOSE_PAREN,0,0,&close,prev);
-			// maybe more eg (e,f)|(c,d)|(a,b)
-			//if (owner){
-			//	owner->push_back(prev);prev=0;}
+			auto np=parse_pattern(src,CLOSE_PAREN,0,0,prev);
+			src.expect(CLOSE_PAREN); // todo: we could avoid repeat arg encapsulated in lexer. 'push terminator'/'pop terminator'... 'src.is_terminator'
 		}else
  
 		if (t==RANGE){
@@ -174,7 +168,7 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 			}
 			auto np=new Pattern(src.prev_pos,RANGE);
 			np->push_back(prev);
-			np->push_back(parse_pattern(src,close,close2,close3,nullptr,nullptr));
+			np->push_back(parse_pattern(src,close,close2,close3?close3:OR,nullptr));
 	
 			if (owner){
 				owner->push_back(np);prev=0;
@@ -190,29 +184,30 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3,int* out
 			}
 			
 			np->push_back(prev);
-			parse_pattern(src,close,close2,close3,out_close_tok, np);
+			parse_pattern(src,close,close2,close3, np);
 			np->dump(0);newline(0);
 			return np;
 		}
 		else if (t==COMMA){ // continue a tuple..
-			if (!owner){
-				error(src.pos,", in pattern must be within tuple (,,) or destructure ident(,,) ident{,,}");
+			if (!owner){ // ITS DELIM
+				//error(src.pos,", in pattern must be within tuple (,,) or destructure ident(,,) ident{,,}");
+				break;
 			}
 			if (prev && owner){
 				owner->push_back(prev);prev=nullptr;
 			}
 		} else if (t==OR){ // todo - bit more elaborate. should be ANY(....)  distinct from TUPLE(...)
-			if (owner){
-				error(src.pos,"TODO ( | | ), only  | | | works right now");
-			}
+			//if (owner){
+			//	error(src.pos,"TODO ( | | ), only  | | | works right now");
+			//}
 			if (!prev){
 				error(src.pos,"in pattern | must seperate options eg a|b|c..");
 			}
 			auto np=new Pattern(src.pos,OR);
 			np->push_back(prev);
-			np->push_back(parse_pattern(src,close,close2,close3,out_close_tok,nullptr));
+			np->push_back(parse_pattern(src,close,close2,close3,nullptr));
 			if (owner) {
-				owner->push_back(prev);prev=0;
+				owner->push_back(np);prev=0;
 			}
 			else { return np; }
 		} else{
@@ -345,16 +340,15 @@ ExprOp* parse_let(TokenStream& src) {
 	// TODO: parse_pattern - we DO want all the tuple assignment goodness
 //	auto ident=src.eat_ident();
 //	auto id=new ExprIdent(src.prev_pos,ident);
-	int closed;
-	auto ptn=parse_pattern(src, ASSIGN,COLON,SEMICOLON,&closed);
+	auto ptn=parse_pattern(src, ASSIGN,COLON,SEMICOLON);
 	Type * t=nullptr;
 	Expr* init=nullptr;
-	if (closed==COLON){//src.eat_if(COLON)){
+	if (src.eat_if(COLON)){//src.eat_if(COLON)){
 		t=parse_type(src,0,nullptr);
 	}
 	//nlet->lhs->set_type(t);// we dont need an operator, all nodes have type
 	
-	if (closed==ASSIGN||src.eat_if(ASSIGN)){
+	if (src.eat_if(ASSIGN)){
 		init=parse_expr(src);
 	}
 // cases..
@@ -816,6 +810,7 @@ ArgDef* parse_arg(int index,TokenStream& src, int close) {
 		a->type()=parse_type(src,close,a);
 	}
 	if (src.eat_if(ASSIGN)){
+		dbg(dbprintf("default expr needs cleanup- move to not consuming close"));
 		a->default_expr=parse_expr(src);
 	}
 	return a;
@@ -1056,9 +1051,8 @@ Expr* parse_if_let(TokenStream& src){
 	auto iflet=new ExprIfLet;
 	MatchArm* arm=new MatchArm(); // if-let is a single match arm with different syntax.
 	iflet->arms=arm;
-	int close=0;
-	arm->pattern=parse_pattern(src,ASSIGN,0,0,&close);
-
+	arm->pattern=parse_pattern(src,ASSIGN,0,0);
+	src.expect(ASSIGN);
 	iflet->expr=parse_block(src,OPEN_BRACE,COMMA,nullptr);
 	arm->body = parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
 	// 'else' if effectively an arm with _=>{}

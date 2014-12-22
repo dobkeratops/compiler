@@ -2,12 +2,12 @@
 #include "error.h"
 SrcPos g_srcpos;	// hack sorry,
 
-bool isSymbolStart(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_';}
-bool isSymbolCont(char c) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || (c>='0' && c<='9');}
-bool isNumStart(char c){return (c>='0'&&c<='9');};
-bool isNum(char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c=='e')||(c=='x') ||c=='.';};
-bool isWhitespace(char c){return  c==' '||c=='\n'||c=='\a'||c=='\t';};
-bool isOperator(char c){return c=='+'||c=='-'||c=='*'||c=='/'||c=='.'||c=='='||c=='>'||c=='<'||c=='&'||c=='|'||c=='~'||c=='%'||c=='^'||c=='+';}
+bool isSymbolStart(char c,char c1) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_';}
+bool isSymbolCont(char c,char c1) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || (c>='0' && c<='9');}
+bool isNumStart(char c,char c1){return (c>='0'&&c<='9');};
+bool isNum(char c,char c1){return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c=='e')||(c=='x') ||(c=='.' && (c1>='0' && c1<='9'));};
+bool isWhitespace(char c,char c1){return  c==' '||c=='\n'||c=='\a'||c=='\t';};
+bool isOperator(char c,char c1){return c=='+'||c=='-'||c=='*'||c=='/'||c=='.'||c=='='||c=='>'||c=='<'||c=='&'||c=='|'||c=='~'||c=='%'||c=='^'||c=='+';}
 
 int close_of(int open){
 	if (open==LT) return GT;
@@ -43,8 +43,8 @@ Lexer::Lexer(const char* src,const char *filename_){
 	advance_tok();
 }
 
-void Lexer::advance_sub(bool (*sub)(char c)){
-	while ( *tok_end && sub(*tok_end)) tok_end++;
+void Lexer::advance_sub(bool (*sub)(char c,char c1)){
+	while ( *tok_end && sub(*tok_end,tok_end[1])) tok_end++;
 }
 void Lexer::advance_operator() {
 	int match=0;
@@ -80,7 +80,7 @@ bool Lexer::is_comment(const char* c){
 void Lexer::skip_whitespace(){
 	bool newline=false;
 	IndentLevel il;
-	while ((isWhitespace(*tok_end) || is_comment(tok_end))&&*tok_end) {
+	while ((isWhitespace(*tok_end,0) || is_comment(tok_end))&&*tok_end) {
 		if (is_comment(tok_end)){
 			// skip comment
 			tok_end+=2;
@@ -181,10 +181,10 @@ void Lexer::advance_tok_sub() {
 	tok_start=tok_end;
 	pos.col=tok_start-line_start;
 	if (!*tok_end) { this->curr_tok=0; return;}
-	auto c=*tok_end;
-	if (c=='_' && tok_end[1] && !isSymbolCont(tok_end[1])) tok_end++; //placeholder
-	else if (isSymbolStart(c))	advance_sub(isSymbolCont);
-	else if (isNumStart(c)) advance_sub(isNum);
+	auto c=*tok_end; auto c1=c?tok_end[1]:0;
+	if (c=='_' && tok_end[1] && !isSymbolCont(tok_end[1],0)) tok_end++; //placeholder
+	else if (isSymbolStart(c,c1))	advance_sub(isSymbolCont);
+	else if (isNumStart(c,c1)) advance_sub(isNum);
 	else if (c=='\"')
 		advance_string('\"');
 	else if (c=='\'')
@@ -255,7 +255,7 @@ bool Lexer::eat_if(Name i) {
 	if (peek_tok()==i) {eat_tok(); return true;}
 	else return false;
 }
-bool Lexer::is_placeholder()const {return  ((*tok_start=='_') && !isSymbolCont(*tok_end));}
+bool Lexer::is_placeholder()const {return  ((*tok_start=='_') && !isSymbolCont(*tok_end,0));}
 Name Lexer::eat_if_placeholder(){if (is_placeholder()){advance_tok(); return PLACEHOLDER;} else return Name();}
 Name Lexer::Lexer::eat_ident() {
 	auto r=eat_tok();

@@ -239,7 +239,7 @@ template<class T> void next(T*& n){if (n) n=n->next;}
 #define MODIFY (READ_LHS|WRITE_LHS|READ_RHS|WRITE_RHS)
 #define RWFLAGS (WRITE_LHS|READ_LHS|WRITE_RHS|READ_RHS)
 extern int operator_flags(Name n);
-bool isSymbolStart(char c);
+bool isSymbolStart(char c,char c1);
 extern int g_raw_types[];
 #define RT_FLOATING 0x4000
 #define RT_INTEGER 	0x8000

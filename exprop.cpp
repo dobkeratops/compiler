@@ -235,7 +235,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			//			verify_expr_ident(rhs);
 			//			ASSERT(rhs->as_ident());
 			
-			if (isNumStart(*str(rhs->name))){
+			if (isNumStart(*str(rhs->name),0)){
 				auto fi=getNumberInt(rhs->name);
 				if (auto t=this->lhs->type()){
 					auto elem_t = t->get_elem(fi);
@@ -426,7 +426,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 			cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
 			lhsv = lhsv.deref_for_dot(cg,0);
 		}
-		if (isNumStart(*str(rhs->name))){
+		if (isNumStart(*str(rhs->name),0)){
 			return lhsv.get_elem_index(cg, getNumberInt(rhs->name));
 		}
 		if (rhs->as_ident()) {
