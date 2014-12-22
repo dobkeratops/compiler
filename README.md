@@ -15,12 +15,12 @@ Dont have a name yet hence 'hack'..
  * most C operators, functions, structs,if-else, 
   * (todo ++/--;and currently &p[i] instead of ptr arithmetic)
  * 'everything is an expression' syntax
- * some rust-like enum/Match,  (see limits..WIP)
+ * rust-like 'enum/Match' - tagged-unions & pattern-matching
  * C for loops + break../else{..} expressions
  * function overloading+UFCS
  * limited operator overloading (no conversions yet)
  * Forward+Reverse Type Inference within functions, 
-  * forward between functions -by adhoc templates
+  * forward between functions -by adhoc template sugar
  * stack-based closures 
   * (workaround: if need escape,use a class)
  * templated functions & structs
@@ -31,7 +31,9 @@ Dont have a name yet hence 'hack'..
 
 #### WIP
  * rust-style enum/match- works with dynamic alloc; base lacks padding
-   * have tried to add scalas idea of being able to reference vars in patterns
+   * currently does a..b a..<b, a|b|c, (a,b,c), if guards, @; 
+     * no slice patterns yet
+   * have tried to add scalas idea of being able to reference vars in patterns (by unary @)
  * HKT (template-template parameters)
   * .. not extensively tested
 
