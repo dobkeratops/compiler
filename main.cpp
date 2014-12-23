@@ -44,8 +44,8 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 		global.dump(0);
 	}
 	node->verify();
-	node->resolve_if(&global,nullptr,R_FORWARD_ONLY);
-	node->resolve_if(&global,nullptr,R_REVERSE_ONLY); // this is temporary until we do it properly setting up constraint graph, flood-fill
+	node->resolve_if(&global,nullptr,R_FORWARD_ONLY);// 1st pass just like c++
+	node->resolve_if(&global,nullptr,0); // this is temporary until we do it properly setting up constraint graph, flood-fill
 	if (flags & B_DEFS){
 		global.dump(0);
 	}

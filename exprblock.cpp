@@ -141,7 +141,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 			}
 			// reverse pass too
 			if (!(flags & R_FORWARD_ONLY)){
-				for (auto n=(int)this->argls.size()-1;n>i_complete; n--) {
+				for (auto n=(int)this->argls.size()-2;n>i_complete; n--) {
 					resolved|=this->argls[n]->resolve_if(sc,0,flags);
 				}
 				#if DEBUG>=2
@@ -156,7 +156,11 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 				}
 #endif
 			}
-
+#if DEBUG>=2
+			if(i_complete>0 &&0==(flags&(R_FORWARD_ONLY|R_REVERSE_ONLY))){
+				dbprintf("%d / %d\n", i_complete,this->argls.size());
+			}
+#endif
 			dbg(this->type()->dump_if(-1));
 			dbg(this->argls.back()->dump_if(-1));
 			dbg(newline(0));
