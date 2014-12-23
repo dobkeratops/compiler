@@ -311,12 +311,12 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled .
-		propogate_type_fwd(flags,this, desired,this->type_ref());
-		return ResolveResult(COMPLETE);
+		return propogate_type_fwd(flags,this, desired,this->type_ref());
 	}
 	
 	propogate_type_fwd(flags,this, desired,this->type_ref());
-	if (this->type()) this->type()->resolve_if(scope,desired,flags);
+	if (this->type())
+		resolved|=this->type()->resolve_if(scope,desired,flags);
 	if (auto sd=scope->find_struct_name_type_if(scope,this->name,this->type())) {
 		this->set_def(sd);
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
@@ -386,9 +386,9 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 			assist_find_symbol(this,scope,this->name);
 			error_end(this);
 		}
-		return ResolveResult();
+		return ResolveResult(INCOMPLETE);
 	}
-	return ResolveResult();
+	return resolved;
 }
 void ExprIdent::dump(int depth) const {
 	if (!this) return;

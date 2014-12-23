@@ -126,18 +126,35 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		// last expression - type bounce. The final expression is a return value, use 'desired';
 		// we then propogate backwards. some variables will have been set, eg return value accumulator..
 		if (this->argls.size()) {
+			int	i_complete=-1;
 			if (!(flags & R_REVERSE_ONLY)){
-				for (auto n=0; n<this->argls.size()-1; n++) {
+				for (auto n=0; n<(int)this->argls.size()-1; n++) {
 					resolved|=this->argls[n]->resolve_if(sc,0,flags);
+					if (resolved==COMPLETE)
+						i_complete=n;
 				}
 			}
 			propogate_type_fwd(flags,this, desired);
 			auto ret=this->argls.back()->resolve_if(sc,desired,flags);
+			if (i_complete>=this->argls.size()-1){
+				dbg(printf("icomplete stuff works"));
+			}
 			// reverse pass too
 			if (!(flags & R_FORWARD_ONLY)){
-				for (auto n=(int)this->argls.size()-1;n>=0; n--) {
+				for (auto n=(int)this->argls.size()-1;n>i_complete; n--) {
 					resolved|=this->argls[n]->resolve_if(sc,0,flags);
 				}
+				#if DEBUG>=2
+				auto resolved2=(char)COMPLETE;
+				for (auto n=i_complete; n>=0; n--){
+					auto a=this->argls[n];
+					resolved2|=a->resolve_if(sc,0,flags);
+					resolved|=resolved2;
+					if (resolved2!=COMPLETE){
+						error(this,"ICE,node %s in %s was falsely declared complete",a->name_str(),a->kind_str());
+					}
+				}
+#endif
 			}
 
 			dbg(this->type()->dump_if(-1));

@@ -44,13 +44,15 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 		global.dump(0);
 	}
 	node->verify();
-	node->resolve(&global,nullptr,0);
+	node->resolve_if(&global,nullptr,R_FORWARD_ONLY);
+	node->resolve_if(&global,nullptr,R_REVERSE_ONLY); // this is temporary until we do it properly setting up constraint graph, flood-fill
 	if (flags & B_DEFS){
 		global.dump(0);
 	}
 	if (flags & B_TYPES) {
 		node->dump(0);
 	}
+	node->resolved=COMPLETE;
 	node->resolve(&global,nullptr,(flags&(B_EXECUTABLE|B_RUN|B_LLVM)?R_FINAL:0)|R_FORWARD_ONLY);// if we just want to dump/search, we dont fail for final errors.
 	if (flags & B_LLVM) {
 		output_code(stdout, &global,0,EMIT_ALL);

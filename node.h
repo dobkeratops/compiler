@@ -1,4 +1,4 @@
-#pragma once
+	#pragma once
 /// needed split this to break some circular dependancies.
 
 typedef char ResolveResult;
@@ -32,11 +32,30 @@ public:
 	// wrapper handles 'this==nullptr', and propogation of 'resolved' flag.
 	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
 		if (this) {
-			if (this->resolved==COMPLETE)
-				ResolveResult(COMPLETE);
-			auto r=this->resolve(scope,desired,flags);
-			resolved|=r;
-			return r;
+			bool try_improved=false;
+			if (this->resolved==COMPLETE && try_improved) {
+				#if DEBUG>=2
+				this->resolved=COMPLETE;
+				this->resolve(scope,desired,flags);
+				if (this->resolved!=COMPLETE){
+					this->resolved=COMPLETE;//repeat for debugger
+					this->resolve(scope,desired,flags);
+					error(this,"ICE,node was falsely declared complete %s:%s",this->name_str(),this->kind_str());
+					return ResolveResult(this->resolved);
+				}
+				#endif
+				return ResolveResult(COMPLETE);
+			}
+			else
+				
+			{
+				this->resolved=COMPLETE;
+				
+				// subsequent resolve call will set to something else if not resolved.
+				auto r=this->resolve(scope,desired,flags);
+				resolved|=r;
+				return r;
+			}
 		}
 		else
 			return ResolveResult(COMPLETE);

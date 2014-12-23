@@ -190,9 +190,9 @@ ResolveResult Node::propogate_type_refs(int flags,const Node*n, Type*& a,Type*& 
 }
 ResolveResult Node::propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b) {
 	::verify(a,b);
-	propogate_type_refs(flags,(const Node*)n,a,b);
-	propogate_type_refs(flags,(const Node*)n,n->type_ref(),b);
-	return propogate_type_refs(flags,(const Node*)n,n->type_ref(),a);
+	resolved|=propogate_type_refs(flags,(const Node*)n,a,b);
+	resolved|=propogate_type_refs(flags,(const Node*)n,n->type_ref(),b);
+	return resolved|=propogate_type_refs(flags,(const Node*)n,n->type_ref(),a);
 }
 ResolveResult Node::propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b) {
 	::verify(a,b);
