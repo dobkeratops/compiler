@@ -140,7 +140,8 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 			return ResolveResult(COMPLETE);
 		}
 		if (!(flags & R_FINAL))
-			return ResolveResult(INCOMPLETE);
+			return ResolveResult(RS_ERROR);
+		// error is stronger than incomplete. incomplete means keep going, error means give up
 		
 		dbg(n->dump(0));
 		error_begin(n," type mismatch\n");
@@ -177,15 +178,15 @@ const Type* any_not_zero(const Type* a, const Type* b){return a?a:b;}
 ResolveResult Node::propogate_type_refs(int flags,const Node*n, Type*& a,Type*& b) {
 	::verify(a,b);
 	if (!(a || b))
-		return ResolveResult(INCOMPLETE);
+		return resolved|=ResolveResult(INCOMPLETE);
 	if (!a && b) {
 		a=b;
-		return ResolveResult(COMPLETE);}
+		return resolved|=ResolveResult(COMPLETE);}
 	else if (!b && a) {
 		b=a;
-		return ResolveResult(COMPLETE);
+		return resolved|=ResolveResult(COMPLETE);
 	}
-	return assert_types_eq(flags,n, a,b);
+	return resolved|=assert_types_eq(flags,n, a,b);
 }
 ResolveResult Node::propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b) {
 	::verify(a,b);
@@ -196,23 +197,23 @@ ResolveResult Node::propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b) {
 ResolveResult Node::propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b) {
 	::verify(a,b);
 	if (!(a || b))
-		return ResolveResult(INCOMPLETE);
+		return resolved|=ResolveResult(INCOMPLETE);
 	if (!a && b){
-		return ResolveResult(INCOMPLETE);
+		return resolved|=ResolveResult(INCOMPLETE);
 	}
 	if (!b && a) {
 		b=(Type*)a;
-		return ResolveResult(COMPLETE);
+		return resolved|=ResolveResult(COMPLETE);
 	}
-	return assert_types_eq(flags,n, a,b);
+	return resolved|=assert_types_eq(flags,n, a,b);
 	
 	return ResolveResult(INCOMPLETE);
 }
 ResolveResult Node::propogate_type_fwd(int flags,Expr* e, const Type*& a) {
-	return propogate_type_fwd(flags,e, a, e->type_ref());
+	return resolved|=propogate_type_fwd(flags,e, a, e->type_ref());
 }
 ResolveResult Node::propogate_type_expr_ref(int flags,Expr* e, Type*& a) {
-	return propogate_type_refs(flags,e, a, e->type_ref());
+	return resolved|=propogate_type_refs(flags,e, a, e->type_ref());
 }
 
 ResolveResult Node::propogate_type_refs(int flags,const Node* n, Type*& a,Type*& b,Type*& c) {
@@ -221,7 +222,7 @@ ResolveResult Node::propogate_type_refs(int flags,const Node* n, Type*& a,Type*&
 	ret|=propogate_type_refs(flags,n,a,b);
 	ret|=(c)?propogate_type_refs(flags,n,b,c):INCOMPLETE;
 	ret|=(c)?propogate_type_refs(flags,n,a,c):INCOMPLETE;
-	return ResolveResult(ret);
+	return resolved|=ResolveResult(ret);
 }
 ResolveResult Node::propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c) {
 	::verify(a,b,c);
@@ -229,7 +230,7 @@ ResolveResult Node::propogate_type_fwd(int flags,const Node* n,const Type*& a,Ty
 	ret|=propogate_type_fwd(flags,n,a,b);
 	ret|=propogate_type_fwd(flags,n,a,c);
 	ret|=propogate_type_refs(flags,n,b,c);
-	return ResolveResult(ret);
+	return resolved|=ResolveResult(ret);
 }
 /*
 ResolveResult propogate_type(int flags,const Node* n, ResolveResult& a,Type*& b) {
