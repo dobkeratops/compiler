@@ -307,8 +307,6 @@ extern bool g_lisp_mode;
 // module base: struct(holds fns,structs), function(local fns), raw module.
 extern const char* g_operator_symbol[];
 
-typedef int ResolveResult;
-enum {COMPLETE=0,INCOMPLETE=1,MISMATCH=2,RS_ERROR=INCOMPLETE|MISMATCH};
 
 // simplified vector<T> easier to debug,
 // break dependance on C++stdlib for easier transpile.

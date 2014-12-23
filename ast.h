@@ -5,7 +5,7 @@
 #include "node.h"
 
 typedef Type TParamVal;
-
+typedef int ResolveResult;
 
 /// Pattern eg arguments or pattern matching, if-let
 /// simplest must behave like 'ident'

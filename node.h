@@ -1,11 +1,16 @@
 #pragma once
 /// needed split this to break some circular dependancies.
 
+typedef int ResolveResult;
+enum {COMPLETE=0,INCOMPLETE=1,MISMATCH=2,RS_ERROR=INCOMPLETE|MISMATCH};
+
 struct Type;
 struct Expr;
+
 struct Node {
-private:Type* m_type=0;
-	
+private:
+	Type* m_type=0;
+
 	
 public:
 	int visited;					// anti-recursion flag.
@@ -67,7 +72,7 @@ public:
 	template<typename T> T* as()const{ auto ret= const_cast<T*>(dynamic_cast<T*>(this)); if (!ret){error(this,"expected,but got %s",this->kind_str());} return ret;};
 	template<typename T> T* isa()const{ return const_cast<T*>(dynamic_cast<T*>(this));};
 	virtual void recurse(std::function<void(Node* f)>& f){dbprintf("recurse not implemented for %s\n",this->kind_str());ASSERT(0&&"unimplemented recurse");};
-	
+
 	virtual CgValue compile(CodeGen& cg, Scope* sc, CgValue input);
 	CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_if(CodeGen& cg, Scope* sc);
@@ -137,6 +142,17 @@ public:
 	void force_type_todo_verify(const Type* t){ m_type=const_cast<Type*>(t);}
 	Type*& type_ref()			{return this->m_type;}
 	void dump_top()const;
+
+	// these would be extention methods if C++ had them
+	ResolveResult propogate_type_refs(int flags,const Node*n, Type*& a,Type*& b);
+	ResolveResult propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b);
+	ResolveResult propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b);
+	ResolveResult propogate_type_fwd(int flags,Expr* e, const Type*& a);
+	ResolveResult propogate_type_expr_ref(int flags,Expr* e, Type*& a);
+	ResolveResult propogate_type_refs(int flags,const Node* n, Type*& a,Type*& b,Type*& c);
+	ResolveResult propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c);
+	
+
 };
 
 

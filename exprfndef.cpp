@@ -243,8 +243,6 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 	this->set_receiver_if_unset(recs);
 	auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
 
-
-
 	if (definer_scope->capture_from){
 		sc->capture_from=definer_scope->capture_from; // this is an 'inner function' (lambda, or local)
 	}
@@ -260,7 +258,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 		//return ResolveResult();
 		flags=0; // dont throw type error here
 	}
-	
+
 	if (true || !this->is_generic()){
 		// Need to propogate types in generic function bodies eg polylambdas
 		// but dont need to terminate compiling until its instantiated properly
