@@ -60,7 +60,7 @@ Node* ExprOp::clone() const {
 	return (Node*) new ExprOp(this->name,this->pos, (Expr*) this->lhs->clone_if(), (Expr*) this->rhs->clone_if());
 }
 
-ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
+ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	verify_all();
 	Type* ret=0;
 	auto op_ident=name;
@@ -161,7 +161,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			//return propogate_type(flags, this, type_ref(),lhs->type_ref());
 		} else{
 			ASSERT(0);
-			return ResolvedType();
+			return ResolveResult();
 		}
 	}
 	else if (op_ident==COLON){ // TYPE ASSERTION
@@ -180,7 +180,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		if (this->rhs->name==PLACEHOLDER) {
 			this->rhs->set_type(desired);
 			this->set_type(desired);
-			return ResolvedType(this->type(),ResolvedType::COMPLETE);
+			return ResolveResult(this->type(),ResolveResult::COMPLETE);
 		} else {
 			if (auto t=this->rhs->type())
 				this->set_type(t);
@@ -218,12 +218,12 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 	else if (op_ident==DELETE ){
 		rhs->resolve(sc,nullptr,flags);
-		return ResolvedType();
+		return ResolveResult();
 	}
 
 	else if (op_ident==DOT || op_ident==ARROW) {
 		auto lhs_t=lhs->resolve(sc, 0,flags);//type doesn't push up- the only info we have is what field it needs
-		auto t=lhs_t.type;
+		auto t=lhs->type();
 		//		dbprintf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);dbprintf("\n");
 		
 		// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
@@ -255,7 +255,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 					dump_field_info(this,sc);
 				}
 				// no good.
-				return ResolvedType();
+				return ResolveResult();
 			} else if (auto call=rhs->as_block()){
 				auto method_name=call->call_expr->name;
 				// really we want to desugar this, a.foo(b) is just foo(a,b)
@@ -272,7 +272,7 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 		}
 		verify_all();
-		return ResolvedType(this->type(),ResolvedType::INCOMPLETE);
+		return ResolveResult(this->type(),ResolveResult::INCOMPLETE);
 	}
 	// remaining types are assumed overloadable.
 	//look for overload - infer fowards only first like C++
@@ -295,8 +295,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			dt=desired->sub;
 		}
 		auto ret=rhs->resolve(sc,dt,flags|R_PUT_ON_STACK);
-		if (!this->get_type() && ret.type){
-			auto ptr_type=new Type(this,PTR,(Type*)ret.type->clone());
+		if (!this->get_type() && rhs->type()){
+			auto ptr_type=new Type(this,PTR,(Type*)rhs->type()->clone());
 			this->set_type(ptr_type);
 			return propogate_type_fwd(flags,this, desired,ptr_type);
 		}
@@ -306,25 +306,25 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// todo: we can assert give type is one less pointer, if given
 		auto ret=rhs->resolve(sc,0,flags);
 		// todo: its' a typeparam constraint.  ptr[desired]==argls[0]
-		if (!this->get_type() && ret.type){
+		if (!this->get_type() && rhs->type()){
 			//			if (ret.type->name!=PTR) {
 			//				this->dump(0);
 			//				rhs->dump(0);
 			//				ret.type->dump(0);
 			//			}
 			//			ASSERT(ret.type->name==PTR);
-			if (ret.type->name!=PTR ){
+			if (rhs->type()->name!=PTR ){
 				if (flags & R_FINAL){
 					error_begin(this,"pointer expected for deref\n");
 					rhs->type()->dump(-1);
 					error_end(this);
 				}
 			} else {
-				this->set_type(ret.type->sub);
+				this->set_type(rhs->type()->sub);
 			}
 			return propogate_type_fwd(flags,this, desired, this->type_ref());
 		}
-		else return ResolvedType();
+		else return ResolveResult();
 	}
 	
 	
@@ -348,8 +348,8 @@ ResolvedType ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// defaults to same types all round.
 		auto lhst=lhs->resolve(sc,desired,flags);
 		auto rhst=rhs->resolve(sc,desired,flags&!R_PUT_ON_STACK);
-		propogate_type(flags,this, lhst,type_ref());
-		propogate_type(flags,this, rhst,type_ref());
+		propogate_type(flags,this, lhs->type_ref(),type_ref());
+		propogate_type(flags,this, rhs->type_ref(),type_ref());
 
 		if (flags & R_FINAL){
 			if (!(lhs->type()->is_number() && rhs->type()->is_number())){

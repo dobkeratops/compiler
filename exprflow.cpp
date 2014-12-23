@@ -8,7 +8,7 @@ void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{
 }
 
 
-ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
+ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
 	init->resolve_if(sc,0,flags);
 	cond->resolve_if(sc,Type::get_bool(),flags);
@@ -30,7 +30,7 @@ ResolvedType	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	};
 	propogate_type_fwd(flags, (Node*)this, desired, this->type_ref());
 	
-	return ResolvedType();
+	return ResolveResult();
 }
 
 
@@ -94,13 +94,13 @@ void ExprIf::dump(int depth) const {
 	newline(depth);dbprintf("})\n");
 };
 
-ResolvedType ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
+ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	auto sc=outer_s->make_inner_scope(&this->scope,outer_s->owner_fn,this);
 	
 	::verify(this->cond->get_type());
 	this->cond->resolve(sc,nullptr,flags); // condition can  be anything coercible to bool
 	auto body_type=this->body->resolve(sc,desired,flags);
-	Type* bt=body_type.type;
+	Type* bt=this->body->type();
 	if (else_block){
 		propogate_type_fwd(flags,this, desired,bt);
 		propogate_type(flags,this, bt);
@@ -267,7 +267,7 @@ ExprMatch::compile(CodeGen& cg, Scope* sc,CgValue input){
 	return r;
 }
 
-ResolvedType
+ResolveResult
 ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 	// the whole block gets a scope
 	auto match_sc=outer_sc->make_inner_scope(&this->scope,outer_sc->owner_fn,this);

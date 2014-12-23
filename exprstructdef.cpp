@@ -281,7 +281,7 @@ int ExprStructDef::first_user_field_index() const{
 	return i;
 }
 
-ResolvedType ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
+ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
 
 	definer_scope->add_struct(this);
 	if (!this->get_type()) {

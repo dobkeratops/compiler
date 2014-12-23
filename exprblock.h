@@ -52,8 +52,8 @@ struct ExprBlock :public ExprScopeBlock{
 	CgValue 		compile_sub(CodeGen& cg, Scope* sc,RegisterName dst);
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
-	ResolvedType	resolve(Scope* scope, const Type* desired,int flags);
-	ResolvedType	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
+	ResolveResult	resolve(Scope* scope, const Type* desired,int flags);
+	ResolveResult	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
 	int	get_elem_count()const override{return this->argls.size();}
 	Node*	get_elem_node(int i) override{return this->argls[i];}
 	void		recurse(std::function<void(Node*)>&) override;
@@ -62,7 +62,7 @@ struct ExprBlock :public ExprScopeBlock{
 /// Where Block - eg 'a where{b;c;d;}' === '{b;c;d;return a}'
 struct ExprWhere : ExprBlock {
 	const char* kind_str() const  override		{return "where";}
-	ResolvedType resolve(Scope* scope, const Type* desired, int flags);
+	ResolveResult resolve(Scope* scope, const Type* desired, int flags);
 	void	dump(int depth) const;
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	ExprBlock* 		as_block() override 	{return nullptr;}

@@ -84,10 +84,10 @@ Node* ExprBlock::clone() const {
 	return (Node*)r;
 }
 
-ResolvedType ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
+ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 	return this->resolve_sub(sc,desired,flags,nullptr);
 }
-ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
+ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
 	verify_all();
 	if (this->type()) this->type()->resolve(sc,nullptr,flags);
 	this->def->resolve_if(sc, nullptr, flags);
@@ -146,20 +146,20 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 
 			return propogate_type(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
 		}
-		else {ASSERT(0);return ResolvedType();}
+		else {ASSERT(0);return ResolveResult();}
 	}
 	else if (this->is_subscript()) {
 		// array indexing operator TODO: check this isn't itself a Type, if we want templates anywhere.
 		auto array_type=this->call_expr->resolve(sc,nullptr,flags); // todo - it could be _[desired]. forward should give possibilities
-		if (array_type.type){
-			ASSERT(array_type.type->is_array()||array_type.type->is_pointer());
+		if (auto t=call_expr->type()){
+			ASSERT(t->is_array()||t->is_pointer());
 			for (auto i=0; i<argls.size(); i++)  {
 				argls[i]->resolve(sc,nullptr,flags&!R_PUT_ON_STACK ); // TODO any indexing type? any type extracted from 'array' ?
 			}
-			const Type* array_elem_type=array_type.type->sub;
+			const Type* array_elem_type=t->sub;
 			propogate_type_fwd(flags,this, array_elem_type);
 			return propogate_type_fwd(flags,this, desired);
-		} else return ResolvedType();
+		} else return ResolveResult();
 	} else if (this->is_struct_initializer()){
 		dbg(this->type()->dump_if(-1));dbg(newline(0));
 		auto si=StructInitializer(sc,this);
@@ -181,7 +181,7 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 			this->argls[0]=new ExprLiteral(src->pos,tmp,(int)strlen(tmp));
 			this->argls[0]->resolve(sc,nullptr,0);
 			this->set_type(src->get_type());
-			return ResolvedType();
+			return ResolveResult();
 		}
 		bool indirect_call=false;
 		auto call_ident=dynamic_cast<ExprIdent*>(this->call_expr);
@@ -196,7 +196,9 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 		}
 		else{
 			// an ident can't be just resolved like this
-			fn_type=this->call_expr->resolve(sc,nullptr,flags).type;
+			this->call_expr->resolve(sc,nullptr,flags);
+			fn_type=this->call_expr->type();
+			
 			//			fn_type_r=this->call_expr->resolve(sc,nullptr,flags);
 			//		} else {
 			//			fn_type_r=this->
@@ -254,10 +256,10 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 				if (!this->type())
 					error(this,"can't call/ type check failed %s",this->call_expr->name_str());
 			
-			return ResolvedType();
+			return ResolveResult();
 		}
 	}
-	return ResolvedType();
+	return ResolveResult();
 }
 
 

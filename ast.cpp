@@ -30,15 +30,15 @@ const Pattern* Pattern::get_elem(int i) const{
 Name Pattern::as_name()const{
 	return this->name;
 }
-ResolvedType
+ResolveResult
 Pattern::resolve(Scope* sc, const Type* rhs, int flags){
 	return this->resolve_with_type(sc,rhs,flags);
 }
 
-ResolvedType
+ResolveResult
 Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	if (!this)
-		return ResolvedType();
+		return ResolveResult();
 	if (this->name==EXPRESSION){
 		((Node*)(this->sub))->resolve(sc,rhs,flags);
 		return propogate_type(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
@@ -63,7 +63,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		if (rhs)
 			return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
 		else
-			return ResolvedType();
+			return ResolveResult();
 	} else if (this->name==PATTERN_BIND){
 		// get or create var here
 		auto v=this->sub; auto p=v->next; ASSERT(p);
@@ -99,16 +99,16 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		if (auto sd=sc->find_struct_name_type_if(sc,this->name,this->type()))
 		{
 			this->set_struct_type(sd);
-			return ResolvedType();
+			return ResolveResult();
 		}
 		if (auto sd=sc->find_struct_named(this->name)){
 			this->set_struct_type(sd);
-			return ResolvedType();
+			return ResolveResult();
 		}
 		if (auto sd=sc->find_inner_def_named(sc,this, 0)){
 
 			this->set_struct_type(sd);
-			return ResolvedType();
+			return ResolveResult();
 		}
 
 		// TODO named-constants
@@ -116,12 +116,12 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		// TODO nullptr
 		if (is_number(this->name)){
 			if (!this->type()) {this->set_type(Type::get_int());}
-			return ResolvedType();
+			return ResolveResult();
 		}
 		else
 		if (this->name==PLACEHOLDER){
 			this->set_type(rhs);
-			return ResolvedType();
+			return ResolveResult();
 			
 		} else {
 			// TODO - scala style quoted variable for comparison
@@ -133,10 +133,10 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 			if (rhs)
 				return propogate_type_fwd(flags, this, rhs, v->type_ref());
 			else
-				return ResolvedType();
+				return ResolveResult();
 		}
 	}
-	return ResolvedType();
+	return ResolveResult();
 }
 
 // TODO: we suspect this will be more complex, like Type translation (
@@ -306,12 +306,12 @@ void Pattern::dump(int depth)const{
 	}
 	if (this->type()) {dbprintf(":"); this->type()->dump_if(-1);dbprintf(" ");}
 }
-ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
+ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled .
 		propogate_type_fwd(flags,this, desired,this->type_ref());
-		return ResolvedType(this->type_ref(),ResolvedType::COMPLETE);
+		return ResolveResult(this->type_ref(),ResolveResult::COMPLETE);
 	}
 	
 	propogate_type_fwd(flags,this, desired,this->type_ref());
@@ -385,9 +385,9 @@ ResolvedType ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 			assist_find_symbol(this,scope,this->name);
 			error_end(this);
 		}
-		return ResolvedType();
+		return ResolveResult();
 	}
-	return ResolvedType();
+	return ResolveResult();
 }
 void ExprIdent::dump(int depth) const {
 	if (!this) return;
@@ -468,7 +468,7 @@ void	ExprLiteral::translate_typeparams(const TypeParamXlat& tpx){
 	
 }
 
-ResolvedType ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
+ResolveResult ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
 	if (!this->owner_scope){
 		this->next_of_scope=sc->global->literals;
 		sc->global->literals=this;
@@ -579,7 +579,7 @@ size_t ArgDef::size()const {
 size_t ArgDef::alignment() const	{
 	return type()->alignment();
 }//todo, 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
-ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
+ResolveResult ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	dbg_resolve("resolving arg %s\n",this->name_str());
 	propogate_type_fwd(flags,this,desired,this->type_ref());
 	if (this->type()){
@@ -588,7 +588,7 @@ ResolvedType ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 //	if (this->pattern)
 //		this->pattern->resolve(sc,this->type(),flags);
 	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
-	return ResolvedType(this->type(), ResolvedType::COMPLETE);
+	return ResolveResult(this->type(), ResolveResult::COMPLETE);
 }
 void ArgDef::recurse(std::function<void(Node*)>&f){
 	this->type()->recurse(f);

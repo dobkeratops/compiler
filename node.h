@@ -22,10 +22,10 @@ public:
 
 	void clear_def();
 	virtual void dump(int depth=0) const;
-	virtual ResolvedType resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolvedType(nullptr, ResolvedType::INCOMPLETE);};
-	ResolvedType resolve_if(Scope* scope, const Type* desired,int flags){
+	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(nullptr, ResolveResult::INCOMPLETE);};
+	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
 		if (this) return this->resolve(scope,desired,flags);
-		else return ResolvedType();
+		else return ResolveResult();
 	}
 	virtual const char* kind_str()const	{return"node";}
 	void	replace_name_if(Name if_is,Name replacement){if (name==if_is) name=replacement;}

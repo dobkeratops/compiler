@@ -51,9 +51,9 @@ struct  ExprFnDef : ExprDef {
 	Node*			instanced_by()const{if (this->instance_of){return this->refs;}else return nullptr;}
 	void			dump(int ind) const;
 	void			dump_sub(int ind,Name prefix) const;
-	ResolvedType	resolve_function(Scope* definer,ExprStructDef* receiver, const Type* desired, int flags);
-	ResolvedType	resolve(Scope* scope,const Type* desired,int flags);
-	ResolvedType	resolve_call(Scope* scope,const Type* desired,int flags);
+	ResolveResult	resolve_function(Scope* definer,ExprStructDef* receiver, const Type* desired, int flags);
+	ResolveResult	resolve(Scope* scope,const Type* desired,int flags);
+	ResolveResult	resolve_call(Scope* scope,const Type* desired,int flags);
 	CaptureVars*		get_or_create_capture(ExprFnDef* src);
 	void			translate_typeparams(const TypeParamXlat& tpx)override;
 	vector<TParamDef*>* get_typeparams() override{return &this->typeparams;}

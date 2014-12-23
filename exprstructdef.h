@@ -71,7 +71,7 @@ struct ExprStructDef: ExprDef {
 	void			inherit_from(Scope* sc, Type* base);
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
-	ResolvedType	resolve(Scope* scope, const Type* desired,int flags)override;
+	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	
 	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;

@@ -24,7 +24,7 @@ struct ExprOp: public Expr{
 	ExprOp*		as_op()const override		{return const_cast<ExprOp*>(this);}
 	const char* kind_str()const override		{return"operator";}
 	void 		translate_typeparams(const TypeParamXlat& tpx) override;
-	ResolvedType resolve(Scope* scope, const Type* desired,int flags) override;
+	ResolveResult resolve(Scope* scope, const Type* desired,int flags) override;
 	void 		find_vars_written(Scope* s, set<Variable*>& vars) const override;
 	void 		verify() override;
 	int			num_levels(int name);

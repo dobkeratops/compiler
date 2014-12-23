@@ -144,7 +144,7 @@ struct Type : ExprDef {
 	
 	
 	void			translate_typeparams(const TypeParamXlat& tpx) override;
-	virtual ResolvedType	resolve(Scope* s, const Type* desired,int flags);
+	virtual ResolveResult	resolve(Scope* s, const Type* desired,int flags);
 	virtual void verify();
 	CgValue	compile(CodeGen& cg, Scope* sc, CgValue input) override;
 };

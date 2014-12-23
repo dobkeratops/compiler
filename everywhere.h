@@ -161,7 +161,7 @@ struct ExprTypeDef;
 struct Scope;
 struct Type;
 struct Variable;
-struct ResolvedType;
+struct ResolveResult;
 struct Module;
 struct TypeParamXlat;
 struct VarDecl;
@@ -308,22 +308,21 @@ extern bool g_lisp_mode;
 extern const char* g_operator_symbol[];
 
 
-struct ResolvedType{
+struct ResolveResult{
 	// TODO: This is a misfeature;
 	// return value from Resolve should just be status
 	// we require the result information to stay on the type itself.
 	// we keep getting bugs from not doing that.
-	enum Status:int {COMPLETE=0,INCOMPLETE=1,ERROR=3};
+	enum Status:int {COMPLETE=0,INCOMPLETE=1,MISMATCH=2,ERROR=INCOMPLETE|MISMATCH};
 	// complete is zero, ERROR is 3 so we can
 	// carries information from type propogation
-	Type* type=0;
 	Status status;
-	void combine(const ResolvedType& other){
+	void combine(const ResolveResult& other){
 		status=(Status)((int)status|(int)other.status);
 	}
-	ResolvedType(){status=INCOMPLETE;}
-	ResolvedType(const Type* t, Status s){type=const_cast<Type*>(t); status=s;}
-	ResolvedType(const Type* t, int s):ResolvedType(t,(Status)s){}
+	ResolveResult(){status=INCOMPLETE;}
+	ResolveResult(const Type* t, Status s){ status=s;}
+	ResolveResult(const Type* t, int s):ResolveResult(t,(Status)s){}
 	//operator Type* ()const {return type;}
 	//operator bool()const { return status==COMPLETE && type!=0;}
 };

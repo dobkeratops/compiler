@@ -87,7 +87,7 @@ void dbprintf(Name& n){
 }
 void dbprintf(Node* n){n->dump(-1);}
 
-ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
+ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
 
 void print_tok(Name n){
 	dbprintf("%s ",getString(n));
@@ -127,20 +127,20 @@ int get_typeparam_index(const vector<TParamDef*>& tps, Name name) {
 	return -1;
 }
 
-ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type* b) {
+ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type* b) {
 	if (!n->pos.line){
 		error(n,"AST node hasn't been setup properly");
 	}
 	ASSERT(a && b);
 	// TODO: variadic args shouldn't get here:
 	if (a->name==ELIPSIS||b->name==ELIPSIS)
-		return ResolvedType(a,ResolvedType::COMPLETE);
+		return ResolveResult(a,ResolveResult::COMPLETE);
 	if (!a->is_equal(b)){
 		if (a->is_coercible(b)){
-			return ResolvedType(0,ResolvedType::COMPLETE);
+			return ResolveResult(0,ResolveResult::COMPLETE);
 		}
 		if (!(flags & R_FINAL))
-			return ResolvedType(0,ResolvedType::INCOMPLETE);
+			return ResolveResult(0,ResolveResult::INCOMPLETE);
 		
 		dbg(n->dump(0));
 		error_begin(n," type mismatch\n");
@@ -153,9 +153,9 @@ ResolvedType assert_types_eq(int flags, const Node* n, const Type* a,const Type*
 		}
 #endif
 		error_end(n);
-		return ResolvedType(a,ResolvedType::ERROR);
+		return ResolveResult(a,ResolveResult::ERROR);
 	}
-	return ResolvedType(a,ResolvedType::COMPLETE);
+	return ResolveResult(a,ResolveResult::COMPLETE);
 }
 void verify(const Type* a){
 	if (a){
@@ -174,79 +174,79 @@ void verify(const Type* a,const Type* b,const Type* c){
 	verify(c);
 }
 const Type* any_not_zero(const Type* a, const Type* b){return a?a:b;}
-ResolvedType propogate_type(int flags,const Node*n, Type*& a,Type*& b) {
+ResolveResult propogate_type(int flags,const Node*n, Type*& a,Type*& b) {
 	verify(a,b);
 	if (!(a || b))
-		return ResolvedType(0,ResolvedType::INCOMPLETE);
+		return ResolveResult(0,ResolveResult::INCOMPLETE);
 	if (!a && b) {
 		a=b;
-		return ResolvedType(a,ResolvedType::COMPLETE);}
+		return ResolveResult(a,ResolveResult::COMPLETE);}
 	else if (!b && a) {
 		b=a;
-		return ResolvedType(b,ResolvedType::COMPLETE);
+		return ResolveResult(b,ResolveResult::COMPLETE);
 	}
 	return assert_types_eq(flags,n, a,b);
 }
-ResolvedType propogate_type(int flags, Expr *n, Type*& a,Type*& b) {
+ResolveResult propogate_type(int flags, Expr *n, Type*& a,Type*& b) {
 	verify(a,b);
 	propogate_type(flags,(const Node*)n,a,b);
 	propogate_type(flags,(const Node*)n,n->type_ref(),b);
 	return propogate_type(flags,(const Node*)n,n->type_ref(),a);
 }
-ResolvedType propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b) {
+ResolveResult propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b) {
 	verify(a,b);
 	if (!(a || b))
-		return ResolvedType(0,ResolvedType::INCOMPLETE);
+		return ResolveResult(0,ResolveResult::INCOMPLETE);
 	if (!a && b){
-		return ResolvedType(b,ResolvedType::INCOMPLETE);
+		return ResolveResult(b,ResolveResult::INCOMPLETE);
 	}
 	if (!b && a) {
 		b=(Type*)a;
-		return ResolvedType(a,ResolvedType::COMPLETE);
+		return ResolveResult(a,ResolveResult::COMPLETE);
 	}
 	return assert_types_eq(flags,n, a,b);
 	
-	return ResolvedType(b,ResolvedType::INCOMPLETE);
+	return ResolveResult(b,ResolveResult::INCOMPLETE);
 }
-ResolvedType propogate_type_fwd(int flags,Expr* e, const Type*& a) {
+ResolveResult propogate_type_fwd(int flags,Expr* e, const Type*& a) {
 	return propogate_type_fwd(flags,e, a, e->type_ref());
 }
-ResolvedType propogate_type(int flags,Expr* e, Type*& a) {
+ResolveResult propogate_type(int flags,Expr* e, Type*& a) {
 	return propogate_type(flags,e, a, e->type_ref());
 }
 
-ResolvedType propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c) {
+ResolveResult propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c) {
 	verify(a,b,c);
-	int ret=ResolvedType::COMPLETE;
+	int ret=ResolveResult::COMPLETE;
 	ret|=propogate_type(flags,n,a,b).status;
-	ret|=(c)?propogate_type(flags,n,b,c).status:ResolvedType::INCOMPLETE;
-	ret|=(c)?propogate_type(flags,n,a,c).status:ResolvedType::INCOMPLETE;
+	ret|=(c)?propogate_type(flags,n,b,c).status:ResolveResult::INCOMPLETE;
+	ret|=(c)?propogate_type(flags,n,a,c).status:ResolveResult::INCOMPLETE;
 	const Type* any=any_not_zero(a,any_not_zero(b,c));
-	return ResolvedType(any,ret);
+	return ResolveResult(any,ret);
 }
-ResolvedType propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c) {
+ResolveResult propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c) {
 	verify(a,b,c);
-	int ret=ResolvedType::COMPLETE;
+	int ret=ResolveResult::COMPLETE;
 	ret|=propogate_type_fwd(flags,n,a,b).status;
 	ret|=propogate_type_fwd(flags,n,a,c).status;
 	ret|=propogate_type(flags,n,b,c).status;
-	return ResolvedType(any_not_zero(a,any_not_zero(b,c)),ret);
+	return ResolveResult(any_not_zero(a,any_not_zero(b,c)),ret);
 }
-ResolvedType propogate_type(int flags,const Node* n, ResolvedType& a,Type*& b) {
-	verify(a.type,b);
+/*
+ResolveResult propogate_type(int flags,const Node* n, ResolveResult& a,Type*& b) {
 	a.combine(propogate_type(flags,n, a.type,b));
 	return a;
 }
-ResolvedType propogate_type(int flags,Expr* e, ResolvedType& a) {
+ResolveResult propogate_type(int flags,Expr* e, ResolveResult& a) {
 	return propogate_type(flags,e, a, e->type_ref());
 }
 
-ResolvedType propogate_type(int flags,const Node* n,ResolvedType& a,Type*& b,const Type* c) {
-	verify(a.type,b,c);
+ResolveResult propogate_type(int flags,const Node* n,ResolveResult& a,Type*& b,const Type* c) {
 	a.combine(propogate_type_fwd(flags,n, c,b));
 	a.combine(propogate_type(flags,n, a.type,b));
 	return a;
 }
+ */
 ExprStructDef* dump_find_struct(Scope* s, Name name){
 	for (;s;s=s->parent_or_global()){
 		dbprintf("find %s in in scope %s\n",getString(name),s->name());
@@ -599,7 +599,7 @@ void dump(vector<T*>& src) {
 	}
 }
 
-ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
+ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 
 	ExprStructDef* sd=nullptr;
 #if DEBUG >=2
@@ -615,7 +615,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 		propogate_type_fwd(flags,si, desiredType,si->call_expr->type_ref());
 		sd=si->call_expr->type()->def->as_struct_def();
 		if (!sd)
-			return ResolvedType();
+			return ResolveResult();
 		dbg(sd->dump(-1));
 		dbg_type("\n");
 		si->call_expr->set_type(desiredType);
@@ -630,7 +630,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 				error_begin(si->call_expr,"can't find struct");
 				si->call_expr->dump(-1);error_end(si->call_expr);
 			}
-			return ResolvedType();
+			return ResolveResult();
 		}
 
 	}
@@ -702,7 +702,7 @@ ResolvedType StructInitializer::resolve(const Type* desiredType,int flags) {
 }
 
 
-ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) {
+ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) {
 	verify_all();
 
 	int num_resolved_args=0;
@@ -721,22 +721,23 @@ ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scop
 	}
 	
 	if (block->get_fn_call() && num_resolved_args==block->argls.size())
-		return ResolvedType(block->get_fn_call()->ret_type,ResolvedType::COMPLETE);
+		return ResolveResult(block->get_fn_call()->ret_type,ResolveResult::COMPLETE);
 
 //	11ASSERT(block->call_target==0);
 	// is it just an array access.
 	if (block->is_subscript()){
 		auto object_t=block->call_expr->resolve(scope,nullptr,flags);
 		auto index_t=block->argls[0]->resolve(scope,nullptr,flags);
+		auto obj_t=block->call_expr->type();
 		//find the method "index(t,index_t)"
 		// for the minute, just assume its' an array
 		// TODO: operator overload.
 
-		if (object_t.type && index_t.type) {
-			ASSERT(object_t.type->is_array() || object_t.type->is_pointer());
-			return ResolvedType(object_t.type->sub,ResolvedType::COMPLETE);
+		if (obj_t && block->argls[0]->type()) {
+			ASSERT(obj_t->is_array() || obj_t->is_pointer());
+			return ResolveResult(obj_t->sub,ResolveResult::COMPLETE);
 		}
-		return ResolvedType();
+		return ResolveResult();
 	}
 	verify_all();
 
@@ -747,7 +748,7 @@ ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scop
 	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_name(),block,args_with_receiver, desired,flags);
 	auto fnc=call_target;
 	if (!call_target){
-		return ResolvedType();
+		return ResolveResult();
 	}
 	verify_all();
 	if (call_target!=block->get_fn_call()) {
@@ -782,7 +783,7 @@ ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scop
 				
 			}
 		}
-		return ResolvedType();
+		return ResolveResult();
 		// generic function, and we have some types to throw in...
 		// if its' a generic function, we have to instantiate it here.
 /*
@@ -822,7 +823,7 @@ ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scop
 	else  {
 		if (flags &1) error(block,"can't resolve call\n");
 		verify_all();
-		return ResolvedType();
+		return ResolveResult();
 	}
 	verify_all();
 }

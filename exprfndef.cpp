@@ -210,14 +210,14 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 //             so set 'capture_from' to its own scope.
 //
 //inner-function: 'definer_scope' has capture_from set - just take it.
-ResolvedType ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int flags) {
+ResolveResult ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int flags) {
 	verify_all();
 	if (auto sd=dynamic_cast<ExprStructDef*>(definer_scope->owner_fn)){
 		return resolve_function(definer_scope,sd,desired,flags);
 	}
 	else return resolve_function(definer_scope,nullptr,desired,flags);
 }
-ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* recs,const Type* desired,int flags) {
+ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* recs,const Type* desired,int flags) {
 	verify_all();
 	
 	// propogate given arguments eg polymorphic lambda..
@@ -257,7 +257,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		for (auto ins=this->instances; ins;ins=ins->next_instance){
 			ins->resolve(scope,nullptr,flags);
 		}
-		//return ResolvedType();
+		//return ResolveResult();
 		flags=0; // dont throw type error here
 	}
 	
@@ -294,7 +294,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 
 			//			this->ret_type=ret.type;
 			
-			propogate_type(flags, (const Node*)this, ret,this->ret_type);
+			propogate_type_fwd(flags, (const Node*)this, this->body->type(),this->ret_type);
 		}
 	}
 
@@ -346,7 +346,7 @@ ResolvedType ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* re
 		this->fn_type->resolve_if(scope,nullptr,flags);
 		this->return_type()->resolve_if(scope,nullptr,flags);
 	}
-	return ResolvedType(fn_type,ResolvedType::COMPLETE);
+	return ResolveResult(fn_type,ResolveResult::COMPLETE);
 }
 
 CaptureVars* ExprFnDef::get_or_create_capture(ExprFnDef* src){
@@ -370,21 +370,21 @@ int ExprFnDef::type_parameter_index(Name n) const {
 	}
 	return -1;
 }
-ResolvedType ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags) {
+ResolveResult ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags) {
 	if (this->is_generic()){
 		for (auto ins=this->instances; ins;ins=ins->next_instance){
 			ins->resolve(scope,nullptr,flags);
 		}
-		return ResolvedType();
+		return ResolveResult();
 	}
 	
 	propogate_type_fwd(flags,this, desired,this->ret_type);
 	
 	auto rt=this->body->resolve(scope,desired,flags);
-	dbprintf("resolve %s yields type:", getString(this->as_name()));if (rt.type) rt.type->dump(-1);printf("\n");
+	dbprintf("resolve %s yields type:", getString(this->as_name()));if (auto t=this->body->type()) t->dump(-1);printf("\n");
 	// awkwardness says: type error return is more like an enum that doesn't return a type?
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
-	return propogate_type(flags,this, rt,this->ret_type); // todo: hide FnDef->type. its too confusing
+	return propogate_type(flags,this, this->body->type_ref(),this->ret_type); // todo: hide FnDef->type. its too confusing
 }
 bool Type::is_typeparam(Scope* sc)const{
 	return sc->get_typeparam_for(const_cast<Type*>(this))!=0;

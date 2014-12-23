@@ -10,7 +10,7 @@ typedef Type TParamVal;
 /// Pattern eg arguments or pattern matching, if-let
 /// simplest must behave like 'ident'
 struct Pattern : Node {
-	ResolvedType	resolve(Scope* sc, const Type* desired, int flags)override;
+	ResolveResult	resolve(Scope* sc, const Type* desired, int flags)override;
 	Pattern* next=0;
 	Pattern* sub=0;
 	Pattern(SrcPos _pos, Name n){pos=_pos,name=n;}
@@ -24,7 +24,7 @@ struct Pattern : Node {
 	void	dump(int indent)const;
 	Node*	clone()const;
 	// if-let , args, or match arms would all call this.
-	ResolvedType	resolve_with_type(Scope* sc, const Type* rhs, int flags);
+	ResolveResult	resolve_with_type(Scope* sc, const Type* rhs, int flags);
 	CgValue	compile(CodeGen& cg, Scope* sc, CgValue input) override;
 	// subroutines of pattern compile, allows seperation into if (cond){bind..}
 	// brute force just uses 'compile' and hopes llvm can optimize..
@@ -93,7 +93,7 @@ struct ExprLiteral : ExprDef {
 	bool is_string() const		{return type_id==T_CONST_STRING;}
 	bool is_undefined()const	{return false;}
 	const char* as_str()const	{return type_id==T_CONST_STRING?u.val_str:"";}
-	ResolvedType resolve(Scope* scope, const Type* desired,int flags);
+	ResolveResult resolve(Scope* scope, const Type* desired,int flags);
 	void translate_typeparams(const TypeParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue input) override;
 	ExprLiteral* as_literal() override{ return this;};
@@ -126,7 +126,7 @@ struct ArgDef :ExprDef{
 	
 	
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
-	ResolvedType	resolve(Scope* sc, const Type* desired, int flags) override;
+	ResolveResult	resolve(Scope* sc, const Type* desired, int flags) override;
 	ArgDef*	as_arg_def()		{return this;}
 	void		recurse(std::function<void(Node*)>&) override;
 };
@@ -176,7 +176,7 @@ struct ExprIdent :Expr{
 	bool		is_undefined()const				{return is_placeholder();}
 	void		translate_typeparams(const TypeParamXlat& tpx) override;
 	CgValue		compile(CodeGen&cg, Scope* sc, CgValue input) override;
-	ResolvedType	resolve(Scope* scope, const Type* desired,int flags) override;
+	ResolveResult	resolve(Scope* scope, const Type* desired,int flags) override;
 	void		recurse(std::function<void(Node*)>&) override;
 };
 // Identifier with given type-parameters

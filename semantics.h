@@ -4,24 +4,22 @@
 struct Type;
 struct TParamDef;
 struct Expr;
-struct ResolvedType;
+struct ResolveResult;
 struct Name;
 // type inference
-ResolvedType propogate_type(int flags,const Node*n, Type*& a,Type*& b);
-ResolvedType propogate_type(int flags, Expr *n, Type*& a,Type*& b);
-ResolvedType propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b);
-ResolvedType propogate_type_fwd(int flags,Expr* e, const Type*& a);
-ResolvedType propogate_type(int flags,Expr* e, Type*& a);
-ResolvedType propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c);
-ResolvedType propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c);
-ResolvedType propogate_type(int flags,const Node* n, ResolvedType& a,Type*& b);
-ResolvedType propogate_type(int flags,const Node* n,ResolvedType& a,Type*& b,const Type* c);
+ResolveResult propogate_type(int flags,const Node*n, Type*& a,Type*& b);
+ResolveResult propogate_type(int flags, Expr *n, Type*& a,Type*& b);
+ResolveResult propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b);
+ResolveResult propogate_type_fwd(int flags,Expr* e, const Type*& a);
+ResolveResult propogate_type(int flags,Expr* e, Type*& a);
+ResolveResult propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c);
+ResolveResult propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c);
 
 struct CaptureVars;
 
 
-ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) ;
-ResolvedType resolve_make_fn_call(Expr* receiver,ExprBlock* block,Scope* scope,const Type* desired);
+ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags) ;
+ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block,Scope* scope,const Type* desired);
 struct Call;
 struct FnName;
 
@@ -43,7 +41,7 @@ struct StructInitializer{ // named initializer
 	vector<Expr*>	value;
 	void map_fields()								{resolve(nullptr,0);}//todo..seperate out}
 	StructInitializer(Scope* s,ExprBlock* block)	{si=block,sc=s;};
-	ResolvedType resolve(const Type* desiredType,int flags);
+	ResolveResult resolve(const Type* desiredType,int flags);
 };
 
 typedef Type TParamVal;
