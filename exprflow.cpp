@@ -16,7 +16,7 @@ ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags)
 	body->resolve_if(sc,desired,flags);
 	if (else_block) {
 		else_block->resolve_if(sc,desired,flags);
-		propogate_type(flags, (Node*)this, this->type_ref(), else_block->type_ref());
+		propogate_type_refs(flags, (Node*)this, this->type_ref(), else_block->type_ref());
 	}
 	//without an else bllock, we can't return
 	else{
@@ -103,17 +103,17 @@ ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	Type* bt=this->body->type();
 	if (else_block){
 		propogate_type_fwd(flags,this, desired,bt);
-		propogate_type(flags,this, bt);
+		propogate_type_expr_ref(flags,this, body->type_ref());
 		else_block->resolve_if(sc,bt,flags);
-		propogate_type(flags,this, this->body->type_ref(), else_block->type_ref());
-		propogate_type(flags,this, this->type_ref(), else_block->type_ref());
+		propogate_type_refs(flags,this, this->body->type_ref(), else_block->type_ref());
+		propogate_type_refs(flags,this, this->type_ref(), else_block->type_ref());
 		
 #if DEBUG >2
 		this->body->type()->dump_if(0);
 		this->else_block->type()->dump_if(0);
 		this->type()->dump_if(0);
 #endif
-		return propogate_type(flags,this, this->type_ref(), this->body->type_ref());
+		return propogate_type_refs(flags,this, this->type_ref(), this->body->type_ref());
 	}
 	else {
 		// TODO: Could it actually return Body|void ? perhaps we could implicityly ask for that?
@@ -288,8 +288,8 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 		a->body->resolve_if(a->scope, this->type(), flags);
 		
 		//all arms outputs have same typeas the whole output
-		propogate_type(flags,this, a->body->type_ref(),this->type_ref());
-		propogate_type(flags,this, a->body->type_ref(),a->type_ref());
+		propogate_type_refs(flags,this, a->body->type_ref(),this->type_ref());
+		propogate_type_refs(flags,this, a->body->type_ref(),a->type_ref());
 		
 	}
 	return propogate_type_fwd(flags,this, desired, this->type_ref());

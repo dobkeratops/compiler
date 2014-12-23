@@ -83,11 +83,11 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 					error(this,"break <expression> requires else block with alternate return expression, same type. Use 'break break <expr>' for nesting");
 				}
 				if (else_block){
-					propogate_type(flags,(Node*)this,rhs->type_ref(),else_block->type_ref());
+					propogate_type_refs(flags,(Node*)this,rhs->type_ref(),else_block->type_ref());
 				}
 			}
-			propogate_type(flags,(Node*)this, rhs->type_ref(),loop->type_ref());
-			propogate_type(flags,(Node*)this,this->type_ref(),this->rhs->type_ref());
+			propogate_type_refs(flags,(Node*)this, rhs->type_ref(),loop->type_ref());
+			propogate_type_refs(flags,(Node*)this,this->type_ref(),this->rhs->type_ref());
 		}
 		return propogate_type_fwd(flags, this, desired, this->type_ref());
 	}
@@ -123,7 +123,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			const Type* tt=rhs?rhs->as_type():nullptr; if (!tt) tt=this->type(); if (!tt) tt=desired;
 			lhs->resolve(sc, tt,flags);
 			if (!lhs->is_ident())
-				return propogate_type(flags, this, lhs->type_ref(),type_ref());
+				return propogate_type_refs(flags, this, lhs->type_ref(),type_ref());
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			// todo: get this in the main parser
 			auto lhsi=expect_cast<ExprIdent>(lhs);
@@ -145,7 +145,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				sc->try_find_struct(t);// instantiate
 			}
 
-			return propogate_type(flags, this, v->type_ref(),type_ref());
+			return propogate_type_refs(flags, this, v->type_ref(),type_ref());
 		}
 		else if (op_ident==ASSIGN){
 			ASSERT(this->lhs && this->rhs);
@@ -155,7 +155,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			lhs->resolve(sc,rhs->type_ref(),flags);
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
 
-			propogate_type(flags,this, rhs->type_ref(), lhs->type_ref());
+			propogate_type_refs(flags,this, rhs->type_ref(), lhs->type_ref());
 			return propogate_type_fwd(flags,this, desired, type_ref());
 			//propogate_type(flags,this, type_ref(),rhs->type_ref());
 			//return propogate_type(flags, this, type_ref(),lhs->type_ref());
@@ -174,7 +174,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			ASSERT(dynamic_cast<Type*>(rhs))
 		}
 		lhs->set_def(v);
-		return propogate_type(flags, this, v->type_ref(),type_ref());
+		return propogate_type_refs(flags, this, v->type_ref(),type_ref());
 	} else if (op_ident==AS){
 		this->lhs->resolve(sc,nullptr,flags);
 		if (this->rhs->name==PLACEHOLDER) {
@@ -203,7 +203,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			this->set_type( new Type(this,PTR,(Type*)b->get_type()->clone()) );
 		}
 		if (get_type())
-			propogate_type(flags, (Node*)this, this->get_type()->sub, b->type_ref());
+			propogate_type_refs(flags, (Node*)this, this->get_type()->sub, b->type_ref());
 		
 		if (rhs->is_subscript()){
 			b->call_expr->resolve(sc,get_type()?get_type()->sub:nullptr,flags);
@@ -239,16 +239,16 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				auto fi=getNumberInt(rhs->name);
 				if (auto t=this->lhs->type()){
 					auto elem_t = t->get_elem(fi);
-					propogate_type(flags, this, elem_t);
+					propogate_type_expr_ref(flags, this, elem_t);
 					return propogate_type_fwd(flags,this, desired, this->type_ref());
 				}
 			}
 			else if (auto field_name=rhs->as_ident()){
 				if (auto st=sc->find_struct_of(lhs)){
 					if (auto f=st->find_field(rhs)){
-						propogate_type(flags,this, f->type_ref(), this->type_ref());
+						propogate_type_refs(flags,this, f->type_ref(), this->type_ref());
 						ret=f->type();
-						return propogate_type(flags,this, ret,this->type_ref());
+						return propogate_type_refs(flags,this, ret,this->type_ref());
 					}
 				}
 				if (flags&R_FINAL) {
@@ -262,7 +262,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				// but we respect the shape of the AST?
 				//				dbprintf("method call: %s\n",str(method_name));
 				call->resolve_sub(sc, desired, flags, lhs);
-				return propogate_type(flags,this,call->type(),this->type_ref());
+				return propogate_type_refs(flags,this,call->type(),this->type_ref());
 			} else {
 				if (flags & R_FINAL){
 					error_begin(this,"dot operator not call or field acess %s.%s %d", t->name_str(), this->rhs->name_str(), is_number(this->rhs->name));
@@ -332,7 +332,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (is_condition(op_ident)){
 		auto lhst=lhs->resolve(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
 		auto rhst=rhs->resolve(sc,lhs->type_ref(),flags);
-		propogate_type(flags,(Node*)this, lhs->type_ref(),rhs->type_ref());
+		propogate_type_refs(flags,(Node*)this, lhs->type_ref(),rhs->type_ref());
 		::verify(lhs->get_type());
 		::verify(rhs->get_type());
 		if (!this->get_type()){
@@ -348,8 +348,8 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// defaults to same types all round.
 		auto lhst=lhs->resolve(sc,desired,flags);
 		auto rhst=rhs->resolve(sc,desired,flags&!R_PUT_ON_STACK);
-		propogate_type(flags,this, lhs->type_ref(),type_ref());
-		propogate_type(flags,this, rhs->type_ref(),type_ref());
+		propogate_type_refs(flags,this, lhs->type_ref(),type_ref());
+		propogate_type_refs(flags,this, rhs->type_ref(),type_ref());
 
 		if (flags & R_FINAL){
 			if (!(lhs->type()->is_number() && rhs->type()->is_number())){

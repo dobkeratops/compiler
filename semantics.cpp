@@ -174,7 +174,7 @@ void verify(const Type* a,const Type* b,const Type* c){
 	verify(c);
 }
 const Type* any_not_zero(const Type* a, const Type* b){return a?a:b;}
-ResolveResult propogate_type(int flags,const Node*n, Type*& a,Type*& b) {
+ResolveResult propogate_type_refs(int flags,const Node*n, Type*& a,Type*& b) {
 	verify(a,b);
 	if (!(a || b))
 		return ResolveResult(0,INCOMPLETE);
@@ -187,11 +187,11 @@ ResolveResult propogate_type(int flags,const Node*n, Type*& a,Type*& b) {
 	}
 	return assert_types_eq(flags,n, a,b);
 }
-ResolveResult propogate_type(int flags, Expr *n, Type*& a,Type*& b) {
+ResolveResult propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b) {
 	verify(a,b);
-	propogate_type(flags,(const Node*)n,a,b);
-	propogate_type(flags,(const Node*)n,n->type_ref(),b);
-	return propogate_type(flags,(const Node*)n,n->type_ref(),a);
+	propogate_type_refs(flags,(const Node*)n,a,b);
+	propogate_type_refs(flags,(const Node*)n,n->type_ref(),b);
+	return propogate_type_refs(flags,(const Node*)n,n->type_ref(),a);
 }
 ResolveResult propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b) {
 	verify(a,b);
@@ -211,16 +211,16 @@ ResolveResult propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b
 ResolveResult propogate_type_fwd(int flags,Expr* e, const Type*& a) {
 	return propogate_type_fwd(flags,e, a, e->type_ref());
 }
-ResolveResult propogate_type(int flags,Expr* e, Type*& a) {
-	return propogate_type(flags,e, a, e->type_ref());
+ResolveResult propogate_type_expr_ref(int flags,Expr* e, Type*& a) {
+	return propogate_type_refs(flags,e, a, e->type_ref());
 }
 
-ResolveResult propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c) {
+ResolveResult propogate_type_refs(int flags,const Node* n, Type*& a,Type*& b,Type*& c) {
 	verify(a,b,c);
 	int ret=COMPLETE;
-	ret|=propogate_type(flags,n,a,b).status;
-	ret|=(c)?propogate_type(flags,n,b,c).status:INCOMPLETE;
-	ret|=(c)?propogate_type(flags,n,a,c).status:INCOMPLETE;
+	ret|=propogate_type_refs(flags,n,a,b).status;
+	ret|=(c)?propogate_type_refs(flags,n,b,c).status:INCOMPLETE;
+	ret|=(c)?propogate_type_refs(flags,n,a,c).status:INCOMPLETE;
 	const Type* any=any_not_zero(a,any_not_zero(b,c));
 	return ResolveResult(any,ret);
 }
@@ -229,7 +229,7 @@ ResolveResult propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b
 	int ret=COMPLETE;
 	ret|=propogate_type_fwd(flags,n,a,b).status;
 	ret|=propogate_type_fwd(flags,n,a,c).status;
-	ret|=propogate_type(flags,n,b,c).status;
+	ret|=propogate_type_refs(flags,n,b,c).status;
 	return ResolveResult(any_not_zero(a,any_not_zero(b,c)),ret);
 }
 /*
@@ -646,7 +646,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 	//if (!si->type()){
 	//	si->set_type(new Type(sd));
 	//}
-	propogate_type(flags,(Node*)si, si->type_ref(),si->call_expr->type_ref());
+	propogate_type_refs(flags,(Node*)si, si->type_ref(),si->call_expr->type_ref());
 	propogate_type_fwd(flags,si, desiredType);
 
 	si->call_expr->def=sd;
@@ -668,13 +668,13 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 		if (op&&(op->name==FIELD_ASSIGN)){
 			field=sd->find_field(op->lhs);
 			op->rhs->resolve(sc,field->type(),flags); // todo, need type params fwd here!
-			propogate_type(flags,op,op->lhs->type_ref(),op->rhs->type_ref());
+			propogate_type_refs(flags,op,op->lhs->type_ref(),op->rhs->type_ref());
 			//				propogate_type(flags,op,op->rhs->type_ref());
 			op->lhs->def=field;
 			named_field_index=sd->field_index(op->lhs);
 			this->value.push_back(op->rhs);
 			t=op->rhs->type();
-			propogate_type(flags,op,field->type_ref(),op->rhs->type_ref());
+			propogate_type_refs(flags,op,field->type_ref(),op->rhs->type_ref());
 		}else if (named_field_index==-1){
 			if (field_index>=sd->fields.size()){
 				error(a,sd,"too many fields");
@@ -684,7 +684,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 			dbg3(field->dump(0));dbg(printf("\n --set_to--> \n"));dbg(a->dump());dbg(newline(0));
 			a->resolve(sc,field->type(),flags); // todo, need generics!
 			t=a->type();
-			propogate_type(flags,a,field->type_ref(),a->type_ref());
+			propogate_type_refs(flags,a,field->type_ref(),a->type_ref());
 		}else{
 			error(a,"named field expected");
 		}

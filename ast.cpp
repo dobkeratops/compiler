@@ -41,7 +41,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		return ResolveResult();
 	if (this->name==EXPRESSION){
 		((Node*)(this->sub))->resolve_if(sc,rhs,flags);
-		return propogate_type(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
+		return propogate_type_refs(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
 	}
 	if (this->name==PTR){
 		if (rhs&&rhs->name==PTR){
@@ -54,7 +54,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		ASSERT(sub->next);
 		sub->next->resolve_if(sc, nullptr, flags);
 		sub->resolve_with_type(sc, rhs, flags);
-		return propogate_type(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
+		return propogate_type_refs(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
 	}
 	if (this->name==OR){
 		for (auto s=this->sub;s;s=s->next){
@@ -72,7 +72,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 			v->set_type((Type*)(p->type()->clone()));
 		}
 		v->resolve_with_type(sc,p->type(),flags);
-		return propogate_type(flags, (Node*)this, this->sub->type_ref(), this->sub->next->type_ref());
+		return propogate_type_refs(flags, (Node*)this, this->sub->type_ref(), this->sub->next->type_ref());
 	}
 	else if (this->name==TUPLE){
 		auto subt=rhs?rhs->sub:nullptr;
@@ -330,13 +330,13 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		if (auto v=scope->find_variable_rec(this->name)){ // look for scope variable..
 			v->on_stack|=flags&R_PUT_ON_STACK;
 			this->set_def(v);
-			return propogate_type(flags,this, this->type_ref(),v->type_ref());
+			return propogate_type_refs(flags,this, this->type_ref(),v->type_ref());
 		}
 	if (auto sd=scope->get_receiver()) {
 		if (auto fi=sd->try_find_field(this->name)){
 			this->set_def(fi);
 			// anonymous struct fields are possible in local anon structs..
-			return propogate_type(flags,this, this->type_ref(),fi->type_ref());
+			return propogate_type_refs(flags,this, this->type_ref(),fi->type_ref());
 		}
 	}
 	if (auto f=scope->find_unique_fn_named(this,flags)){ // todo: filter using function type, because we'd be storing it as a callback frequently..

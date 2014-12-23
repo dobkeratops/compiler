@@ -273,7 +273,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 			if (!v){
 				v=sc->create_variable(arg,arg->name,VkArg);
 			}
-			propogate_type(flags,arg, arg->type_ref(),v->type_ref());
+			propogate_type_refs(flags,arg, arg->type_ref(),v->type_ref());
 			if (arg->default_expr){static int warn=0; if (!warn){warn=1;
 				dbprintf("error todo default expressions really need to instantiate new code- at callsite, or a shim; we need to manage caching that. type propogation requires setting those up. Possible solution is giving a variable an initializer-expression? type propogation could know about that, and its only used for input-args?");}
 			}
@@ -286,7 +286,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 		
 		if (this->body){
 			auto ret=this->body->resolve_if(sc, this->ret_type, flags);
-			propogate_type(flags, (const Node*)this,this->ret_type,this->body->type_ref());
+			propogate_type_refs(flags, (const Node*)this,this->ret_type,this->body->type_ref());
 
 			dbg2(this->ret_type->dump_if(-1));
 			dbg2(this->body->type()->dump_if(-1));
@@ -384,7 +384,7 @@ ResolveResult ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags
 	dbprintf("resolve %s yields type:", getString(this->as_name()));if (auto t=this->body->type()) t->dump(-1);printf("\n");
 	// awkwardness says: type error return is more like an enum that doesn't return a type?
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
-	return propogate_type(flags,this, this->body->type_ref(),this->ret_type); // todo: hide FnDef->type. its too confusing
+	return propogate_type_refs(flags,this, this->body->type_ref(),this->ret_type); // todo: hide FnDef->type. its too confusing
 }
 bool Type::is_typeparam(Scope* sc)const{
 	return sc->get_typeparam_for(const_cast<Type*>(this))!=0;

@@ -144,7 +144,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 			dbg(this->argls.back()->dump_if(-1));
 			dbg(newline(0));
 
-			return propogate_type(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
+			return propogate_type_refs(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
 		}
 		else {ASSERT(0);return ResolveResult();}
 	}

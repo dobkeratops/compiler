@@ -7,12 +7,12 @@ struct Expr;
 struct ResolveResult;
 struct Name;
 // type inference
-ResolveResult propogate_type(int flags,const Node*n, Type*& a,Type*& b);
-ResolveResult propogate_type(int flags, Expr *n, Type*& a,Type*& b);
+ResolveResult propogate_type_refs(int flags,const Node*n, Type*& a,Type*& b);
+ResolveResult propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b);
 ResolveResult propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b);
 ResolveResult propogate_type_fwd(int flags,Expr* e, const Type*& a);
-ResolveResult propogate_type(int flags,Expr* e, Type*& a);
-ResolveResult propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c);
+ResolveResult propogate_type_expr_ref(int flags,Expr* e, Type*& a);
+ResolveResult propogate_type_refs(int flags,const Node* n, Type*& a,Type*& b,Type*& c);
 ResolveResult propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c);
 
 struct CaptureVars;
