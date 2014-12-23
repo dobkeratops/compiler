@@ -97,7 +97,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==DECLARE_WITH_TYPE) {
 		if (op_ident==LET_ASSIGN){
 			ASSERT(this->lhs && this->rhs);
-			rhs->resolve_if(sc,desired,flags);
+			resolved|=rhs->resolve_if(sc,desired,flags);
 			dbg(lhs->dump(0));dbg(printf(".let="));
 			dbg(rhs->dump(0));dbg(newline(0));
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
@@ -115,13 +115,13 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 			
 			//new_var->force_type_todo_verify(rhs_t);
-			lhs->resolve_if(sc,rhs->type(),flags);
+			resolved|=lhs->resolve_if(sc,rhs->type(),flags);
 			propogate_type_fwd(flags, this, desired, lhs->type_ref());
 			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 		}
 		else if (op_ident==DECLARE_WITH_TYPE){ // create a var, of given type,like let lhs:rhs;
 			const Type* tt=rhs?rhs->as_type():nullptr; if (!tt) tt=this->type(); if (!tt) tt=desired;
-			lhs->resolve_if(sc, tt,flags);
+			resolved|=lhs->resolve_if(sc, tt,flags);
 			if (!lhs->is_ident())
 				return propogate_type_refs(flags, this, lhs->type_ref(),type_ref());
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
@@ -131,7 +131,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			auto v=sc->get_or_create_scope_variable(this,lhsi->name,Local);
 			auto t=v->get_type();
 			if (rhs){
-				rhs->resolve_if(sc,desired,flags);
+				resolved|=rhs->resolve_if(sc,desired,flags);
 				t=expect_cast<Type>(rhs);
 				v->set_type(t);
 			}
@@ -150,9 +150,9 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		else if (op_ident==ASSIGN){
 			ASSERT(this->lhs && this->rhs);
 			dbg(::dump(this->lhs->type(),this->rhs->type()));
-			rhs->resolve_if(sc,lhs->type_ref(),flags);
+			resolved|=rhs->resolve_if(sc,lhs->type_ref(),flags);
 
-			lhs->resolve_if(sc,rhs->type_ref(),flags);
+			resolved|=lhs->resolve_if(sc,rhs->type_ref(),flags);
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
 
 			propogate_type_refs(flags,this, rhs->type_ref(), lhs->type_ref());
@@ -206,11 +206,11 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			propogate_type_refs(flags, (Node*)this, this->get_type()->sub, b->type_ref());
 		
 		if (rhs->is_subscript()){
-			b->call_expr->resolve_if(sc,get_type()?get_type()->sub:nullptr,flags);
+			resolved|=b->call_expr->resolve_if(sc,get_type()?get_type()->sub:nullptr,flags);
 			b->set_type(b->call_expr->get_type());
 		}
 		else {
-			b->resolve_if(sc, desired?desired->sub:nullptr, flags);
+			resolved|=b->resolve_if(sc, desired?desired->sub:nullptr, flags);
 			
 		}
 		
@@ -221,7 +221,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 
 	else if (op_ident==DOT || op_ident==ARROW) {
-		auto lhs_t=lhs->resolve_if(sc, 0,flags);//type doesn't push up- the only info we have is what field it needs
+		resolved|=lhs->resolve_if(sc, 0,flags);//type doesn't push up- the only info we have is what field it needs
 		auto t=lhs->type();
 		//		dbprintf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);dbprintf("\n");
 		
@@ -303,7 +303,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 	else if (op_ident==DEREF){ //result=*rhs
 		// todo: we can assert give type is one less pointer, if given
-		auto ret=rhs->resolve_if(sc,0,flags);
+		resolved|=rhs->resolve_if(sc,0,flags);
 		// todo: its' a typeparam constraint.  ptr[desired]==argls[0]
 		if (!this->get_type() && rhs->type()){
 			//			if (ret.type->name!=PTR) {
@@ -323,7 +323,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 			return propogate_type_fwd(flags,this, desired, this->type_ref());
 		}
-		else return ret;
+		else return resolved;
 	}
 	
 	
@@ -345,8 +345,8 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// regular operator
 		// TODO propogate types for pointer-arithmetic - ptr+int->ptr   int+ptr->ptr  ptr-ptr->int
 		// defaults to same types all round.
-		lhs->resolve_if(sc,desired,flags);
-		rhs->resolve_if(sc,desired,flags&!R_PUT_ON_STACK);
+		resolved|=lhs->resolve_if(sc,desired,flags);
+		resolved|=rhs->resolve_if(sc,desired,flags&!R_PUT_ON_STACK);
 		propogate_type_refs(flags,this, lhs->type_ref(),type_ref());
 		propogate_type_refs(flags,this, rhs->type_ref(),type_ref());
 
@@ -368,8 +368,8 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 		return false;
 	if (this->get_fn())
 		return true;
-	lhs->resolve_if(sc,nullptr,flags&(~R_FINAL));
-	rhs->resolve_if(sc,nullptr,flags&(~(R_PUT_ON_STACK|R_FINAL)));
+	resolved|=lhs->resolve_if(sc,nullptr,flags&(~R_FINAL));
+	resolved|=rhs->resolve_if(sc,nullptr,flags&(~(R_PUT_ON_STACK|R_FINAL)));
  	if (!(lhs->type_if()||rhs->type_if()||desired)){
 		return false;		// no info to go on.
 	}

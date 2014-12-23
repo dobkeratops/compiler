@@ -10,10 +10,10 @@ void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{
 
 ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
-	init->resolve_if(sc,0,flags);
-	cond->resolve_if(sc,Type::get_bool(),flags);
-	incr->resolve_if(sc,0,flags);
-	body->resolve_if(sc,desired,flags);
+	resolved|=init->resolve_if(sc,0,flags);
+	resolved|=cond->resolve_if(sc,Type::get_bool(),flags);
+	resolved|=incr->resolve_if(sc,0,flags);
+	resolved|=body->resolve_if(sc,desired,flags);
 	if (else_block) {
 		else_block->resolve_if(sc,desired,flags);
 		propogate_type_refs(flags, (Node*)this, this->type_ref(), else_block->type_ref());
@@ -98,13 +98,13 @@ ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	auto sc=outer_s->make_inner_scope(&this->scope,outer_s->owner_fn,this);
 	
 	::verify(this->cond->get_type());
-	this->cond->resolve_if(sc,nullptr,flags); // condition can  be anything coercible to bool
-	auto body_type=this->body->resolve_if(sc,desired,flags);
+	resolved|=this->cond->resolve_if(sc,nullptr,flags); // condition can  be anything coercible to bool
+	resolved|=this->body->resolve_if(sc,desired,flags);
 	Type* bt=this->body->type();
 	if (else_block){
 		propogate_type_fwd(flags,this, desired,bt);
 		propogate_type_expr_ref(flags,this, body->type_ref());
-		else_block->resolve_if(sc,bt,flags);
+		resolved|=else_block->resolve_if(sc,bt,flags);
 		propogate_type_refs(flags,this, this->body->type_ref(), else_block->type_ref());
 		propogate_type_refs(flags,this, this->type_ref(), else_block->type_ref());
 		
@@ -117,7 +117,7 @@ ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	}
 	else {
 		// TODO: Could it actually return Body|void ? perhaps we could implicityly ask for that?
-		return body_type;
+		return resolved;
 	}
 }
 void ExprIf::recurse(std::function<void(Node*)>& f){
@@ -272,7 +272,7 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 	// the whole block gets a scope
 	auto match_sc=outer_sc->make_inner_scope(&this->scope,outer_sc->owner_fn,this);
 
-	this->expr->resolve_if(match_sc,nullptr,flags);
+	resolved|=this->expr->resolve_if(match_sc,nullptr,flags);
 	propogate_type_fwd(flags,this, desired, this->type_ref());
 
 	for (auto a=this->arms; a;a=a->next ) {
@@ -283,9 +283,9 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 		// setup the types: expression has same type as match patterns;
 		//*dont* push the type onto the arms, because variants cast to subtypes.
 		//propogate_type(flags, (Node*)this, this->expr->type_ref(), a->pattern->type_ref());
-		a->pattern->resolve_with_type(a->scope, this->expr->type(), flags);
-		a->cond->resolve_if(a->scope, Type::get_bool(),flags);
-		a->body->resolve_if(a->scope, this->type(), flags);
+		resolved|=a->pattern->resolve_with_type(a->scope, this->expr->type(), flags);
+		resolved|=a->cond->resolve_if(a->scope, Type::get_bool(),flags);
+		resolved|=a->body->resolve_if(a->scope, this->type(), flags);
 		
 		//all arms outputs have same typeas the whole output
 		propogate_type_refs(flags,this, a->body->type_ref(),this->type_ref());

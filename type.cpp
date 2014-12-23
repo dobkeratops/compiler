@@ -104,7 +104,8 @@ bool  Type::has_typeparam(Scope* sc){
 }
 ResolveResult Type::resolve(Scope* sc,const Type* desired,int flags)
 {
-	if(!this)return ResolveResult();
+	if(!this)
+		return COMPLETE;
 	if (!this->struct_def() && this->name>=IDENT && !::is_number(this->name)){
 		if (!strcmp(str(name),"Union")){
 			sc->owner_fn->dump_if(0);
@@ -128,9 +129,9 @@ ResolveResult Type::resolve(Scope* sc,const Type* desired,int flags)
 #endif
 	auto ds=desired?desired->sub:nullptr;
 	for (auto s=this->sub;s;s=s->next,ds=ds?ds->next:nullptr)
-		s->resolve(sc,ds,flags);
+		resolved|=s->resolve_if(sc,ds,flags);
 	
-	return ResolveResult(COMPLETE);
+	return resolved;
 }
 
 Type::Type(Name i,SrcPos sp){

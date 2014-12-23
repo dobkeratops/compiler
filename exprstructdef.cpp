@@ -298,21 +298,21 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 		}
 
 		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
-		for (auto m:fields)			{m->resolve_if(sc,nullptr,flags&~R_FINAL);}
-		for (auto m:static_fields)	{m->resolve_if(sc,nullptr,flags);}
-		for (auto m:static_virtual)	{m->resolve_if(sc,nullptr,flags);}
+		for (auto m:fields)			{resolved|=m->resolve_if(sc,nullptr,flags&~R_FINAL);}
+		for (auto m:static_fields)	{resolved|=m->resolve_if(sc,nullptr,flags);}
+		for (auto m:static_virtual)	{resolved|=m->resolve_if(sc,nullptr,flags);}
 		for (auto s:structs){
-			s->resolve_if(sc,nullptr,flags);
+			resolved|=s->resolve_if(sc,nullptr,flags);
 		}
 		for (auto f:functions){
-			f->resolve_if(sc,nullptr,flags);
+			resolved|=f->resolve_if(sc,nullptr,flags);
 		}
 		for (auto f:virtual_functions){
-			f->resolve_if(sc,nullptr,flags);
+			resolved|=f->resolve_if(sc,nullptr,flags);
 		}
 
 		if (this->inherits_type && !this->inherits){
-			this->inherits_type->resolve_if(definer_scope,desired,flags);
+			resolved|=this->inherits_type->resolve_if(definer_scope,desired,flags);
 			this->inherits=definer_scope->find_struct_named(this->inherits_type->name);
 		}
 		roll_vtable();
@@ -321,7 +321,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 		//if (this->vtable) this->vtable->resolve(definer_scope,desired,flags);
 	} else{
 		for (auto ins=this->instances; ins; ins=ins->next_instance)
-			ins->resolve_if(definer_scope,nullptr, flags);
+			resolved|=ins->resolve_if(definer_scope,nullptr, flags);
 	}
 
 	return propogate_type_fwd(flags,this, desired);

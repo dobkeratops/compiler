@@ -666,7 +666,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 		Type*t = nullptr;
 		if (op&&(op->name==FIELD_ASSIGN)){
 			field=sd->find_field(op->lhs);
-			op->rhs->resolve(sc,field->type(),flags); // todo, need type params fwd here!
+			si->resolved|=op->rhs->resolve_if(sc,field->type(),flags); // todo, need type params fwd here!
 			si->propogate_type_refs(flags,op,op->lhs->type_ref(),op->rhs->type_ref());
 			//				propogate_type(flags,op,op->rhs->type_ref());
 			op->lhs->def=field;

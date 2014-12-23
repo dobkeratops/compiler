@@ -32,22 +32,23 @@ Name Pattern::as_name()const{
 }
 ResolveResult
 Pattern::resolve(Scope* sc, const Type* rhs, int flags){
+	resolved=COMPLETE;// calls will correct it..
 	return this->resolve_with_type(sc,rhs,flags);
 }
 
 ResolveResult
 Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	if (!this)
-		return ResolveResult();
+		return ResolveResult(COMPLETE);
 	if (this->name==EXPRESSION){
 		((Node*)(this->sub))->resolve_if(sc,rhs,flags);
 		return propogate_type_refs(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
 	}
 	if (this->name==PTR){
 		if (rhs&&rhs->name==PTR){
-			auto ret=sub->resolve_with_type(sc, rhs->sub, flags);
+			resolved|=sub->resolve_with_type(sc, rhs->sub, flags);
 			this->set_type(new Type(this,PTR,sub->type()));
-			return ret;
+			return resolved;
 		}
 	}
 	if (this->name==IF){// guarded.
@@ -58,7 +59,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	}
 	if (this->name==OR){
 		for (auto s=this->sub;s;s=s->next){
-			s->resolve_with_type(sc,rhs,flags);
+			resolved|=s->resolve_with_type(sc,rhs,flags);
 		}
 		if (rhs)
 			return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
@@ -67,17 +68,17 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	} else if (this->name==PATTERN_BIND){
 		// get or create var here
 		auto v=this->sub; auto p=v->next; ASSERT(p);
-		p->resolve_with_type(sc,rhs,flags);
+		resolved|=p->resolve_with_type(sc,rhs,flags);
 		if (!v->type()&&p->type()){
 			v->set_type((Type*)(p->type()->clone()));
 		}
-		v->resolve_with_type(sc,p->type(),flags);
+		resolved|=v->resolve_with_type(sc,p->type(),flags);
 		return propogate_type_refs(flags, (Node*)this, this->sub->type_ref(), this->sub->next->type_ref());
 	}
 	else if (this->name==TUPLE){
 		auto subt=rhs?rhs->sub:nullptr;
 		for (auto subp=this->sub; subp; subp=subp->next, subt?subt=subt->next:nullptr){
-			subp->resolve_with_type(sc,subt, flags);
+			resolved|=subp->resolve_with_type(sc,subt, flags);
 		}
 	} else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring
 		auto sd=sc->find_struct_type(this,rhs);// todo tparams from rhs, if given

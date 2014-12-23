@@ -128,7 +128,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		if (this->argls.size()) {
 			if (!(flags & R_REVERSE_ONLY)){
 				for (auto n=0; n<this->argls.size()-1; n++) {
-					this->argls[n]->resolve_if(sc,0,flags);
+					resolved|=this->argls[n]->resolve_if(sc,0,flags);
 				}
 			}
 			propogate_type_fwd(flags,this, desired);
@@ -136,7 +136,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 			// reverse pass too
 			if (!(flags & R_FORWARD_ONLY)){
 				for (auto n=(int)this->argls.size()-1;n>=0; n--) {
-					this->argls[n]->resolve_if(sc,0,flags);
+					resolved|=this->argls[n]->resolve_if(sc,0,flags);
 				}
 			}
 
@@ -154,7 +154,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		if (auto t=call_expr->type()){
 			ASSERT(t->is_array()||t->is_pointer());
 			for (auto i=0; i<argls.size(); i++)  {
-				argls[i]->resolve_if(sc,nullptr,flags&!R_PUT_ON_STACK ); // TODO any indexing type? any type extracted from 'array' ?
+				resolved|=argls[i]->resolve_if(sc,nullptr,flags&!R_PUT_ON_STACK ); // TODO any indexing type? any type extracted from 'array' ?
 			}
 			const Type* array_elem_type=t->sub;
 			propogate_type_fwd(flags,this, array_elem_type);
@@ -179,7 +179,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 			this->call_expr=0;
 			this->argls.resize(1);
 			this->argls[0]=new ExprLiteral(src->pos,tmp,(int)strlen(tmp));
-			this->argls[0]->resolve_if(sc,nullptr,0);
+			resolved|=this->argls[0]->resolve_if(sc,nullptr,0);
 			this->set_type(src->get_type());
 			return ResolveResult();
 		}
@@ -196,7 +196,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		}
 		else{
 			// an ident can't be just resolved like this
-			this->call_expr->resolve(sc,nullptr,flags);
+			resolved|=this->call_expr->resolve_if(sc,nullptr,flags);
 			fn_type=this->call_expr->type();
 			
 			//			fn_type_r=this->call_expr->resolve(sc,nullptr,flags);
@@ -212,10 +212,10 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 				if (a->name==FN){
 					dbg_lambdas("resolving fn type into function argument %s\n", argls[arg_index]->name_str());
 				}
-				argls[arg_index]->resolve(sc,a,flags);
+				resolved|=argls[arg_index]->resolve(sc,a,flags);
 			}
 			for (;arg_index<argls.size(); arg_index++){ // variadic args.
-				argls[arg_index]->resolve(sc,nullptr,flags);
+				resolved|=argls[arg_index]->resolve_if(sc,nullptr,flags);
 #if DEBUG >=2
 				dbprintf("resolve variadic C arg[%d]\n",arg_index);
 				argls[arg_index]->type()->dump_if(0);newline(0);
@@ -225,13 +225,13 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 			propogate_type_fwd(flags,this, fr);
 		} else
 			for (auto i=0; i<argls.size(); i++)  {
-				argls[i]->resolve(sc,nullptr,flags );
+				resolved|=argls[i]->resolve_if(sc,nullptr,flags );
 			}
 		
 		if (!this->get_fn_call()){
 			
 			for (auto i=0; i<argls.size(); i++)  {
-				argls[i]->resolve_if(sc,nullptr ,flags);
+				resolved|=argls[i]->resolve_if(sc,nullptr ,flags);
 			}
 			if (this->call_expr->is_ident() && 0==dynamic_cast<Variable*>(this->call_expr->def)){
 				return resolve_make_fn_call(receiver,this, sc,desired,flags);
@@ -242,13 +242,13 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 #if DEBUG>=2
 				dbprintf("receiver+ %d args; call %s with %d args\n",argls.size(), fnc->name_str(), fnc->args.size());
 #endif
-				receiver->resolve_if(sc,fnc->args[0]->type(),flags);
+				resolved|=receiver->resolve_if(sc,fnc->args[0]->type(),flags);
 			}
 			for (auto i=0; i<(argls.size()); i++)  {
 				//int i=srci+ofs;
 				auto ii=i+ofs;
 				auto fnarg=ii<fnc->args.size()?fnc->args[ii]:nullptr;
-				argls[i]->resolve_if(sc,fnarg?fnarg->type():nullptr ,flags);
+				resolved|=argls[i]->resolve_if(sc,fnarg?fnarg->type():nullptr ,flags);
 			}
 			return propogate_type_fwd(flags,this, desired,this->get_fn_call()->ret_type);
 		} else {
