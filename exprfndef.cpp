@@ -346,7 +346,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 		this->fn_type->resolve_if(scope,nullptr,flags);
 		this->return_type()->resolve_if(scope,nullptr,flags);
 	}
-	return ResolveResult(fn_type,COMPLETE);
+	return ResolveResult(COMPLETE);
 }
 
 CaptureVars* ExprFnDef::get_or_create_capture(ExprFnDef* src){

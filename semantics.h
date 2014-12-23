@@ -4,7 +4,6 @@
 struct Type;
 struct TParamDef;
 struct Expr;
-struct ResolveResult;
 struct Name;
 // type inference
 ResolveResult propogate_type_refs(int flags,const Node*n, Type*& a,Type*& b);

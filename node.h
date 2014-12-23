@@ -23,7 +23,7 @@ public:
 
 	void clear_def();
 	virtual void dump(int depth=0) const;
-	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(nullptr, INCOMPLETE);};
+	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(INCOMPLETE);};
 	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
 		if (this) {
 			if (this->resolved) return ResolveResult(COMPLETE);

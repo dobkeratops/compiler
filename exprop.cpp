@@ -180,7 +180,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		if (this->rhs->name==PLACEHOLDER) {
 			this->rhs->set_type(desired);
 			this->set_type(desired);
-			return ResolveResult(this->type(),COMPLETE);
+			return ResolveResult(COMPLETE);
 		} else {
 			if (auto t=this->rhs->type())
 				this->set_type(t);
@@ -272,7 +272,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 		}
 		verify_all();
-		return ResolveResult(this->type(),INCOMPLETE);
+		return ResolveResult(INCOMPLETE);
 	}
 	// remaining types are assumed overloadable.
 	//look for overload - infer fowards only first like C++

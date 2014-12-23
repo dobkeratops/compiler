@@ -311,7 +311,7 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled .
 		propogate_type_fwd(flags,this, desired,this->type_ref());
-		return ResolveResult(this->type_ref(),COMPLETE);
+		return ResolveResult(COMPLETE);
 	}
 	
 	propogate_type_fwd(flags,this, desired,this->type_ref());
@@ -588,7 +588,7 @@ ResolveResult ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 //	if (this->pattern)
 //		this->pattern->resolve(sc,this->type(),flags);
 	if (this->default_expr){this->default_expr->resolve_if(sc,this->type(),flags);}
-	return ResolveResult(this->type(), COMPLETE);
+	return ResolveResult(COMPLETE);
 }
 void ArgDef::recurse(std::function<void(Node*)>&f){
 	this->type()->recurse(f);
