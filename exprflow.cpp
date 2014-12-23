@@ -30,7 +30,7 @@ ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags)
 	};
 	propogate_type_fwd(flags, (Node*)this, desired, this->type_ref());
 	
-	return ResolveResult();
+	return resolved;
 }
 
 

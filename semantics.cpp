@@ -615,7 +615,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 		si->propogate_type_fwd(flags,si, desiredType,si->call_expr->type_ref());
 		sd=si->call_expr->type()->def->as_struct_def();
 		if (!sd)
-			return ResolveResult();
+			return si->resolved|INCOMPLETE;
 		dbg(sd->dump(-1));
 		dbg_type("\n");
 		si->call_expr->set_type(desiredType);
@@ -630,7 +630,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 				error_begin(si->call_expr,"can't find struct");
 				si->call_expr->dump(-1);error_end(si->call_expr);
 			}
-			return ResolveResult();
+			return si->resolved|INCOMPLETE;
 		}
 
 	}
@@ -707,8 +707,9 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 
 	int num_resolved_args=0;
 	for (int i=0; i<block->argls.size(); i++) {
-		block->argls[i]->resolve_if(scope,nullptr,flags);
-		if (block->argls[i]->type()) num_resolved_args++;
+		block->resolved|=block->argls[i]->resolve_if(scope,nullptr,flags);
+		if (block->argls[i]->type())
+			num_resolved_args++;
 	}
 #if DEBUG>4
 	for (int i=0; i<block->argls.size(); i++) {
@@ -717,7 +718,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 	}
 #endif
 	if (receiver){
-		receiver->resolve_if(scope,nullptr,flags); if (receiver->type()) num_resolved_args++;
+		block->resolved|=receiver->resolve_if(scope,nullptr,flags); if (receiver->type()) num_resolved_args++;
 	}
 	
 	if (block->get_fn_call() && num_resolved_args==block->argls.size())
@@ -726,8 +727,8 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 //	11ASSERT(block->call_target==0);
 	// is it just an array access.
 	if (block->is_subscript()){
-		auto object_t=block->call_expr->resolve(scope,nullptr,flags);
-		auto index_t=block->argls[0]->resolve(scope,nullptr,flags);
+		block->resolved|=block->call_expr->resolve_if(scope,nullptr,flags);
+		block->resolved|=block->argls[0]->resolve_if(scope,nullptr,flags);
 		auto obj_t=block->call_expr->type();
 		//find the method "index(t,index_t)"
 		// for the minute, just assume its' an array
@@ -735,9 +736,9 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 
 		if (obj_t && block->argls[0]->type()) {
 			ASSERT(obj_t->is_array() || obj_t->is_pointer());
-			return ResolveResult(COMPLETE);
+			return block->resolved;
 		}
-		return ResolveResult();
+		return block->resolved;
 	}
 	verify_all();
 
@@ -748,7 +749,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_name(),block,args_with_receiver, desired,flags);
 	auto fnc=call_target;
 	if (!call_target){
-		return ResolveResult();
+		return block->resolved|INCOMPLETE;
 	}
 	verify_all();
 	if (call_target!=block->get_fn_call()) {
@@ -783,7 +784,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 				
 			}
 		}
-		return ResolveResult();
+		return block->resolved;
 		// generic function, and we have some types to throw in...
 		// if its' a generic function, we have to instantiate it here.
 /*
@@ -821,9 +822,10 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
  */
 	}
 	else  {
-		if (flags &1) error(block,"can't resolve call\n");
+		if (flags &R_FINAL)
+			error(block,"can't resolve call\n");
 		verify_all();
-		return ResolveResult();
+		return block->resolved|=INCOMPLETE;
 	}
 	verify_all();
 }

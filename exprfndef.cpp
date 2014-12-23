@@ -371,9 +371,9 @@ int ExprFnDef::type_parameter_index(Name n) const {
 ResolveResult ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags) {
 	if (this->is_generic()){
 		for (auto ins=this->instances; ins;ins=ins->next_instance){
-			ins->resolve_if(scope,nullptr,flags);
+			resolved|=ins->resolve_if(scope,nullptr,flags);
 		}
-		return ResolveResult();
+		return resolved;
 	}
 	
 	propogate_type_fwd(flags,this, desired,this->ret_type);

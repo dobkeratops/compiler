@@ -161,7 +161,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			//return propogate_type(flags, this, type_ref(),lhs->type_ref());
 		} else{
 			ASSERT(0);
-			return ResolveResult();
+			return resolved;
 		}
 	}
 	else if (op_ident==COLON){ // TYPE ASSERTION
@@ -176,11 +176,11 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		lhs->set_def(v);
 		return propogate_type_refs(flags, this, v->type_ref(),type_ref());
 	} else if (op_ident==AS){
-		this->lhs->resolve_if(sc,nullptr,flags);
+		resolved|=this->lhs->resolve_if(sc,nullptr,flags);
 		if (this->rhs->name==PLACEHOLDER) {
 			this->rhs->set_type(desired);
 			this->set_type(desired);
-			return ResolveResult(COMPLETE);
+			return resolved;
 		} else {
 			if (auto t=this->rhs->type())
 				this->set_type(t);

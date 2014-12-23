@@ -64,7 +64,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		if (rhs)
 			return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
 		else
-			return ResolveResult();
+			return resolved;
 	} else if (this->name==PATTERN_BIND){
 		// get or create var here
 		auto v=this->sub; auto p=v->next; ASSERT(p);
@@ -100,16 +100,16 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		if (auto sd=sc->find_struct_name_type_if(sc,this->name,this->type()))
 		{
 			this->set_struct_type(sd);
-			return ResolveResult();
+			return resolved;
 		}
 		if (auto sd=sc->find_struct_named(this->name)){
 			this->set_struct_type(sd);
-			return ResolveResult();
+			return resolved;
 		}
 		if (auto sd=sc->find_inner_def_named(sc,this, 0)){
 
 			this->set_struct_type(sd);
-			return ResolveResult();
+			return resolved;
 		}
 
 		// TODO named-constants
@@ -117,12 +117,12 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		// TODO nullptr
 		if (is_number(this->name)){
 			if (!this->type()) {this->set_type(Type::get_int());}
-			return ResolveResult();
+			return resolved;
 		}
 		else
 		if (this->name==PLACEHOLDER){
 			this->set_type(rhs);
-			return ResolveResult();
+			return resolved;
 			
 		} else {
 			// TODO - scala style quoted variable for comparison
@@ -134,10 +134,10 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 			if (rhs)
 				return propogate_type_fwd(flags, this, rhs, v->type_ref());
 			else
-				return ResolveResult();
+				return resolved;
 		}
 	}
-	return ResolveResult();
+	return resolved;
 }
 
 // TODO: we suspect this will be more complex, like Type translation (

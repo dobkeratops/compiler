@@ -101,7 +101,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	if (this->is_tuple()) {
 		for (size_t i=0; i<this->argls.size(); i++) {
 			auto desired_sub=desired?desired->get_elem(i):nullptr;
-			this->argls[i]->resolve_if(sc,desired_sub,flags);
+			resolved|=this->argls[i]->resolve_if(sc,desired_sub,flags);
 		}
 		// todo: we need to get better at filling in the gaps.
 		if (!this->get_type()) {
@@ -135,7 +135,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 				}
 			}
 			propogate_type_fwd(flags,this, desired);
-			auto ret=this->argls.back()->resolve_if(sc,desired,flags);
+			resolved|=this->argls.back()->resolve_if(sc,desired,flags);
 			if (i_complete>=this->argls.size()-1){
 				dbg(printf("icomplete stuff works"));
 			}
@@ -167,7 +167,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	}
 	else if (this->is_subscript()) {
 		// array indexing operator TODO: check this isn't itself a Type, if we want templates anywhere.
-		auto array_type=this->call_expr->resolve_if(sc,nullptr,flags); // todo - it could be _[desired]. forward should give possibilities
+		resolved|=this->call_expr->resolve_if(sc,nullptr,flags); // todo - it could be _[desired]. forward should give possibilities
 		if (auto t=call_expr->type()){
 			ASSERT(t->is_array()||t->is_pointer());
 			for (auto i=0; i<argls.size(); i++)  {
@@ -176,7 +176,8 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 			const Type* array_elem_type=t->sub;
 			propogate_type_fwd(flags,this, array_elem_type);
 			return propogate_type_fwd(flags,this, desired);
-		} else return ResolveResult();
+		} else
+			return resolved|=INCOMPLETE;
 	} else if (this->is_struct_initializer()){
 		dbg(this->type()->dump_if(-1));dbg(newline(0));
 		auto si=StructInitializer(sc,this);
@@ -198,7 +199,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 			this->argls[0]=new ExprLiteral(src->pos,tmp,(int)strlen(tmp));
 			resolved|=this->argls[0]->resolve_if(sc,nullptr,0);
 			this->set_type(src->get_type());
-			return ResolveResult();
+			return resolved;
 		}
 		bool indirect_call=false;
 		auto call_ident=dynamic_cast<ExprIdent*>(this->call_expr);
@@ -273,10 +274,10 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 				if (!this->type())
 					error(this,"can't call/ type check failed %s",this->call_expr->name_str());
 			
-			return ResolveResult();
+			return resolved;
 		}
 	}
-	return ResolveResult();
+	return resolved;
 }
 
 
