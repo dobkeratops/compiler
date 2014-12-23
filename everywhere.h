@@ -307,22 +307,23 @@ extern bool g_lisp_mode;
 // module base: struct(holds fns,structs), function(local fns), raw module.
 extern const char* g_operator_symbol[];
 
+enum ResolveStatus:int {COMPLETE=0,INCOMPLETE=1,MISMATCH=2,RS_ERROR=INCOMPLETE|MISMATCH};
 
 struct ResolveResult{
 	// TODO: This is a misfeature;
 	// return value from Resolve should just be status
 	// we require the result information to stay on the type itself.
 	// we keep getting bugs from not doing that.
-	enum Status:int {COMPLETE=0,INCOMPLETE=1,MISMATCH=2,ERROR=INCOMPLETE|MISMATCH};
 	// complete is zero, ERROR is 3 so we can
 	// carries information from type propogation
-	Status status;
+	ResolveStatus status;
 	void combine(const ResolveResult& other){
-		status=(Status)((int)status|(int)other.status);
+		status=(ResolveStatus)((int)status|(int)other.status);
 	}
 	ResolveResult(){status=INCOMPLETE;}
-	ResolveResult(const Type* t, Status s){ status=s;}
-	ResolveResult(const Type* t, int s):ResolveResult(t,(Status)s){}
+	ResolveResult(ResolveStatus s){status=s;}
+	ResolveResult(const Type* t, ResolveStatus s){ status=s;}
+	ResolveResult(const Type* t, int s):ResolveResult(t,(ResolveStatus)s){}
 	//operator Type* ()const {return type;}
 	//operator bool()const { return status==COMPLETE && type!=0;}
 };

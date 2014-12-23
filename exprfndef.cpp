@@ -185,10 +185,10 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	dbg2(printf("arg types after instancing\n"));
 	dbg2(new_fn->dump_signature());
 	
-	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type ininstantiation too
+	new_fn->resolve_if(src_fn_owner,return_type,flags);//todo: we can use output type ininstantiation too
 	//	new_fn->dump(0);
-	new_fn->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
-	new_fn->fn_type->resolve(src_fn_owner,return_type,flags);//todo: we can use output type
+	new_fn->resolve_if(src_fn_owner,return_type,flags);//todo: we can use output type
+	new_fn->fn_type->resolve_if(src_fn_owner,return_type,flags);//todo: we can use output type
 
 	dbg_fnmatch("%s return type=\n",new_fn->name_str());
 	dbg2(srcfn->type()->dump_if(-1));
@@ -201,7 +201,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	dbg_fnmatch("\nlast expression type:");
 	dbg2(new_fn->last_expr()->type()->dump_if(0));
 	dbg_fnmatch("\n");
-	dbg2(new_fn->fn_type->resolve(src_fn_owner,return_type,flags));//todo: we can use output type
+	dbg2(new_fn->fn_type->resolve_if(src_fn_owner,return_type,flags));//todo: we can use output type
 
 	verify_all();
 	return new_fn;	// welcome new function!
@@ -255,7 +255,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 	
 	if (this->is_generic()){	// must resolve instances too, if they relied on args that aren't resolved? TODO: dont instance until all symbols are found
 		for (auto ins=this->instances; ins;ins=ins->next_instance){
-			ins->resolve(scope,nullptr,flags);
+			ins->resolve_if(scope,nullptr,flags);
 		}
 		//return ResolveResult();
 		flags=0; // dont throw type error here
@@ -267,7 +267,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 		auto use_flags=(this->is_generic())?(flags&~R_FINAL):flags;
 			
 		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
-			this->args[i]->resolve(this->scope, nullptr, use_flags); // todo: call with defaultparams & init-expr
+			this->args[i]->resolve_if(this->scope, nullptr, use_flags); // todo: call with defaultparams & init-expr
 			auto arg=this->args[i];
 			auto v=sc->find_scope_variable(arg->name);
 			if (!v){
@@ -285,7 +285,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 			desired=nullptr;
 		
 		if (this->body){
-			auto ret=this->body->resolve(sc, this->ret_type, flags);
+			auto ret=this->body->resolve_if(sc, this->ret_type, flags);
 			propogate_type(flags, (const Node*)this,this->ret_type,this->body->type_ref());
 
 			dbg2(this->ret_type->dump_if(-1));
@@ -337,7 +337,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 		dbg(x->dump(0))
 		;
 		if (x->pattern && this->scope)
-			x->pattern->resolve(this->scope,x->type(),flags);
+			x->pattern->resolve_if(this->scope,x->type(),flags);
 	}
 
 
@@ -346,7 +346,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 		this->fn_type->resolve_if(scope,nullptr,flags);
 		this->return_type()->resolve_if(scope,nullptr,flags);
 	}
-	return ResolveResult(fn_type,ResolveResult::COMPLETE);
+	return ResolveResult(fn_type,COMPLETE);
 }
 
 CaptureVars* ExprFnDef::get_or_create_capture(ExprFnDef* src){
@@ -373,14 +373,14 @@ int ExprFnDef::type_parameter_index(Name n) const {
 ResolveResult ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags) {
 	if (this->is_generic()){
 		for (auto ins=this->instances; ins;ins=ins->next_instance){
-			ins->resolve(scope,nullptr,flags);
+			ins->resolve_if(scope,nullptr,flags);
 		}
 		return ResolveResult();
 	}
 	
 	propogate_type_fwd(flags,this, desired,this->ret_type);
 	
-	auto rt=this->body->resolve(scope,desired,flags);
+	auto rt=this->body->resolve_if(scope,desired,flags);
 	dbprintf("resolve %s yields type:", getString(this->as_name()));if (auto t=this->body->type()) t->dump(-1);printf("\n");
 	// awkwardness says: type error return is more like an enum that doesn't return a type?
 	// if its' a type error we should favour the most significant info: types manually specified(return values,function args)
@@ -570,7 +570,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 	//[1.3] argument conversions..
 	auto coerce_args=[&](const Type* fn_type){
 		// todo - should not be needed
-		const_cast<Type*>(fn_type)->resolve(sc, nullptr, 0);
+		const_cast<Type*>(fn_type)->resolve_if(sc, nullptr, 0);
 		auto ai=0;
 		dbg2(fn_type->dump(-1);newline(0));
 		auto fn_arg=fn_type->fn_args_first();

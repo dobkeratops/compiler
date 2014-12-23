@@ -134,13 +134,13 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 	ASSERT(a && b);
 	// TODO: variadic args shouldn't get here:
 	if (a->name==ELIPSIS||b->name==ELIPSIS)
-		return ResolveResult(a,ResolveResult::COMPLETE);
+		return ResolveResult(a,COMPLETE);
 	if (!a->is_equal(b)){
 		if (a->is_coercible(b)){
-			return ResolveResult(0,ResolveResult::COMPLETE);
+			return ResolveResult(0,COMPLETE);
 		}
 		if (!(flags & R_FINAL))
-			return ResolveResult(0,ResolveResult::INCOMPLETE);
+			return ResolveResult(0,INCOMPLETE);
 		
 		dbg(n->dump(0));
 		error_begin(n," type mismatch\n");
@@ -153,9 +153,9 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 		}
 #endif
 		error_end(n);
-		return ResolveResult(a,ResolveResult::ERROR);
+		return ResolveResult(a,RS_ERROR);
 	}
-	return ResolveResult(a,ResolveResult::COMPLETE);
+	return ResolveResult(a,COMPLETE);
 }
 void verify(const Type* a){
 	if (a){
@@ -177,13 +177,13 @@ const Type* any_not_zero(const Type* a, const Type* b){return a?a:b;}
 ResolveResult propogate_type(int flags,const Node*n, Type*& a,Type*& b) {
 	verify(a,b);
 	if (!(a || b))
-		return ResolveResult(0,ResolveResult::INCOMPLETE);
+		return ResolveResult(0,INCOMPLETE);
 	if (!a && b) {
 		a=b;
-		return ResolveResult(a,ResolveResult::COMPLETE);}
+		return ResolveResult(a,COMPLETE);}
 	else if (!b && a) {
 		b=a;
-		return ResolveResult(b,ResolveResult::COMPLETE);
+		return ResolveResult(b,COMPLETE);
 	}
 	return assert_types_eq(flags,n, a,b);
 }
@@ -196,17 +196,17 @@ ResolveResult propogate_type(int flags, Expr *n, Type*& a,Type*& b) {
 ResolveResult propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b) {
 	verify(a,b);
 	if (!(a || b))
-		return ResolveResult(0,ResolveResult::INCOMPLETE);
+		return ResolveResult(0,INCOMPLETE);
 	if (!a && b){
-		return ResolveResult(b,ResolveResult::INCOMPLETE);
+		return ResolveResult(b,INCOMPLETE);
 	}
 	if (!b && a) {
 		b=(Type*)a;
-		return ResolveResult(a,ResolveResult::COMPLETE);
+		return ResolveResult(a,COMPLETE);
 	}
 	return assert_types_eq(flags,n, a,b);
 	
-	return ResolveResult(b,ResolveResult::INCOMPLETE);
+	return ResolveResult(b,INCOMPLETE);
 }
 ResolveResult propogate_type_fwd(int flags,Expr* e, const Type*& a) {
 	return propogate_type_fwd(flags,e, a, e->type_ref());
@@ -217,16 +217,16 @@ ResolveResult propogate_type(int flags,Expr* e, Type*& a) {
 
 ResolveResult propogate_type(int flags,const Node* n, Type*& a,Type*& b,Type*& c) {
 	verify(a,b,c);
-	int ret=ResolveResult::COMPLETE;
+	int ret=COMPLETE;
 	ret|=propogate_type(flags,n,a,b).status;
-	ret|=(c)?propogate_type(flags,n,b,c).status:ResolveResult::INCOMPLETE;
-	ret|=(c)?propogate_type(flags,n,a,c).status:ResolveResult::INCOMPLETE;
+	ret|=(c)?propogate_type(flags,n,b,c).status:INCOMPLETE;
+	ret|=(c)?propogate_type(flags,n,a,c).status:INCOMPLETE;
 	const Type* any=any_not_zero(a,any_not_zero(b,c));
 	return ResolveResult(any,ret);
 }
 ResolveResult propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c) {
 	verify(a,b,c);
-	int ret=ResolveResult::COMPLETE;
+	int ret=COMPLETE;
 	ret|=propogate_type_fwd(flags,n,a,b).status;
 	ret|=propogate_type_fwd(flags,n,a,c).status;
 	ret|=propogate_type(flags,n,b,c).status;
@@ -721,7 +721,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 	}
 	
 	if (block->get_fn_call() && num_resolved_args==block->argls.size())
-		return ResolveResult(block->get_fn_call()->ret_type,ResolveResult::COMPLETE);
+		return ResolveResult(block->get_fn_call()->ret_type,COMPLETE);
 
 //	11ASSERT(block->call_target==0);
 	// is it just an array access.
@@ -735,7 +735,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 
 		if (obj_t && block->argls[0]->type()) {
 			ASSERT(obj_t->is_array() || obj_t->is_pointer());
-			return ResolveResult(obj_t->sub,ResolveResult::COMPLETE);
+			return ResolveResult(obj_t->sub,COMPLETE);
 		}
 		return ResolveResult();
 	}

@@ -130,7 +130,7 @@ ResolveResult Type::resolve(Scope* sc,const Type* desired,int flags)
 	for (auto s=this->sub;s;s=s->next,ds=ds?ds->next:nullptr)
 		s->resolve(sc,ds,flags);
 	
-	return ResolveResult(this,ResolveResult::COMPLETE);
+	return ResolveResult(this,COMPLETE);
 }
 
 Type::Type(Name i,SrcPos sp){

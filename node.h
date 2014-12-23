@@ -12,7 +12,8 @@ public:
 	Node*	m_parent=0;					// for search & error messages,convenience TODO option to strip.
 	Name name;
 	RegisterName reg_name=0;			// temporary for llvm SSA calc. TODO: these are really in Expr, not NOde.
-	bool reg_is_addr=false;
+	bool 	reg_is_addr=false;
+	bool	resolved=false;			// true once all types are set correctly.
 	SrcPos pos;						// where is it
 	Node(){}
 	ExprDef*	def=0;		// definition of the entity here. (function call, struct,type,field);
@@ -22,9 +23,12 @@ public:
 
 	void clear_def();
 	virtual void dump(int depth=0) const;
-	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(nullptr, ResolveResult::INCOMPLETE);};
+	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(nullptr, INCOMPLETE);};
 	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
-		if (this) return this->resolve(scope,desired,flags);
+		if (this) {
+			if (this->resolved) return ResolveResult(COMPLETE);
+			return this->resolve(scope,desired,flags);
+		}
 		else return ResolveResult();
 	}
 	virtual const char* kind_str()const	{return"node";}

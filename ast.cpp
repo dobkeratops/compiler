@@ -40,7 +40,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	if (!this)
 		return ResolveResult();
 	if (this->name==EXPRESSION){
-		((Node*)(this->sub))->resolve(sc,rhs,flags);
+		((Node*)(this->sub))->resolve_if(sc,rhs,flags);
 		return propogate_type(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
 	}
 	if (this->name==PTR){
@@ -52,7 +52,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	}
 	if (this->name==IF){// guarded.
 		ASSERT(sub->next);
-		sub->next->resolve(sc, nullptr, flags);
+		sub->next->resolve_if(sc, nullptr, flags);
 		sub->resolve_with_type(sc, rhs, flags);
 		return propogate_type(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
 	}
@@ -311,11 +311,11 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled .
 		propogate_type_fwd(flags,this, desired,this->type_ref());
-		return ResolveResult(this->type_ref(),ResolveResult::COMPLETE);
+		return ResolveResult(this->type_ref(),COMPLETE);
 	}
 	
 	propogate_type_fwd(flags,this, desired,this->type_ref());
-	if (this->type()) this->type()->resolve(scope,desired,flags);
+	if (this->type()) this->type()->resolve_if(scope,desired,flags);
 	if (auto sd=scope->find_struct_name_type_if(scope,this->name,this->type())) {
 		this->set_def(sd);
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
@@ -583,12 +583,12 @@ ResolveResult ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	dbg_resolve("resolving arg %s\n",this->name_str());
 	propogate_type_fwd(flags,this,desired,this->type_ref());
 	if (this->type()){
-		this->type()->resolve(sc,desired,flags);
+		this->type()->resolve_if(sc,desired,flags);
 	}
 //	if (this->pattern)
 //		this->pattern->resolve(sc,this->type(),flags);
-	if (this->default_expr){this->default_expr->resolve(sc,this->type(),flags);}
-	return ResolveResult(this->type(), ResolveResult::COMPLETE);
+	if (this->default_expr){this->default_expr->resolve_if(sc,this->type(),flags);}
+	return ResolveResult(this->type(), COMPLETE);
 }
 void ArgDef::recurse(std::function<void(Node*)>&f){
 	this->type()->recurse(f);

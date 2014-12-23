@@ -89,19 +89,19 @@ ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 }
 ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
 	verify_all();
-	if (this->type()) this->type()->resolve(sc,nullptr,flags);
+	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
 	this->def->resolve_if(sc, nullptr, flags);
 	
 	/// loose end? if this is a method-call, we dont resolve the symbol here,
 	/// in other contexts we do
 	if (this->call_expr &&!receiver)
-		this->call_expr->resolve(sc,nullptr,flags);
+		this->call_expr->resolve_if(sc,nullptr,flags);
 	::verify(this->get_type());
 
 	if (this->is_tuple()) {
 		for (size_t i=0; i<this->argls.size(); i++) {
 			auto desired_sub=desired?desired->get_elem(i):nullptr;
-			this->argls[i]->resolve(sc,desired_sub,flags);
+			this->argls[i]->resolve_if(sc,desired_sub,flags);
 		}
 		// todo: we need to get better at filling in the gaps.
 		if (!this->get_type()) {
@@ -128,15 +128,15 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		if (this->argls.size()) {
 			if (!(flags & R_REVERSE_ONLY)){
 				for (auto n=0; n<this->argls.size()-1; n++) {
-					this->argls[n]->resolve(sc,0,flags);
+					this->argls[n]->resolve_if(sc,0,flags);
 				}
 			}
 			propogate_type_fwd(flags,this, desired);
-			auto ret=this->argls.back()->resolve(sc,desired,flags);
+			auto ret=this->argls.back()->resolve_if(sc,desired,flags);
 			// reverse pass too
 			if (!(flags & R_FORWARD_ONLY)){
 				for (auto n=(int)this->argls.size()-1;n>=0; n--) {
-					this->argls[n]->resolve(sc,0,flags);
+					this->argls[n]->resolve_if(sc,0,flags);
 				}
 			}
 
@@ -150,11 +150,11 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	}
 	else if (this->is_subscript()) {
 		// array indexing operator TODO: check this isn't itself a Type, if we want templates anywhere.
-		auto array_type=this->call_expr->resolve(sc,nullptr,flags); // todo - it could be _[desired]. forward should give possibilities
+		auto array_type=this->call_expr->resolve_if(sc,nullptr,flags); // todo - it could be _[desired]. forward should give possibilities
 		if (auto t=call_expr->type()){
 			ASSERT(t->is_array()||t->is_pointer());
 			for (auto i=0; i<argls.size(); i++)  {
-				argls[i]->resolve(sc,nullptr,flags&!R_PUT_ON_STACK ); // TODO any indexing type? any type extracted from 'array' ?
+				argls[i]->resolve_if(sc,nullptr,flags&!R_PUT_ON_STACK ); // TODO any indexing type? any type extracted from 'array' ?
 			}
 			const Type* array_elem_type=t->sub;
 			propogate_type_fwd(flags,this, array_elem_type);
@@ -179,7 +179,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 			this->call_expr=0;
 			this->argls.resize(1);
 			this->argls[0]=new ExprLiteral(src->pos,tmp,(int)strlen(tmp));
-			this->argls[0]->resolve(sc,nullptr,0);
+			this->argls[0]->resolve_if(sc,nullptr,0);
 			this->set_type(src->get_type());
 			return ResolveResult();
 		}
@@ -231,7 +231,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		if (!this->get_fn_call()){
 			
 			for (auto i=0; i<argls.size(); i++)  {
-				argls[i]->resolve(sc,nullptr ,flags);
+				argls[i]->resolve_if(sc,nullptr ,flags);
 			}
 			if (this->call_expr->is_ident() && 0==dynamic_cast<Variable*>(this->call_expr->def)){
 				return resolve_make_fn_call(receiver,this, sc,desired,flags);
@@ -242,13 +242,13 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 #if DEBUG>=2
 				dbprintf("receiver+ %d args; call %s with %d args\n",argls.size(), fnc->name_str(), fnc->args.size());
 #endif
-				receiver->resolve(sc,fnc->args[0]->type(),flags);
+				receiver->resolve_if(sc,fnc->args[0]->type(),flags);
 			}
 			for (auto i=0; i<(argls.size()); i++)  {
 				//int i=srci+ofs;
 				auto ii=i+ofs;
 				auto fnarg=ii<fnc->args.size()?fnc->args[ii]:nullptr;
-				argls[i]->resolve(sc,fnarg?fnarg->type():nullptr ,flags);
+				argls[i]->resolve_if(sc,fnarg?fnarg->type():nullptr ,flags);
 			}
 			return propogate_type_fwd(flags,this, desired,this->get_fn_call()->ret_type);
 		} else {

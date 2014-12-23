@@ -15,7 +15,7 @@ ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags)
 	incr->resolve_if(sc,0,flags);
 	body->resolve_if(sc,desired,flags);
 	if (else_block) {
-		else_block->resolve(sc,desired,flags);
+		else_block->resolve_if(sc,desired,flags);
 		propogate_type(flags, (Node*)this, this->type_ref(), else_block->type_ref());
 	}
 	//without an else bllock, we can't return
@@ -98,13 +98,13 @@ ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	auto sc=outer_s->make_inner_scope(&this->scope,outer_s->owner_fn,this);
 	
 	::verify(this->cond->get_type());
-	this->cond->resolve(sc,nullptr,flags); // condition can  be anything coercible to bool
-	auto body_type=this->body->resolve(sc,desired,flags);
+	this->cond->resolve_if(sc,nullptr,flags); // condition can  be anything coercible to bool
+	auto body_type=this->body->resolve_if(sc,desired,flags);
 	Type* bt=this->body->type();
 	if (else_block){
 		propogate_type_fwd(flags,this, desired,bt);
 		propogate_type(flags,this, bt);
-		else_block->resolve(sc,bt,flags);
+		else_block->resolve_if(sc,bt,flags);
 		propogate_type(flags,this, this->body->type_ref(), else_block->type_ref());
 		propogate_type(flags,this, this->type_ref(), else_block->type_ref());
 		
@@ -272,7 +272,7 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 	// the whole block gets a scope
 	auto match_sc=outer_sc->make_inner_scope(&this->scope,outer_sc->owner_fn,this);
 
-	this->expr->resolve(match_sc,nullptr,flags);
+	this->expr->resolve_if(match_sc,nullptr,flags);
 	propogate_type_fwd(flags,this, desired, this->type_ref());
 
 	for (auto a=this->arms; a;a=a->next ) {
@@ -285,7 +285,7 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 		//propogate_type(flags, (Node*)this, this->expr->type_ref(), a->pattern->type_ref());
 		a->pattern->resolve_with_type(a->scope, this->expr->type(), flags);
 		a->cond->resolve_if(a->scope, Type::get_bool(),flags);
-		a->body->resolve(a->scope, this->type(), flags);
+		a->body->resolve_if(a->scope, this->type(), flags);
 		
 		//all arms outputs have same typeas the whole output
 		propogate_type(flags,this, a->body->type_ref(),this->type_ref());
