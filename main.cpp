@@ -51,7 +51,7 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 	if (flags & B_TYPES) {
 		node->dump(0);
 	}
-	node->resolve(&global,nullptr,flags&(B_EXECUTABLE|B_RUN|B_LLVM)?R_FINAL:0);// if we just want to dump/search, we dont fail for final errors.
+	node->resolve(&global,nullptr,(flags&(B_EXECUTABLE|B_RUN|B_LLVM)?R_FINAL:0)|R_FORWARD_ONLY);// if we just want to dump/search, we dont fail for final errors.
 	if (flags & B_LLVM) {
 		output_code(stdout, &global,0,EMIT_ALL);
 	}

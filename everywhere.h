@@ -131,7 +131,8 @@ struct Span {
 };
 
 #define R_FINAL 0x0001
-#define R_REVERSE 0x0002
+#define R_REVERSE_ONLY 0x0002
+#define R_FORWARD_ONLY 0x0004
 #define R_PUT_ON_STACK 0x8000
 
 extern void verify_all_sub();
@@ -315,13 +316,13 @@ struct ResolvedType{
 	enum Status:int {COMPLETE=0,INCOMPLETE=1,ERROR=3};
 	// complete is zero, ERROR is 3 so we can
 	// carries information from type propogation
-	Type* type;
+	Type* type=0;
 	Status status;
 	void combine(const ResolvedType& other){
 		status=(Status)((int)status|(int)other.status);
 	}
-	ResolvedType(){type=0;status=INCOMPLETE;}
-	ResolvedType(const Type*t,Status s){type=const_cast<Type*>(t); status=s;}
+	ResolvedType(){status=INCOMPLETE;}
+	ResolvedType(const Type* t, Status s){type=const_cast<Type*>(t); status=s;}
 	ResolvedType(const Type* t, int s):ResolvedType(t,(Status)s){}
 	//operator Type* ()const {return type;}
 	//operator bool()const { return status==COMPLETE && type!=0;}

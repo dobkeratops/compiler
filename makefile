@@ -9,7 +9,6 @@ hack: $(SRC) all.cpp $(HEADER) foo
 
 debug: hack
 	./hack example.rs -tr
-	./hack maths.rs -tr
 
 # 'DEBUG=4' switches on ultra verbose debug trace , 
 # dumps of intermediate state during resolving 

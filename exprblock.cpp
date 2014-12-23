@@ -123,37 +123,27 @@ ResolvedType ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Ex
 	}
 	ExprIdent* p=nullptr;
 	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
-		auto n=0;
-		for (; n<this->argls.size()-1; n++) {
-			this->argls[n]->resolve(sc,0,flags);
-		}
 		// last expression - type bounce. The final expression is a return value, use 'desired';
 		// we then propogate backwards. some variables will have been set, eg return value accumulator..
 		if (this->argls.size()) {
-			propogate_type_fwd(flags,this, desired);
-			auto ret=this->argls[n]->resolve(sc,desired,flags);
-			// reverse pass too
-			for (n=(int)this->argls.size()-1;n>=0; n--) {
-				this->argls[n]->resolve(sc,0,flags);
-			}
-			if ((flags & R_FINAL) &&ret.type && desired  &&this->argls.back()->type()){
-				if (!ret.type->is_equal(desired)){
-					newline(0);
-					dbprintf("mismattched types..\n",n);
-					ret.type->dump(-1); newline(0); desired->dump(-1);newline(0);
-					this->argls.back()->type()->dump(0);
-					dbprintf("n=%d",n);
-					this->argls.back()->dump(0);
-					newline(0);
-					auto ret1=this->argls.back()->resolve(sc,desired,flags);
+			if (!(flags & R_REVERSE_ONLY)){
+				for (auto n=0; n<this->argls.size()-1; n++) {
+					this->argls[n]->resolve(sc,0,flags);
 				}
 			}
-			propogate_type(flags, this, this->argls.back()->type_ref());
-#if DEBUG>=2
-			this->type()->dump_if(-1);
-			this->argls.back()->dump_if(-1);
-			newline(0);
-#endif
+			propogate_type_fwd(flags,this, desired);
+			auto ret=this->argls.back()->resolve(sc,desired,flags);
+			// reverse pass too
+			if (!(flags & R_FORWARD_ONLY)){
+				for (auto n=(int)this->argls.size()-1;n>=0; n--) {
+					this->argls[n]->resolve(sc,0,flags);
+				}
+			}
+
+			dbg(this->type()->dump_if(-1));
+			dbg(this->argls.back()->dump_if(-1));
+			dbg(newline(0));
+
 			return propogate_type(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
 		}
 		else {ASSERT(0);return ResolvedType();}
