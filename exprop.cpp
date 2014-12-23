@@ -64,7 +64,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	verify_all();
 	Type* ret=0;
 	auto op_ident=name;
-	if (this->type()) this->type()->resolve(sc,desired,flags);
+	this->type()->resolve_if(sc,desired,flags);
 	//	if (flags) {ASSERT(lhs->def) ;ASSERT(rhs->def);}
 
 	
@@ -72,7 +72,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (op_ident==BREAK){
 		if (this->rhs) {
 			// break expression..
-			rhs->resolve(sc,desired,flags);
+			rhs->resolve_if(sc,desired,flags);
 			auto loop = sc->current_loop(this->lhs?getNumberInt(lhs->name):1);
 			if (flags & R_FINAL){
 				if (!loop && flags&R_FINAL) {
@@ -97,7 +97,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==DECLARE_WITH_TYPE) {
 		if (op_ident==LET_ASSIGN){
 			ASSERT(this->lhs && this->rhs);
-			rhs->resolve(sc,desired,flags);
+			rhs->resolve_if(sc,desired,flags);
 			dbg(lhs->dump(0));dbg(printf(".let="));
 			dbg(rhs->dump(0));dbg(newline(0));
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
@@ -115,13 +115,13 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 			
 			//new_var->force_type_todo_verify(rhs_t);
-			lhs->resolve(sc,rhs->type(),flags);
+			lhs->resolve_if(sc,rhs->type(),flags);
 			propogate_type_fwd(flags, this, desired, lhs->type_ref());
 			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 		}
 		else if (op_ident==DECLARE_WITH_TYPE){ // create a var, of given type,like let lhs:rhs;
 			const Type* tt=rhs?rhs->as_type():nullptr; if (!tt) tt=this->type(); if (!tt) tt=desired;
-			lhs->resolve(sc, tt,flags);
+			lhs->resolve_if(sc, tt,flags);
 			if (!lhs->is_ident())
 				return propogate_type_refs(flags, this, lhs->type_ref(),type_ref());
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
@@ -131,7 +131,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			auto v=sc->get_or_create_scope_variable(this,lhsi->name,Local);
 			auto t=v->get_type();
 			if (rhs){
-				rhs->resolve(sc,desired,flags);
+				rhs->resolve_if(sc,desired,flags);
 				t=expect_cast<Type>(rhs);
 				v->set_type(t);
 			}
@@ -150,9 +150,9 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		else if (op_ident==ASSIGN){
 			ASSERT(this->lhs && this->rhs);
 			dbg(::dump(this->lhs->type(),this->rhs->type()));
-			rhs->resolve(sc,lhs->type_ref(),flags);
+			rhs->resolve_if(sc,lhs->type_ref(),flags);
 
-			lhs->resolve(sc,rhs->type_ref(),flags);
+			lhs->resolve_if(sc,rhs->type_ref(),flags);
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
 
 			propogate_type_refs(flags,this, rhs->type_ref(), lhs->type_ref());
@@ -176,7 +176,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		lhs->set_def(v);
 		return propogate_type_refs(flags, this, v->type_ref(),type_ref());
 	} else if (op_ident==AS){
-		this->lhs->resolve(sc,nullptr,flags);
+		this->lhs->resolve_if(sc,nullptr,flags);
 		if (this->rhs->name==PLACEHOLDER) {
 			this->rhs->set_type(desired);
 			this->set_type(desired);
@@ -206,23 +206,22 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			propogate_type_refs(flags, (Node*)this, this->get_type()->sub, b->type_ref());
 		
 		if (rhs->is_subscript()){
-			b->call_expr->resolve(sc,get_type()?get_type()->sub:nullptr,flags);
+			b->call_expr->resolve_if(sc,get_type()?get_type()->sub:nullptr,flags);
 			b->set_type(b->call_expr->get_type());
 		}
 		else {
-			b->resolve(sc, desired?desired->sub:nullptr, flags);
+			b->resolve_if(sc, desired?desired->sub:nullptr, flags);
 			
 		}
 		
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
 	else if (op_ident==DELETE ){
-		rhs->resolve(sc,nullptr,flags);
-		return ResolveResult();
+		return rhs->resolve_if(sc,nullptr,flags);
 	}
 
 	else if (op_ident==DOT || op_ident==ARROW) {
-		auto lhs_t=lhs->resolve(sc, 0,flags);//type doesn't push up- the only info we have is what field it needs
+		auto lhs_t=lhs->resolve_if(sc, 0,flags);//type doesn't push up- the only info we have is what field it needs
 		auto t=lhs->type();
 		//		dbprintf("resolve %s.%s   lhs:",getString(lhs->name),getString(rhs->name));if (t) t->dump(-1);dbprintf("\n");
 		
@@ -294,7 +293,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 			dt=desired->sub;
 		}
-		auto ret=rhs->resolve(sc,dt,flags|R_PUT_ON_STACK);
+		auto ret=rhs->resolve_if(sc,dt,flags|R_PUT_ON_STACK);
 		if (!this->get_type() && rhs->type()){
 			auto ptr_type=new Type(this,PTR,(Type*)rhs->type()->clone());
 			this->set_type(ptr_type);
@@ -304,7 +303,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 	else if (op_ident==DEREF){ //result=*rhs
 		// todo: we can assert give type is one less pointer, if given
-		auto ret=rhs->resolve(sc,0,flags);
+		auto ret=rhs->resolve_if(sc,0,flags);
 		// todo: its' a typeparam constraint.  ptr[desired]==argls[0]
 		if (!this->get_type() && rhs->type()){
 			//			if (ret.type->name!=PTR) {
@@ -324,14 +323,14 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 			return propogate_type_fwd(flags,this, desired, this->type_ref());
 		}
-		else return ResolveResult();
+		else return ret;
 	}
 	
 	
 	
 	if (is_condition(op_ident)){
-		auto lhst=lhs->resolve(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
-		auto rhst=rhs->resolve(sc,lhs->type_ref(),flags);
+		lhs->resolve_if(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
+		rhs->resolve_if(sc,lhs->type_ref(),flags);
 		propogate_type_refs(flags,(Node*)this, lhs->type_ref(),rhs->type_ref());
 		::verify(lhs->get_type());
 		::verify(rhs->get_type());
@@ -346,8 +345,8 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// regular operator
 		// TODO propogate types for pointer-arithmetic - ptr+int->ptr   int+ptr->ptr  ptr-ptr->int
 		// defaults to same types all round.
-		auto lhst=lhs->resolve(sc,desired,flags);
-		auto rhst=rhs->resolve(sc,desired,flags&!R_PUT_ON_STACK);
+		lhs->resolve_if(sc,desired,flags);
+		rhs->resolve_if(sc,desired,flags&!R_PUT_ON_STACK);
 		propogate_type_refs(flags,this, lhs->type_ref(),type_ref());
 		propogate_type_refs(flags,this, rhs->type_ref(),type_ref());
 
@@ -369,8 +368,8 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 		return false;
 	if (this->get_fn())
 		return true;
-	if (lhs)lhs->resolve(sc,nullptr,flags&(~R_FINAL));
-	if (rhs)rhs->resolve(sc,nullptr,flags&(~(R_PUT_ON_STACK|R_FINAL)));
+	lhs->resolve_if(sc,nullptr,flags&(~R_FINAL));
+	rhs->resolve_if(sc,nullptr,flags&(~(R_PUT_ON_STACK|R_FINAL)));
  	if (!(lhs->type_if()||rhs->type_if()||desired)){
 		return false;		// no info to go on.
 	}

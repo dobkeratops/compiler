@@ -22,7 +22,6 @@ struct  ExprFnDef : ExprDef {
 	bool variadic;
 	bool c_linkage=false;
 	bool m_closure=false;
-	bool resolved;
 	
 	Type* ret_type=0;
 	Type* fn_type=0;				// eg (args)->return
@@ -32,7 +31,7 @@ struct  ExprFnDef : ExprDef {
 	vector<ArgDef*> args;
 	Expr* body=0;
 	ExprFnDef(){};
-	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;resolved=false;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
+	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
 	void			set_receiver_if_unset(ExprStructDef* sd); // not sure if it'll be arbitrary type
 	ExprStructDef*	get_receiver();
 	int		get_name()const {return index(name);}

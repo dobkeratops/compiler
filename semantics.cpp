@@ -706,7 +706,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 
 	int num_resolved_args=0;
 	for (int i=0; i<block->argls.size(); i++) {
-		block->argls[i]->resolve(scope,nullptr,flags);
+		block->argls[i]->resolve_if(scope,nullptr,flags);
 		if (block->argls[i]->type()) num_resolved_args++;
 	}
 #if DEBUG>4
@@ -716,7 +716,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 	}
 #endif
 	if (receiver){
-		receiver->resolve(scope,nullptr,flags); if (receiver->type()) num_resolved_args++;
+		receiver->resolve_if(scope,nullptr,flags); if (receiver->type()) num_resolved_args++;
 	}
 	
 	if (block->get_fn_call() && num_resolved_args==block->argls.size())

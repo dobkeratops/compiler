@@ -1,7 +1,7 @@
 #pragma once
 /// needed split this to break some circular dependancies.
 
-typedef int ResolveResult;
+typedef char ResolveResult;
 enum {COMPLETE=0,INCOMPLETE=1,MISMATCH=2,RS_ERROR=INCOMPLETE|MISMATCH};
 
 struct Type;
@@ -18,7 +18,7 @@ public:
 	Name name;
 	RegisterName reg_name=0;			// temporary for llvm SSA calc. TODO: these are really in Expr, not NOde.
 	bool 	reg_is_addr=false;
-	bool	resolved=false;			// true once all types are set correctly.
+	ResolveResult	resolved=INCOMPLETE;			// true once all types are set correctly.
 	SrcPos pos;						// where is it
 	Node(){}
 	ExprDef*	def=0;		// definition of the entity here. (function call, struct,type,field);
@@ -29,12 +29,17 @@ public:
 	void clear_def();
 	virtual void dump(int depth=0) const;
 	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(INCOMPLETE);};
+	// wrapper handles 'this==nullptr', and propogation of 'resolved' flag.
 	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
 		if (this) {
-			if (this->resolved) return ResolveResult(COMPLETE);
-			return this->resolve(scope,desired,flags);
+			if (this->resolved==COMPLETE)
+				ResolveResult(COMPLETE);
+			auto r=this->resolve(scope,desired,flags);
+			resolved|=r;
+			return r;
 		}
-		else return ResolveResult();
+		else
+			return ResolveResult(COMPLETE);
 	}
 	virtual const char* kind_str()const	{return"node";}
 	void	replace_name_if(Name if_is,Name replacement){if (name==if_is) name=replacement;}

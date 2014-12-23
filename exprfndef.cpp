@@ -180,7 +180,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	new_fn->next_instance = srcfn->instances;
 	srcfn->instances=new_fn;
 	new_fn->instance_of = srcfn;
-	new_fn->resolved=false;
+	new_fn->resolved=INCOMPLETE;
 	
 	dbg2(printf("arg types after instancing\n"));
 	dbg2(new_fn->dump_signature());
