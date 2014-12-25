@@ -122,6 +122,15 @@ If another language has every feature I want in one place... great, I'll ditch t
 
 ### Open questions...
 
+ * inbuilt slice/vector types like .jai?
+   * reasoning behind that makes sense
+   * but we have templates already
+   * might just give syntax sugar for declaring them 
+     * [] [..] [N] == __slice<T> __vector<T> __array<T,N>
+     * [K=>V] == __dictionary<K,V>
+     * .. then we can switch to inbuilt later..
+     * still might just want to recover old Rust syntax ~[T], ~T, ~str [T*N] .. it was nice!
+
  * default value passing behaviour especially * vs &, C++ vs rust..
    * C++ - value, copy by default, but autoborrow for '& ptrs' (aka references)
    * Rust - move by default, must write 'borrow' explicitely.
