@@ -1,4 +1,5 @@
 #include "node.h"
+#include "type.h"
 #include "codegen.h"
 
 void Node::clear_def(){

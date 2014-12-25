@@ -1,6 +1,4 @@
-#include "ast.h"
 #include "scope.h"
-#include "exprstructdef.h"
 
 void dump_locals(Scope* s){
 	for (;s;s=s->parent){

@@ -1,7 +1,10 @@
 	#pragma once
 #include "stringtable.h"
-//#include "codegen.h"
+//#include "type.h"
 
+//#include "codegen.h"
+class CgValue;
+class CodeGen;
 /// needed split this to break some circular dependancies.
 
 typedef char ResolveResult;
