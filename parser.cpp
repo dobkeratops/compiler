@@ -135,7 +135,7 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3, Pattern
 		t=src.eat_tok();
 		if (!prev && t==PATTERN_BIND){//backticks would be better since this can be @
 			auto np=new Pattern(src.pos, EXPRESSION);
-			np->push_back((Pattern*)parse_expr(src));// TODO, this is dodgy- subtype is not pattern. we're counting on Pattern to know. we'd need to derive PatternExpression.
+			np->set_sub_expr(parse_expr(src));
 			if (owner)owner->push_back(np);
 			return np;
 			

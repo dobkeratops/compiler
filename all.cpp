@@ -5,6 +5,7 @@
 #include "error.cpp"
 #include "everywhere.cpp"
 #include "exprblock.cpp"
+#include "pattern.cpp"
 #include "exprflow.cpp"
 #include "exprfndef.cpp"
 #include "exprop.cpp"

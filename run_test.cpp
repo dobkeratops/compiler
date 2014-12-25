@@ -231,9 +231,6 @@ CompilerTest g_Tests[]={
 		)===="
 		,nullptr
 	},
-
-
-	
  
 	{	"struct default constructor",__FILE__,__LINE__,R"====(
 		

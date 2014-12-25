@@ -484,7 +484,7 @@ Vec<T> operator+(Vec<T>&& a, const Vec<T>& b){
 	return ret;// RVO or move?
 }
 template<typename T>
-Vec<T>& operator+(Vec<T>&& a, const T& b){
+Vec<T> operator+(Vec<T>&& a, const T& b){
 	Vec<T> ret;
 	ret.resize_tofit(a.size()+1);
 	for (auto i=0; i<a.size(); i++){ ret.data[i]=a[i];}

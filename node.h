@@ -12,6 +12,7 @@ enum {COMPLETE=0,INCOMPLETE=1,MISMATCH=2,RS_ERROR=INCOMPLETE|MISMATCH};
 
 struct Type;
 struct Expr;
+struct Pattern;
 enum VarKind{VkArg,Local,Global};
 
 
@@ -119,6 +120,10 @@ public:
 	virtual ExprBlock*			as_block()		{return nullptr;}
 	virtual TParamDef*			as_tparam_def() {return nullptr;}
 	virtual const ExprBlock* 	as_block() const{return nullptr;}
+	virtual const Pattern*		as_pattern()const{return nullptr;}
+	virtual Pattern*			as_pattern(){return nullptr;}
+	virtual const Expr*		as_expr()const{return nullptr;}
+	virtual Expr*			as_expr(){return nullptr;}
 	virtual ArgDef* as_arg_def()				{return nullptr;}
 	virtual Variable* as_variable()				{return nullptr;}
 	virtual const Variable* as_variable() const {return nullptr;}
@@ -187,10 +192,15 @@ public:
 // Type Parameter, actually Template Parameter as we generalize it.
 struct Expr : public Node{					// anythifng yielding a value
 public:
+	virtual const Expr*		as_expr()const{return this;}
+	virtual Expr*			as_expr(){return this;}
+
 };
 
 struct ExprDef;
 struct ExprStructDef;
+typedef Type TParamVal;
+
 struct ExprScopeBlock : Expr{
 	Scope*		scope=0;
 };
@@ -201,6 +211,7 @@ struct ExprDef :Expr{
 	void	remove_ref(Node* ref);
 	virtual ExprDef* member_of(){return nullptr;}
 };
+
 
 
 template<typename T>

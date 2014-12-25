@@ -160,4 +160,26 @@ ResolveResult Node::propogate_type_fwd(int flags,const Node* n,const Type*& a,Ty
 	return resolved|=ResolveResult(ret);
 }
 
+void	ExprDef::remove_ref(Node* ref){
+	Node** pp=&refs;
+	Node* p;
+	auto dbg=[&](){
+		for (auto r=refs; r; r=r->next_of_def){
+			dbprintf("ref by %p %s %s %d\n",r, r->kind_str(), str(r->name),r->	pos.line);
+		}
+	};
+	for (p=*pp; p; pp=&p->next_of_def, p=*pp) {
+		if (p==ref) *pp=p->next_of_def;
+	}
+	ref->def=0;
+}
+
+Node*
+ExprIdent::clone() const {
+	auto r=new ExprIdent(this->name,this->pos);
+	r->set_type(this->get_type());	// this is where given typeparams live.
+	r->clear_def();	// def will need re-resolving.
+	return r;
+}
+
 
