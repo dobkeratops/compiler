@@ -52,6 +52,37 @@ struct Lexer {
 	int		bracket_close[MAX_DEPTH];
 	const char* buffer=0,*tok_start=0,*tok_end=0,*prev_start=0,*line_start=0;
 	Name curr_tok;int typaram_depth=0;
+	struct Terminator {
+		int delim,t0,t1,t2;
+	};
+	// terminator stack in lexer
+	// (i)to get rid of mess where open/close is consumed at different functioncall levels
+	// (ii) to facilitate 'quit parsing current node'
+	int terminator_depth=0;
+	Terminator terminator[MAX_DEPTH];
+	void	push_delimiters(int delim, int t0, int t1=0, int t2=0){
+		ASSERT(terminator_depth<(MAX_DEPTH-1));
+		terminator[terminator_depth++]=Terminator{delim,t0,t1,t2};
+	}
+	void	pop_delimiters() {
+		ASSERT(terminator_depth>0);
+		terminator_depth--;
+	}
+	bool is_terminator()const{
+		ASSERT(terminator_depth>0);
+		auto t=&terminator[terminator_depth-1];
+		return t->t0==(int)curr_tok || t->t1==(int)curr_tok || t->t2==(int)curr_tok;
+	}
+	bool is_delimiter()const{
+		ASSERT(terminator_depth>0);
+		auto t=&terminator[terminator_depth-1];
+		return t->delim==(int)curr_tok;
+	}
+	Name eat_if_delimiter(){
+		if (is_delimiter()) return eat_tok();
+		else return Name(0);
+	}
+	void exit_block();
 #ifdef WATCH_TOK
 	char watch_tok[64][12];
 #endif

@@ -465,7 +465,6 @@ struct Vec{
 		}
 	}
 
-
 	template<typename B>
 	Vec(const Vec<B>& src){
 		realloc(src.size());

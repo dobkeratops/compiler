@@ -51,8 +51,6 @@ Name get_infix_operator(Name tok) {
 		default: return tok;
 	}
 }
-
-
 StringTable::StringTable(const char** initial){
 	verbose=false;
 	nextId=0;

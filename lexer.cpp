@@ -61,6 +61,17 @@ void Lexer::advance_operator() {
 	}
 	tok_end=tok_start+longest;
 }
+void Lexer::exit_block(){
+	ASSERT(terminator_depth>0);
+	while (!is_terminator()) {
+		auto t=(int)eat_tok();
+		if (t==OPEN_BRACE || t==OPEN_BRACKET || t==OPEN_PAREN || t==OPEN_TYPARAM){
+			push_delimiters(0,close_of(t));
+			exit_block();
+		}
+	}
+	pop_delimiters();
+}
 void Lexer::advance_string(char quote) {
 	tok_start=tok_end;
 	tok_end++;
