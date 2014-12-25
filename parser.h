@@ -1,6 +1,5 @@
 #pragma once
-#include "lexer.h"
-struct TypeDef;
+//struct TypeDef;
 struct IdentWithTParams;
 struct Pattern;
 #include "exprflow.h"
@@ -8,7 +7,10 @@ struct Pattern;
 #include "exprfndef.h"
 #include "exprstructdef.h"
 #include "error.h"
+#include "lexer.h"
 
+struct ImplDef;
+struct TypeDef;
 struct SrcOp{ Name op; SrcPos pos;};
 template<typename T>
 T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
@@ -34,6 +36,8 @@ void		parse_typeparams_def(TokenStream& src,vector<TParamDef*>& out,int close);
 void		parse_typeparams_given(TokenStream& src, Type* add_here, int close);
 IdentWithTParams*		parse_tparams_for_ident(TokenStream& src,ExprIdent* id,int close);
 ExprStructDef*	parse_struct(TokenStream& src);
+TraitDef*		parse_trait(TokenStream& src);
+ImplDef*		parse_impl(TokenStream& src);
 ExprLiteral*	parse_literal(TokenStream& src);
 /// TODO - rust features..
 Pattern*	parse_pattern(TokenStream& src,int close, int close2=0,int close3=0,Pattern* owner=0);

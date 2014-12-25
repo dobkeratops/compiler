@@ -30,27 +30,33 @@ Dont have a name yet hence 'hack'..
 
 
 #### WIP
+ * Parsing rust Trait/Impl
+   * not planning on getting a full implementation done soon,
+   * but its' relatively to do the parsing easy, might inspire handling more Rust features
+   * details - 'Self' type - in progress..
  * rust-style enum/match- works with dynamic alloc; base lacks padding
    * currently does a..b a..<b, a|b|c, (a,b,c), if guards, @; 
      * no slice patterns yet
    * have tried to add scalas idea of being able to reference vars in patterns (by unary @)
  * HKT (template-template parameters)
-  * .. not extensively tested
+   * .. not extensively tested
 
 example source..
 https://github.com/dobkeratops/compiler/blob/master/example.rs
 
 Quite early days.
 
-#### Long Term Goals / project pillars :-
+#### Long Term Goals / project pillars, Prioritized :-
 
- * a systems language, 'for games'. no GC,zero overhead principle.
- * significant C/C++ subset resyntaxed, intended for transpiling both ways 
- * open-world polymorphism
- * add Rust/functional language inspired features
- * features for parallelism, shader+GPGPU programming ?
- * a subset should make a passable embedded dynamic language
-  * (think of 1 language to handle the C++-&-embedded-Lua usecase. recover @ptr..)
+ * 1 a systems language, 'for games'. no GC,zero overhead principle.
+ * 2 significant C/C++ subset resyntaxed, intended for nondestructive transpiling both ways 
+ * 3 open-world polymorphism (starting with UFCS)
+ * 4 add Rust+Functional Language inspired features
+ * 5 dedicated features for parallelism, shader+GPGPU programming ?
+ * 6 Aim to compile a subset of Rust, 
+   * unless it proves impossible to reconcile with goals 1,2,3..
+ * 7 a subset should make a passable embedded dynamic language
+  * think of 1 language to handle the C++-&-embedded-Lua usecase. recover @ptr..
 
 ### Short Term Priorities
 
@@ -66,6 +72,7 @@ Quite early days.
  * low priority: gradually expand C++ and Rust features set covered (trait objects, rust macros)
    * .. but get bits done when focussed on an area of overlap
    * maybe aim to get all of Rust parsed, at least eg impl, lifetimes, even if not compiling
+   * Rusts Macro System would fit perfectly but is low priority
 
 ### Rationale
 
@@ -103,6 +110,34 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
   * I'm intending to transpile to self-host, 
   * so have been reluctant to dive into full "modern C++"
   * still might want to eliminate dependance on C++ stdlib with simplified Vec<T>
+
+### Open questions...
+
+ * default value passing behaviour especially * vs &, C++ vs rust..
+   * C++ - value, copy by default, but autoborrow for '& ptrs' (aka references)
+   * Rust - move by default, must write 'borrow' explicitely.
+ * whats' more useful, whats' more consistent?
+   * Move is cheap, borrow is cheap, but which is more common..
+     * find oneself writing & a lot in rust.
+ * this language wants immutable default, like rust.
+ * immutable-borrow is just like a value, so reverting to C++ like behaviour modified for immutable borrow could be nice.
+ * its nice that Rust makes copy explicit (.clone()), as its' expensive
+   * do we want to use C++ copy-constructors, or go that route..
+ * perhaps we should just have immutable-borrow as the default/nothing extra typed
+   * and write explicit move or copy operators/functions
+   * and have to write something explicit for a *mutable* pointer.
+     * agree with google-style guide's preference to make output params obvious at callsite
+     * rust also requires you to write &mut
+ * So is simply C++ like behaviour, tweaked for immutable default enough
+ * can we still shoe-horn compiling Rust source into this
+   * Auto-coerce *ptr to &ptr, and & makes a * like in C++.
+   * does that break any C++ code?
+
+ * What are the deatils of jonathan blows ^ptr. how does that sit.
+   * would most likely want to converge on that language..
+
+ * Could we just generalize how the * & operators act on types and use some syntax on their declaration to set that up
+   * so C++ transpiled and rust originated types get the right behaviour
 
 
 
@@ -205,13 +240,19 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
   * GPU&shader programming is important enough to hardcode language features.
   * recover rusts' lost "do" notation for pleasant internal iterators, 
 
- * other ideas..
-  * ways of carrying more information down an object graph..
-    * maybe hidden parameters on '.' overloads inlined away usually
-      * eg foo.bar could return  (&Bar,this) which autocoerces to &Bar 
-    * maybe nested 'this' for nested classes (eg scene->lights,scene->meshes...)
-  * 'intersection types' for cutting structures up without having to butcher source
-    * maybe just autoderef on tuple member acessors so tuples do that job..
-  * immutable data hint ? (eg for coalesced-allocations,local ptrs)
-  * 'vtable-from-address' for pooled objects?.. 
-    * generalize 'get-vtable','get-data' to do classes,trait-obj & more in 1 system?
+
+
+#### other ideas
+ * ways of carrying more information down an object graph..
+   * maybe hidden parameters on '.' overloads inlined away usually
+     * eg foo.bar could return  (&Bar,this) which autocoerces to &Bar 
+   * maybe nested 'this' for nested classes (eg scene->lights,scene->meshes...)
+ * 'intersection types' for cutting structures up without having to butcher source
+   * maybe just autoderef on tuple member acessors so tuples do that job..
+ * immutable data hint ? (eg for coalesced-allocations,local ptrs)
+ * 'vtable-from-address' for pooled objects?.. 
+   * generalize 'get-vtable','get-data' to do classes,trait-obj & more in 1 system?
+ * Haskell lazy eval is intruiging.
+   * Would there be any merit in being able to instantiate pure functions for lazy eval. x=lazy_call(..... ).
+   * detect fn's that are eligable.
+   * could any of that work without a GC?

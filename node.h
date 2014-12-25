@@ -213,6 +213,15 @@ struct ExprDef :Expr{
 };
 
 
+struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
+	TypeDef(SrcPos p, Name n){this->pos=p; this->name=n;}
+	const char* kind_str()const{return "typedef";}
+	vector<TParamDef*> typeparams;
+	Type*	type_def=0;
+	TypeDef*	clone()const;
+	void	dump(int depth) const;
+};
+
 
 template<typename T>
 T* expect_cast(Node* n){

@@ -62,9 +62,9 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 				char exename[256];
 				char wdir[512];getcwd(wdir,512);
 				filename_change_ext(exename,outname,"");
-#if DEBUG>=2
-				printf("invocation: wd=%s f=%s o=%s\n e=%s\n",wdir, filename, outname,exename);
-#endif
+
+				dbg(printf("invocation: wd=%s f=%s o=%s\n e=%s\n",wdir, filename, outname,exename));
+
 				char compile_cmd[512]; sprintf(compile_cmd,"clang %s -o %s", outname, exename);
 				if (flags & B_VERBOSE)printf("\nllvm src=%s\n executable=%s\nflags %x\n",outname,exename, flags);
 				if (flags & B_VERBOSE)printf("\n%s\n",compile_cmd);
@@ -72,9 +72,9 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 				if (!ret && (flags & B_RUN)) {
 					if (flags & B_VERBOSE)printf("compiled ok, running executable %s \n", exename);
 					char invoke[512];snprintf(invoke,512,"%s%s",has_dir(exename)?"":"./",exename);
-#if DEBUG>=2
-					printf("invocation: %s\npwd=%s\n",invoke,wdir);
-#endif
+
+					dbg(printf("invocation: %s\npwd=%s\n",invoke,wdir));
+
 					if (!capture_output){
 						return system(invoke);
 					} else{
@@ -111,9 +111,9 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 int compile_source_file(const char* filename, int options) {
 	char outname[256];
 	filename_change_ext(outname,filename,"ll");
-#if DEBUG
-	options|=B_VERBOSE;
-#endif
+
+	dbg(options|=B_VERBOSE);
+
 	if (options & B_VERBOSE)printf("compiling %s\n -> %s\n",filename,outname);
 	auto fp=fopen(filename,"rb");
 	if (fp){
@@ -189,9 +189,7 @@ int main(int argc, const char** argv) {
 	auto x=Vec<int>(mk_list(),4);
 	auto z=mk_list()+4;
 	
-#if DEBUG>=2
-	printf("compiled with debug level=%d\n", DEBUG);
-#endif
+	dbg(printf("compiled with debug level=%d\n", DEBUG));
 	ASSERT(!strcmp(str(OPEN_PAREN),"(") && !strcmp(str(ASSIGN),"=")&& !strcmp(str(UNDERSCORE),"_")  && !strcmp(str(OPEN_TYPARAM),"<[")&& "string table alignment?")
 	dbg_strings("paren=%s %s\nprecedences: ->%d *%d +%d &%d \n", str(OPEN_PAREN),str(CLOSE_PAREN),precedence(ARROW),precedence(MUL),precedence(ADD),precedence(AND));
 	//	compile_source_file("~/hack/test_hack/prog.rs",0xf);
@@ -220,11 +218,8 @@ int main(int argc, const char** argv) {
 		}
 	}
 	if (argc<=1) {
-#if DEBUG>=2
-		printf("no sources given so running inbuilt tests.\n");
-		run_tests();
-#else
 		dump_help();
-#endif
+		dbg(printf("no sources given so running inbuilt tests.\n"));
+		dbg(run_tests());
 	}
 }

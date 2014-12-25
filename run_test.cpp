@@ -12,6 +12,30 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+	{	"parse struct-trait-impl",__FILE__,__LINE__,R"====(
+		fn"C" printf(s:str,...)->int;
+		struct Foo{
+			x:int,y:int
+		};
+//		trait Object {
+//			fn render(self:&Object);
+//			fn update(self:&Object);
+//		};
+		impl Object for Foo {
+			fn render(self:&Foo){
+				printf("Foo.render\n");
+			}
+			fn update(self:&Foo){
+				printf("Foo.render\n");
+			}
+		}
+		fn main(argc:int, argv:**char)->int{
+			0
+		}
+		)====",
+		nullptr,true
+	},
+	
 	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
@@ -31,7 +55,6 @@ CompilerTest g_Tests[]={
 		)====",
 		nullptr
 	},
-	
 
 	{	"match val + ranges",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;

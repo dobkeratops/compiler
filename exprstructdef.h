@@ -4,8 +4,9 @@
 #include "exprfndef.h"
 #include "codegen.h"
 
-struct TypeDef;
 struct NamedItems;
+struct ImplDef;
+struct TraitDef;
 struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
 	// but its' backwards.
@@ -30,6 +31,7 @@ struct ExprStructDef: ExprDef {
 	vector<TypeDef*>		typedefs;
 	vector<ArgDef*>			args;		// default constructor form
 	ExprBlock*				body=0;		// for default constructor form.
+	ImplDef*				impls=0;
 	int 	first_user_field_index()const;
 	Type*	inherits_type=0;
 	Scope* scope=0;
@@ -59,8 +61,10 @@ struct ExprStructDef: ExprDef {
 	void			set_variant_of(ExprStructDef* owner, int index){set_discriminant(index); ASSERT(inherits==0); inherits=owner;}
 	void			dump(int depth)const;
 	void			dump_instances(int depth)const;
+	void			dump_struct_body(int depth) const;
 	size_t			size() const;
 	Node*			clone()const;
+	ImplDef*		get_impl_for(TraitDef* t);	//optionally instantiates (like go)
 	Node*			clone_sub(ExprStructDef* into) const;
 	void			inherit_from(Scope* sc, Type* base);
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
@@ -94,8 +98,9 @@ struct EnumDef  : ExprStructDef {
 	//CgValue compile(CodeGen& cg, Scope* sc); // different compile behaviour: discriminant+opaque
 };
 
-/// a rust 'Trait' is a struct with only virtual functions
+/// a rust 'Trait' is a struct with only virtual functions (&typedefs)
 struct TraitDef : ExprStructDef {
+	ImplDef* impls=0;
 	Node* clone()const;
 	const char* kind_str()const{return "trait";}
 	TraitDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
@@ -105,7 +110,14 @@ struct TraitDef : ExprStructDef {
 /// it could also represent a C++ namespace ... whihc would just add more definitions to a fieldless struct
 struct ImplDef : ExprStructDef {
 	Node* clone()const;
+	Type* impl_trait=0;
+	Type* impl_for_type=0;
+	ExprStructDef* impl_for_struct=0;
+	ImplDef*	next_of_type=0;
+	ImplDef*	next_of_trait=0;
+	void		add_to_struct();
 	const char* kind_str()const{return "impl";}
+	void dump(int depth) const;
 	ImplDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
 };
 /// a rust 'Mod' is just a struct with no fields, and just static functions

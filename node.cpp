@@ -181,5 +181,16 @@ ExprIdent::clone() const {
 	r->clear_def();	// def will need re-resolving.
 	return r;
 }
-
+TypeDef* TypeDef::clone()const{
+	TypeDef* td = new TypeDef(this->pos, this->name);
+	// todo - clone typeparams
+	td->type_def = (Type*) this->type_def->clone();// actual ->type() will be translated
+	return td;
+}
+void TypeDef::dump(int depth) const{
+	newline(depth); dbprintf("%s %s",this->kind_str() ,this->name_str()); dump_typeparams(this->typeparams); dbprintf("=");
+	this->type_def->dump(-1);
+	if (this->type()){dbprintf(":"); this->type()->dump_if(depth);}
+	dbprintf(";");
+}
 

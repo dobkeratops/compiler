@@ -1,3 +1,4 @@
+#include "node.h"
 #include "parser.h"
 
 //#define pop(X) ASSERT(X.size()>0); pop_sub(X);
@@ -140,9 +141,9 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3, Pattern
 			return np;
 			
 		}
-		if (t==PTR || t==REF || t==MUL || t==ADDR || t==NOT){ // todo: is_prefix
+		if (t==PTR || t==REF || t==MUL || t==AND || t==ADDR || t==NOT){ // todo: is_prefix
 			if (t==MUL) t=PTR;
-			if (t==ADDR) t=REF;
+			if (t==ADDR || t==AND) t=REF;
 			if (prev){ error(src.pos,"ptr/ref operator must be prefix in pattern");}
 			auto np=new Pattern(src.pos, t);
 			parse_pattern(src,close,close2,close3,np);
@@ -286,6 +287,16 @@ void parse_fn_body(ExprFnDef* fndef, TokenStream& src){
 	} else{  // its' a single-expression functoin, eg lambda.
 		fndef->body=parse_expr(src);
 	}
+}
+
+TypeDef* parse_typedef(TokenStream& src){
+	auto td=new TypeDef(src.prev_pos, src.eat_ident());
+	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
+		parse_typeparams_def(src,td->typeparams,close_of(open));
+	}
+	src.expect(ASSIGN);
+	td->type_def=parse_type(src, SEMICOLON, td);
+	return td;
 }
 
 ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,bool is_virtual) {
@@ -446,6 +457,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 			was_operand=true;
 			continue;
 		}
+		// todo ... datatable to associate ID with parse function
 		else if (src.eat_if(LET)){
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_let(src));
@@ -453,6 +465,14 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 		else if (src.eat_if(STRUCT)){
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
 			operands.push_back(parse_struct(src));
+		}
+		else if (src.eat_if(TRAIT)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			operands.push_back(parse_trait(src));
+		}
+		else if (src.eat_if(IMPL)){
+			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			operands.push_back(parse_impl(src));
 		}
 		else if (src.eat_if(ENUM)){
 			another_operand_so_maybe_flush(was_operand,node,operators,operands);
@@ -862,6 +882,7 @@ ExprStructDef* parse_struct(TokenStream& src) {
 	auto pos=src.pos;
 	auto sname=src.peek_tok()==OPEN_BRACE?0:src.eat_ident();
 	auto sd=parse_struct_body(src,pos,sname,nullptr);
+	// where block following struct def for default constructor..
 	if (src.eat_if(WHERE)){
 		src.expect(OPEN_BRACE);
 		sd->body=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
@@ -944,6 +965,65 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	// if there's any virtual functions, stuff a vtable pointer in the start
 	return sd;
 }
+
+// trait: describes a vtable layout
+TraitDef* parse_trait(TokenStream& src) {
+	auto pos=src.pos;
+	auto sname=src.eat_ident();
+
+	auto td= new TraitDef(src.prev_pos, sname);
+	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
+		parse_typeparams_def(src,td->typeparams,close_of(open));
+	}
+	// todo - parse trait inheritance here
+	src.expect(OPEN_BRACE);
+	// where block following struct def for default constructor..
+	while (src.peek_tok()!=CLOSE_BRACE){
+		dbg(printf("%s\n",str(src.peek_tok())););
+		if (src.eat_if(FN)){
+			td->virtual_functions.push_back(parse_fn(src,nullptr));
+		} else if (src.eat_if(TYPE)){
+			td->typedefs.push_back(parse_typedef(src));
+		}
+		src.eat_if(SEMICOLON);
+	}
+	src.eat_tok();
+	return td;
+}
+
+// impl: shortcut for declaring a bunch of functions with the same receiver.
+ImplDef* parse_impl(TokenStream& src) {
+	auto pos=src.pos;
+	auto imp= new ImplDef(src.prev_pos,0);
+	if (auto open=src.eat_if(OPEN_BRACKET,LT)){
+		parse_typeparams_def(src,imp->typeparams,close_of(open));
+	}
+	auto t1=parse_type(src,0,0);
+	if (src.eat_if(FOR)){			// impl Trait for Type
+		auto t2=parse_type(src,0,0);
+		imp->impl_trait=t1;
+		imp->impl_for_type = t2;
+	} else if (src.eat_if(COLON)){	// impl Type : Trait
+		auto t2=parse_type(src,0,0);
+		imp->impl_trait=t2;
+		imp->impl_for_type = t1;
+	} else {						// impl Type { ...}
+		imp->impl_for_type=t1;
+	}
+	src.expect(OPEN_BRACE);
+	// where block following struct def for default constructor..
+	while (src.peek_tok()!=CLOSE_BRACE){
+		if (src.eat_if(FN)){
+			imp->functions.push_back(parse_fn(src,nullptr));
+		} else if (src.eat_if(TYPE)){
+			imp->typedefs.push_back(parse_typedef(src));
+		}
+		src.eat_if(SEMICOLON);
+	}
+	src.eat_tok();
+	return imp;
+}
+
 
 ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
 	Name tok;

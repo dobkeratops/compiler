@@ -45,7 +45,7 @@ const char* g_token_str[]={
 	"auto","ptr","ref","Self",
 	"tuple","__NUMBER__","__TYPE__","__IDNAME__",
 	
-	"print___","fn","struct","class","trait","virtual","static","extern", "enum","array","vector","union","variant","with","match","where","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
+	"print___","fn","struct","class","trait","impl","virtual","static","extern", "enum","array","vector","union","variant","with","match","where","sizeof","typeof","nameof","offsetof", "this","self","super","vtableof","closure",
 	"let","var",
 	"const","mut","volatile",
 	"while","if","else","do","for","in","return","break","continue",
@@ -101,7 +101,7 @@ int g_tok_info[]={
 	0,0,0,0,0,0,0,0,0,
 	0,0,0,0,
 	0,0,0,0,			// type modifiers
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0, 0,0,0,0,0, // keywords
 	0,0,			// let,var
 	0,0,0,			// modifiers const,mut,volatile
 	0,0,0,0,0,0,0,0,0,  // while,if,else,do,for,in,return,break

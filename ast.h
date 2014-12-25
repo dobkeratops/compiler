@@ -55,11 +55,6 @@ struct TParamDef: ExprDef{
 	const char* kind_str()const{return "TParamDef";}
 };
 
-struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
-	const char* kind_str()const{return "typedef";}
-	vector<TParamDef*> typeparams;
-};
-
 struct ExprLiteral : ExprDef {
 	TypeId	type_id;
 	ExprLiteral* next_of_scope=0;	// collected..

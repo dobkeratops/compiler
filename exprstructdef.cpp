@@ -244,8 +244,16 @@ void ExprStructDef::roll_vtable() {
 		for (auto f:this->virtual_functions) {
 			// todo: static-virtual fields go here!
 			auto fnt=(Type*)(f->fn_type->clone());
-			fnt->sub->sub->sub->replace_name_if(this->name,SELF_T);
-			fnt->sub->next->next->replace_name_if(this->name,SELF_T);
+			
+			if (fnt->sub){
+				if(fnt->sub->sub)
+					if (fnt->sub->sub->sub)
+			
+						fnt->sub->sub->sub->replace_name_if(this->name,SELF_T);
+				if (fnt->sub->next)
+					if (fnt->sub->next->next)
+						fnt->sub->next->next->replace_name_if(this->name,SELF_T);
+			}
 			this->vtable->fields.push_back(
 					new ArgDef(
 					this->pos,
@@ -268,6 +276,7 @@ void ExprStructDef::roll_vtable() {
 
 	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??
 }
+
 void ExprStructDef::dump(int depth) const{
 	auto depth2=depth>=0?depth+1:depth;
 	newline(depth);
@@ -286,6 +295,15 @@ void ExprStructDef::dump(int depth) const{
 		dbprintf("(");for (auto a:this->args)	{a->dump(-1);dbprintf(",");};dbprintf(")");
 	}
 	dbprintf("{");
+	dump_struct_body(depth);
+	newline(depth);dbprintf("}");
+	if (this->body){
+		dbprintf("where");
+		((Node*)this->body)->dump(depth);
+	}
+}
+void ExprStructDef::dump_struct_body(int depth)const {
+	auto depth2=depth>=0?depth+1:depth;
 	if (this->m_is_variant){
 		newline(depth);dbprintf("__discriminant=%d ",this->discriminant);
 	}
@@ -294,11 +312,6 @@ void ExprStructDef::dump(int depth) const{
 	for (auto s:this->structs)	{s->dump(depth2);}
 	for (auto f:this->functions){f->dump(depth2);}
 	for (auto f:this->virtual_functions){f->dump(depth2);}
-	newline(depth);dbprintf("}");
-	if (this->body){
-		dbprintf("where");
-		((Node*)this->body)->dump(depth);
-	}
 }
 int ExprStructDef::first_user_field_index() const{
 	int i=0;
@@ -444,7 +457,26 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 	}
 	return CgValue();	// todo: could return symbol? or its' constructor-function?
 }
-
+Node* TraitDef::clone()const{
+	auto td=new TraitDef(this->pos, this->name);
+	return this->clone_sub(td);
+}
+Node* ImplDef::clone()const{
+	auto imp=new ImplDef(this->pos, this->name);
+	imp->impl_trait = this->impl_trait;
+	imp->impl_for_type = this->impl_for_type;
+	return this->clone_sub(imp);
+}
+void ImplDef::dump(int depth) const{
+	
+	newline(depth);
+	dbprintf("%s ",this->kind_str());dump_typeparams(this->typeparams);
+	if (this->impl_trait) {this->impl_trait->dump_if(-1);dbprintf(" for ");}
+	if (this->impl_for_type) this->impl_for_type->dump_if(-1);
+	
+	dump_struct_body(depth);
+	newline(depth);dbprintf("}");
+}
 //CgValue EnumDef::compile(CodeGen &cg, Scope *sc){
 //	return CgValue();
 //}
