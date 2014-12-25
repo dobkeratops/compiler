@@ -12,6 +12,7 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+
 	{	"parse struct-trait-impl",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		struct Foo{
@@ -21,7 +22,7 @@ CompilerTest g_Tests[]={
 //			fn render(self:&Object);
 //			fn update(self:&Object);
 //		};
-		impl Object for Foo {
+		impl Obj for Foo {
 			fn render(self:&Foo){
 				printf("Foo.render\n");
 			}

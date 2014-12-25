@@ -32,7 +32,8 @@ Dont have a name yet hence 'hack'..
 #### WIP
  * Parsing rust Trait/Impl
    * not planning on getting a full implementation done soon,
-   * but its' relatively to do the parsing easy, might inspire handling more Rust features
+   * but its' relatively easy to do the parsing
+   * might inspire getting a larger subset of Rust handled..
    * details - 'Self' type - in progress..
  * rust-style enum/match- works with dynamic alloc; base lacks padding
    * currently does a..b a..<b, a|b|c, (a,b,c), if guards, @; 
@@ -44,19 +45,18 @@ Dont have a name yet hence 'hack'..
 example source..
 https://github.com/dobkeratops/compiler/blob/master/example.rs
 
-Quite early days.
-
 #### Long Term Goals / project pillars, Prioritized :-
 
  * 1 a systems language, 'for games'. no GC,zero overhead principle.
  * 2 significant C/C++ subset resyntaxed, intended for nondestructive transpiling both ways 
  * 3 open-world polymorphism (starting with UFCS)
- * 4 add Rust+Functional Language inspired features
+ * 4 Add features inspired by Rust, keep syntax close
  * 5 dedicated features for parallelism, shader+GPGPU programming ?
- * 6 Aim to compile a subset of Rust, 
+ * 6 Aim to actually compile a subset of Rust, 
    * unless it proves impossible to reconcile with goals 1,2,3..
  * 7 a subset should make a passable embedded dynamic language
-  * think of 1 language to handle the C++-&-embedded-Lua usecase. recover @ptr..
+   * think of 1 language to handle the C++-&-embedded-Lua usecase. recover @ptr..
+   * but dont' compromise goals 1,2,.. over this.
 
 ### Short Term Priorities
 
@@ -73,6 +73,10 @@ Quite early days.
    * .. but get bits done when focussed on an area of overlap
    * maybe aim to get all of Rust parsed, at least eg impl, lifetimes, even if not compiling
    * Rusts Macro System would fit perfectly but is low priority
+ * Keep track of 'jonathan blows JAI' language and 
+   * maybe copy features, 
+   * the syntax is different but in time we could switch
+  
 
 ### Rationale
 
@@ -80,13 +84,15 @@ Basically trying to combine everything I like from C++ & Rust, dropping what I d
 
 This could all be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects - retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? 
 
-Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code;
+.. Anything here could be considered 'feature requests' for C++ or Rust.
 
-I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code.
+I beleive C++ can be 'fixed' and improved without straying so far,without sacrificing existing knowledge & code. A C++ compiler could be 'reskinned' to fix syntactic problems?
+
+Rust has many inspiring features but is a departure from C++ lacking features like function overloading that prevents representing existing C++ code; But its close enough to beleive it would only take very small changes to satisfy me.
 
 Also I value performance+productivity over compile-time safety. You need to write tests for other reasons, so IMO productivity for *tests* will still yield stability... there is still so much you still can't express in a typesystem or verify at compile time.
 
-I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating.(I have worked mostly on platforms where vtables were unacceptable). 
+I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating.(I have worked mostly on platforms where vtables were unacceptable). The standard libraries are messy but easily replaced. UFCS would be a big step forward.
 
 Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
 
@@ -95,12 +101,15 @@ Rust has to *over-estimate* safety to be sure. Some performant patterns are stil
 
 So somewhere between the two is my perfect language.
 
-This is probably all way beyond a 1man project but I'll see how far I can get. Perhaps I can just experiment and converge on whatever mainstream option is closest.
+This is probably all way beyond a 1man project but I'll see how far I can get. 
+Perhaps I can just experiment and converge on whatever mainstream option is closest.
+
+If another language has every feature I want in one place... great, I'll ditch this.
 
 #### project structure & info..
 
  * 'main.cpp' contains the driver,'parser.cpp' builds the AST,
- * 'node.h'=AST; implementations - eg'exprfndef.cpp' &'exprstructdef.cpp' 'exprOp.cpp 
+ * 'node.h'=abstract AST node; implementations - eg'exprfndef.cpp' &'exprstructdef.cpp' 'exprOp.cpp (operator);  
  * 'semantics.cpp' & '::resolve()' methods do inference/overload resolving..
  * 'codegen.cpp' encapsulates the output, called from node '::compile()' methods 
   * this is a hacky text output at the minute but does the job, 
@@ -119,6 +128,7 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
  * whats' more useful, whats' more consistent?
    * Move is cheap, borrow is cheap, but which is more common..
      * find oneself writing & a lot in rust.
+   * Can types from both slot in one system, eg flag rust stuff as 'Move', c++ stuff as Copy
  * this language wants immutable default, like rust.
  * immutable-borrow is just like a value, so reverting to C++ like behaviour modified for immutable borrow could be nice.
  * its nice that Rust makes copy explicit (.clone()), as its' expensive
@@ -153,6 +163,8 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
  * graph like/relative module import: 
   * any file in a project should work as the root for its own tests
   * No committing to heirachical structure
+    * i strongly dislike this in rust, the fact you bake in the hrc position into a symbol name
+      * moving things around is just as annoying as with C++ headers.
     * dont need to commit to 'crate roots', change library granularity
     * relative namespace search (to avoid any absolute root), just warn about ambiguity
     * overloading is,IMO, like non hierachical 'tagging'.
@@ -167,9 +179,9 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
   * Jonathan Blows' ".jai" "language for games"
     * most similar stated goal, but maybe different preferences
     * was inspiration to start this
-    * could just converge on it and keep our extra features?
+    * could just converge on it and keep any extra features we have?
   * 'SugarCpp' - an interesting transpiler, looks very practical
-    * accepts C++1y as starting point and just adds more.
+    * it just accepts C++1y as starting point and just adds more.
   * D - never grabbed me for some reason, but has many features of interest eg UFCS
     * (tends to focus on gc? and doesn't have expression syntax?)
   * disqualified by CG, but still interesting:-
@@ -243,16 +255,29 @@ This is probably all way beyond a 1man project but I'll see how far I can get. P
 
 
 #### other ideas
+
+ * Generalizing enum/match:-
+   * make it call an 'isa(:*X)->*Y' test/coerce (like dynamic_cast)
+   * an 'enum' just rolls a 'isa' function which tests the discriminant...
+   * .. but any custom union type could supply the 'isa' methods to fit match
+   * C++ vtables could slot in with 'isa() being dynamic_cast
+   * eg -1 invalid index, +ve vs -ve values, etc.
+
+ * 'intersection types'(?) for cutting structures up without having to butcher source
+   * want to write the same routine with data split or merged
+   * maybe just autoderef on tuple member acessors so tuples do that job..
+
  * ways of carrying more information down an object graph..
    * maybe hidden parameters on '.' overloads inlined away usually
      * eg foo.bar could return  (&Bar,this) which autocoerces to &Bar 
    * maybe nested 'this' for nested classes (eg scene->lights,scene->meshes...)
- * 'intersection types' for cutting structures up without having to butcher source
-   * maybe just autoderef on tuple member acessors so tuples do that job..
+
+
  * immutable data hint ? (eg for coalesced-allocations,local ptrs)
  * 'vtable-from-address' for pooled objects?.. 
    * generalize 'get-vtable','get-data' to do classes,trait-obj & more in 1 system?
- * Haskell lazy eval is intruiging.
+ * random idea.. Haskell lazy eval is intruiging
+   * would the haskell way of working be useful for tools? lazy file io?
    * Would there be any merit in being able to instantiate pure functions for lazy eval. x=lazy_call(..... ).
    * detect fn's that are eligable.
    * could any of that work without a GC?

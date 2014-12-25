@@ -10,8 +10,10 @@ extern"C"fn fread(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn fwrite(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn sqrt(f:float)->float;
 
-// template typeparameter sugar - just omit types, and they get typeparams automatically
-// eg lerp<A,B,F>(a:A,b:B,f:F)... ; also single-expression sugar.
+// trivial helpers - just omit types, they get typeparams
+// eg lerp<A,B,F>(a:A,b:B,f:F)... ; also single-expression sugar
+// there is a C++ proposal for this using 'auto' but its' more verbose
+// handy for writing quick helpers. replaces some macro usecases
 
 fn lerp(a,b,f)=(b-a)*f+a;
 fn invlerp(x0,x1,x)=(x-x0)/(x1-x0);
@@ -21,12 +23,13 @@ fn take_closure(funcp:|int|){
 	funcp(10);
 }
 
-// Rust style enum
+// Rust style enum (tagged-union)
 enum Shape {
 	Sphere(Vec3,float),
 	Cuboid{min:Vec3,max:Vec3},
 	Cylinder(float,float),
 };
+
 // Rust style match
 fn shape_vol(s:*Shape)->float= match s{
 	*Sphere(my_centre, my_radius)=>{	// destructuring like rust
@@ -40,7 +43,6 @@ fn shape_vol(s:*Shape)->float= match s{
 	*Cylinder(radius,height)=>3.142*radius*radius*height,
 	_ =>{printf("shape error\n");0.0}
 };
-
 
 // 'where' expression sugar ..sort salient info on one line
 fn interpolate(x,x0,y0,x1,y1)=(ofsx/dx)*dy+y0 where{
@@ -148,7 +150,7 @@ fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 
 fn main(argc:int,argv:**char)->int{
 
-	printf("example program ./hello.rpp compiled & run by default makefile\n");
+	printf("example program ./example.rs compiled & run by default makefile\n");
 
 	// closure syntax stolen from Rust |args,..|{body...}
 	let captured_y=15;
@@ -161,8 +163,8 @@ fn main(argc:int,argv:**char)->int{
 		printf("closure2 says x=%d y=%d\n",x,captured_y);
 	}
 
-	let v0=Vec3{1.0,0.0,0.0};
-	let v1=Vec3{0.0,1.0,0.0};
+	let v0=Vec3{1.0,0.0,0.0};	// structs can be initialized positionally or named
+	let v1=Vec3{vx:0.0,vy:1.0,vz:0.0};
 	let v2=v0+v1;
 
 	// Demo rust-style enums
@@ -170,8 +172,6 @@ fn main(argc:int,argv:**char)->int{
 	let s2=new Cuboid{Vec3{1.0,1.0,1.0},Vec3{2.0,2.0,2.0}};
 	let sv1=shape_vol(s1 as *Shape);
 	let sv2=shape_vol(s2 as *Shape);
-
-
 
 	// let for introducing variable, rather than just ident:T
 	// :T would be used as a type-assertion
@@ -201,15 +201,14 @@ fn main(argc:int,argv:**char)->int{
 	for y:=0; y<8; y+=1{
 		for x:=0; x<8; x+=1{
 			match (x,y){
-				(2|5,_)					=>printf("X"),
-				(_,2|5)					=>printf("Y"),
-				_ if x==y || (7-x)==y	=>printf("o"),
-				_						=>printf(".")
+				(2|5,_)                 =>printf("X"),
+				(_,2|5)                 =>printf("Y"),
+				_ if x==y || (7-x)==y   =>printf("o"),
+				_                       =>printf(".")
 			};
 		};
 		printf("\n");
 	};
-
 
 	// type inference with templates & lambdas
 	// unlike C++, the output type of the lambdas infer back to  'R' here
@@ -282,6 +281,7 @@ fn main(argc:int,argv:**char)->int{
 	let pbaz1= new Qux{x=66};
 	let pbaz2= new Bar{y=77};
 
+
 	do_something(pbaz1 as*IBaz);//TODO autocoerce to base type
 	do_something(pbaz2 as*IBaz);
 
@@ -290,7 +290,6 @@ fn main(argc:int,argv:**char)->int{
 	printf("\n**Hello World** %d %d\n", x1, y );
 
 	// last statement is a return value, like Rust. significant semicolons
-
 	0
 }
 
@@ -328,6 +327,7 @@ struct Bar : IBaz {
 		printf("hello from Bar.bar this.y=%d\n",y);
 	}
 }
+
 // multiple *named* return values as anonymous struct
 // need to write 'struct' because type-context doesn't  include braces
 // if we name it, it doesn't go into any scope at the minute.
@@ -346,6 +346,7 @@ fn foo_bar(p:*void){
 fn foo_bar(p:*Foo,f:float){
 	printf("2arg foo_bar %p %f\n",p,f);
 }
+// Rust style tuple pattern arguments
 fn foo_bar(p:*Foo,q:*Foo,(i,j,k):(int,int,int)){
 	printf("3arg foo_bar with tuple destructure %p %d %d %d\n",p,i,j,k);
 }

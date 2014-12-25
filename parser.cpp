@@ -139,7 +139,6 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3, Pattern
 			np->set_sub_expr(parse_expr(src));
 			if (owner)owner->push_back(np);
 			return np;
-			
 		}
 		if (t==PTR || t==REF || t==MUL || t==AND || t==ADDR || t==NOT){ // todo: is_prefix
 			if (t==MUL) t=PTR;
