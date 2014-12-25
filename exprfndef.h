@@ -1,5 +1,10 @@
 #pragma once
+#include "type.h"
 #include "ast.h"
+#include "exprblock.h"
+#include "scope.h"
+#include "codegen.h"
+#include "exprstructdef.h"
 
 // todo.. generic instantiation: typeparam logic, and adhoc mo
 struct CodeGen;
@@ -40,7 +45,7 @@ struct  ExprFnDef : ExprDef {
 	bool	is_closure() const			{return my_capture!=0 || m_closure;}
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
-	int		min_args()					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}
+	int		min_args();//					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}
 	int 	max_args()					{return variadic?1024:(int)args.size();}
 	bool	is_enough_args(int x)		{if (x<min_args()) return false; if (x> args.size() && !variadic) return false; return true;}
 	bool	too_many_args(int x)		{return x>max_args();}

@@ -1,5 +1,4 @@
 #include "lexer.h"
-#include "error.h"
 SrcPos g_srcpos;	// hack sorry,
 
 bool isSymbolStart(char c,char c1) { return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_';}

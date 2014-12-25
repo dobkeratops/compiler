@@ -1,7 +1,4 @@
-	#include "ast.h"
-#include "semantics.h"
 #include "parser.h"
-#include "error.h"
 
 //#define pop(X) ASSERT(X.size()>0); pop_sub(X);
 

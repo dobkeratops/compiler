@@ -2,7 +2,7 @@
 #include "everywhere.h"
 #include "error.h"
 #include "stringtable.h"
-#include "node.h"
+#include "type.h"
 
 typedef Type TParamVal;
 typedef char ResolveResult;
@@ -38,23 +38,6 @@ struct Pattern : Node {
 	Name	as_just_name()const{if (this){return this->sub==nullptr?this->name:0;}else return 0;}
 };
 
-// Type Parameter, actually Template Parameter as we generalize it.
-struct Expr : public Node{					// anythifng yielding a value
-public:
-};
-
-struct ExprDef;
-struct ExprStructDef;
-struct ExprScopeBlock : Expr{
-	Scope*		scope=0;
-};
-
-/// any node that is a Definition, maintains list of refs
-struct ExprDef :Expr{
-	Node*	refs=0;
-	void	remove_ref(Node* ref);
-	virtual ExprDef* member_of(){return nullptr;}
-};
 
 struct TParamDef: ExprDef{
 	TParamVal* bound=0;	// eg traits/concepts
@@ -131,7 +114,6 @@ struct ArgDef :ExprDef{
 	void		recurse(std::function<void(Node*)>&) override;
 };
 
-enum VarKind{VkArg,Local,Global};
 struct Variable : ExprDef{
 	bool		on_stack=true;
 	CaptureVars*	capture_in=0;	// todo: scope or capture could be unified? 'in this , or in capture ...'

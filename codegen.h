@@ -1,7 +1,8 @@
 #pragma once
-// TODO : this shouldn't need the whole AST prototypes, just a few key items.
-#include "semantics.h"
+#include "everywhere.h"
+//#include "node.h"
 #include "type.h"
+#include "exprflow.h"
 
 // Describes interface to codegen(implemented by codegen_llvm);
 // codegen.cpp contains AST node 'compile' methods
@@ -62,7 +63,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	CgValue addr_op(CodeGen& cg,const Type* t)const;
 	CgValue ref_op(CodeGen& cg,const Type* t) const;
 	CgValue deref_op(CodeGen& cg, const Type* t)const;	//when you know the type, use for assertion
-	CgValue deref_op(CodeGen& cg)const	{return deref_op(cg,type->sub);}
+	CgValue deref_op(CodeGen& cg)const;
 	CgValue deref_for_dot(CodeGen& cg, const Type* t)const;
 	inline CgValue to_rvalue(CodeGen& cg)const;
 	inline CgValue load(CodeGen& cg)const;

@@ -8,7 +8,7 @@
 #include "run_test.h"
 #include "exprfndef.h"
 
-
+struct CgValue;
 struct ExprFlow:Expr{	// control flow statements
 };
 
@@ -117,7 +117,7 @@ struct ExprWhileLet : ExprMatch{	// sugar for match 1arm. parses+prints differen
 	Expr*	body=0;			// loop body.
 	Expr*	else_block=0;	// for expression-return
 	const char*		kind_str() const {return "kind str";}
-	CgValue			compile(CodeGen& cg, Scope* sc,CgValue input) override{error("todo, while-let support");return CgValue();}
+	CgValue			compile(CodeGen& cg, Scope* sc,CgValue input);
 };
 
 

@@ -1,10 +1,4 @@
-#include "ast.h"
-#include "semantics.h"
-#include "scope.h"
-#include "exprfndef.h"
-#include "exprstructdef.h"
 #include "exprblock.h"
-#include "codegen.h"
 
 void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const{
 	this->call_expr->find_vars_written_if(s, vars);

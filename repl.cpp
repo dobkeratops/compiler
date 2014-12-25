@@ -1,3 +1,4 @@
+#ifdef _NO_
 #include "repl.h"
 void repl() {	
 
@@ -12,3 +13,4 @@ void repl() {
 	}
 }
 
+#endif

@@ -24,7 +24,6 @@ struct NamedItems {		// everything defined under a name
 /// 'Scope'-
 /// scopes are created when resolving, held on some node types.
 /// blocks which can add locals or named entities have them.
-
 struct Scope {
 	ExprDef*	owner_fn=0;	// TODO: eliminate this, owner might be FnDef,Struct,ExprBlock
 	Expr*		node=0;

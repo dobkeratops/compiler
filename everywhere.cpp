@@ -66,7 +66,7 @@ const char* g_token_str[]={
 	".=","?=",	// linklist follow ptr.=next
 	"++","--","++","--", //inc/dec
 	"-","*","&","!","~","?", // unary ops
-	"*?","*!","&?","~[]","[]","&[]","??","<?>","<*>","<+>","<-->","</>","?->", // special pointers?
+	"&&","*?","*!","&?","~[]","[]","&[]","??","<?>","<*>","<+>","<-->","</>","?->", // special pointers?
 	",",";",";;",
 	"...","..","..<","..>","..>=","..<=",
 	"_","",
@@ -87,7 +87,7 @@ const char* g_operator_symbol[]={
 	"assign_dot","maybe_assign",
 	"post_inc","post_dec","pre_inc","pre_dec",
 	"negate","deref","not","complement","option",
-	"opt_ptr","own_ptr","maybe_ref","own_vector","slice","slice_ref", "double_question_mark","tag_question_mark","tag_mul","tag_add","tag_sub","tag_div","maybe_arrow",
+	"rvalue_ref","opt_ptr","own_ptr","maybe_ref","own_vector","slice","slice_ref", "double_question_mark","tag_question_mark","tag_mul","tag_add","tag_sub","tag_div","maybe_arrow",
 	"comma","semicolon","doublesemicolon","ellipsis","dotdot",
 	"range_lt","range_gt","range_ge","range_le",
 	"placeholder",""
@@ -122,7 +122,7 @@ int g_tok_info[]={
 	WRITE_LHS|READ|ASSOC|16, // dot-assign
 	MODIFY|PREFIX|UNARY|2,MODIFY|PREFIX|UNARY|2,MODIFY|UNARY|ASSOC|3,MODIFY|UNARY|ASSOC|3, // post/pre inc/dec
 	READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3,READ|UNARY|PREFIX|3, //unary ops
-	READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3,READ|UNARY|ASSOC|3, /// special pointers
+	READ|UNARY|ASSOC|3,READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3, READ|UNARY|ASSOC|3,READ|UNARY|ASSOC|3, /// special pointers
 	0,0,17, // delim
 	0,
 	0,0,

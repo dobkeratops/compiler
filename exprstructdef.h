@@ -2,6 +2,9 @@
 #include "ast.h"
 #include "scope.h"
 #include "exprfndef.h"
+#include "codegen.h"
+
+struct TypeDef;
 struct NamedItems;
 struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
@@ -39,16 +42,7 @@ struct ExprStructDef: ExprDef {
 	//	ArgDef* find_field(Name name){ for (auto a:fields){if (a->name==name) return a;} error(this,"no field %s",str(name));return nullptr;}
 	ArgDef* find_field(const Node* rhs)const;
 	ArgDef* try_find_field(const Name n)const;
-	int field_index(const Node* rhs){
-		auto name=rhs->as_name();
-		for (auto i=0; i<fields.size(); i++){
-			if(fields[i]->name==name){
-				((Node*)rhs)->set_def((ExprDef*)fields[i]);
-				return i;
-			}
-		}
-		return -1;
-	}
+	int field_index(const Node* rhs);
 	const char* kind_str()const	override{return"struct";}
 	ExprStructDef* next_of_name;
 	Name	get_mangled_name()const;
@@ -59,7 +53,7 @@ struct ExprStructDef: ExprDef {
 		name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0;
 		derived=0; name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;
 	}
-	size_t		alignment() const			{size_t max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;}
+	size_t		alignment() const;
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
 	void			set_discriminant(int value){discriminant=value;m_is_variant=true;}
 	void			set_variant_of(ExprStructDef* owner, int index){set_discriminant(index); ASSERT(inherits==0); inherits=owner;}
@@ -75,9 +69,9 @@ struct ExprStructDef: ExprDef {
 	
 	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
-	const Type*			get_elem_type(int i)const{return this->fields[i]->type();}
-	Name			get_elem_name(int i)const {return this->fields[i]->name;}
-	int 			get_elem_index(Name name)const {int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
+	const Type*			get_elem_type(int i)const;//{return this->fields[i]->type();}
+	Name			get_elem_name(int i)const;// {return this->fields[i]->name;}
+	int 			get_elem_index(Name name)const;//{int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
 	int				override_index(ExprFnDef* f);
 	int				vtable_size();
 	int				vtable_base_index();

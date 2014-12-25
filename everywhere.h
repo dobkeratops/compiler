@@ -10,6 +10,10 @@ extern "C" char* gets(char*);
 #include <string.h>
 #include <functional>
 #include <cstdio>
+#include <unistd.h>
+
+
+using std::move;
 
 #ifdef DEBUG
 #define CRASH {*(volatile long*)0=-1;exit(-1);}
@@ -281,7 +285,7 @@ enum Token {
 	DOT_ASSIGN,MAYBE_ASSIGN,
 	PRE_INC,PRE_DEC,POST_INC,POST_DEC,
 	NEG,DEREF,ADDR,NOT,COMPLEMENT,OPTION,
-	MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,SLICE_REF,DOUBLE_QUESTION_MARK,TAG_QUESTION_MARK,TAG_MUL,TAG_ADD,TAG_SUB,TAG_DIV, MAYBE_ARROW,
+	RVALUE_REF,MAYBE_PTR,OWN_PTR,MAYBE_REF,VECTOR_OF,SLICE,SLICE_REF,DOUBLE_QUESTION_MARK,TAG_QUESTION_MARK,TAG_MUL,TAG_ADD,TAG_SUB,TAG_DIV, MAYBE_ARROW,
 	COMMA,SEMICOLON,DOUBLE_SEMICOLON,
 	// after these indices, comes indents
 	
@@ -339,8 +343,34 @@ struct Vec{
 	const T& operator[](int i)const{
 		dbg(ASSERT(i>=0&&i<=num));return data[i];
 	}
+	Vec(Vec<T>&& src){
+		this->take_from(src);
+	}
+	Vec(const Vec<T>& src){
+		resize_sub(src.num,src.num);
+		for (auto i=0; i<num; i++){
+			data[i]=src[i];
+		}
+	}
+	Vec(Vec<T>&& src, const T& val){
+		this->take_from(src);
+		this->push_back(val);
+	}
+	Vec<T> clone()const{return Vec<T>(*this);}
+	void take_from(Vec<T>& src){
+		reserve(num+src.size());
+//		data=src.data;
+//		num=src.num;
+//		cap=src.cap;
+		for (auto i=0; i<src.size(); i++){
+			data[i]=move(src[i]);
+		}
+		src.data=0;
+		src.num=0;
+		src.cap=0;
+	}
 	void resize_sub(int newsize,int newcap){
-		ASSERT(newcap>=newsize);
+		if (newcap<newsize) newcap=newsize;
 		int i;
 		for (i=newsize;i<num;i++){
 			data[i].~T();
@@ -350,6 +380,9 @@ struct Vec{
 			new(&data[i]) T();
 		}
 		num=newsize;
+	}
+	void resize_tofit(int newsize){
+		resize_sub(newsize,newsize);
 	}
 	void resize(int newsize){
 		if (newsize!=num){
@@ -443,5 +476,21 @@ struct Vec{
 		}
 	}
 };
+template<typename T>
+Vec<T> operator+(Vec<T>&& a, const Vec<T>& b){
+	Vec<T> ret;
+	ret.take_from(a);
+	ret.concat(b);
+	return ret;// RVO or move?
+}
+template<typename T>
+Vec<T>& operator+(Vec<T>&& a, const T& b){
+	Vec<T> ret;
+	ret.resize_tofit(a.size()+1);
+	for (auto i=0; i<a.size(); i++){ ret.data[i]=a[i];}
+	ret.data[a.size()]=b;
+	return ret;
+}
+
 
 

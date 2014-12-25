@@ -1,4 +1,6 @@
 #pragma once
+#include "ast.h"
+
 /// todo:
 /// [1] operator overloading,
 /// [2] custom operators

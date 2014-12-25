@@ -326,5 +326,9 @@ void ExprIfLet::dump(int depth)const{
 		newline(depth);dbprintf("}");
 	}
 }
+CgValue ExprWhileLet::compile(CodeGen& cg, Scope* sc, CgValue input) {
+	error("todo, while-let support");return CgValue();
+}
+
 
 

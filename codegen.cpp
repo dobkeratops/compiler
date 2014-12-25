@@ -1,8 +1,4 @@
-#include "ast.h"
 #include "codegen.h"
-#include "exprflow.h"
-#include "exprfndef.h"
-#include "exprstructdef.h"
 /// details of compiling LLVM
 /// CodeGen is planned to be an interface, slot in 'CodeGenLLVM' / 'CodeGenC'
 size_t g_DefaultAlignment=4;
@@ -106,6 +102,10 @@ CgValue CgValue::addr_op(CodeGen& cg,const Type* t)const { // take type calculat
 		//			return this->to_stack(cg).addr_op(cg,t);
 	}
 }
+CgValue CgValue::deref_op(CodeGen& cg) const {
+	return deref_op(cg,type->sub);
+}
+
 CgValue CgValue::ref_op(CodeGen& cg,const Type* t) const { // take type calculated by sema
 	ASSERT(this->type);
 #if DEBUG>=2

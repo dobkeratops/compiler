@@ -1,6 +1,11 @@
 #pragma once
 #include "codegen.h"
 #include "error.h"
+#include "exprblock.h"
+#include "exprstructdef.h"
+#include "exprfndef.h"
+#include "exprflow.h"
+
 enum{
 	EMIT_FN=0x0001,EMIT_STRUCT=0x0002,EMIT_GLOBALS=0x0004,EMIT_ALL=EMIT_FN|EMIT_STRUCT|EMIT_GLOBALS
 };

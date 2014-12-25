@@ -2,6 +2,8 @@
 
 #include "stringtable.h"
 #include "node.h"
+#include "exprfndef.h"
+
 struct Type;
 struct TParamDef;
 struct Expr;

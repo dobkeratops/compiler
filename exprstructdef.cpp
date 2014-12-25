@@ -1,5 +1,23 @@
 #include "exprstructdef.h"
-#include "codegen.h"
+
+size_t		ExprStructDef::alignment() const {
+	size_t max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;
+}
+const Type*		ExprStructDef::get_elem_type(int i)const{
+	return this->fields[i]->type();
+}
+Name	ExprStructDef::get_elem_name(int i)const {
+	return this->fields[i]->name;
+}
+int ExprStructDef::get_elem_index(Name name)const {
+	int i;
+	for (i=0; i<this->fields.size(); i++){
+		if (this->fields[i]->name==name)
+			return i;
+	} return -1;
+}
+
+
 
 bool ExprStructDef::is_generic()const{
 	if (typeparams.size())
@@ -15,6 +33,18 @@ ExprStructDef::has_base_class(ExprStructDef* other)const{
 			return true;
 	return false;
 }
+
+int ExprStructDef::field_index(const Node* rhs){
+	auto name=rhs->as_name();
+	for (auto i=0; i<fields.size(); i++){
+		if(fields[i]->name==name){
+			((Node*)rhs)->set_def((ExprDef*)fields[i]);
+			return i;
+		}
+	}
+	return -1;
+}
+
 
 size_t ExprStructDef::size()const{
 	size_t sum=0;

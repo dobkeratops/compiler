@@ -1,4 +1,12 @@
 #pragma once
+#include "type.h"
+#include "semantics.h"
+#include "parser.h"
+#include "codegen.h"
+#include "compile.h"
+#include "run_test.h"
+#include "exprblock.h"
+
 
 struct Option{
 	char name;int clear;int set; const char* help;

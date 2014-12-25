@@ -1,4 +1,7 @@
 	#pragma once
+#include "stringtable.h"
+//#include "codegen.h"
+
 /// needed split this to break some circular dependancies.
 
 typedef char ResolveResult;
@@ -6,6 +9,8 @@ enum {COMPLETE=0,INCOMPLETE=1,MISMATCH=2,RS_ERROR=INCOMPLETE|MISMATCH};
 
 struct Type;
 struct Expr;
+enum VarKind{VkArg,Local,Global};
+
 
 struct Node {
 private:
@@ -175,8 +180,23 @@ public:
 	ResolveResult propogate_type_expr_ref(int flags,Expr* e, Type*& a);
 	ResolveResult propogate_type_refs(int flags,const Node* n, Type*& a,Type*& b,Type*& c);
 	ResolveResult propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c);
-	
+};
+// Type Parameter, actually Template Parameter as we generalize it.
+struct Expr : public Node{					// anythifng yielding a value
+public:
+};
 
+struct ExprDef;
+struct ExprStructDef;
+struct ExprScopeBlock : Expr{
+	Scope*		scope=0;
+};
+
+/// any node that is a Definition, maintains list of refs
+struct ExprDef :Expr{
+	Node*	refs=0;
+	void	remove_ref(Node* ref);
+	virtual ExprDef* member_of(){return nullptr;}
 };
 
 

@@ -1,12 +1,4 @@
 #include "main.h"
-#include "ast.h"
-#include "semantics.h"
-#include "parser.h"
-#include "codegen.h"
-#include "compile.h"
-#include "run_test.h"
-#include "exprblock.h"
-#include <unistd.h>
 
 void filename_change_ext(char* dst,const char* src,const char* new_ext){
 	strcpy(dst,src);
@@ -29,6 +21,7 @@ bool has_dir(const char* fn){
 	}
 	return false;
 }
+
 int compile_and_run(const char *buffer, const char* filename, const char* outname, int flags,char** capture_output){
 	
 	Lexer	src(buffer,filename);
@@ -177,8 +170,25 @@ void dump_help(){
 		printf("%c - %s\n",opt->name,opt->help);
 	}
 }
+Vec<int> mk_list(){
+	Vec<int> tmp;
+	tmp.resize(4);
+	tmp[0]=0;
+	tmp[1]=1;
+	tmp[2]=2;
+	tmp[3]=3;
+	return tmp;
+}
 
 int main(int argc, const char** argv) {
+	// C++'s behaviour is good.
+	// value by default, moves from 'rvalues'
+	// what's not to like?
+	// SO in short you just need R-Value References, exactly like C++.
+	auto tmp=mk_list();
+	auto x=Vec<int>(mk_list(),4);
+	auto z=mk_list()+4;
+	
 #if DEBUG>=2
 	printf("compiled with debug level=%d\n", DEBUG);
 #endif

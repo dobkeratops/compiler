@@ -1,9 +1,20 @@
-#include "ast.h"
 #include "type.h"
-#include "everywhere.h"
-#include "stringtable.h"
-#include "exprstructdef.h"
-#include "codegen.h"
+void verify(const Type* a){
+	if (a){
+		ASSERT(a->name>=0 && a->name<g_Names.nextId);
+		verify(a->sub);
+		verify(a->next);
+	}
+}
+void verify(const Type* a,const Type* b){
+	verify(a);
+	verify(b);
+}
+void verify(const Type* a,const Type* b,const Type* c){
+	verify(a);
+	verify(b);
+	verify(c);
+}
 
 void Type::verify(){
 	verify_type(this);
@@ -583,6 +594,40 @@ void dump(const Type* a,const Type* b){
 	dbprintf("\ttype2:"); b->dump_if(-1);
 	dbprintf("\n");
 }
+
+
+ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type* b) {
+	if (!n->pos.line){
+		error(n,"AST node hasn't been setup properly");
+	}
+	ASSERT(a && b);
+	// TODO: variadic args shouldn't get here:
+	if (a->name==ELIPSIS||b->name==ELIPSIS)
+		return ResolveResult(COMPLETE);
+	if (!a->is_equal(b)){
+		if (a->is_coercible(b)){
+			return ResolveResult(COMPLETE);
+		}
+		if (!(flags & R_FINAL))
+			return ResolveResult(RS_ERROR);
+		// error is stronger than incomplete. incomplete means keep going, error means give up
+		
+		dbg(n->dump(0));
+		error_begin(n," type mismatch\n");
+		warning(a->get_origin(),"from here:");
+		a->dump(-1);
+		warning(b->get_origin(),"vs here");
+		b->dump(-1);
+#if DEBUG>=2
+		if (a->is_coercible(b)){
+		}
+#endif
+		error_end(n);
+		return ResolveResult(RS_ERROR);
+	}
+	return ResolveResult(COMPLETE);
+}
+
 
 
 // todo table of each 'intrinsic type', and pointer to it

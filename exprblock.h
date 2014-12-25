@@ -1,5 +1,10 @@
 #pragma once
+//#include "ast.h"
+#include "exprfndef.h"
+#include "exprstructdef.h"
 #include "exprop.h"
+#include "codegen.h"
+
 
 /// 'ExpressionBlock' - expr( expr,expr,...)
 ///- any group of expressions

@@ -1,6 +1,8 @@
 #pragma once
 #include "stringtable.h"
 #include "everywhere.h"
+#include "error.h"
+
 extern const char* g_filename;
 // STUPID HEADER FILES STUPID CLASSES
 /*

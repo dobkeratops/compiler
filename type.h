@@ -1,6 +1,9 @@
 #pragma once
 
 #include "stringtable.h"
+#include "node.h"
+#include "exprstructdef.h"
+
 struct Name;
 struct Type : ExprDef {
 	vector<TParamDef*> typeparams;
@@ -151,5 +154,9 @@ struct Type : ExprDef {
 void dump(const Type* a,const Type* b);
 bool type_params_eq(const vector<Type*>& a, const Type* tp);
 bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b);
+void verify(const Type* a);
+void verify(const Type* a,const Type* b);
+void verify(const Type* a,const Type* b,const Type* c);
+ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type* b);
 
 

@@ -1,9 +1,4 @@
-#include "ast.h"
 #include "compile.h"
-#include "exprblock.h"
-#include "exprstructdef.h"
-#include "exprfndef.h"
-#include "exprflow.h"
 
 /// compile methods from various types.
 

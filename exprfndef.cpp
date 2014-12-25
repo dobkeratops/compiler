@@ -1,9 +1,12 @@
-#include "everywhere.h"
 #include "exprfndef.h"
-#include "exprblock.h"
-#include "scope.h"
-#include "codegen.h"
-#include "exprstructdef.h"
+int	ExprFnDef::min_args()	{
+	for (int i=0; i<args.size();i++){
+		if (args[i]->default_expr)
+			return i;
+	}
+	return (int)args.size();
+}
+
 
 void ExprFnDef::verify(){
 	verify_expr_fn_def(this);
