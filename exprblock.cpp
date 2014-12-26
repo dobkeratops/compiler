@@ -81,6 +81,28 @@ ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
 	return r;
 }
 
+ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
+	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
+	this->def->resolve_if(sc, nullptr, flags);
+
+	for (size_t i=0; i<this->argls.size(); i++) {
+		auto desired_sub=desired?desired->get_elem(i):nullptr;
+		resolved|=this->argls[i]->resolve_if(sc,desired_sub,flags);
+	}
+	// todo: we need to get better at filling in the gaps.
+	if (!this->get_type()) {
+		auto t=new Type(this, TUPLE);
+		for (size_t i=0; i<this->argls.size();i++){
+			auto ct=this->argls[i]->get_type();
+			if (!ct) ct=Type::get_auto();
+			t->push_back(ct);
+		}
+		t->set_def(t);
+		this->set_type(t);
+	}
+	return propogate_type_fwd(flags,(Node*)this, desired,this->type_ref());
+}
+
 ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 	return this->resolve_sub(sc,desired,flags,nullptr);
 }
@@ -95,24 +117,6 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		this->call_expr->resolve_if(sc,nullptr,flags);
 	::verify(this->get_type());
 
-	if (this->is_tuple()) {
-		for (size_t i=0; i<this->argls.size(); i++) {
-			auto desired_sub=desired?desired->get_elem(i):nullptr;
-			resolved|=this->argls[i]->resolve_if(sc,desired_sub,flags);
-		}
-		// todo: we need to get better at filling in the gaps.
-		if (!this->get_type()) {
-			auto t=new Type(this, TUPLE);
-			for (size_t i=0; i<this->argls.size();i++){
-				auto ct=this->argls[i]->get_type();
-				if (!ct) ct=Type::get_auto();
-				t->push_back(ct);
-			}
-			t->set_def(t);
-			this->set_type(t);
-		}
-		return propogate_type_fwd(flags,(Node*)this, desired,this->type_ref());
-	}
 
 	if (this->argls.size()<=0 && this->is_compound_expression() ) {
 		if (!this->get_type()) this->set_type(new Type(this,VOID));
@@ -333,7 +337,7 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc, CgValue input) {
 }
 
 CgValue ExprTuple::compile(CodeGen& cg,Scope *sc, CgValue input) {
-	auto tuple=cg.emit_alloca_type(e, e->type());
+	auto tuple=cg.emit_alloca_type(this, this->type());
 	for (int i=0; i<this->argls.size(); i++){
 		auto val=this->argls[i]->compile(cg,sc);
 		auto elem=tuple.get_elem_index(cg,i);

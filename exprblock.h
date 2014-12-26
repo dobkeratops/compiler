@@ -86,6 +86,7 @@ struct ExprTuple : ExprBlock{
 	const char* kind_str() const  override		{return "tuple";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const override	{return (Node*)clone_sub(new ExprTuple());}
+	ResolveResult	resolve(Scope* scope, const Type* desired,int flags);
 };
 struct ExprCall : ExprBlock{
 	const char* kind_str() const  override		{return "call";}
