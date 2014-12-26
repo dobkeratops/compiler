@@ -255,7 +255,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				// really we want to desugar this, a.foo(b) is just foo(a,b)
 				// but we respect the shape of the AST?
 				//				dbprintf("method call: %s\n",str(method_name));
-				call->resolve_sub(sc, desired, flags, lhs);
+				dynamic_cast<ExprCall*>(call)->resolve_call_sub(sc, desired, flags, lhs);
 				return propogate_type_refs(flags,this,call->type(),this->type_ref());
 			} else {
 				if (flags & R_FINAL){

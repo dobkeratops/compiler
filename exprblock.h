@@ -86,12 +86,14 @@ struct ExprTuple : ExprBlock{
 	const char* kind_str() const  override		{return "tuple";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const override	{return (Node*)clone_sub(new ExprTuple());}
-	ResolveResult	resolve(Scope* scope, const Type* desired,int flags);
+	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 };
 struct ExprCall : ExprBlock{
 	const char* kind_str() const  override		{return "call";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const override	{return (Node*)clone_sub(new ExprCall());}
+	ResolveResult	resolve(Scope* sc, const Type* desired,int flags) override;
+	ResolveResult resolve_call_sub(Scope* sc, const Type* desired, int flags,Expr* receiver);
 };
 struct ExprArrayInit : ExprBlock{
 	const char* kind_str() const  override		{return "array_init";}
@@ -102,5 +104,5 @@ struct ExprSubscript : ExprBlock{
 	const char* kind_str() const  override		{return "subscript";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node*	clone() const override	{return (Node*)clone_sub(new ExprSubscript());}
-	ResolveResult	resolve(Scope* sc, const Type* desired,int flags);
+	ResolveResult	resolve(Scope* sc, const Type* desired,int flags)override;
 };

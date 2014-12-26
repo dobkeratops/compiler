@@ -124,6 +124,108 @@ ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 	return this->resolve_sub(sc,desired,flags,nullptr);
 }
+ResolveResult ExprCall::resolve(Scope* sc, const Type* desired, int flags) {
+	return this->resolve_call_sub(sc,desired,flags,nullptr);
+}
+ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
+	ASSERT(!dynamic_cast<ExprStructInit*>(this));
+	ASSERT(dynamic_cast<ExprCall*>(this));
+	// TODO: distinguish 'partially resolved' from fully-resolved.
+	// at the moment we only pick an fn when we know all our types.
+	// But, some functions may be pure generic? -these are ok to match to nothing.
+	// todo:
+	//		auto n=num_known_arg_types(this->argls);
+	if (call_expr->name==NAMEOF && strlen(str(this->argls[0]->name))>1) {
+		auto src=this->argls[0];
+		if (!this->type()){ this->set_type(new Type(this,STR));};
+		char tmp[512];
+		sprintf(tmp,"%s",str(src->name));
+		this->call_expr=0;
+		this->argls.resize(1);
+		this->argls[0]=new ExprLiteral(src->pos,tmp,(int)strlen(tmp));
+		resolved|=this->argls[0]->resolve_if(sc,nullptr,0);
+		this->set_type(src->get_type());
+		return resolved;
+	}
+	bool indirect_call=false;
+	auto call_ident=dynamic_cast<ExprIdent*>(this->call_expr);
+	if (call_ident){
+		if (sc->find_fn_variable(this->call_expr->as_name(),nullptr))
+			indirect_call=true;
+			}else {
+				indirect_call=true;
+			}
+	Type* fn_type=nullptr;
+	if (receiver || indirect_call) {
+	}
+	else{
+		// an ident can't be just resolved like this
+		resolved|=this->call_expr->resolve_if(sc,nullptr,flags);
+		fn_type=this->call_expr->type();
+		
+		//			fn_type_r=this->call_expr->resolve(sc,nullptr,flags);
+		//		} else {
+		//			fn_type_r=this->
+	}
+	//		auto fn_type=indirect_call?nullptr:fn_type_r.type;
+	
+	int arg_index=0;
+	if (fn_type) {
+		// propogate types we have into argument expressions
+		for (auto a=fn_type->fn_args_first(); arg_index<argls.size() && a; arg_index++,a=a->next)  {
+			if (a->name==FN){
+				dbg_lambdas("resolving fn type into function argument %s\n", argls[arg_index]->name_str());
+			}
+			resolved|=argls[arg_index]->resolve(sc,a,flags);
+		}
+		for (;arg_index<argls.size(); arg_index++){ // variadic args.
+			resolved|=argls[arg_index]->resolve_if(sc,nullptr,flags);
+#if DEBUG >=2
+			dbprintf("resolve variadic C arg[%d]\n",arg_index);
+			argls[arg_index]->type()->dump_if(0);newline(0);
+#endif
+		}
+		const Type* fr=fn_type->fn_return();
+		propogate_type_fwd(flags,this, fr);
+	} else
+		for (auto i=0; i<argls.size(); i++)  {
+			resolved|=argls[i]->resolve_if(sc,nullptr,flags );
+		}
+	
+	if (!this->get_fn_call()){
+		
+		for (auto i=0; i<argls.size(); i++)  {
+			resolved|=argls[i]->resolve_if(sc,nullptr ,flags);
+		}
+		if (this->call_expr->is_ident() && 0==dynamic_cast<Variable*>(this->call_expr->def)){
+			return resolve_make_fn_call(receiver,this, sc,desired,flags);
+		}
+	} else if (auto fnc=this->get_fn_call()){ // static call
+		int ofs=(receiver)?1:0;
+		if (receiver) {
+#if DEBUG>=2
+			dbprintf("receiver+ %d args; call %s with %d args\n",argls.size(), fnc->name_str(), fnc->args.size());
+#endif
+			resolved|=receiver->resolve_if(sc,fnc->args[0]->type(),flags);
+		}
+		for (auto i=0; i<(argls.size()); i++)  {
+			//int i=srci+ofs;
+			auto ii=i+ofs;
+			auto fnarg=ii<fnc->args.size()?fnc->args[ii]:nullptr;
+			resolved|=argls[i]->resolve_if(sc,fnarg?fnarg->type():nullptr ,flags);
+		}
+		return propogate_type_fwd(flags,this, desired,this->get_fn_call()->ret_type);
+	}
+	else {
+		if (flags & R_FINAL)
+			if (!this->type())
+				error(this,"can't call/ type check failed %s",this->call_expr->name_str());
+				
+				return resolved;
+	}
+	return resolved;
+}
+
 ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
 	verify_all();
 	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
@@ -145,6 +247,9 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		// last expression - type bounce. The final expression is a return value, use 'desired';
 		// we then propogate backwards. some variables will have been set, eg return value accumulator..
 		ASSERT(!dynamic_cast<ExprStructInit*>(this));
+		ASSERT(!dynamic_cast<ExprCall*>(this));
+		ASSERT(!dynamic_cast<ExprTuple*>(this));
+		ASSERT(!dynamic_cast<ExprSubscript*>(this));
 		if (this->argls.size()) {
 			int	i_complete=-1;
 			if (!(flags & R_REVERSE_ONLY)){
@@ -191,104 +296,10 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	}
 	else if (this->is_struct_initializer()){
 		ASSERT(dynamic_cast<ExprStructInit*>(this));
+		ASSERT(!dynamic_cast<ExprCall*>(this));
 		dbg(this->type()->dump_if(-1));dbg(newline(0));
 		auto si=StructInitializer(sc,this);
 		return si.resolve(desired,flags);
-	}
-	else if (this->call_expr){
-		ASSERT(!dynamic_cast<ExprStructInit*>(this));
-		// TODO: distinguish 'partially resolved' from fully-resolved.
-		// at the moment we only pick an fn when we know all our types.
-		// But, some functions may be pure generic? -these are ok to match to nothing.
-		// todo:
-		//		auto n=num_known_arg_types(this->argls);
-		if (call_expr->name==NAMEOF && strlen(str(this->argls[0]->name))>1) {
-			auto src=this->argls[0];
-			if (!this->type()){ this->set_type(new Type(this,STR));};
-			char tmp[512];
-			sprintf(tmp,"%s",str(src->name));
-			this->call_expr=0;
-			this->argls.resize(1);
-			this->argls[0]=new ExprLiteral(src->pos,tmp,(int)strlen(tmp));
-			resolved|=this->argls[0]->resolve_if(sc,nullptr,0);
-			this->set_type(src->get_type());
-			return resolved;
-		}
-		bool indirect_call=false;
-		auto call_ident=dynamic_cast<ExprIdent*>(this->call_expr);
-		if (call_ident){
-			if (sc->find_fn_variable(this->call_expr->as_name(),nullptr))
-				indirect_call=true;
-		}else {
-			indirect_call=true;
-		}
-		Type* fn_type=nullptr;
-		if (receiver || indirect_call) {
-		}
-		else{
-			// an ident can't be just resolved like this
-			resolved|=this->call_expr->resolve_if(sc,nullptr,flags);
-			fn_type=this->call_expr->type();
-			
-			//			fn_type_r=this->call_expr->resolve(sc,nullptr,flags);
-			//		} else {
-			//			fn_type_r=this->
-		}
-		//		auto fn_type=indirect_call?nullptr:fn_type_r.type;
-		
-		int arg_index=0;
-		if (fn_type) {
-			// propogate types we have into argument expressions
-			for (auto a=fn_type->fn_args_first(); arg_index<argls.size() && a; arg_index++,a=a->next)  {
-				if (a->name==FN){
-					dbg_lambdas("resolving fn type into function argument %s\n", argls[arg_index]->name_str());
-				}
-				resolved|=argls[arg_index]->resolve(sc,a,flags);
-			}
-			for (;arg_index<argls.size(); arg_index++){ // variadic args.
-				resolved|=argls[arg_index]->resolve_if(sc,nullptr,flags);
-#if DEBUG >=2
-				dbprintf("resolve variadic C arg[%d]\n",arg_index);
-				argls[arg_index]->type()->dump_if(0);newline(0);
-#endif
-			}
-			const Type* fr=fn_type->fn_return();
-			propogate_type_fwd(flags,this, fr);
-		} else
-			for (auto i=0; i<argls.size(); i++)  {
-				resolved|=argls[i]->resolve_if(sc,nullptr,flags );
-			}
-		
-		if (!this->get_fn_call()){
-			
-			for (auto i=0; i<argls.size(); i++)  {
-				resolved|=argls[i]->resolve_if(sc,nullptr ,flags);
-			}
-			if (this->call_expr->is_ident() && 0==dynamic_cast<Variable*>(this->call_expr->def)){
-				return resolve_make_fn_call(receiver,this, sc,desired,flags);
-			}
-		} else if (auto fnc=this->get_fn_call()){ // static call
-			int ofs=(receiver)?1:0;
-			if (receiver) {
-#if DEBUG>=2
-				dbprintf("receiver+ %d args; call %s with %d args\n",argls.size(), fnc->name_str(), fnc->args.size());
-#endif
-				resolved|=receiver->resolve_if(sc,fnc->args[0]->type(),flags);
-			}
-			for (auto i=0; i<(argls.size()); i++)  {
-				//int i=srci+ofs;
-				auto ii=i+ofs;
-				auto fnarg=ii<fnc->args.size()?fnc->args[ii]:nullptr;
-				resolved|=argls[i]->resolve_if(sc,fnarg?fnarg->type():nullptr ,flags);
-			}
-			return propogate_type_fwd(flags,this, desired,this->get_fn_call()->ret_type);
-		} else {
-			if (flags & R_FINAL)
-				if (!this->type())
-					error(this,"can't call/ type check failed %s",this->call_expr->name_str());
-			
-			return resolved;
-		}
 	}
 	return resolved;
 }
