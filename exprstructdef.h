@@ -104,6 +104,8 @@ struct TraitDef : ExprStructDef {
 	Node* clone()const;
 	const char* kind_str()const{return "trait";}
 	TraitDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
+	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
+	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
 };
 
 /// a rust 'Impl' extends a struct with functions implementations

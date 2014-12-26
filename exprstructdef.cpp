@@ -461,6 +461,15 @@ Node* TraitDef::clone()const{
 	auto td=new TraitDef(this->pos, this->name);
 	return this->clone_sub(td);
 }
+ResolveResult	TraitDef::resolve(Scope* scope, const Type* desired,int flags){
+	dbprintf("warning traits not yet implemented");
+	return COMPLETE;
+}
+CgValue TraitDef::compile(CodeGen& cg, Scope* sc,CgValue input) {
+	dbprintf("warning traits not yet implemented");
+	return CgValue();
+}
+
 Node* ImplDef::clone()const{
 	auto imp=new ImplDef(this->pos, this->name);
 	imp->impl_trait = this->impl_trait;

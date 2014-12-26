@@ -22,7 +22,7 @@ extern Node* g_pRoot;	// temporary hack
 ExprBlock*	parse_block(TokenStream& src,int close,int delim, Expr* op);
 Expr*		parse_expr(TokenStream&src);
 Type*		parse_type(TokenStream& src, int close,Node* owner);
-ExprFnDef*	parse_fn(TokenStream&src,ExprStructDef* owner,bool is_virtual=false);	// eg fn foo()
+ExprFnDef*	parse_fn(TokenStream&src,ExprStructDef* owner,Type* self_t=nullptr, bool is_virtual=false);	// eg fn foo()
 ExprFnDef*	parse_closure(TokenStream&src,int close);//eg |x|{expr..} (x)->{}
 ExprFor*	parse_for(TokenStream&src);
 Expr*		parse_if(TokenStream&src);
@@ -32,6 +32,7 @@ ExprOp*		parse_flow(TokenStream& src,Name flow);
 ExprOp*		parse_let(TokenStream& src);
 Expr*		parse_match_arm(TokenStream& src);
 ArgDef*		parse_arg(int index,TokenStream& src, int close);
+ArgDef* parse_arg_or_self(int index,TokenStream& src, Type* self_t, int close);
 void		parse_typeparams_def(TokenStream& src,vector<TParamDef*>& out,int close);
 void		parse_typeparams_given(TokenStream& src, Type* add_here, int close);
 IdentWithTParams*		parse_tparams_for_ident(TokenStream& src,ExprIdent* id,int close);

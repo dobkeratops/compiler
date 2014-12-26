@@ -21,6 +21,7 @@ struct  ExprFnDef : ExprDef {
 	CaptureVars*	captures=0;			//
 	CaptureVars*	my_capture=0;			// for closures- hidden param,environment struct passed in
 	ExprStructDef* m_receiver=0;
+	Type*		self_t=0;			// also type of receiver.
 	int8_t		vtable_index=-1;
 	int8_t		vtable_param=0;		// which parameter dispatches
 	int8_t		num_prefix_args=0;	// 0- foo(a,b,c) 1- a.foo(b,c)

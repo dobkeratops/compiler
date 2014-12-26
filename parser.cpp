@@ -263,7 +263,7 @@ void parse_fn_args_ret(ExprFnDef* fndef,TokenStream& src,int close){
 			fndef->variadic=true; src.eat_tok(); src.expect(close); break;
 		}
 		if (src.eat_if(close)){break;}
-		auto arg=parse_arg(i++,src,close);
+		auto arg=parse_arg_or_self(i++,src,fndef->self_t, close);
 		fndef->args.push_back(arg);
 		src.eat_if(COMMA);
 	}
@@ -298,10 +298,10 @@ TypeDef* parse_typedef(TokenStream& src){
 	return td;
 }
 
-ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,bool is_virtual) {
+ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,Type* self_t, bool is_virtual) {
 	auto *fndef=new ExprFnDef(src.pos);
 	// read function name or blank
-
+	fndef->self_t=(Type*)self_t->clone_if();
 	if (auto tmp=src.eat_if_string()){
 		if (tmp==EXTERN_C){
 			fndef->c_linkage=true;
@@ -332,6 +332,7 @@ ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,bool is_virtual) {
 	}
 	parse_fn_args_ret(fndef,src,CLOSE_PAREN);
 	parse_fn_body(fndef,src);
+	// translate 'self' into given self_t
 	return fndef;
 }
 ExprFnDef* parse_closure(TokenStream&src,int close) {// eg |x|x*2
@@ -818,7 +819,10 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 // (x,y,z):(int,int,int)
 // foo:int
 // todo:
-ArgDef* parse_arg(int index,TokenStream& src, int close) {
+vector<Pattern*> g_leak_hack;
+ArgDef* parse_arg_or_self(int index,TokenStream& src, Type* self_t, int close) {
+	// temporary , translate the self type here for rust-like behaviour,
+	// until we've made the rest of it handle self; self should be like a typeparam
 	if (src.peek_tok()==close){src.eat_tok();return nullptr;}
 	auto ptn=parse_pattern(src,COLON,COMMA,close);
 	auto argname=orelse(ptn->as_just_name(),getNumberIndex(index));
@@ -828,13 +832,23 @@ ArgDef* parse_arg(int index,TokenStream& src, int close) {
 	a->pattern=ptn;
 	a->pos=src.pos;
 	if (src.eat_if(COLON)) {
-		a->type()=parse_type(src,close,a);
+		a->set_type(parse_type(src,close,a));
 	}
 	if (src.eat_if(ASSIGN)){
 		dbg(dbprintf("default expr needs cleanup- move to not consuming close"));
 		a->default_expr=parse_expr(src);
 	}
+	if (self_t && (a->pattern->name==REF || a->pattern->name==PTR) && a->pattern->sub->name==SELF){
+		a->name= THIS;
+		g_leak_hack.push_back(a->pattern);
+		a->pattern=nullptr;
+		//a->pattern=new Pattern(src.prev_pos,THIS);
+		a->set_type(new Type(a, PTR, (Type*)(self_t->clone())));
+	}
 	return a;
+}
+ArgDef* parse_arg(int index,TokenStream& src, int close) {
+	return parse_arg_or_self(index,src,nullptr,close);
 }
 // for tuple struct. makes a mess of our idea for scala style constructpr
 // unless we can find a way to build the type..
@@ -949,7 +963,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 			if (sd->inherits_type){
 				error(sd,"limited vtables - currently this can only describe the vtable layout in the base class.\nTODO - this is just a temporary simplification,  other priorities eg rust-style traits, ADTs, static-virtuals, reflection..\n");
 			}
-			sd->virtual_functions.push_back(parse_fn(src,sd,true));
+			sd->virtual_functions.push_back(parse_fn(src,sd,nullptr, true));
 		} else if (auto cmd=src.eat_if(STATIC)){
 			auto arg=parse_arg(f_index++,src,CLOSE_BRACE);
 			if (src.eat_if(VIRTUAL)){
@@ -1013,7 +1027,7 @@ ImplDef* parse_impl(TokenStream& src) {
 	// where block following struct def for default constructor..
 	while (src.peek_tok()!=CLOSE_BRACE){
 		if (src.eat_if(FN)){
-			imp->functions.push_back(parse_fn(src,nullptr));
+			imp->functions.push_back(parse_fn(src,nullptr,imp->impl_for_type));
 		} else if (src.eat_if(TYPE)){
 			imp->typedefs.push_back(parse_typedef(src));
 		}

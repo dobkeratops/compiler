@@ -14,27 +14,33 @@ struct CompilerTest {
 CompilerTest g_Tests[]={
 
 	{	"parse struct-trait-impl",__FILE__,__LINE__,R"====(
-		fn"C" printf(s:str,...)->int;
+		extern"C" fn printf(s:str,...)->int;
 		struct Foo{
 			x:int,y:int
+			fn a_method(){
+				printf("Foo.a_method\n");
+			}
 		};
-//		trait Object {
-//			fn render(self:&Object);
-//			fn update(self:&Object);
-//		};
+		trait Object {
+			fn render(&self);
+			fn update(&self);
+		};
 		impl Obj for Foo {
-			fn render(self:&Foo){
+			fn render(&self){
 				printf("Foo.render\n");
 			}
-			fn update(self:&Foo){
-				printf("Foo.render\n");
+			fn update(&self){
+				printf("Foo.update\n");
 			}
 		}
 		fn main(argc:int, argv:**char)->int{
+			let x:Foo; let y=&x;
+			y.a_method();
+			y.render();
 			0
 		}
 		)====",
-		nullptr,true
+		nullptr,false
 	},
 	
 	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
