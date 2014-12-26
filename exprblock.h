@@ -44,7 +44,7 @@ struct ExprBlock :public ExprScopeBlock{
 	Name		get_fn_name() const;
 	void		dump(int depth) const;
 	Node*		clone() const;
-	Node*		clone_sub() const;
+	ExprBlock*		clone_sub(ExprBlock* clone_into) const;
 	bool		is_undefined()const;
 	void		create_anon_struct_initializer();
 	void			clear_reg()				{for (auto p:argls)p->clear_reg();if (call_expr)call_expr->clear_reg(); reg_name=0;};
@@ -64,7 +64,8 @@ struct ExprBlock :public ExprScopeBlock{
 	void		recurse(std::function<void(Node*)>&) override;
 };
 
-/// Where Block - eg 'a where{b;c;d;}' === '{b;c;d;return a}'
+// TODO Where Block - eg 'a where{b;c;d;}' === '{b;c;d;return a}'
+// add dedicated node for this
 struct ExprWhere : ExprBlock {
 	const char* kind_str() const  override		{return "where";}
 	ResolveResult resolve(Scope* scope, const Type* desired, int flags);
@@ -74,3 +75,8 @@ struct ExprWhere : ExprBlock {
 	Node*		clone() const;
 };
 
+// TODO - split ExprBlock into cases..
+// TODO - 'ExprStructInitializer' ..
+// TODO - 'ExprCall'
+// TODO - 'ExprArrayInit'
+// TODO - 'ExprTuple

@@ -158,7 +158,15 @@ If another language has every feature I want in one place... great, I'll ditch t
  * Could we just generalize how the * & operators act on types and use some syntax on their declaration to set that up
    * so C++ transpiled and rust originated types get the right behaviour
 
-
+#### Rust Compatability ???
+ * everything I want would be possible as a superset of Rust.
+ * It *would* be nice to build this up into 'a superset of a subset of Rust'
+   * try to overlap with Rust community, Rust tools.
+ * but (i)I'm unlikely to be able to sort out every detail single handedly
+ * but(ii)its' not essential for the 'Project Pillars'.
+ * would anyone out there want to collaborate on building this up into a full rust implementation?
+ * full rust *macros* would be a nice addition that don't complicate the internals
+ * its' still possible future Rust versions might include these features..
 
 #### Goals In detail:- (a huge TODO list..)
 
@@ -172,7 +180,7 @@ If another language has every feature I want in one place... great, I'll ditch t
  * graph like/relative module import: 
   * any file in a project should work as the root for its own tests
   * No committing to heirachical structure
-    * i strongly dislike this in rust, the fact you bake in the hrc position into a symbol name
+    * I strongly dislike this in rust, the fact you MUST bake the whole hrc position into a symbol name
       * moving things around is just as annoying as with C++ headers.
     * dont need to commit to 'crate roots', change library granularity
     * relative namespace search (to avoid any absolute root), just warn about ambiguity
@@ -189,13 +197,19 @@ If another language has every feature I want in one place... great, I'll ditch t
     * most similar stated goal, but maybe different preferences
     * was inspiration to start this
     * could just converge on it and keep any extra features we have?
+    * as it gains momentum, we could just switch to its' syntax?
   * 'SugarCpp' - an interesting transpiler, looks very practical
     * it just accepts C++1y as starting point and just adds more.
+    * differs by not having the 'rust' influence, but very similar goals
   * D - never grabbed me for some reason, but has many features of interest eg UFCS
     * (tends to focus on gc? and doesn't have expression syntax?)
   * disqualified by CG, but still interesting:-
-    * Julia - focus on overloading/multimethods & interactivity
-    * Go - adhoc duck-type interface gather, simple but practical
+    * Julia
+      * focus on overloading/multimethods instead of 'special parameter'
+      * interactivity
+    * Go - 
+      * adhoc duck-type interface gather- want this;
+      * interesting for doing a lot with a simple feature set
 
  * Features inspired by Rust & other languages:
   * 2 way inference
@@ -266,7 +280,7 @@ If another language has every feature I want in one place... great, I'll ditch t
 #### other ideas
 
  * Generalizing enum/match:-
-   * make it call an 'isa(:*X)->*Y' test/coerce (like dynamic_cast)
+   * maybe make it call an 'isa(x:*X)->*Y' test/coerce (like dynamic_cast)
    * an 'enum' just rolls a 'isa' function which tests the discriminant...
    * .. but any custom union type could supply the 'isa' methods to fit match
    * C++ vtables could slot in with 'isa() being dynamic_cast
@@ -275,14 +289,18 @@ If another language has every feature I want in one place... great, I'll ditch t
  * 'intersection types'(?) for cutting structures up without having to butcher source
    * want to write the same routine with data split or merged
    * maybe just autoderef on tuple member acessors so tuples do that job..
+   * writing cachefriendly code means routinely splitting things up
 
  * ways of carrying more information down an object graph..
    * maybe hidden parameters on '.' overloads inlined away usually
      * eg foo.bar could return  (&Bar,this) which autocoerces to &Bar 
    * maybe nested 'this' for nested classes (eg scene->lights,scene->meshes...)
+     * pass an inherited 'this' into methods?
+       *alternate use of 'this/self'? .. just 1 level
 
 
- * immutable data hint ? (eg for coalesced-allocations,local ptrs)
+ * immutable data hint ? 
+   * eg for coalesced-allocations,local ptrs
  * 'vtable-from-address' for pooled objects?.. 
    * generalize 'get-vtable','get-data' to do classes,trait-obj & more in 1 system?
  * random idea.. Haskell lazy eval is intruiging

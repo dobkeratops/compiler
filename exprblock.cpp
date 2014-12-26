@@ -62,7 +62,10 @@ bool ExprBlock::is_undefined() const{
 }
 Node* ExprBlock::clone() const {
 	if (!this) return nullptr;
-	auto r=new ExprBlock(this->pos);
+	return (Node*)clone_sub(new ExprBlock());
+}
+ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
+	r->pos=this->pos;
 	r->bracket_type=this->bracket_type;
 	r->delimiter=this->delimiter;
 	if (this->call_expr) {
@@ -75,7 +78,7 @@ Node* ExprBlock::clone() const {
 	for (int i=0; i<this->argls.size(); i++) {
 		r->argls[i]=(Expr*)(this->argls[i]->clone());
 	}
-	return (Node*)r;
+	return r;
 }
 
 ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
