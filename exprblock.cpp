@@ -61,7 +61,7 @@ bool ExprBlock::is_undefined() const{
 	return false;
 }
 Node* ExprBlock::clone() const {
-	if (!this) return nullptr;
+//	if (!this) return nullptr;
 	return (Node*)clone_sub(new ExprBlock());
 }
 ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
@@ -323,76 +323,73 @@ void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
 	this->type()->translate_typeparams_if(tpx);
 }
 
-
 CgValue ExprBlock::compile(CodeGen& cg,Scope *sc, CgValue input) {
-	return compile_sub(cg,sc,0);
+	if (!argls.size())
+		return CgValue();
+	for (int i=0; i<argls.size()-1; i++){
+		this->argls[i]->compile(cg,sc);
+	}
+	return this->argls.back()->compile(cg,sc);
 }
 
-CgValue ExprBlock::compile_sub(CodeGen& cg,Scope *sc, RegisterName force_dst) {
-	auto n=this;
-	auto e=this; auto curr_fn=cg.curr_fn;
-	// [1] compound expression - last expression is the return .
-	if (e->is_tuple()){
-		auto tuple=cg.emit_alloca_type(e, e->type());
-		for (int i=0; i<e->argls.size(); i++){
-			auto val=e->argls[i]->compile(cg,sc);
-			auto elem=tuple.get_elem_index(cg,i);
-			elem.store(cg,val);
-		}
-		return tuple;
+CgValue ExprTuple::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	auto tuple=cg.emit_alloca_type(e, e->type());
+	for (int i=0; i<this->argls.size(); i++){
+		auto val=this->argls[i]->compile(cg,sc);
+		auto elem=tuple.get_elem_index(cg,i);
+		elem.store(cg,val);
 	}
-	else if(e->is_compound_expression()) {
-		if (auto num=e->argls.size()) {
-			for (int i=0; i<num-1; i++){
-				e->argls[i]->compile(cg,sc);
-			}
-			if (e->argls.size())
-				return e->argls[num-1]->compile(cg,sc);
-		};
+	return tuple;
+}
+CgValue ExprStructInit::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	return compile_struct_init(cg,sc,0);
+}
+CgValue ExprStructInit::compile_struct_init(CodeGen& cg,Scope *sc, RegisterName force_dst) {
+	auto e=this;
+	StructInitializer si(sc,e); si.map_fields();
+	auto dbg=[&](){e->type()->dump(0);newline(0);};
+	auto struct_val= force_dst?CgValue(0,e->type(),force_dst):cg.emit_alloca_type(e, e->type());
+	e->reg_name=struct_val.reg; // YUK todo - reallyw wanted reg copy
+	// can we trust llvm to cache the small cases in reg..
+	if (e->argls.size()!=si.value.size())
+		dbprintf("warning StructInitializer vs argls mismatch, %d,%d\n",e->argls.size(),si.value.size());
+	auto sd=si.get_struct_def();
+	if (sd->m_is_variant){
+		auto ni=sd->get_elem_index(__DISCRIMINANT);
+		auto dis=struct_val.get_elem_index(cg,ni);
+		cg.emit_store_i32(dis, sd->discriminant);
 	}
-	else if (e->is_struct_initializer()){
-		StructInitializer si(sc,e); si.map_fields();
-		auto dbg=[&](){e->type()->dump(0);newline(0);};
-		auto struct_val= force_dst?CgValue(0,e->type(),force_dst):cg.emit_alloca_type(e, e->type());
-		e->reg_name=struct_val.reg; // YUK todo - reallyw wanted reg copy
-		// can we trust llvm to cache the small cases in reg..
-		if (e->argls.size()!=si.value.size())
-			dbprintf("warning StructInitializer vs argls mismatch, %d,%d\n",e->argls.size(),si.value.size());
-		auto sd=si.get_struct_def();
-		if (sd->m_is_variant){
-			auto ni=sd->get_elem_index(__DISCRIMINANT);
-			auto dis=struct_val.get_elem_index(cg,ni);
-			cg.emit_store_i32(dis, sd->discriminant);
-		}
-		for (int i=0; i<e->argls.size() && i<si.value.size();i++) {
-			auto rvalue=si.value[i]->compile(cg,sc);
-			auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);
-			auto r=dst.store(cg,rvalue.load(cg));
-			if (r.type==struct_val.type)
-				struct_val=r; // mutate by insertion if its 'in-reg'
-		}
-		// TODO: CLARIFY WHY... alloca returns 'ref' whilst struct-initializer gives a 'ptr'?
-		// eliminate this, its' messy. 'force_dst' should be a CgValue.
-		if (force_dst) {
-			struct_val.reg=force_dst;
-			struct_val.addr=0;
-		}
-		return struct_val;
+	for (int i=0; i<e->argls.size() && i<si.value.size();i++) {
+		auto rvalue=si.value[i]->compile(cg,sc);
+		auto dst = struct_val.get_elem(cg,si.field_refs[i],sc);
+		auto r=dst.store(cg,rvalue.load(cg));
+		if (r.type==struct_val.type)
+			struct_val=r; // mutate by insertion if its 'in-reg'
 	}
-	// [2] Operator
-	//[3] ARRAY ACCESSs
-	else if (auto ar=n->is_subscript()){
-		auto expr=ar->call_expr->compile(cg,sc);// expression[index]
-		auto index=ar->argls[0]->compile(cg,sc);
-		/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
-		// TODO: abstract this into codegen -getelementref(CgValue ptr,CgValue index);
-		return cg.emit_get_array_elem_ref(expr, index);
+	// TODO: CLARIFY WHY... alloca returns 'ref' whilst struct-initializer gives a 'ptr'?
+	// eliminate this, its' messy. 'force_dst' should be a CgValue.
+	if (force_dst) {
+		struct_val.reg=force_dst;
+		struct_val.addr=0;
 	}
-	//[3] FUNCTION CALL (no receiver)
-	else if (e->is_function_call()){
-		return compile_function_call(cg,sc,CgValue(),nullptr,e);
-	}
+	return struct_val;
+}
+CgValue ExprArrayInit::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	error(this,"todo array initializer\n");
 	return CgValue();
+}
+
+CgValue ExprSubscript::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	auto ar=this;
+	auto expr=ar->call_expr->compile(cg,sc);// expression[index]
+	auto index=ar->argls[0]->compile(cg,sc);
+	/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
+	// TODO: abstract this into codegen -getelementref(CgValue ptr,CgValue index);
+	return cg.emit_get_array_elem_ref(expr, index);
+}
+
+CgValue ExprCall::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	return compile_function_call(cg,sc,CgValue(),nullptr,this);
 }
 
 

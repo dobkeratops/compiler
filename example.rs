@@ -147,7 +147,6 @@ fn setv[X,Y](u:&Union[X,Y],x:X)->void{
 	u.tag=0;
 }
 
-
 fn main(argc:int,argv:**char)->int{
 
 	printf("example program ./example.rs compiled & run by default makefile\n");
@@ -159,6 +158,7 @@ fn main(argc:int,argv:**char)->int{
 	// sugar for closure as last arg, foo(..)do x{...}  === foo(..,|x|{...})
 	// similar to rusts' lost "DO" notation - 
 	// but 'do' keyword is still free for another use as a prefix
+	// great for internal iterators (which are in turn nice for data-parallel)
 	take_closure() do x{
 		printf("closure2 says x=%d y=%d\n",x,captured_y);
 	}

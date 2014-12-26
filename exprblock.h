@@ -54,7 +54,6 @@ struct ExprBlock :public ExprScopeBlock{
 	Scope*	get_scope()	override			{return this->scope;}
 	void 			verify();
 	CgValue 		compile(CodeGen& cg, Scope* sc, CgValue) override;
-	CgValue 		compile_sub(CodeGen& cg, Scope* sc,RegisterName dst);
 	void	translate_typeparams(const TypeParamXlat& tpx) override;
 	void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags);
@@ -77,17 +76,29 @@ struct ExprWhere : ExprBlock {
 };
 
 struct ExprStructInit : ExprBlock{
+	CgValue compile_struct_init(CodeGen& cg,Scope *sc, RegisterName force_dst);
 	const char* kind_str() const  override		{return "struct_init";}
+	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
+	Node* 	clone() const {return (Node*)clone_sub(new ExprStructInit());}
+
 };
 struct ExprTuple : ExprBlock{
 	const char* kind_str() const  override		{return "tuple";}
+	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
+	Node* 	clone() const override	{return (Node*)clone_sub(new ExprTuple());}
 };
 struct ExprCall : ExprBlock{
 	const char* kind_str() const  override		{return "call";}
+	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
+	Node* 	clone() const override	{return (Node*)clone_sub(new ExprCall());}
 };
 struct ExprArrayInit : ExprBlock{
 	const char* kind_str() const  override		{return "array_init";}
+	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
+	Node* 	clone() const override	{return (Node*)clone_sub(new ExprArrayInit());}
 };
 struct ExprSubscript : ExprBlock{
 	const char* kind_str() const  override		{return "subscript";}
+	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
+	Node*	clone() const override	{return (Node*)clone_sub(new ExprSubscript());}
 };
