@@ -80,6 +80,24 @@ ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
 	}
 	return r;
 }
+ResolveResult	ExprSubscript::resolve(Scope* sc, const Type* desired,int flags){
+	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
+		this->def->resolve_if(sc, nullptr, flags);
+	ASSERT(!dynamic_cast<ExprStructInit*>(this));
+	// array indexing operator TODO: check this isn't itself a Type, if we want templates anywhere.
+	resolved|=this->call_expr->resolve_if(sc,nullptr,flags); // todo - it could be _[desired]. forward should give possibilities
+	if (auto t=call_expr->type()){
+		ASSERT(t->is_array()||t->is_pointer());
+		for (auto i=0; i<argls.size(); i++)  {
+			resolved|=argls[i]->resolve_if(sc,nullptr,flags&!R_PUT_ON_STACK ); // TODO any indexing type? any type extracted from 'array' ?
+		}
+		const Type* array_elem_type=t->sub;
+		propogate_type_fwd(flags,this, array_elem_type);
+		return propogate_type_fwd(flags,this, desired);
+	} else
+		return resolved|=INCOMPLETE;
+}
+
 
 ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
@@ -126,6 +144,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
 		// last expression - type bounce. The final expression is a return value, use 'desired';
 		// we then propogate backwards. some variables will have been set, eg return value accumulator..
+		ASSERT(!dynamic_cast<ExprStructInit*>(this));
 		if (this->argls.size()) {
 			int	i_complete=-1;
 			if (!(flags & R_REVERSE_ONLY)){
@@ -170,25 +189,14 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		}
 		else {ASSERT(0);return ResolveResult();}
 	}
-	else if (this->is_subscript()) {
-		// array indexing operator TODO: check this isn't itself a Type, if we want templates anywhere.
-		resolved|=this->call_expr->resolve_if(sc,nullptr,flags); // todo - it could be _[desired]. forward should give possibilities
-		if (auto t=call_expr->type()){
-			ASSERT(t->is_array()||t->is_pointer());
-			for (auto i=0; i<argls.size(); i++)  {
-				resolved|=argls[i]->resolve_if(sc,nullptr,flags&!R_PUT_ON_STACK ); // TODO any indexing type? any type extracted from 'array' ?
-			}
-			const Type* array_elem_type=t->sub;
-			propogate_type_fwd(flags,this, array_elem_type);
-			return propogate_type_fwd(flags,this, desired);
-		} else
-			return resolved|=INCOMPLETE;
-	} else if (this->is_struct_initializer()){
+	else if (this->is_struct_initializer()){
+		ASSERT(dynamic_cast<ExprStructInit*>(this));
 		dbg(this->type()->dump_if(-1));dbg(newline(0));
 		auto si=StructInitializer(sc,this);
 		return si.resolve(desired,flags);
 	}
 	else if (this->call_expr){
+		ASSERT(!dynamic_cast<ExprStructInit*>(this));
 		// TODO: distinguish 'partially resolved' from fully-resolved.
 		// at the moment we only pick an fn when we know all our types.
 		// But, some functions may be pure generic? -these are ok to match to nothing.

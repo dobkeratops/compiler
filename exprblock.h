@@ -102,4 +102,5 @@ struct ExprSubscript : ExprBlock{
 	const char* kind_str() const  override		{return "subscript";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node*	clone() const override	{return (Node*)clone_sub(new ExprSubscript());}
+	ResolveResult	resolve(Scope* sc, const Type* desired,int flags);
 };
