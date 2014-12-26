@@ -59,6 +59,7 @@ struct ExprBlock :public ExprScopeBlock{
 	void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags);
 	ResolveResult	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
+	ResolveResult	resolve_elems(Scope* scope, const Type* sub_desired, int flags);
 	int	get_elem_count()const override{return this->argls.size();}
 	Node*	get_elem_node(int i) override{return this->argls[i];}
 	void		recurse(std::function<void(Node*)>&) override;
@@ -75,8 +76,18 @@ struct ExprWhere : ExprBlock {
 	Node*		clone() const;
 };
 
-// TODO - split ExprBlock into cases..
-// TODO - 'ExprStructInitializer' ..
-// TODO - 'ExprCall'
-// TODO - 'ExprArrayInit'
-// TODO - 'ExprTuple
+struct ExprStructInit : ExprBlock{
+	const char* kind_str() const  override		{return "struct_init";}
+};
+struct ExprTuple : ExprBlock{
+	const char* kind_str() const  override		{return "tuple";}
+};
+struct ExprCall : ExprBlock{
+	const char* kind_str() const  override		{return "call";}
+};
+struct ExprArrayInit : ExprBlock{
+	const char* kind_str() const  override		{return "array_init";}
+};
+struct ExprSubscript : ExprBlock{
+	const char* kind_str() const  override		{return "subscript";}
+};

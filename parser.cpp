@@ -421,9 +421,19 @@ ExprBlock* ExprBlock_alloc(SrcPos& pos){
 //	else
 		return new ExprBlock(pos);
 }
-ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
+ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_node);
+
+ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_node) {
 	// shunting yard expression parser+dispatch to other contexts
-	ExprBlock *node=ExprBlock_alloc(src.pos);
+//	ExprBlock *node=ExprBlock_alloc(src.pos);
+	return parse_block_sub(ExprBlock_alloc(src.pos), src,close,delim, outer_node);
+}
+ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
+	// todo - parse the first expr. look for comma, insantiate ExprTuple or ExprBlock accordingly.
+	return parse_block(src, CLOSE_PAREN,COMMA,nullptr);
+}
+ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_op) {
+	node->pos=src.pos;
 	node->call_expr=outer_op;
 	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
@@ -500,7 +510,7 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 		else if (src.eat_if(DO)){
 			// simple syntax sugar- do notation,parser hack
 			flatten_stack(operators,operands);
-			expect(src,operands.size()>=1,"need preceeding expression for 'do x{..}");
+			expect(src,operands.size()>=1,"need preceeding expression eg 'expr(..) do x{..}");
 			auto fndef=parse_fn_args( src, OPEN_BRACE);
 			fndef->body=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
 			auto prev=operands.back();
@@ -544,26 +554,27 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
-				operands.push_back(parse_block(src, CLOSE_PAREN,SEMICOLON, pop(operands)));
+				operands.push_back(parse_block_sub(new ExprCall(), src, CLOSE_PAREN,SEMICOLON, pop(operands)));
 				// call result is operand
 			}
 			else {
-				operands.push_back(parse_block(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
+				// subexpression-or-tuple
+				operands.push_back(parse_subexpr_or_tuple(src)); // just a subexpression
 				was_operand=true;
 			}
 		} else if (src.eat_if(OPEN_BRACKET)){
 			if (was_operand){
-				operands.push_back(parse_block(src,CLOSE_BRACKET,COMMA,operands.pop()));
+				operands.push_back(parse_block_sub(new ExprSubscript(), src,CLOSE_BRACKET,COMMA,operands.pop()));
 			} else {
 				error(operands.back()?operands.back():node,"TODO: array initializer");
-				operands.push_back(parse_block(src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
+				operands.push_back(parse_block_sub(new ExprArrayInit,src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
 			}
 		} else if (src.eat_if(OPEN_BRACE)){
 			//			error(operands.back()?operands.back():node,"struct initializer");
 			if (was_operand){// struct initializer
 				auto sname=operands.pop_back();
-				auto si=parse_block(src,CLOSE_BRACE,COMMA,sname);
+				auto si=parse_block_sub(new ExprStructInit(), src,CLOSE_BRACE,COMMA,sname);
 				operands.push_back(si);
 				si->set_type(sname->get_type()); //eg ident might have typeparams.struct init uses given type
 				dbg(operands.back()->dump(0));
@@ -597,11 +608,8 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_op) {
 						if (tok==COLON || tok==ASSIGN)
 							tok=FIELD_ASSIGN;
 					}
-					
 					if (was_operand) tok=get_infix_operator(tok);
 					else tok=get_prefix_operator(tok);
-					
-					
 					verify_all();
 					while (operators.size()>0) {
 						int prev_precedence=precedence(operators.back().op);

@@ -10,6 +10,11 @@ struct VTablePtrs {
 	void* expr_ident;
 	void* expr_fn_def;
 	void* expr_block;
+	void* expr_tuple;
+	void* expr_array_init;
+	void* expr_struct_init;
+	void* expr_call;
+	void* expr_subscript;
 	void* type;
 }
 g_vtable_ptrs;
@@ -29,7 +34,17 @@ void lazy_cache_vtable_ptrs(){
 	
 	auto p4=new ExprBlock();
 	g_vtable_ptrs.expr_block=*(void**)p4;
-	
+	{auto p=new ExprStructInit();
+		g_vtable_ptrs.expr_struct_init=*(void**)p;}
+	{auto p=new ExprArrayInit();
+		g_vtable_ptrs.expr_array_init=*(void**)p;}
+	{auto p=new ExprTuple();
+		g_vtable_ptrs.expr_tuple=*(void**)p;}
+	{auto p=new ExprCall();
+		g_vtable_ptrs.expr_call=*(void**)p;}
+	{auto p=new ExprSubscript();
+		g_vtable_ptrs.expr_subscript=*(void**)p;}
+
 	auto p5=new Type();
 	g_vtable_ptrs.type=*(void**)p5;
 }
@@ -42,7 +57,13 @@ void verify_expr_op(const Node* p){
 }
 void verify_expr_block(const Node* p){
 	lazy_cache_vtable_ptrs();
-	ASSERT(g_vtable_ptrs.expr_block==*(void**)p)
+	ASSERT(g_vtable_ptrs.expr_block==*(void**)p||
+		   g_vtable_ptrs.expr_struct_init==*(void**)p||
+		   g_vtable_ptrs.expr_array_init==*(void**)p||
+		   g_vtable_ptrs.expr_tuple==*(void**)p||
+		   g_vtable_ptrs.expr_call==*(void**)p||
+		   g_vtable_ptrs.expr_subscript==*(void**)p
+		   )
 }
 void verify_expr_fn_def(const Node* p){
 	lazy_cache_vtable_ptrs();
