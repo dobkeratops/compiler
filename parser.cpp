@@ -412,6 +412,11 @@ void expect(TokenStream& src,bool expr,const char* msg){
 		error(src.pos,msg);
 	}
 }
+Vec<ExprBlock*> g_leak_hack_exprblock;
+void ExprBlock_free(ExprBlock* b){
+	ASSERT(b->argls.size()==0 && !b->call_expr);
+	g_exprpool.push_back(b);
+}
 ExprBlock* ExprBlock_alloc(SrcPos& pos){
 	// todo - 'g_exprpool'=temp hack for stupid expr / block conflation
 	// we free these up when parse_block() allocates extraneously for "parse_expr()"
@@ -430,7 +435,19 @@ ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_node) {
 }
 ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
 	// todo - parse the first expr. look for comma, insantiate ExprTuple or ExprBlock accordingly.
-	return parse_block(src, CLOSE_PAREN,COMMA,nullptr);
+	auto node= parse_block(src, CLOSE_PAREN,COMMA,nullptr);
+//	return node;
+	if (node->argls.size()>1){
+		auto tp=new ExprTuple;
+		tp->pos=node->pos;
+		tp->argls.take_from(node->argls);
+		tp->delimiter=node->delimiter;
+		tp->bracket_type=node->bracket_type;
+		ASSERT(node->call_expr==nullptr);
+		ExprBlock_free(node);
+		return tp;
+	} else
+		return node;
 }
 ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_op) {
 	node->pos=src.pos;

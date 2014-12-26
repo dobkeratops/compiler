@@ -361,6 +361,7 @@ struct Vec{
 //		data=src.data;
 //		num=src.num;
 //		cap=src.cap;
+		num=src.size();
 		for (auto i=0; i<src.size(); i++){
 			data[i]=move(src[i]);
 		}
