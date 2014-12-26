@@ -20,13 +20,8 @@ void ExprBlock::dump(int depth) const {
 	newline(depth);
 	auto b=(this->bracket_type==OPEN_PAREN)?"(\0)\0":"{\0}\0";
 	dbprintf(b+0);
-	if (this->call_expr){
-		dbprintf(this->is_subscript()?"subscript: ":this->is_struct_initializer()?"struct_init ":"call ");
-		this->call_expr->dump(-100);
-		//
-	} else{
-		dbprintf(this->is_array_initializer()?"array_init ":this->is_tuple()?"tuple ":"");
-	}
+	dbprintf(this->kind_str());
+	this->call_expr->dump_if(-100);
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
 	}
@@ -237,71 +232,63 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 		this->call_expr->resolve_if(sc,nullptr,flags);
 	::verify(this->get_type());
 
+	ExprIdent* p=nullptr;
 
-	if (this->argls.size()<=0 && this->is_compound_expression() ) {
+	if (!this->argls.size()) {
 		if (!this->get_type()) this->set_type(new Type(this,VOID));
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
 	}
-	ExprIdent* p=nullptr;
-	if (this->is_compound_expression()) {	// do executes each expr, returns last ..
-		// last expression - type bounce. The final expression is a return value, use 'desired';
-		// we then propogate backwards. some variables will have been set, eg return value accumulator..
-		ASSERT(!dynamic_cast<ExprStructInit*>(this));
-		ASSERT(!dynamic_cast<ExprCall*>(this));
-		ASSERT(!dynamic_cast<ExprTuple*>(this));
-		ASSERT(!dynamic_cast<ExprSubscript*>(this));
-		if (this->argls.size()) {
-			int	i_complete=-1;
-			if (!(flags & R_REVERSE_ONLY)){
-				for (auto n=0; n<(int)this->argls.size()-1; n++) {
-					resolved|=this->argls[n]->resolve_if(sc,0,flags);
-					if (resolved==COMPLETE)
-						i_complete=n;
-				}
-			}
-			propogate_type_fwd(flags,this, desired);
-			resolved|=this->argls.back()->resolve_if(sc,desired,flags);
-			if (i_complete>=this->argls.size()-1){
-				dbg(printf("icomplete stuff works"));
-			}
-			// reverse pass too
-			if (!(flags & R_FORWARD_ONLY)){
-				for (auto n=(int)this->argls.size()-2;n>i_complete; n--) {
-					resolved|=this->argls[n]->resolve_if(sc,0,flags);
-				}
-				#if DEBUG>=2
-				auto resolved2=(char)COMPLETE;
-				for (auto n=i_complete; n>=0; n--){
-					auto a=this->argls[n];
-					resolved2|=a->resolve_if(sc,0,flags);
-					resolved|=resolved2;
-					if (resolved2!=COMPLETE){
-						error(this,"ICE,node %s in %s was falsely declared complete",a->name_str(),a->kind_str());
-					}
-				}
-#endif
-			}
-#if DEBUG>=2
-			if(i_complete>0 &&0==(flags&(R_FORWARD_ONLY|R_REVERSE_ONLY))){
-				dbprintf("%d / %d\n", i_complete,this->argls.size());
-			}
-#endif
-			dbg(this->type()->dump_if(-1));
-			dbg(this->argls.back()->dump_if(-1));
-			dbg(newline(0));
-
-			return propogate_type_refs(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
+	int	i_complete=-1;
+	if (!(flags & R_REVERSE_ONLY)){
+		for (auto n=0; n<(int)this->argls.size()-1; n++) {
+			resolved|=this->argls[n]->resolve_if(sc,0,flags);
+			if (resolved==COMPLETE)
+				i_complete=n;
 		}
-		else {ASSERT(0);return ResolveResult();}
 	}
-	else if (this->is_struct_initializer()){
-		ASSERT(dynamic_cast<ExprStructInit*>(this));
-		ASSERT(!dynamic_cast<ExprCall*>(this));
-		dbg(this->type()->dump_if(-1));dbg(newline(0));
-		auto si=StructInitializer(sc,this);
-		return si.resolve(desired,flags);
+	propogate_type_fwd(flags,this, desired);
+	resolved|=this->argls.back()->resolve_if(sc,desired,flags);
+	if (i_complete>=this->argls.size()-1){
+		dbg(printf("icomplete stuff works"));
 	}
-	return resolved;
+	// reverse pass too
+	if (!(flags & R_FORWARD_ONLY)){
+		for (auto n=(int)this->argls.size()-2;n>i_complete; n--) {
+			resolved|=this->argls[n]->resolve_if(sc,0,flags);
+		}
+		#if DEBUG>=2
+		auto resolved2=(char)COMPLETE;
+		for (auto n=i_complete; n>=0; n--){
+			auto a=this->argls[n];
+			resolved2|=a->resolve_if(sc,0,flags);
+			resolved|=resolved2;
+			if (resolved2!=COMPLETE){
+				error(this,"ICE,node %s in %s was falsely declared complete",a->name_str(),a->kind_str());
+			}
+		}
+#endif
+	}
+#if DEBUG>=2
+	if(i_complete>0 &&0==(flags&(R_FORWARD_ONLY|R_REVERSE_ONLY))){
+		dbprintf("%d / %d\n", i_complete,this->argls.size());
+	}
+#endif
+	dbg(this->type()->dump_if(-1));
+	dbg(this->argls.back()->dump_if(-1));
+	dbg(newline(0));
+
+	return propogate_type_refs(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
+}
+
+ResolveResult
+ExprStructInit::resolve(Scope* sc,const Type* desired,int flags){
+	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
+	this->def->resolve_if(sc, nullptr, flags);
+	this->call_expr->resolve_if(sc,nullptr,flags);
+
+	dbg(this->type()->dump_if(-1));dbg(newline(0));
+	auto si=StructInitializer(sc,this);
+	return si.resolve(desired,flags);
 }
 
 

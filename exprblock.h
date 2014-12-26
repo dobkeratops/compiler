@@ -80,6 +80,7 @@ struct ExprStructInit : ExprBlock{
 	const char* kind_str() const  override		{return "struct_init";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const {return (Node*)clone_sub(new ExprStructInit());}
+	ResolveResult	resolve(Scope* sc, const Type* desired,int flags) override;
 
 };
 struct ExprTuple : ExprBlock{
