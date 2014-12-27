@@ -129,7 +129,7 @@ Type* Node::expect_type() const {
 	error((const Node*)this,"%s has no type\n", str(name));
 	return nullptr;
 }
-void Node::dump(int depth) const {
+void Node::dump(PrinterRef depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("(?)");
 }
@@ -655,7 +655,7 @@ int TParamXlat::typeparam_index(const Name& n) const{
 	}
 	return -1;
 }
-void TParamXlat::dump(int depth)const{
+void TParamXlat::dump(PrinterRef depth)const{
 	dbprintf("[");
 	for (auto i=0; i<this->tparams.size();i++){
 		if (i)dbprintf(",");

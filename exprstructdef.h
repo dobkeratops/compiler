@@ -59,7 +59,7 @@ struct ExprStructDef: ExprDef {
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
 	void			set_discriminant(int value){discriminant=value;m_is_variant=true;}
 	void			set_variant_of(ExprStructDef* owner, int index){set_discriminant(index); ASSERT(inherits==0); inherits=owner;}
-	void			dump(int depth)const;
+	void			dump(PrinterRef depth)const;
 	void			dump_instances(int depth)const;
 	void			dump_struct_body(int depth) const;
 	size_t			size() const;
@@ -119,7 +119,7 @@ struct ImplDef : ExprStructDef {
 	ImplDef*	next_of_trait=0;
 	void		add_to_struct();
 	const char* kind_str()const{return "impl";}
-	void dump(int depth) const;
+	void dump(PrinterRef depth) const;
 	ImplDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
 };
 /// a rust 'Mod' is just a struct with no fields, and just static functions

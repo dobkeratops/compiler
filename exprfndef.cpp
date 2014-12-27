@@ -46,7 +46,7 @@ bool	ExprFnDef::has_return_value() const{
 }
 
 
-void ExprFnDef::dump(int ind) const {
+void ExprFnDef::dump(PrinterRef ind) const {
 	dump_sub(ind,FN);
 }
 

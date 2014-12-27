@@ -19,7 +19,7 @@ struct ExprOp: public Expr{
 	void	set_fn(ExprFnDef* call)			{this->set_def((ExprDef*)call);}
 	const ExprFnDef*	get_fn()const		{return def?def->as_fn_def():nullptr;}
 	ExprOp(Name opname,SrcPos sp)			{name=opname; lhs=0; rhs=0;pos=sp;}
-	void	dump(int depth) const;
+	void	dump(PrinterRef depth) const;
 	int		get_operator() const			{return index(this->name);}
 	int		get_op_name() const				{return index(this->name);}
 	bool	is_undefined()const				{return (lhs?lhs->is_undefined():false)||(rhs?rhs->is_undefined():false);}

@@ -37,7 +37,7 @@ struct TParamXlat{
 		return true;
 	}
 	int typeparam_index(const Name& n) const;
-	void dump(int depth)const;
+	void dump(PrinterRef depth)const;
 };
 
 struct FindFunction {

@@ -26,7 +26,7 @@ struct ExprBlock :public ExprScopeBlock{
 	// TODO: move these into dedicated nodes, starting with 'structInitializer' which will give us ScalaDefaultConstructor.
 	ExprFnDef*	get_fn_call()const;
 	Name		get_fn_name() const;
-	void		dump(int depth) const;
+	void		dump(PrinterRef depth) const;
 	Node*		clone() const;
 	ExprBlock*		clone_sub(ExprBlock* clone_into) const;
 	bool		is_undefined()const;
@@ -53,7 +53,7 @@ struct ExprBlock :public ExprScopeBlock{
 struct ExprWhere : ExprBlock {
 	const char* kind_str() const  override		{return "where";}
 	ResolveResult resolve(Scope* scope, const Type* desired, int flags) override;
-	void	dump(int depth) const override;
+	void	dump(PrinterRef depth) const override;
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	ExprBlock* 		as_block() override 	{return nullptr;}
 	Node*		clone() const{return clone_sub(new ExprWhere());}

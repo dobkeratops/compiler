@@ -54,7 +54,7 @@ struct  ExprFnDef : ExprDef {
 	ExprFnDef* 		as_fn_def() override{return this;}
 	const ExprFnDef* 		as_fn_def() const override{return this;}
 	Node*			instanced_by()const{if (this->instance_of){return this->refs;}else return nullptr;}
-	void			dump(int ind) const;
+	void			dump(PrinterRef ind) const;
 	void			dump_sub(int ind,Name prefix) const;
 	ResolveResult	resolve_function(Scope* definer,ExprStructDef* receiver, const Type* desired, int flags);
 	ResolveResult	resolve(Scope* scope,const Type* desired,int flags);

@@ -466,7 +466,7 @@ Variable* Scope::get_or_create_scope_variable(Node* creator,Name name,VarKind k)
 	auto v=this->create_variable(creator,name,k);
 	return v;
 }
-void Scope::dump(int depth)const {
+void Scope::dump(PrinterRef depth)const {
 	newline(depth);dbprintf("scope: %s",this->name());
 	if (this->parent)
 		dbprintf("(of %s)", this->parent);

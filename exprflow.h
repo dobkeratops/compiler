@@ -18,7 +18,7 @@ struct ExprIf :  ExprFlow {
 	Expr*	cond=0;
 	Expr*	body=0;
 	Expr*	else_block=0;
-	void	dump(int depth) const;
+	void	dump(PrinterRef depth) const;
 	ExprIf(const SrcPos& s){pos=s;name=0;cond=0;body=0;else_block=0;}
 	~ExprIf(){}
 	Node*	clone() const;
@@ -47,7 +47,7 @@ struct ExprFor :  ExprFlow {
 	Expr* body=0;
 	Expr* else_block=0;
 	Scope* scope=0;
-	void dump(int depth) const;
+	void dump(PrinterRef depth) const;
 	ExprFor(const SrcPos& s)		{pos=s;name=0;pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;scope=0;}
 	bool is_c_for()const			{return !pattern;}
 	bool is_for_in()const			{return pattern && cond==0 && incr==0;}
@@ -78,7 +78,7 @@ struct ExprMatch : ExprFlow {
 	MatchArm*	arms=0;
 	Node*	clone()const{ return this->clone_into(new ExprMatch);}
 	Node*	clone_into(ExprMatch* ) const;
-	void	dump(int depth)const;
+	void	dump(PrinterRef depth)const;
 	void	recurse(std::function<void(Node*)>& f)override;
 };
 
@@ -91,7 +91,7 @@ struct MatchArm : ExprScopeBlock {
 	Expr*		cond=0;
 	Expr*		body=0;
 	MatchArm*	next=0;
-	void		dump(int depth)const;
+	void		dump(PrinterRef depth)const;
 	Node*		clone() const override;
 	Scope*		get_scope()override{return this->scope;}
 	void		translate_tparams(const TParamXlat& tpx){}
@@ -106,7 +106,7 @@ struct MatchArm : ExprScopeBlock {
 };
 
 struct ExprIfLet : ExprMatch{	// sugar for match 1arm. parses+prints different. eval the same
-	void		dump(int depth)const;
+	void		dump(PrinterRef depth)const;
 	Node*		clone() const override {return this->clone_into(new ExprIfLet);}
 	const char*		kind_str() const {return "kind str";}
 };

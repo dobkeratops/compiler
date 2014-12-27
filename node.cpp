@@ -192,7 +192,7 @@ TypeDef* TypeDef::clone()const{
 	td->type_def = (Type*) this->type_def->clone();// actual ->type() will be translated
 	return td;
 }
-void TypeDef::dump(int depth) const{
+void TypeDef::dump(PrinterRef depth) const{
 	newline(depth); dbprintf("%s %s",this->kind_str() ,this->name_str()); dump_typeparams(this->tparams); dbprintf("=");
 	this->type_def->dump(-1);
 	if (this->type()){dbprintf(":"); this->type()->dump_if(depth);}

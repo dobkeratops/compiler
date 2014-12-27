@@ -34,7 +34,7 @@ void ExprOp::find_vars_written(Scope* s, set<Variable *> &vs) const{
 	}
 }
 
-void ExprOp::dump(int depth) const {
+void ExprOp::dump(PrinterRef depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("(");
 	auto id=this->name;

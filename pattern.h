@@ -27,7 +27,7 @@ struct Pattern : Node {
 	const Pattern*	get_elem(int i,int ii)const{return get_elem(i)->get_elem(ii);}
 	void	push_back(Pattern* p);
 	void	push_child(Pattern* p);
-	void	dump(int indent)const;
+	void	dump(PrinterRef indent)const;
 	Node*	clone()const;
 	// if-let , args, or match arms would all call this.
 	ResolveResult	resolve_with_type(Scope* sc, const Type* rhs, int flags);

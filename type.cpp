@@ -441,7 +441,7 @@ ExprStructDef* Type::get_receiver()const
 	return nullptr;
 }
 
-void Type::dump(int depth)const{
+void Type::dump(PrinterRef depth)const{
 	if (!this) return;
 	newline(depth);dump_sub(depth);
 }

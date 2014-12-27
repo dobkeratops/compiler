@@ -81,7 +81,7 @@ Node* ExprIf::clone()const {
 	::verify(p->cond->get_type());
 	return p;
 }
-void ExprIf::dump(int depth) const {
+void ExprIf::dump(PrinterRef depth) const {
 	::verify(cond->get_type());
 	newline(depth);dbprintf("(if\n");
 	cond->dump(depth+1);
@@ -140,7 +140,7 @@ void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
 }
 
 
-void ExprFor::dump(int d) const {
+void ExprFor::dump(PrinterRef d) const {
 	newline(d);dbprintf("(for ");
 	if (this->is_c_for()) {
 		this->init->dump(d+1); newline(d);dbprintf(";");
@@ -188,7 +188,7 @@ Node* MatchArm::clone()const{
 	return a;
 }
 
-void ExprMatch::dump(int depth)const{
+void ExprMatch::dump(PrinterRef depth)const{
 	newline(depth); dbprintf("match "); this->expr->dump(-1000);dbprintf("{");
 	for (auto ma=this->arms; ma;ma=ma->next){
 		ma->dump(depth>=0?depth+1:-1);
@@ -295,7 +295,7 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 	return propogate_type_fwd(flags,this, desired, this->type_ref());
 }
 
-void MatchArm::dump(int depth)const{
+void MatchArm::dump(PrinterRef depth)const{
 	auto d1=depth>=0?depth+1:depth;
 	newline(depth);
 	this->pattern->dump(-1);
@@ -312,7 +312,7 @@ void MatchArm::recurse(std::function<void(Node *)> &f){
 	this->type()->recurse(f);
 }
 
-void ExprIfLet::dump(int depth)const{
+void ExprIfLet::dump(PrinterRef depth)const{
 	newline(depth);dbprintf("if let ");
 	this->arms->pattern->dump(-1);
 	dbprintf("=");

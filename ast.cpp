@@ -88,7 +88,7 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	}
 	return resolved;
 }
-void ExprIdent::dump(int depth) const {
+void ExprIdent::dump(PrinterRef depth) const {
 	if (!this) return;
 	newline(depth);dbprintf("%s ",getString(name));
 	//	if (this->def) {dbprintf("(%s %d)",this->def->pos.line);}
@@ -147,7 +147,7 @@ int IdentWithTParams::get_elem_count()const{
 Node* IdentWithTParams::get_elem_node(int i){
 	return this->given_tparams[i];
 }
-void IdentWithTParams::dump(int depth) const{
+void IdentWithTParams::dump(PrinterRef depth) const{
 	newline(depth);ident->dump(-1);
 	dbprintf("<");
 	for (auto x:given_tparams){x->dump(-1);dbprintf(",");}
@@ -197,7 +197,7 @@ CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc, CgValue ) {
 }
 
 
-void ExprLiteral::dump(int depth) const{
+void ExprLiteral::dump(PrinterRef depth) const{
 	if (!this) return;
 	newline(depth);
 	if (type_id==T_VOIDPTR){dbprintf("%p:*void",u.val_ptr);}
@@ -314,7 +314,7 @@ CgValue Variable::compile(CodeGen& cg, Scope* sc, CgValue input){
 		return CgValue(this);
 }
 
-void Variable::dump(int depth) const{
+void Variable::dump(PrinterRef depth) const{
 	newline(depth);dbprintf("%s",getString(name));
 	if (type()) {dbprintf(":");type()->dump(-1);}
 	switch (this->kind){
@@ -348,7 +348,7 @@ void ArgDef::recurse(std::function<void(Node*)>&f){
 	this->default_expr->recurse(f);
 }
 
-void ArgDef::dump(int depth) const {
+void ArgDef::dump(PrinterRef depth) const {
 	newline(depth);dbprintf("%s",getString(name));
 	this->pattern->dump_if(-1);
 	if (this->type()) {dbprintf(":");type()->dump(-1);}
@@ -359,7 +359,7 @@ Node*	TParamDef::clone() const
 {	return new TParamDef(this->pos,this->name, (TParamVal*) (this->bound->clone_if()),(TParamVal*) (this->defaultv->clone_if()));
 }
 
-void TParamDef::dump(int depth) const {
+void TParamDef::dump(PrinterRef depth) const {
 	newline(depth);dbprintf("%s",str(name));
 	if (defaultv) {dbprintf("=");defaultv->dump(-1);}
 }

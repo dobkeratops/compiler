@@ -277,7 +277,7 @@ void ExprStructDef::roll_vtable() {
 	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??
 }
 
-void ExprStructDef::dump(int depth) const{
+void ExprStructDef::dump(PrinterRef depth) const{
 	auto depth2=depth>=0?depth+1:depth;
 	newline(depth);
 	dbprintf("%s %s",this->kind_str(), getString(this->name));dump_typeparams(this->tparams);
@@ -502,7 +502,7 @@ Node* ImplDef::clone()const{
 	imp->impl_for_type = this->impl_for_type;
 	return this->clone_sub(imp);
 }
-void ImplDef::dump(int depth) const{
+void ImplDef::dump(PrinterRef depth) const{
 	
 	newline(depth);
 	dbprintf("%s ",this->kind_str());dump_typeparams(this->tparams);

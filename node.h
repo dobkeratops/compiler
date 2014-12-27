@@ -18,6 +18,9 @@ struct ExprSubscript;
 struct ExprCompound;
 struct ExprArrayInit;
 
+typedef int Printer;			// todo: pass printer obj to 'dump' methods, it'll do formatting, line stuff..
+typedef int PrinterRef;
+
 struct Node {
 private:
 	Type* m_type=0;
@@ -38,7 +41,7 @@ public:
 	void set_struct_type(ExprDef* d);
 
 	void clear_def();
-	virtual void dump(int depth=0) const;
+	virtual void dump(PrinterRef) const;
 	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(INCOMPLETE);};
 	// wrapper handles 'this==nullptr', and propogation of 'resolved' flag.
 	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
@@ -227,7 +230,7 @@ struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
 	vector<TParamDef*> tparams;
 	Type*	type_def=0;
 	TypeDef*	clone()const;
-	void	dump(int depth) const;
+	void	dump(PrinterRef depth) const;
 };
 
 

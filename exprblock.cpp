@@ -15,7 +15,7 @@ Name ExprBlock::get_fn_name()const
 	else return 0;
 }
 
-void ExprBlock::dump(int depth) const {
+void ExprBlock::dump(PrinterRef depth) const {
 	if (!this) return;
 	newline(depth);
 	auto b="{\0}\0";

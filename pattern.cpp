@@ -271,7 +271,7 @@ void Pattern::push_child(Pattern* newp) {
 	for (; p->sub; p=p->sub){};
 	p->sub=newp;
 }
-void Pattern::dump(int depth)const{
+void Pattern::dump(PrinterRef depth)const{
 	int d2=depth>=0?depth+1:depth;
 	newline(depth);
 	if (name==TUPLE){

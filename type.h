@@ -104,7 +104,7 @@ struct Type : ExprDef {
 	bool			is_auto(){return !this || this->name==AUTO;}
 	void			dump_sub(int f
 							 )const;
-	void			dump(int depth)const;
+	void			dump(PrinterRef depth)const;
 	static Type*	get_auto();
 	static Type*	get_bool();
 	static Type*	get_void();

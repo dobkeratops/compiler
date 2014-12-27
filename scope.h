@@ -21,12 +21,12 @@ struct NamedItems {		// everything defined under a name
 struct Using : public Node {	// symbol aliasing
 	Name use_as;
 	TypeDef*	clone()const;
-	void	dump(int depth) const;
+	void	dump(PrinterRef depth) const;
 };
 struct Import : public Node {	// 'use mod' to retrofit into Rust-like syntax
 	Name use_as;				// 'use mod <relative_path> as <prefix>
 	TypeDef*	clone()const;
-	void	dump(int depth) const;
+	void	dump(PrinterRef depth) const;
 };
 
 /// 'Scope'-
@@ -85,7 +85,7 @@ public:
 	void	add_struct(ExprStructDef*);
 	void	add_fn(ExprFnDef*);
 	void	add_fn_def(ExprFnDef*);
-	void	dump(int depth) const;
+	void	dump(PrinterRef depth) const;
 	NamedItems* find_named_items_local(Name name);
 	NamedItems* get_named_items_local(Name name);
 	NamedItems* find_named_items_rec(Name name);

@@ -11,7 +11,7 @@ typedef char ResolveResult;
 
 struct ExprIdent :Expr{
 	// TODO: definition pointer. (ptr to field,function,struct,typedef..)
-	void		dump(int depth) const;
+	void		dump(PrinterRef depth) const;
 	Node*		clone() const;
 	ExprIdent()	{};
 	ExprIdent(const char* s,const char* e)	{name=Name(s,e);set_type(nullptr);}
@@ -34,7 +34,7 @@ struct ExprIdent :Expr{
 struct IdentWithTParams : ExprIdent{
 	ExprIdent*			ident;
 	vector<TParamVal*>	given_tparams;
-	void		dump(int depth)const override;
+	void		dump(PrinterRef depth)const override;
 	Node*		clone()const override;
 	Type*		make_type(Scope* sc) const;
 	void		translate_tparams(const TParamXlat& tpx) override;
@@ -49,7 +49,7 @@ struct TParamDef: ExprDef{
 	TParamVal* defaultv=0;
 	TParamDef(){};
 	TParamDef(SrcPos sp,Name n, TParamVal* dv,TParamVal* bound_=0, TParamVal*defaultv_=0){pos=sp;name=n;defaultv=dv;bound=bound_;defaultv=defaultv_;};
-	void dump(int depth)const;
+	void dump(PrinterRef depth)const;
 	Node* clone() const override;
 	TParamDef*	as_tparam_def() override{return this;}
 	const char* kind_str()const{return "TParamDef";}
@@ -63,7 +63,7 @@ struct ExprLiteral : ExprDef {
 	
 	union  {int val_int; int val_uint; float val_float; void* val_ptr;bool val_bool; const char* val_str;int val_keyword;} u;
 	virtual const char* kind_str()const{return"lit";}
-	void dump(int depth) const;
+	void dump(PrinterRef depth) const;
 	ExprLiteral(bool b);
 	ExprLiteral(const SrcPos&s);
 	ExprLiteral(const SrcPos&s,float f);
@@ -99,7 +99,7 @@ struct ArgDef :ExprDef{
 	//void set_type(Type* t){verify(t);type=t;}
 	//Type*& type_ref(){return type;}
 	ArgDef(SrcPos p,Name n, Type* t=nullptr,Expr* d=nullptr){pos=p; name=n;set_type(t);default_expr=d; owner=0;}
-	void dump(int depth) const;
+	void dump(PrinterRef depth) const;
 	const char* kind_str()const override;
 	~ArgDef(){}
 	Node*	clone() const override;
@@ -135,7 +135,7 @@ struct Variable : ExprDef{
 	}
 	Variable*	as_variable() {return this;}
 	const Variable*	as_variable() const {return this;}
-	void dump(int depth) const;
+	void dump(PrinterRef depth) const;
 	CgValue		compile(CodeGen&cg, Scope* sc, CgValue input) override;
 	const char* kind_str()const{return "variable";}
 };
