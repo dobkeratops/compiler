@@ -44,26 +44,7 @@ void flatten_stack(Vec<SrcOp>& ops,Vec<Expr*>& vals){
 
 ExprBlock* parse_block(TokenStream&src,int close,int delim, Expr* op);
 
-/// parse_expr - parse a single expression
-/// TODO - refactor 'parse_block', this is backwards!
-vector<Expr*> g_exprpool;
-Expr* remove_extraneous_layers(ExprBlock* b){
-	while (b->argls.size()==1 && !b->call_expr && b->is_compound_expression()){
-		// silly hack to fix the fact we got expr&block backwards
-		auto e=b->argls.back();
-		b->argls.pop_back();
-		ASSERT(b->argls.size()==0);
-		g_exprpool.push_back(b);
-		if (0==(b=e->as_block())){
-			return e;
-		}
-	}
-	return b;
-}
-
 Expr* parse_expr(TokenStream&src) {
-//	auto b= parse_block(src,0,0,nullptr);
-//	return remove_extraneous_layers(b);
 	Vec<Expr*> nodes;
 	int delim;
 	parse_block_nodes(&nodes,&delim, src, 0,0);// TODO - retardation- its' allocating. Vec.num==1 could be inplace.
@@ -418,44 +399,31 @@ void expect(TokenStream& src,bool expr,const char* msg){
 		error(src.pos,msg);
 	}
 }
-Vec<ExprBlock*> g_leak_hack_exprblock;
-void ExprBlock_free(ExprBlock* b){
-	ASSERT(b->argls.size()==0 && !b->call_expr);
-	g_exprpool.push_back(b);
-}
-ExprBlock* ExprBlock_alloc(SrcPos& pos){
-	// todo - 'g_exprpool'=temp hack for stupid expr / block conflation
-	// we free these up when parse_block() allocates extraneously for "parse_expr()"
-	// parse_block & parse expr are backwards.
-	
-//	if (g_exprpool.size()){auto node=g_exprpool.back()->as_block(); g_exprpool.pop_back(); return node;}
-//	else
-		return new ExprBlock(pos);
-}
+
 ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_node);
 
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_node) {
-	// shunting yard expression parser+dispatch to other contexts
-//	ExprBlock *node=ExprBlock_alloc(src.pos);
-	return parse_block_sub(ExprBlock_alloc(src.pos), src,close,delim, outer_node);
-}
-ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
-	// todo - parse the first expr. look for comma, insantiate ExprTuple or ExprBlock accordingly.
-	auto node= parse_block(src, CLOSE_PAREN,COMMA,nullptr);
-//	return node;
-	if (node->argls.size()>1){
-		auto tp=new ExprTuple;
-		tp->pos=node->pos;
-		tp->argls.take_from(node->argls);
-		tp->delimiter=node->delimiter;
-		tp->bracket_type=node->bracket_type;
-		ASSERT(node->call_expr==nullptr);
-		ExprBlock_free(node);
-		return tp;
-	} else
-		return node;
+	return parse_block_sub(new ExprBlock(src.pos), src,close,delim, outer_node);
 }
 
+ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
+	// todo - parse the first expr. look for comma, insantiate ExprTuple or ExprBlock accordingly.
+	auto pos=src.pos;
+	Vec<Expr*> nodes;
+	int delim_found=0;
+	parse_block_nodes(&nodes,&delim_found,src, CLOSE_PAREN,COMMA);
+	ExprBlock* r=nullptr;
+	if (nodes.size()>1 ||delim_found==COMMA){
+		r=new ExprTuple();
+	} else{
+		r= new ExprBlock();
+	}
+	r->pos=pos;
+	r->argls.take_from(nodes);
+	r->delimiter=delim_found;
+	r->bracket_type=OPEN_PAREN;
+	return r;
+}
 
 ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_op) {
 	node->pos=src.pos;
@@ -494,7 +462,6 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			if (peek==CLOSE_BRACKET || peek==CLOSE_BRACE || peek==COMMA || peek==SEMICOLON)
 				break;
 		}
-		
 		if (src.is_next_literal()||src.is_next(BOOL_TRUE,BOOL_FALSE,NULLPTR,VOID)) {
 			auto ln=parse_literal(src);
 			operands.push_back(ln);
@@ -688,8 +655,8 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 	if (operands.size()){
 		// final expression is also returnvalue,
 		flush_op_stack(nodes,operators,operands);
-	} else if (((close==CLOSE_BRACE && delim==SEMICOLON))/*node->is_compound_expression()*/ &&
-			   close!=OPEN_BRACE&& close!=FAT_ARROW)// not a if ...{  or match...{  match..if ..=>{}etc
+	} else if (((close==CLOSE_BRACE && delim==SEMICOLON)) &&
+			   close!=OPEN_BRACE&& close!=FAT_ARROW)
 	{
 		nodes->push_back(new ExprLiteral(src.prev_pos));
 	}
