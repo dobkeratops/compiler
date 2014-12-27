@@ -431,7 +431,6 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 	int delim_used=0;
 
 	parse_block_nodes(&node->argls,&delim_used, src,close,delim);
-	node->delimiter=(short)delim_used;
 	node->call_expr=outer_op;
 	
 	if (delim_used==COMMA && !outer_op && close==CLOSE_BRACE)

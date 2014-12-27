@@ -61,7 +61,6 @@ Node* ExprBlock::clone() const {
 }
 ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
 	r->pos=this->pos;
-	r->delimiter=this->delimiter;
 	if (this->call_expr) {
 		r->call_expr = (Expr*) this->call_expr->clone();
 	}

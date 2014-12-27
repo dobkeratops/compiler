@@ -7,6 +7,10 @@ HEADER = main.h node.h stringtable.h ast.h semantics.h compile.h codegen.h lexer
 hack: $(SRC) all.cpp $(HEADER) foo
 	g++ all.cpp  -o hack -std=c++1y -g3 -DDEBUG
 
+#run internal test
+test: hack
+	./hack -T
+
 debug: hack
 	./hack example.rs -tr
 

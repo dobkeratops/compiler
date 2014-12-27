@@ -15,8 +15,6 @@ struct ExprBlock :public ExprScopeBlock{
 	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
 	// the similarity between all is
 	
-	short	delimiter=0;//COMMA, SEMICOLON,SPACES?
-	
 	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...} call_expr[argls..] call_expr{argls}
 	Vec<Expr*>	argls;
 	//ExprFnDef*	call_target=0;
@@ -26,7 +24,6 @@ struct ExprBlock :public ExprScopeBlock{
 	ExprBlock(const SrcPos& p);
 	
 	// TODO: move these into dedicated nodes, starting with 'structInitializer' which will give us ScalaDefaultConstructor.
-	void	set_delim(int delim)			{delimiter=delim;}
 	ExprFnDef*	get_fn_call()const;
 	Name		get_fn_name() const;
 	void		dump(int depth) const;
