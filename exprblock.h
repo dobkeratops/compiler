@@ -25,21 +25,9 @@ struct ExprBlock :public ExprScopeBlock{
 	// these are supposed to be mutually exclusive substates, this would be an enum ideally.
 	ExprBlock(){};
 	ExprBlock(const SrcPos& p);
+	
 	// TODO: move these into dedicated nodes, starting with 'structInitializer' which will give us ScalaDefaultConstructor.
-	bool	is_compound_expression()const	{return !call_expr && !index(name);}
-	bool	is_tuple()const					{return !call_expr && this->bracket_type==OPEN_PAREN && this->delimiter==COMMA;}
-	bool	is_struct_initializer()const	{return this->bracket_type==OPEN_BRACE && (this->delimiter==COMMA||this->delimiter==0);}
-	bool	is_match() const				{return false;}
-	bool	is_function_call()const			{return (this->call_expr!=0) && this->bracket_type==OPEN_PAREN && (this->delimiter==COMMA||this->delimiter==0);}
-	bool	is_anon_struct()const			{return this->is_struct_initializer() && !this->call_expr;}
-	bool	is_array_initializer()const		{return !this->call_expr && this->bracket_type==OPEN_BRACKET && this->delimiter==COMMA;}
 	void	set_delim(int delim)			{delimiter=delim;}
-	ExprBlock* is_subscript()const override	{
-		if (this->bracket_type==OPEN_BRACKET && call_expr){
-			return (ExprBlock*) this;
-		}
-		return (ExprBlock*)nullptr;
-	}
 	ExprFnDef*	get_fn_call()const;
 	Name		get_fn_name() const;
 	void		dump(int depth) const;
@@ -106,4 +94,7 @@ struct ExprSubscript : ExprBlock{
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node*	clone() const override	{return (Node*)clone_sub(new ExprSubscript());}
 	ResolveResult	resolve(Scope* sc, const Type* desired,int flags)override;
+	const ExprSubscript* as_subscript()const	override{return this;}
+	ExprSubscript* as_subscript()	override{return this;}
+
 };

@@ -631,7 +631,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 
 //	11ASSERT(block->call_target==0);
 	// is it just an array access.
-	if (block->is_subscript()){
+	if (block->as_subscript()){
 		block->resolved|=block->call_expr->resolve_if(scope,nullptr,flags);
 		block->resolved|=block->argls[0]->resolve_if(scope,nullptr,flags);
 		auto obj_t=block->call_expr->type();

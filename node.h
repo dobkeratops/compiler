@@ -14,7 +14,7 @@ struct Type;
 struct Expr;
 struct Pattern;
 enum VarKind{VkArg,Local,Global};
-
+struct ExprSubscript;
 
 struct Node {
 private:
@@ -158,7 +158,8 @@ public:
 	virtual Expr*	loop_else_block()const			{return nullptr;}// for decoupling something
 	LLVMType get_type_llvm() const;
 	virtual Type* eval_as_type()const		{return nullptr;};
-	virtual ExprBlock* is_subscript()const	{return (ExprBlock*)nullptr;}
+	virtual const ExprSubscript* as_subscript()const	{return (const ExprSubscript*)nullptr;}
+	virtual ExprSubscript* as_subscript()	{return (ExprSubscript*)nullptr;}
 	virtual bool is_function_name()const	{return false;}
 	virtual bool is_variable_name()const	{return false;}
 	virtual Scope* get_scope()				{return nullptr;}

@@ -88,7 +88,7 @@ ExprStructDef*	ExprFnDef::get_receiver(){ // TODO: switch to 1st-argument.
 Expr* ExprFnDef::get_return_value() const{
 	if (this->body){
 		if (auto b=dynamic_cast<ExprBlock*>(this->body)){
-			if (b->is_compound_expression()){
+			if (!dynamic_cast<ExprTuple*>(this->body) && !dynamic_cast<ExprStructInit*>(this->body) && !dynamic_cast<ExprCall*>(this->body) && !dynamic_cast<ExprArrayInit*>(this->body)){
 				if (b->argls.size()>0){
 					return b->argls.back();
 				}

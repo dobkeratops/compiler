@@ -200,7 +200,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		if (get_type())
 			propogate_type_refs(flags, (Node*)this, this->get_type()->sub, b->type_ref());
 		
-		if (rhs->is_subscript()){
+		if (rhs->as_subscript()){
 			resolved|=b->call_expr->resolve_if(sc,get_type()?get_type()->sub:nullptr,flags);
 			b->set_type(b->call_expr->get_type());
 		}
@@ -495,9 +495,9 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 		}
 		else if (opname==NEW){
 			if (auto b=rhs->as_block()){
-				if (b->is_struct_initializer()){
+				if (auto si=dynamic_cast<ExprStructInit*>(b)){
 					auto reg=cg.emit_malloc(this->type(),1);
-					auto st=b->call_expr->type()->get_struct_autoderef();
+					auto st=si->call_expr->type()->get_struct_autoderef();
 					if (st->vtable){
 						auto vtref=cg.emit_getelementref(reg,__VTABLE_PTR);
 						cg.emit_store_global(vtref, st->vtable_name );
@@ -506,8 +506,8 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 						auto dref=cg.emit_getelementref(reg,__DISCRIMINANT);
 						cg.emit_store_i32(dref, st->discriminant );
 					}
-					return dynamic_cast<ExprStructInit*>(b)->compile_struct_init(cg,sc,reg.reg);
-				} else if (b->is_subscript()){ // new Foo[5] makes 5 foos; [5,6,7] is like new int[3],(fill..)
+					return si->compile_struct_init(cg,sc,reg.reg);
+				} else if (b->as_subscript()){ // new Foo[5] makes 5 foos; [5,6,7] is like new int[3],(fill..)
 					if (b->argls.size()==1){
 						auto num=b->argls[0]->compile(cg,sc);
 						return cg.emit_malloc_array(this->type(),num);
