@@ -54,7 +54,7 @@ ExprBlock::create_anon_struct_initializer(){
 	for (auto i=0; i<argls.size();i++){
 		auto p=dynamic_cast<ExprOp*>(argls[i]);
 		if (!p || !(p->name==ASSIGN||p->name==COLON)){
-			error(this,"anon struct initializer must have named elements {n0=expr,n1=expr,..}");
+			error(this,"anon struct initializer must have named elements {n0=expr,n1=expr,..} or{n0:expr,n1:expr,...}");
 		}
 		if (i) strcat(tmp,"_");
 		strcat(tmp,str(p->lhs->as_name()));
@@ -127,7 +127,6 @@ ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
 ResolveResult	ExprSubscript::resolve(Scope* sc, const Type* desired,int flags){
 	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
 		this->def->resolve_if(sc, nullptr, flags);
-	ASSERT(!dynamic_cast<ExprStructInit*>(this));
 	// array indexing operator TODO: check this isn't itself a Type, if we want templates anywhere.
 	resolved|=this->call_expr->resolve_if(sc,nullptr,flags); // todo - it could be _[desired]. forward should give possibilities
 	if (auto t=call_expr->type()){
@@ -249,8 +248,6 @@ ResolveResult ExprCall::resolve(Scope* sc, const Type* desired, int flags) {
 	return this->resolve_call_sub(sc,desired,flags,nullptr);
 }
 ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
-	ASSERT(!dynamic_cast<ExprStructInit*>(this));
-	ASSERT(dynamic_cast<ExprCall*>(this));
 	// TODO: distinguish 'partially resolved' from fully-resolved.
 	// at the moment we only pick an fn when we know all our types.
 	// But, some functions may be pure generic? -these are ok to match to nothing.
@@ -269,7 +266,7 @@ ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int fla
 		return resolved;
 	}
 	bool indirect_call=false;
-	auto call_ident=dynamic_cast<ExprIdent*>(this->call_expr);
+	auto call_ident=this->call_expr->as_ident();
 	if (call_ident){
 		if (sc->find_fn_variable(this->call_expr->as_name(),nullptr))
 			indirect_call=true;
@@ -405,7 +402,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 	dbg3(desiredType->dump_if(0));
 	dbg3(sd->dump(0));
 	// if its in place..
-	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
+	auto local_struct_def=si->call_expr->as_struct_def();
 	if (local_struct_def){
 		sc->add_struct(local_struct_def); // todo - why did we need this?
 		sd=local_struct_def;

@@ -160,7 +160,6 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	dbg2(return_type->dump_if(-1));
 	verify_all();
 	
-	//auto callsiteb=dynamic_cast<const ExprBlock*>(pcallsite);
 	auto callsiteb=pcallsite;
 	ASSERT(callsiteb!=0 &&"ambiguity, when we come to do operator overloads, ExprOp & ExprBlock will call..");
 	vector<Type*>	ins_typarams;
@@ -208,7 +207,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 //inner-function: 'definer_scope' has capture_from set - just take it.
 ResolveResult ExprFnDef::resolve(Scope* definer_scope, const Type* desired,int flags) {
 	verify_all();
-	if (auto sd=dynamic_cast<ExprStructDef*>(definer_scope->owner_fn)){
+	if (auto sd=definer_scope->owner_struct()){
 		return resolve_function(definer_scope,sd,desired,flags);
 	}
 	else return resolve_function(definer_scope,nullptr,desired,flags);
