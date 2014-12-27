@@ -25,19 +25,6 @@ struct FnName;
 /// TODO a Rust Enum is sugar for a struct holding constants & derived variant structs.
 
 
-struct StructInitializer{ // named initializer
-	ExprBlock*		si; // struct_intializer
-	Scope*			sc;
-	ExprStructDef*	struct_def=0;
-	ExprStructDef*	get_struct_def(){return struct_def;}
-	vector<int>		field_indices;
-	vector<ArgDef*> field_refs;
-	vector<Expr*>	value;
-	void map_fields()								{resolve(nullptr,0);}//todo..seperate out}
-	StructInitializer(Scope* s,ExprBlock* block)	{si=block,sc=s;};
-	ResolveResult resolve(const Type* desiredType,int flags);
-};
-
 typedef Type TParamVal;
 struct TypeParamXlat{
 	const vector<TParamDef*>& typeparams; const vector<TParamVal*>& given_types;

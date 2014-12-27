@@ -18,6 +18,16 @@ struct NamedItems {		// everything defined under a name
 	NamedItems(Name n,Scope* s){  name=n; owner=s;next=0;fn_defs=0;structs=0;types=0;}
 };
 
+struct Using : public Node {	// symbol aliasing
+	Name use_as;
+	TypeDef*	clone()const;
+	void	dump(int depth) const;
+};
+struct Import : public Node {	// 'use mod' to retrofit into Rust-like syntax
+	Name use_as;				// 'use mod <relative_path> as <prefix>
+	TypeDef*	clone()const;
+	void	dump(int depth) const;
+};
 
 /// 'Scope'-
 /// scopes are created when resolving, held on some node types.

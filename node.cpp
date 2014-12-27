@@ -94,6 +94,11 @@ CgValue Node::compile(CodeGen& cg, Scope* sc){
 	// most common case is no input value, input is added for 'match' & 'switch'.
 	return this->compile(cg,sc,CgValue());
 }
+CgValue Node::compile_operator_new(CodeGen &cg, Scope *sc,const Type* t,const Expr *lhs){
+	error(this,"operator new not supported for %s",this->kind_str());
+	return CgValue();
+}
+
 
 
 CgValue Node::codegen(CodeGen& cg, bool just_contents) {

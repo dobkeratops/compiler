@@ -494,31 +494,8 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 			return src.deref_op(cg,n->type());
 		}
 		else if (opname==NEW){
-			if (auto b=rhs->as_block()){
-				if (auto si=dynamic_cast<ExprStructInit*>(b)){
-					auto reg=cg.emit_malloc(this->type(),1);
-					auto st=si->call_expr->type()->get_struct_autoderef();
-					if (st->vtable){
-						auto vtref=cg.emit_getelementref(reg,__VTABLE_PTR);
-						cg.emit_store_global(vtref, st->vtable_name );
-					}
-					if (st->m_is_variant){
-						auto dref=cg.emit_getelementref(reg,__DISCRIMINANT);
-						cg.emit_store_i32(dref, st->discriminant );
-					}
-					return si->compile_struct_init(cg,sc,reg.reg);
-				} else if (b->as_subscript()){ // new Foo[5] makes 5 foos; [5,6,7] is like new int[3],(fill..)
-					if (b->argls.size()==1){
-						auto num=b->argls[0]->compile(cg,sc);
-						return cg.emit_malloc_array(this->type(),num);
-					}
-					else{
-						// empty dynamic array ctr
-					}
-				}
-			}
-			error(e,"TODO:new only works for  new StructName{....} \n");
-			return CgValue();
+			// LHS is for 'placement-new'.
+			return rhs->compile_operator_new(cg,sc,this->type(),lhs);
 		}
 		else if (opname==DELETE){
 			auto x=rhs->compile(cg,sc);

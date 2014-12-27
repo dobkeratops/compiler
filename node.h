@@ -16,6 +16,7 @@ struct Pattern;
 enum VarKind{VkArg,Local,Global};
 struct ExprSubscript;
 struct ExprCompound;
+struct ExprArrayInit;
 
 struct Node {
 private:
@@ -108,6 +109,7 @@ public:
 	virtual void recurse(std::function<void(Node* f)>& f){dbprintf("recurse not implemented for %s\n",this->kind_str());ASSERT(0&&"unimplemented recurse");};
 
 	virtual CgValue compile(CodeGen& cg, Scope* sc, CgValue input);
+	virtual CgValue compile_operator_new(CodeGen &cg, Scope *sc, const Type* t,const Expr *lhs);
 	CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_if(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}
@@ -123,6 +125,7 @@ public:
 	virtual TParamDef*			as_tparam_def() {return nullptr;}
 	virtual const ExprBlock* 	as_block() const{return nullptr;}
 	virtual const Pattern*		as_pattern()const{return nullptr;}
+	virtual const ExprArrayInit*		as_array_init()const{return nullptr;}
 	virtual Pattern*			as_pattern(){return nullptr;}
 	virtual const Expr*		as_expr()const{return nullptr;}
 	virtual Expr*			as_expr(){return nullptr;}

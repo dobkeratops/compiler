@@ -46,6 +46,57 @@ ExprFnDef* ExprBlock::get_fn_call()const {
 	return nullptr;
 }
 
+void
+ExprBlock::create_anon_struct_initializer(){
+	// concatenate given names & argcount as the identifer
+	// make it generic over types.
+	char tmp[256]="anon_";
+	for (auto i=0; i<argls.size();i++){
+		auto p=dynamic_cast<ExprOp*>(argls[i]);
+		if (!p || !(p->name==ASSIGN||p->name==COLON)){
+			error(this,"anon struct initializer must have named elements {n0=expr,n1=expr,..}");
+		}
+		if (i) strcat(tmp,"_");
+		strcat(tmp,str(p->lhs->as_name()));
+	}
+	// TODO - these need to be hashed somewhere, dont want each unique!
+	ExprStructDef* sd=new ExprStructDef(this->pos,0);
+	sd->name=getStringIndex(tmp);
+	ASSERT(sd->type()==0&&"todo-struct def creates its own type");
+	sd->set_type(new Type(sd));
+	sd->name=getStringIndex(tmp);
+	for (auto i=0; i<argls.size();i++){
+		auto a=argls[i];
+		auto nf=new ArgDef(a->pos, a->as_op()->lhs->as_name(),a->type());
+		sd->fields.push_back(nf );
+	}
+	this->call_expr=sd;
+	this->def=sd;
+	this->set_type(sd->get_type());
+}
+void ExprBlock::verify(){
+	verify_expr_block(this);
+	if (this->call_expr) this->call_expr->verify();
+	for (auto x:argls) x->verify();
+}
+void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
+	this->call_expr->translate_typeparams_if(tpx);
+	for (auto e:argls){
+		e->translate_typeparams(tpx);
+	}
+	this->type()->translate_typeparams_if(tpx);
+}
+
+CgValue ExprBlock::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	if (!argls.size())
+		return CgValue();
+	for (int i=0; i<argls.size()-1; i++){
+		this->argls[i]->compile(cg,sc);
+	}
+	return this->argls.back()->compile(cg,sc);
+}
+
+
 
 bool ExprBlock::is_undefined() const{
 	if (!this) return false; //only presencence of "_" is undefined.
@@ -90,6 +141,14 @@ ResolveResult	ExprSubscript::resolve(Scope* sc, const Type* desired,int flags){
 	} else
 		return resolved|=INCOMPLETE;
 }
+CgValue ExprSubscript::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	auto ar=this;
+	auto expr=ar->call_expr->compile(cg,sc);// expression[index]
+	auto index=ar->argls[0]->compile(cg,sc);
+	/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
+	// TODO: abstract this into codegen -getelementref(CgValue ptr,CgValue index);
+	return cg.emit_get_array_elem_ref(expr, index);
+}
 
 
 ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
@@ -113,10 +172,79 @@ ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 	}
 	return propogate_type_fwd(flags,(Node*)this, desired,this->type_ref());
 }
+CgValue ExprTuple::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	auto tuple=cg.emit_alloca_type(this, this->type());
+	for (int i=0; i<this->argls.size(); i++){
+		auto val=this->argls[i]->compile(cg,sc);
+		auto elem=tuple.get_elem_index(cg,i);
+		elem.store(cg,val);
+	}
+	return tuple;
+}
 
 ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 	return this->resolve_sub(sc,desired,flags,nullptr);
 }
+
+ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
+	verify_all();
+	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
+	this->def->resolve_if(sc, nullptr, flags);
+	
+	/// loose end? if this is a method-call, we dont resolve the symbol here,
+	/// in other contexts we do
+	if (this->call_expr &&!receiver)
+		this->call_expr->resolve_if(sc,nullptr,flags);
+	::verify(this->get_type());
+
+	ExprIdent* p=nullptr;
+
+	if (!this->argls.size()) {
+		if (!this->get_type()) this->set_type(new Type(this,VOID));
+		return propogate_type_fwd(flags,this, desired,this->type_ref());
+	}
+	int	i_complete=-1;
+	if (!(flags & R_REVERSE_ONLY)){
+		for (auto n=0; n<(int)this->argls.size()-1; n++) {
+			resolved|=this->argls[n]->resolve_if(sc,0,flags);
+			if (resolved==COMPLETE)
+				i_complete=n;
+		}
+	}
+	propogate_type_fwd(flags,this, desired);
+	resolved|=this->argls.back()->resolve_if(sc,desired,flags);
+	if (i_complete>=this->argls.size()-1){
+		dbg(printf("icomplete stuff works"));
+	}
+	// reverse pass too
+	if (!(flags & R_FORWARD_ONLY)){
+		for (auto n=(int)this->argls.size()-2;n>i_complete; n--) {
+			resolved|=this->argls[n]->resolve_if(sc,0,flags);
+		}
+		#if DEBUG>=2
+		auto resolved2=(char)COMPLETE;
+		for (auto n=i_complete; n>=0; n--){
+			auto a=this->argls[n];
+			resolved2|=a->resolve_if(sc,0,flags);
+			resolved|=resolved2;
+			if (resolved2!=COMPLETE){
+				error(this,"ICE,node %s in %s was falsely declared complete",a->name_str(),a->kind_str());
+			}
+		}
+#endif
+	}
+#if DEBUG>=2
+	if(i_complete>0 &&0==(flags&(R_FORWARD_ONLY|R_REVERSE_ONLY))){
+		dbprintf("%d / %d\n", i_complete,this->argls.size());
+	}
+#endif
+	dbg(this->type()->dump_if(-1));
+	dbg(this->argls.back()->dump_if(-1));
+	dbg(newline(0));
+
+	return propogate_type_refs(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
+}
+
 ResolveResult ExprCall::resolve(Scope* sc, const Type* desired, int flags) {
 	return this->resolve_call_sub(sc,desired,flags,nullptr);
 }
@@ -145,9 +273,9 @@ ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int fla
 	if (call_ident){
 		if (sc->find_fn_variable(this->call_expr->as_name(),nullptr))
 			indirect_call=true;
-			}else {
-				indirect_call=true;
-			}
+	}else {
+		indirect_call=true;
+	}
 	Type* fn_type=nullptr;
 	if (receiver || indirect_call) {
 	}
@@ -213,69 +341,18 @@ ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int fla
 		if (flags & R_FINAL)
 			if (!this->type())
 				error(this,"can't call/ type check failed %s",this->call_expr->name_str());
-				
-				return resolved;
+		
+		return resolved;
 	}
 	return resolved;
 }
+CgValue ExprCall::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	return compile_function_call(cg,sc,CgValue(),nullptr,this);
+}
 
-ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
-	verify_all();
-	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
-	this->def->resolve_if(sc, nullptr, flags);
-	
-	/// loose end? if this is a method-call, we dont resolve the symbol here,
-	/// in other contexts we do
-	if (this->call_expr &&!receiver)
-		this->call_expr->resolve_if(sc,nullptr,flags);
-	::verify(this->get_type());
-
-	ExprIdent* p=nullptr;
-
-	if (!this->argls.size()) {
-		if (!this->get_type()) this->set_type(new Type(this,VOID));
-		return propogate_type_fwd(flags,this, desired,this->type_ref());
-	}
-	int	i_complete=-1;
-	if (!(flags & R_REVERSE_ONLY)){
-		for (auto n=0; n<(int)this->argls.size()-1; n++) {
-			resolved|=this->argls[n]->resolve_if(sc,0,flags);
-			if (resolved==COMPLETE)
-				i_complete=n;
-		}
-	}
-	propogate_type_fwd(flags,this, desired);
-	resolved|=this->argls.back()->resolve_if(sc,desired,flags);
-	if (i_complete>=this->argls.size()-1){
-		dbg(printf("icomplete stuff works"));
-	}
-	// reverse pass too
-	if (!(flags & R_FORWARD_ONLY)){
-		for (auto n=(int)this->argls.size()-2;n>i_complete; n--) {
-			resolved|=this->argls[n]->resolve_if(sc,0,flags);
-		}
-		#if DEBUG>=2
-		auto resolved2=(char)COMPLETE;
-		for (auto n=i_complete; n>=0; n--){
-			auto a=this->argls[n];
-			resolved2|=a->resolve_if(sc,0,flags);
-			resolved|=resolved2;
-			if (resolved2!=COMPLETE){
-				error(this,"ICE,node %s in %s was falsely declared complete",a->name_str(),a->kind_str());
-			}
-		}
-#endif
-	}
-#if DEBUG>=2
-	if(i_complete>0 &&0==(flags&(R_FORWARD_ONLY|R_REVERSE_ONLY))){
-		dbprintf("%d / %d\n", i_complete,this->argls.size());
-	}
-#endif
-	dbg(this->type()->dump_if(-1));
-	dbg(this->argls.back()->dump_if(-1));
-	dbg(newline(0));
-
-	return propogate_type_refs(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
+CgValue ExprArrayInit::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	error(this,"todo array initializer\n");
+	return CgValue();
 }
 
 ResolveResult
@@ -289,67 +366,111 @@ ExprStructInit::resolve(Scope* sc,const Type* desired,int flags){
 	return si.resolve(desired,flags);
 }
 
-
-void
-ExprBlock::create_anon_struct_initializer(){
-	// concatenate given names & argcount as the identifer
-	// make it generic over types.
-	char tmp[256]="anon_";
-	for (auto i=0; i<argls.size();i++){
-		auto p=dynamic_cast<ExprOp*>(argls[i]);
-		if (!p || !(p->name==ASSIGN||p->name==COLON)){
-			error(this,"anon struct initializer must have named elements {n0=expr,n1=expr,..}");
+ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
+	
+	ExprStructDef* sd=nullptr;
+#if DEBUG >=2
+	dbprintf("\n===================\nstruct init: %s:",si->call_expr->name_str());
+	si->call_expr->type()->dump_if(-1);
+	dbprintf("\tdesired:");desiredType->dump_if(-1);newline(0);
+	
+	auto sdn=sc->find_struct_named(si->call_expr->name);
+	sdn->dump_instances(0);
+	
+#endif
+	if (si->call_expr->name==PLACEHOLDER && desiredType){
+		si->propogate_type_fwd(flags,si, desiredType,si->call_expr->type_ref());
+		sd=si->call_expr->type()->def->as_struct_def();
+		if (!sd)
+			return si->resolved|INCOMPLETE;
+		dbg(sd->dump(-1));
+		dbg_type("\n");
+		si->call_expr->set_type(desiredType);
+		if (!si)
+			si->set_type(desiredType);
+	}
+	else {
+		sd=sc->find_struct(si->call_expr);
+		dbg(sd->dump_if(0));
+		if (!sd){
+			if (flags&R_FINAL){
+				error_begin(si->call_expr,"can't find struct");
+				si->call_expr->dump(-1);error_end(si->call_expr);
+			}
+			return si->resolved|INCOMPLETE;
 		}
-		if (i) strcat(tmp,"_");
-		strcat(tmp,str(p->lhs->as_name()));
+		
 	}
-	// TODO - these need to be hashed somewhere, dont want each unique!
-	ExprStructDef* sd=new ExprStructDef(this->pos,0);
-	sd->name=getStringIndex(tmp);
-	ASSERT(sd->type()==0&&"todo-struct def creates its own type");
-	sd->set_type(new Type(sd));
-	sd->name=getStringIndex(tmp);
-	for (auto i=0; i<argls.size();i++){
-		auto a=argls[i];
-		auto nf=new ArgDef(a->pos, a->as_op()->lhs->as_name(),a->type());
-		sd->fields.push_back(nf );
+	dbg3(printf("=====struct init & desired type..=====\n"));
+	dbg3(desiredType->dump_if(0));
+	dbg3(sd->dump(0));
+	// if its in place..
+	auto local_struct_def=dynamic_cast<ExprStructDef*>(si->call_expr);
+	if (local_struct_def){
+		sc->add_struct(local_struct_def); // todo - why did we need this?
+		sd=local_struct_def;
 	}
-	this->call_expr=sd;
-	this->def=sd;
-	this->set_type(sd->get_type());
-}
-void ExprBlock::verify(){
-	verify_expr_block(this);
-	if (this->call_expr) this->call_expr->verify();
-	for (auto x:argls) x->verify();
-}
-void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
-	this->call_expr->translate_typeparams_if(tpx);
-	for (auto e:argls){
-		e->translate_typeparams(tpx);
+	//if (!si->type()){
+	//	si->set_type(new Type(sd));
+	//}
+	si->propogate_type_refs(flags,(Node*)si, si->type_ref(),si->call_expr->type_ref());
+	si->propogate_type_fwd(flags,si, desiredType);
+	
+	si->call_expr->def=sd;
+	si->def=sd;
+	this->struct_def=sd;
+	// assignment forms are expected eg MyStruct{x=...,y=...,z=...} .. or can we have MyStruct{expr0,expr1..} equally?
+	//int next_field_index=0;
+	// todo:infer generic typeparams - adapt code for functioncall. we have struct fields & struct type-params & given expressions.
+	int named_field_index=-1;
+	// todo encapsulate StructInitializer to reuse logic for codegen
+	field_indices.reserve(si->argls.size());
+	//step past the hidden automatically setup fields
+	int field_index=sd->first_user_field_index();
+	for (auto i=0; i<si->argls.size(); i++)  {
+		auto a=si->argls[i];
+		auto op=dynamic_cast<ExprOp*>(a);
+		ArgDef* field=nullptr;
+		Type*t = nullptr;
+		if (op&&(op->name==FIELD_ASSIGN)){
+			field=sd->find_field(op->lhs);
+			si->resolved|=op->rhs->resolve_if(sc,field->type(),flags); // todo, need type params fwd here!
+			si->propogate_type_refs(flags,op,op->lhs->type_ref(),op->rhs->type_ref());
+			//				propogate_type(flags,op,op->rhs->type_ref());
+			op->lhs->def=field;
+			named_field_index=sd->field_index(op->lhs);
+			this->value.push_back(op->rhs);
+			t=op->rhs->type();
+			si->propogate_type_refs(flags,op,field->type_ref(),op->rhs->type_ref());
+		}else if (named_field_index==-1){
+			if (field_index>=sd->fields.size()){
+				error(a,sd,"too many fields");
+			}
+			field=sd->fields[field_index++];
+			this->value.push_back(a);
+			dbg3(field->dump(0));dbg(printf("\n --set_to--> \n"));dbg(a->dump());dbg(newline(0));
+			a->resolve(sc,field->type(),flags); // todo, need generics!
+			t=a->type();
+			si->propogate_type_refs(flags,a,field->type_ref(),a->type_ref());
+		}else{
+			error(a,"named field expected");
+		}
+		this->field_refs.push_back(field);
+		this->field_indices.push_back(field_index);
+		if (local_struct_def){
+			// special case :( if its' an inline def, we write the type. doing propper inference on generic structs have solved this stupidity.
+			if (!local_struct_def->fields[i]->type()){
+				local_struct_def->fields[i]->type()=t;
+			}
+		}
 	}
-	this->type()->translate_typeparams_if(tpx);
+	//	?. // if (this) return this->.... else return None.
+	return si->propogate_type_fwd(flags,si, desiredType);
 }
 
-CgValue ExprBlock::compile(CodeGen& cg,Scope *sc, CgValue input) {
-	if (!argls.size())
-		return CgValue();
-	for (int i=0; i<argls.size()-1; i++){
-		this->argls[i]->compile(cg,sc);
-	}
-	return this->argls.back()->compile(cg,sc);
-}
 
-CgValue ExprTuple::compile(CodeGen& cg,Scope *sc, CgValue input) {
-	auto tuple=cg.emit_alloca_type(this, this->type());
-	for (int i=0; i<this->argls.size(); i++){
-		auto val=this->argls[i]->compile(cg,sc);
-		auto elem=tuple.get_elem_index(cg,i);
-		elem.store(cg,val);
-	}
-	return tuple;
-}
 CgValue ExprStructInit::compile(CodeGen& cg,Scope *sc, CgValue input) {
+	ASSERT(!input.is_valid());
 	return compile_struct_init(cg,sc,0);
 }
 CgValue ExprStructInit::compile_struct_init(CodeGen& cg,Scope *sc, RegisterName force_dst) {
@@ -382,23 +503,9 @@ CgValue ExprStructInit::compile_struct_init(CodeGen& cg,Scope *sc, RegisterName 
 	}
 	return struct_val;
 }
-CgValue ExprArrayInit::compile(CodeGen& cg,Scope *sc, CgValue input) {
-	error(this,"todo array initializer\n");
-	return CgValue();
-}
 
-CgValue ExprSubscript::compile(CodeGen& cg,Scope *sc, CgValue input) {
-	auto ar=this;
-	auto expr=ar->call_expr->compile(cg,sc);// expression[index]
-	auto index=ar->argls[0]->compile(cg,sc);
-	/// TODO , this is actually supposed to distinguish array[ n x T ] from pointer *T case
-	// TODO: abstract this into codegen -getelementref(CgValue ptr,CgValue index);
-	return cg.emit_get_array_elem_ref(expr, index);
-}
 
-CgValue ExprCall::compile(CodeGen& cg,Scope *sc, CgValue input) {
-	return compile_function_call(cg,sc,CgValue(),nullptr,this);
-}
+
 
 
 

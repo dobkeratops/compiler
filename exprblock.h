@@ -52,13 +52,27 @@ struct ExprBlock :public ExprScopeBlock{
 // add dedicated node for this
 struct ExprWhere : ExprBlock {
 	const char* kind_str() const  override		{return "where";}
-	ResolveResult resolve(Scope* scope, const Type* desired, int flags);
-	void	dump(int depth) const;
+	ResolveResult resolve(Scope* scope, const Type* desired, int flags) override;
+	void	dump(int depth) const override;
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	ExprBlock* 		as_block() override 	{return nullptr;}
-	Node*		clone() const;
+	Node*		clone() const{return clone_sub(new ExprWhere());}
 	virtual const Expr*	get_return_expr()const override	{return call_expr;}
 };
+
+struct StructInitializer{ // named initializer
+	ExprBlock*		si; // struct_intializer
+	Scope*			sc;
+	ExprStructDef*	struct_def=0;
+	ExprStructDef*	get_struct_def(){return struct_def;}
+	vector<int>		field_indices;
+	vector<ArgDef*> field_refs;
+	vector<Expr*>	value;
+	void map_fields()								{resolve(nullptr,0);}//todo..seperate out}
+	StructInitializer(Scope* s,ExprBlock* block)	{si=block,sc=s;};
+	ResolveResult resolve(const Type* desiredType,int flags);
+};
+
 
 struct ExprStructInit : ExprBlock{
 	CgValue compile_struct_init(CodeGen& cg,Scope *sc, RegisterName force_dst);
@@ -66,7 +80,7 @@ struct ExprStructInit : ExprBlock{
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const {return (Node*)clone_sub(new ExprStructInit());}
 	ResolveResult	resolve(Scope* sc, const Type* desired,int flags) override;
-
+	CgValue compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 };
 struct ExprParens : ExprBlock{
 	const char* kind_str() const  override		{return "expr_parens";}
@@ -97,6 +111,7 @@ struct ExprArrayInit : ExprBlock{
 	const char* kind_str() const  override		{return "array_init";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const override	{return (Node*)clone_sub(new ExprArrayInit());}
+	const ExprArrayInit* as_array_init()const override{return this;}
 };
 struct ExprSubscript : ExprBlock{
 	const char* kind_str() const  override		{return "subscript";}
@@ -105,5 +120,5 @@ struct ExprSubscript : ExprBlock{
 	ResolveResult	resolve(Scope* sc, const Type* desired,int flags)override;
 	const ExprSubscript* as_subscript()const	override{return this;}
 	ExprSubscript* as_subscript()	override{return this;}
-
+	CgValue compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 };
