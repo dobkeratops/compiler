@@ -18,7 +18,7 @@ Name ExprBlock::get_fn_name()const
 void ExprBlock::dump(int depth) const {
 	if (!this) return;
 	newline(depth);
-	auto b=(this->bracket_type==OPEN_PAREN)?"(\0)\0":"{\0}\0";
+	auto b="{\0}\0";
 	dbprintf(b+0);
 	dbprintf(this->kind_str());
 	this->call_expr->dump_if(-100);
@@ -61,7 +61,6 @@ Node* ExprBlock::clone() const {
 }
 ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
 	r->pos=this->pos;
-	r->bracket_type=this->bracket_type;
 	r->delimiter=this->delimiter;
 	if (this->call_expr) {
 		r->call_expr = (Expr*) this->call_expr->clone();

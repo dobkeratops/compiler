@@ -403,7 +403,7 @@ void expect(TokenStream& src,bool expr,const char* msg){
 ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_node);
 
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_node) {
-	return parse_block_sub(new ExprBlock(src.pos), src,close,delim, outer_node);
+	return parse_block_sub(new ExprCompound(), src,close,delim, outer_node);
 }
 
 ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
@@ -416,12 +416,10 @@ ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
 	if (nodes.size()>1 ||delim_found==COMMA){
 		r=new ExprTuple();
 	} else{
-		r= new ExprBlock();
+		r= new ExprParens();
 	}
 	r->pos=pos;
 	r->argls.take_from(nodes);
-	r->delimiter=delim_found;
-	r->bracket_type=OPEN_PAREN;
 	return r;
 }
 
@@ -431,11 +429,14 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
 	int delim_used=0;
-	node->bracket_type=(close==CLOSE_BRACKET)?OPEN_BRACKET:close==CLOSE_PAREN?OPEN_PAREN:close==CLOSE_BRACE?OPEN_BRACE:0;
 
 	parse_block_nodes(&node->argls,&delim_used, src,close,delim);
 	node->delimiter=(short)delim_used;
 	node->call_expr=outer_op;
+	
+	if (delim_used==COMMA && !outer_op && close==CLOSE_BRACE)
+		node->create_anon_struct_initializer();
+
 	verify(node->type());
 	return node;
 }
@@ -583,8 +584,6 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			else{//progn aka scope block with return value.
 				auto sub=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
 				operands.push_back(sub);
-				if (sub->delimiter==COMMA)
-					sub->create_anon_struct_initializer();
 			}
 		} else if (src.eat_if(delim)) {
 			flush_op_stack(nodes,operators,operands);

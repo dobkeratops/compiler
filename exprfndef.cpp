@@ -85,18 +85,11 @@ void ExprFnDef::recurse(std::function<void(Node *)>& f){
 ExprStructDef*	ExprFnDef::get_receiver(){ // TODO: switch to 1st-argument.
 	return m_receiver;
 }
-Expr* ExprFnDef::get_return_value() const{
+const Expr* ExprFnDef::get_return_expr() const{
 	if (this->body){
-		if (auto b=dynamic_cast<ExprBlock*>(this->body)){
-			if (!dynamic_cast<ExprTuple*>(this->body) && !dynamic_cast<ExprStructInit*>(this->body) && !dynamic_cast<ExprCall*>(this->body) && !dynamic_cast<ExprArrayInit*>(this->body)){
-				if (b->argls.size()>0){
-					return b->argls.back();
-				}
-			}
-		}
-		return this->body;
+		return this->body->get_return_expr();
 	}
-	return 0;
+	return nullptr;
 }
 
 Node*
@@ -342,7 +335,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 	}
 
 
-	if (true|| !this->is_generic()){
+	if (true|| this->is_generic()){
 		
 		this->fn_type->resolve_if(scope,nullptr,flags);
 		this->return_type()->resolve_if(scope,nullptr,flags);
@@ -518,7 +511,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 		cg.emit_comment("compiling generic fn body");
 	}
 	emit_local_vars(cg, fn_node->body, fn_node, scope);
-	auto rtn=fn_node->get_return_value();
+	auto rtn=fn_node->get_return_expr();
 	
 	if (fn_node->fn_type->name==CLOSURE){
 		auto cp=fn_node->my_capture;

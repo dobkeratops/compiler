@@ -15,6 +15,7 @@ struct Expr;
 struct Pattern;
 enum VarKind{VkArg,Local,Global};
 struct ExprSubscript;
+struct ExprCompound;
 
 struct Node {
 private:
@@ -114,6 +115,7 @@ public:
 	virtual ExprIdent*			as_ident() 		{return nullptr;}
 	virtual ExprLiteral*		as_literal() 		{return nullptr;}
 	virtual const ExprIdent*	as_ident() const{return nullptr;}
+	virtual const ExprCompound*	as_compound() const{return nullptr;}
 	virtual ExprFor* 			as_for() 		{return nullptr;}
 	virtual ExprFnDef*			as_fn_def() 	{return nullptr;}
 	virtual const ExprFnDef*	as_fn_def() const {return nullptr;}
@@ -155,6 +157,7 @@ public:
 	virtual ~Node(){
 		error("dont call delete, we haven't sorted out ownership of Types or nodes. compiler implementation doesn't need to free anything. Types will be owned by a manager, not the ast ");
 	}
+	virtual const Expr*	get_return_expr()const	{return nullptr;}
 	virtual Expr*	loop_else_block()const			{return nullptr;}// for decoupling something
 	LLVMType get_type_llvm() const;
 	virtual Type* eval_as_type()const		{return nullptr;};
@@ -204,6 +207,7 @@ typedef Type TParamVal;
 
 struct ExprScopeBlock : Expr{
 	Scope*		scope=0;
+	const Expr*	get_return_expr()const override	{return this;}
 };
 
 /// any node that is a Definition, maintains list of refs

@@ -15,7 +15,6 @@ struct ExprBlock :public ExprScopeBlock{
 	// TODO we may split into ExprOperator, ExprFnCall, ExprBlock
 	// the similarity between all is
 	
-	short	bracket_type;	//OPEN_PARENS,OPEN_BRACES,OPEN_BRACKETS,(ANGLE_BRACKETS?)
 	short	delimiter=0;//COMMA, SEMICOLON,SPACES?
 	
 	Expr*	call_expr=0;  //call_expr(argls...)  or {argsls...} call_expr[argls..] call_expr{argls}
@@ -61,6 +60,7 @@ struct ExprWhere : ExprBlock {
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	ExprBlock* 		as_block() override 	{return nullptr;}
 	Node*		clone() const;
+	virtual const Expr*	get_return_expr()const override	{return call_expr;}
 };
 
 struct ExprStructInit : ExprBlock{
@@ -71,6 +71,18 @@ struct ExprStructInit : ExprBlock{
 	ResolveResult	resolve(Scope* sc, const Type* desired,int flags) override;
 
 };
+struct ExprParens : ExprBlock{
+	const char* kind_str() const  override		{return "expr_parens";}
+	Node* 	clone() const override	{return (Node*)clone_sub(new ExprParens());}
+};
+struct ExprCompound : ExprBlock{
+	const char* kind_str() const  override		{return "expr_compound";}
+	Node* 	clone() const override	{return (Node*)clone_sub(new ExprCompound());}
+	const ExprCompound*	as_compound() const override{return this;}
+	virtual const Expr*	get_return_expr()const override	{return (argls.size())?argls.back():nullptr;}
+
+};
+
 struct ExprTuple : ExprBlock{
 	const char* kind_str() const  override		{return "tuple";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;

@@ -63,9 +63,9 @@ struct  ExprFnDef : ExprDef {
 	void			translate_typeparams(const TypeParamXlat& tpx)override;
 	vector<TParamDef*>* get_typeparams() override{return &this->typeparams;}
 	Expr*			last_expr()const;
-	Expr*			get_return_value() const;
+	const Expr*		get_return_expr() const override;
 	Type*				return_type()const {
-		auto x=get_return_value(); if (auto xt=x->get_type()) return xt;
+		auto x=get_return_expr(); if (x){if (auto xt=x->get_type()) return xt;}
 		return this->ret_type;
 	}
 	bool	has_return_value() const;
