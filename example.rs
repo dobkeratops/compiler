@@ -167,10 +167,10 @@ fn main(argc:int,argv:**char)->int{
 	let v1=Vec3{vx:0.0,vy:1.0,vz:0.0};
 
 	// Demo rust-style enums
-	let s1=new Sphere{Vec3{1.0,1.0,1.0},1.0};
-	let s2=new Cuboid{Vec3{1.0,1.0,1.0},Vec3{2.0,2.0,2.0}};
-	let sv1=shape_vol(s1 as *Shape);
-	let sv2=shape_vol(s2 as *Shape);
+	let s1=Sphere{Vec3{1.0,1.0,1.0},1.0};
+	let s2=Cuboid{Vec3{1.0,1.0,1.0},Vec3{2.0,2.0,2.0}};
+	let sv1=shape_vol(&s1 as *Shape);
+	let sv2=shape_vol(&s2 as *Shape);
 
 	// let for introducing variable, rather than just ident:T
 	// :T would be used as a type-assertion
