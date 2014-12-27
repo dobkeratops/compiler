@@ -32,6 +32,7 @@ Dont have a name yet hence 'hack'..
 #### WIP
  * Parsing rust Trait/Impl
    * not planning on getting a full implementation done soon,
+   * I prefer UFCS/overloading
    * but its' relatively easy to do the parsing
    * might inspire getting a larger subset of Rust handled..
    * details - 'Self' type - in progress..

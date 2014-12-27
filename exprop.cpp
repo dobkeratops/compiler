@@ -145,12 +145,13 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		else if (op_ident==ASSIGN){
 			ASSERT(this->lhs && this->rhs);
 			dbg(::dump(this->lhs->type(),this->rhs->type()));
-			resolved|=rhs->resolve_if(sc,lhs->type_ref(),flags);
+			resolved|=rhs->resolve_if(sc,nullptr,flags);
 
-			resolved|=lhs->resolve_if(sc,rhs->type_ref(),flags);
+			resolved|=lhs->resolve_if(sc,desired,flags);
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
 
 			propogate_type_refs(flags,this, rhs->type_ref(), lhs->type_ref());
+			dbg(::dump(this->lhs->type(),this->rhs->type());)
 			return propogate_type_fwd(flags,this, desired, type_ref());
 			//propogate_type(flags,this, type_ref(),rhs->type_ref());
 			//return propogate_type(flags, this, type_ref(),lhs->type_ref());

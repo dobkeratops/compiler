@@ -12,7 +12,7 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
-	
+/*
 	{	"enum decls",__FILE__,__LINE__,R"====(
 		
 		fn"C" printf(s:str,...)->int;
@@ -23,16 +23,14 @@ CompilerTest g_Tests[]={
 		};
 		fn main(argc:int,argv:**char)->int{
 			let x=Bar{};
-			let y=Baz{};
-			let z=Qux{};
 			let f=Foo{};
-
+			f=x;
 			0
 		}
 		)====",
 		nullptr,false
 	},
-
+*/
 	{	"parse struct-trait-impl",__FILE__,__LINE__,R"====(
 		extern"C" fn printf(s:str,...)->int;
 		struct Foo{

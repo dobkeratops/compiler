@@ -677,8 +677,8 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 			for (auto i=0; i<sd->fields.size(); i++){
 				emit_type(sd->fields[i]->type(),false);
 			}
-			if (sd->discriminant>=0 || sd->is_enum()){
-				emit_array_type(Type::get_u8(), sd->padding());//get_u32
+			if (auto pad=sd->padding()){
+				emit_array_type(Type::get_u8(), pad);//get_u32
 			}
 			emit_struct_end();
 		}

@@ -59,7 +59,7 @@ bool type_is_coercible(const Type* from,const Type* to,bool coerce){
 	// void pointers auto-coerce like they should,
 	// thats what they're there for, legacy C
 	// modern code just doesn't use void*
-	
+//	dbg(from->dump(0));dbg(to->dump(0));dbg(newline(0));
 	if (from->is_pointer_not_ref() && to->is_pointer_not_ref() && coerce){
 		if (from->is_void_ptr() || to->is_void_ptr())
 			return true;

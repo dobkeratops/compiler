@@ -165,7 +165,6 @@ fn main(argc:int,argv:**char)->int{
 
 	let v0=Vec3{1.0,0.0,0.0};	// structs can be initialized positionally or named
 	let v1=Vec3{vx:0.0,vy:1.0,vz:0.0};
-	let v2=v0+v1;
 
 	// Demo rust-style enums
 	let s1=new Sphere{Vec3{1.0,1.0,1.0},1.0};
