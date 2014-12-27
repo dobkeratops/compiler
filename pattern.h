@@ -37,7 +37,7 @@ struct Pattern : Node {
 	CgValue	compile_condition(CodeGen& cg,Scope* sc, CgValue input);
 	CgValue compile_bind(CodeGen& cg, Scope* sc, CgValue input);
 	void	recurse(std::function<void(Node*)>& f);
-	void	translate_typeparams(const TypeParamXlat& xlat);
+	void	translate_tparams(const TParamXlat& xlat);
 	const char* kind_str()const{return "pattern";}
 	const Pattern* as_pattern()const{return this;}
 	Pattern* as_pattern(){return this;}

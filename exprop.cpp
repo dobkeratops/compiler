@@ -1,6 +1,6 @@
 #include "exprop.h"
 
-void ExprOp::translate_typeparams(const TypeParamXlat& tpx){
+void ExprOp::translate_tparams(const TParamXlat& tpx){
 	lhs->translate_typeparams_if(tpx);
 	rhs->translate_typeparams_if(tpx);
 	this->type()->translate_typeparams_if(tpx);
@@ -19,14 +19,14 @@ void ExprOp::find_vars_written(Scope* s, set<Variable *> &vs) const{
 	lhs->find_vars_written_if(s,vs);
 	rhs->find_vars_written_if(s,vs);
 	if (flags&WRITE_LHS){
-		if (auto vname=dynamic_cast<ExprIdent*>(this->lhs)){
+		if (auto vname=this->lhs->as_ident()){
 			if (auto var=s->find_variable_rec(vname->name)){
 				vs.insert(var);
 			}
 		}
 	}
 	if (flags&WRITE_RHS){
-		if (auto vname=dynamic_cast<ExprIdent*>(this->rhs)){
+		if (auto vname=this->rhs->as_ident()){
 			if (auto var=s->find_variable_rec(vname->name)){
 				vs.insert(var);
 			}
@@ -161,7 +161,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	}
 	else if (op_ident==COLON){ // TYPE ASSERTION
 		// todo: get this in the main parser
-		ASSERT(dynamic_cast<ExprIdent*>(rhs)); // todo- not just that
+		ASSERT(rhs->as_ident()); // todo- not just that
 		auto tname=rhs->name;
 		auto v=sc->find_variable_rec(lhs->name);
 		if (!v->get_type()){
@@ -250,12 +250,12 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				}
 				// no good.
 				return ResolveResult();
-			} else if (auto call=rhs->as_block()){
+			} else if (auto call=dynamic_cast<ExprCall*>(rhs)){
 				auto method_name=call->call_expr->name;
-				// really we want to desugar this, a.foo(b) is just foo(a,b)
-				// but we respect the shape of the AST?
+				// TODO - should there be a dedicated MethodCall node?
+				// should the parser just accumulate the receiver into the argument list already?
 				//				dbprintf("method call: %s\n",str(method_name));
-				dynamic_cast<ExprCall*>(call)->resolve_call_sub(sc, desired, flags, lhs);
+				call->resolve_call_sub(sc, desired, flags, lhs);
 				return propogate_type_refs(flags,this,call->type(),this->type_ref());
 			} else {
 				if (flags & R_FINAL){

@@ -278,7 +278,7 @@ void parse_fn_body(ExprFnDef* fndef, TokenStream& src){
 TypeDef* parse_typedef(TokenStream& src){
 	auto td=new TypeDef(src.prev_pos, src.eat_ident());
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-		parse_typeparams_def(src,td->typeparams,close_of(open));
+		parse_typeparams_def(src,td->tparams,close_of(open));
 	}
 	src.expect(ASSIGN);
 	td->type_def=parse_type(src, SEMICOLON, td);
@@ -305,7 +305,7 @@ ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,Type* self_t, bool is_
 		}
 		fndef->name=tok;
 		if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-			parse_typeparams_def(src,fndef->typeparams,close_of(open));
+			parse_typeparams_def(src,fndef->tparams,close_of(open));
 		}
 		tok=src.expect(OPEN_PAREN);
 	} else {
@@ -523,11 +523,11 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			auto open_tp=src.eat_if(LT,OPEN_BRACKET,OPEN_TYPARAM);
 			if (open_tp && was_operand){
 				auto id=pop(operands)->as_ident();
-				if (!id){src.error("::<TypeParams> must follow identifier");}
+				if (!id){src.error("::<tparams> must follow identifier");}
 				auto itw=parse_tparams_for_ident(src,id,close_of(open_tp));
 				operands.push_back(itw);
 			} else {
-				src.error("::<TypeParams> must follow identifier");
+				src.error("::<tparams> must follow identifier");
 			}
 		}
 		else if (src.eat_if(WHERE)){
@@ -577,7 +577,7 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 				auto sname=operands.pop_back();
 				auto si=parse_block_sub(new ExprStructInit(), src,CLOSE_BRACE,COMMA,sname);
 				operands.push_back(si);
-				si->set_type(sname->get_type()); //eg ident might have typeparams.struct init uses given type
+				si->set_type(sname->get_type()); //eg ident might have tparams.struct init uses given type
 				dbg(operands.back()->dump(0));
 			}
 			else{//progn aka scope block with return value.
@@ -795,7 +795,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 			ret=new Type(owner,REF);
 			ret->sub=parse_type(src,close,owner);
 		}else {
-			// main: something[typeparams]..
+			// main: something[tparams]..
 			ret = new Type(owner,tok);
 			if (auto open=src.eat_if(OPEN_BRACKET,LT,OPEN_TYPARAM)) {
 				while (auto sub=parse_type(src, close_of(open),owner)){
@@ -934,10 +934,10 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	}
 	for (auto x:args)x->dump(0);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-		parse_typeparams_def(src,sd->typeparams,close_of(open));
+		parse_typeparams_def(src,sd->tparams,close_of(open));
 	}
 	if (src.eat_if(COLON)) {
-		sd->inherits_type = parse_type(src,0,nullptr); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
+		sd->inherits_type = parse_type(src,0,nullptr); // inherited base has tparams. only single-inheritance allowed. its essentially an anonymous field
 	} else {
 		sd->inherits_type = force_inherit; // enum is sugar rolling a number of classes from base
 	}
@@ -990,7 +990,7 @@ TraitDef* parse_trait(TokenStream& src) {
 
 	auto td= new TraitDef(src.prev_pos, sname);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-		parse_typeparams_def(src,td->typeparams,close_of(open));
+		parse_typeparams_def(src,td->tparams,close_of(open));
 	}
 	// todo - parse trait inheritance here
 	src.expect(OPEN_BRACE);
@@ -1013,7 +1013,7 @@ ImplDef* parse_impl(TokenStream& src) {
 	auto pos=src.pos;
 	auto imp= new ImplDef(src.prev_pos,0);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)){
-		parse_typeparams_def(src,imp->typeparams,close_of(open));
+		parse_typeparams_def(src,imp->tparams,close_of(open));
 	}
 	auto t1=parse_type(src,0,0);
 	if (src.eat_if(FOR)){			// impl Trait for Type
@@ -1046,7 +1046,7 @@ ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
 	Name tok;
 	auto sd=new ExprStructDef(pos,name);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-		parse_typeparams_def(src,sd->typeparams,close_of(open));
+		parse_typeparams_def(src,sd->tparams,close_of(open));
 	}
 	if (!src.eat_if(OPEN_PAREN))
 		return sd;
@@ -1057,10 +1057,10 @@ EnumDef* parse_enum(TokenStream& src) {
 	auto tok=src.eat_ident();
 	auto ed=new EnumDef(src.pos,tok);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
-		parse_typeparams_def(src,ed->typeparams,close_of(open));
+		parse_typeparams_def(src,ed->tparams,close_of(open));
 	}
 	if (src.eat_if(COLON)) {
-		ed->inherits_type = parse_type(src,0,ed); // inherited base has typeparams. only single-inheritance allowed. its essentially an anonymous field
+		ed->inherits_type = parse_type(src,0,ed); // inherited base has tparams. only single-inheritance allowed. its essentially an anonymous field
 	}
 	if (!src.eat_if(OPEN_BRACE))
 		return ed;

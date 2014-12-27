@@ -34,7 +34,7 @@ ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags)
 }
 
 
-void ExprIf::translate_typeparams(const TypeParamXlat& tpx){
+void ExprIf::translate_tparams(const TParamXlat& tpx){
 	this->cond->translate_typeparams_if(tpx);
 	this->body->translate_typeparams_if(tpx);
 	this->else_block->translate_typeparams_if(tpx);
@@ -42,7 +42,7 @@ void ExprIf::translate_typeparams(const TypeParamXlat& tpx){
 }
 
 
-void ExprFor::translate_typeparams(const TypeParamXlat& tpx)
+void ExprFor::translate_tparams(const TParamXlat& tpx)
 {
 	this->init->translate_typeparams_if(tpx);
 	this->cond->translate_typeparams_if(tpx);

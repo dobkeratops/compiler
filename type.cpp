@@ -232,7 +232,7 @@ bool Type::is_equal_sub(const Type* other,bool coerce,Name self_t) const{
 	return true;
 }
 
-bool Type::is_equal(const Type* other,const TypeParamXlat& xlat,Name self_t) const{
+bool Type::is_equal(const Type* other,const TParamXlat& xlat,Name self_t) const{
 	//if (coerce)
 	if ((!this) && (!other)) return true;
 	if (this && other && 0)
@@ -252,7 +252,7 @@ bool Type::is_equal(const Type* other,const TypeParamXlat& xlat,Name self_t) con
 	}
 	return is_equal_sub(other,xlat,self_t);
 }
-bool Type::is_equal_sub(const Type* other,const TypeParamXlat& xlat,Name self_t) const{
+bool Type::is_equal_sub(const Type* other,const TParamXlat& xlat,Name self_t) const{
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
 	if (this &&this->name==AUTO){
@@ -324,7 +324,7 @@ void Type::dump_sub(int flags)const{
 const char* Type::kind_str()const{return"type";}
 
 bool Type::is_complex()const{
-	if (sub) return true;	// todo: we assume anything with typeparams is a struct, it might just be calculation
+	if (sub) return true;	// todo: we assume anything with tparams is a struct, it might just be calculation
 	for (auto a=sub; a;a=a->next)if (a->is_complex()) return true;
 	if (this->is_struct()||this->name==ARRAY||this->name==VARIANT) return true;
 	return false;
@@ -471,10 +471,10 @@ Type::clone() const{
 
 bool Type::has_non_instanced_typeparams()const{ if (!def) return true; if (def->as_tparam_def()) return false; return true;}
 
-void Type::translate_typeparams(const TypeParamXlat& tpx){
+void Type::translate_tparams(const TParamXlat& tpx){
 	this->translate_typeparams_sub(tpx,nullptr);
 }
-void Type::translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_replace){
+void Type::translate_typeparams_sub(const TParamXlat& tpx,Type* inherit_replace){
 	// todo: replace wih 'instantiate' typparams, given complex cases
 	/*
 	 example:
@@ -529,7 +529,7 @@ void Type::translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_repla
 		else {
 #if DEBUG>=2
 			tpx.dump(0);
-			tpx.typeparams[pi]->dump(-1);
+			tpx.tparams[pi]->dump(-1);
 			dbg_generic(" replace with ");
 			tpx.given_types[pi]->dump(-1);newline(0);
 			newline(0);
@@ -537,7 +537,7 @@ void Type::translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_repla
 			this->dump(-1);
 			newline(0);
 #endif
-			//error_begin(this,"param index %d %s trying to instantiate complex typeparameter into non-root of another complex typeparameter,we dont support this yet\n",param_index, tpx.typeparams[pi]->name_str());
+			//error_begin(this,"param index %d %s trying to instantiate complex typeparameter into non-root of another complex typeparameter,we dont support this yet\n",param_index, tpx.tparams[pi]->name_str());
 			
 			//error_end(this);
 			this->name=src_ty->name;

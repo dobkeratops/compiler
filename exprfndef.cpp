@@ -18,7 +18,7 @@ void ExprFnDef::verify(){
 bool ExprFnDef::is_generic() const {
 	if(instances!=nullptr)
 		return true;
-	if (typeparams.size())
+	if (tparams.size())
 		return true;
 	for (auto i=0; i<args.size(); i++)
 		if (!args[i]->type() || args[i]->type()->name==AUTO)
@@ -52,7 +52,7 @@ void ExprFnDef::dump(int ind) const {
 
 void ExprFnDef::dump_sub(int ind, Name prefix) const {
 	if (!this) return;
-	newline(ind);dbprintf("%s %s",getString(prefix),getString(name));dump_typeparams(this->typeparams);dbprintf("(");
+	newline(ind);dbprintf("%s %s",getString(prefix),getString(name));dump_typeparams(this->tparams);dbprintf("(");
 	for (int i=0; i<args.size();i++){
 		args[i]->dump(-1);
 		if (i<args.size()-1) dbprintf(",");
@@ -164,8 +164,8 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	ASSERT(callsiteb!=0 &&"ambiguity, when we come to do operator overloads, ExprOp & ExprBlock will call..");
 	vector<Type*>	ins_typarams;
 	match_typeparams(ins_typarams, srcfn,call_args, callsiteb);
-	TypeParamXlat xlat(srcfn->typeparams, ins_typarams);
-	new_fn->translate_typeparams(xlat);
+	TParamXlat xlat(srcfn->tparams, ins_typarams);
+	new_fn->translate_tparams(xlat);
 	dbg(new_fn->dump(0));
 	
 	// todo: translate return type. for the minute we discard it..
@@ -357,8 +357,8 @@ CaptureVars* ExprFnDef::get_or_create_capture(ExprFnDef* src){
 }
 
 int ExprFnDef::type_parameter_index(Name n) const {
-	for (auto i=0; i<typeparams.size(); i++){
-		if (n==typeparams[i]->name)
+	for (auto i=0; i<tparams.size(); i++){
+		if (n==tparams[i]->name)
 			return i;
 	}
 	return -1;
@@ -382,10 +382,10 @@ ResolveResult ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags
 bool Type::is_typeparam(Scope* sc)const{
 	return sc->get_typeparam_for(const_cast<Type*>(this))!=0;
 }
-void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
-	dbg_generic("translate typeparams for fn %s\n",this->name_str());
+void ExprFnDef::translate_tparams(const TParamXlat& tpx){
+	dbg_generic("translate tparams for fn %s\n",this->name_str());
 	for (auto &a:args)
-		a->translate_typeparams(tpx);
+		a->translate_tparams(tpx);
 
 	
 	this->ret_type->translate_typeparams_if(tpx);
@@ -393,7 +393,7 @@ void ExprFnDef::translate_typeparams(const TypeParamXlat& tpx){
 	
 	if (tpx.typeparams_all_set())
 	{
-		this->typeparams.resize(0);
+		this->tparams.resize(0);
 	}
 }
 

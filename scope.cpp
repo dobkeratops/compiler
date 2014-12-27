@@ -196,7 +196,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& a
 			if (args.size()<best.f->min_args()){info(best.f,"maybe requires %d args, %d given",best.f->min_args(),args.size());}
 			vector<Type*> callsite_tys;
 			match_typeparams(callsite_tys, best.f,args,callsite);
-			auto tpxlat=TypeParamXlat{best.f->typeparams,callsite_tys};
+			auto tpxlat=TParamXlat{best.f->tparams,callsite_tys};
 			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
 				
 				if (!args[i]->type()->is_equal(best.f->args[i]->type(),tpxlat)){
@@ -418,7 +418,7 @@ Variable* Scope::try_capture_var(Name name) {
 	}
 	dbg_varscope("Trying to capture %s in %s\n",str(name),this->name());
 	dbg_varscope(" from %s\n",this->capture_from->name());
-	if (auto ofn=dynamic_cast<ExprFnDef*>(this->owner_fn)){
+	if (auto ofn=this->get_owner_fn()){
 		auto v=capture_from->find_variable_rec(name);
 		if (v) {
 			dbg_varscope("capture: found %s in %s\n",str(name),this->capture_from->name());
@@ -503,7 +503,7 @@ Expr*	Scope::current_loop(int levels){
 }
 
 ExprStructDef* Scope::find_struct(const Node* node) {
-	if (auto sd=const_cast<ExprStructDef*>(dynamic_cast<const ExprStructDef*>(node))){
+	if (auto sd=const_cast<ExprStructDef*>(node->as_struct_def())){
 		return sd;
 	}
 	if (auto iwt=dynamic_cast<const IdentWithTParams*>(node)){

@@ -8,7 +8,7 @@ void ExprBlock::find_vars_written(Scope* s, set<Variable*>& vars) const{
 Name ExprBlock::get_fn_name()const
 {	// distinguishes operator &  function call
 	if (call_expr){
-		ASSERT(dynamic_cast<ExprIdent*>(call_expr)&& "TODO: distinguish expression with computed function name");
+		ASSERT(call_expr->as_ident()&& "TODO: distinguish expression with computed function name");
 		return call_expr->name;
 	}
 	else if (get_fn_call()){return get_fn_call()->name;}
@@ -39,8 +39,7 @@ ExprBlock::ExprBlock(const SrcPos& s){ pos=s;}
 ExprFnDef* ExprBlock::get_fn_call()const {
 	if (!this->def)
 		return nullptr;
-	auto df=this->def;
-	auto d=dynamic_cast<ExprFnDef*>(df);
+	auto d=this->def->as_fn_def();
 	if (d)
 		return d;
 	return nullptr;
@@ -79,10 +78,10 @@ void ExprBlock::verify(){
 	if (this->call_expr) this->call_expr->verify();
 	for (auto x:argls) x->verify();
 }
-void ExprBlock::translate_typeparams(const TypeParamXlat& tpx){
+void ExprBlock::translate_tparams(const TParamXlat& tpx){
 	this->call_expr->translate_typeparams_if(tpx);
 	for (auto e:argls){
-		e->translate_typeparams(tpx);
+		e->translate_tparams(tpx);
 	}
 	this->type()->translate_typeparams_if(tpx);
 }
@@ -316,6 +315,8 @@ ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int fla
 			resolved|=argls[i]->resolve_if(sc,nullptr ,flags);
 		}
 		if (this->call_expr->is_ident() && 0==dynamic_cast<Variable*>(this->call_expr->def)){
+
+//		if (this->call_expr->is_ident() && 0==this->call_expr->def->as_variable()){
 			return resolve_make_fn_call(receiver,this, sc,desired,flags);
 		}
 	} else if (auto fnc=this->get_fn_call()){ // static call
@@ -418,7 +419,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 	this->struct_def=sd;
 	// assignment forms are expected eg MyStruct{x=...,y=...,z=...} .. or can we have MyStruct{expr0,expr1..} equally?
 	//int next_field_index=0;
-	// todo:infer generic typeparams - adapt code for functioncall. we have struct fields & struct type-params & given expressions.
+	// todo:infer generic tparams - adapt code for functioncall. we have struct fields & struct type-params & given expressions.
 	int named_field_index=-1;
 	// todo encapsulate StructInitializer to reuse logic for codegen
 	field_indices.reserve(si->argls.size());

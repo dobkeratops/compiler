@@ -31,7 +31,7 @@ struct ExprIf :  ExprFlow {
 	const char*	kind_str()const	override	{return"if";}
 	ResolveResult	resolve(Scope* scope,const Type*,int flags) ;
 	void	find_vars_written(Scope* s,set<Variable*>& vars ) const override;
-	void	translate_typeparams(const TypeParamXlat& tpx) override;
+	void	translate_tparams(const TParamXlat& tpx) override;
 	CgValue	compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	Scope*	get_scope()	override			{return this->scope;}
 	void	recurse(std::function<void(Node*)>& f)override;
@@ -60,7 +60,7 @@ struct ExprFor :  ExprFlow {
 	ExprFor*	as_for()override			{return this;}
 	ResolveResult resolve(Scope* scope,const Type*,int flags);
 	void find_vars_written(Scope* s,set<Variable*>& vars ) const override;
-	void translate_typeparams(const TypeParamXlat& tpx) override;
+	void translate_tparams(const TParamXlat& tpx) override;
 	CgValue compile(CodeGen&, Scope*,CgValue) override;
 	Expr*	loop_else_block()const override{return else_block;}
 	void	recurse(std::function<void(Node*)>& f)override;
@@ -94,7 +94,7 @@ struct MatchArm : ExprScopeBlock {
 	void		dump(int depth)const;
 	Node*		clone() const override;
 	Scope*		get_scope()override{return this->scope;}
-	void		translate_typeparams(const TypeParamXlat& tpx){}
+	void		translate_tparams(const TParamXlat& tpx){}
 	CgValue		compile_condition(CodeGen& cg, Scope* sc, const Pattern* match_expr,CgValue match_val);
 	// todo - as patterns exist elsewhere, so 'compile-bind might generalize'.
 	CgValue		compile_bind_locals(CodeGen& cg, Scope* sc, const Pattern* match_expr,CgValue match_val);

@@ -59,7 +59,7 @@ const LLVMOp* get_op_llvm(Name ntok,Name ntype){
 	return 0;
 }
 bool CgValue::is_literal() const{
-	return dynamic_cast<ExprLiteral*>(val)!=0;
+	return val->as_literal()!=0;
 }
 
 bool CgValue::is_valid()const{
@@ -72,10 +72,10 @@ CgValue::CgValue(Node* n) {
 	// todo - unify with 'expr'
 	addr=0; reg=0; ofs=0;elem=-1;
 	val = n;
-	if (auto fd=dynamic_cast<ExprFnDef*>(n)){ // variable is a function pointer?
+	if (auto fd=n->as_fn_def()){ // variable is a function pointer?
 		reg=0; // it needs to be loaded
 	}
-	if (auto v=dynamic_cast<Variable*>(n)){
+	if (auto v=n->as_variable()){
 		if (v->reg_is_addr){
 			addr=v->reg_name;
 		}
@@ -217,11 +217,11 @@ CgValue CodeGen::load(const CgValue& v,const Type* result_type) {
 	if(v.val) {
 		auto outr=cg.next_reg();
 		
-		if (auto lit=dynamic_cast<ExprLiteral*>(v.val)){
+		if (auto lit=v.val->as_literal()){
 			return cg.emit_make_literal(lit);
 			// todo: string literal, vector literals, bit formats
 		}
-		else if (auto fp=dynamic_cast<ExprFnDef*>(v.val)){
+		else if (auto fp=v.val->as_fn_def()){
 			if (fp->is_closure()) {
 				// Build a pair. we would also build the CaptureVars Object here.
 				// TODO: we're blocked from making a nice' emit_make_pair()' wrapper here
@@ -257,7 +257,7 @@ CgValue CodeGen::load(const CgValue& v,const Type* result_type) {
 				return CgValue(outr,fp->fn_type);
 			}
 		}
-		else if (auto var=dynamic_cast<Variable*>(v.val)){
+		else if (auto var=v.val->as_variable()){
 			if (var->reg_is_addr){
 				auto r= CgValue(0,var->type(),var->reg_name);
 				return cg.load(r);
@@ -317,11 +317,11 @@ void CodeGen::emit_operand(const CgValue& v){
 		return;
 	}
 	else if (v.val){
-		if (auto lit=dynamic_cast<ExprLiteral*>(v.val)) {
+		if (auto lit=v.val->as_literal()) {
 			ASSERT(v.addr==0 && "check case above, incorrect assumptions")
 			cg.emit_operand_literal(v,lit);
 		}
-		if (auto fn=dynamic_cast<ExprFnDef*>(v.val)) {
+		if (auto fn=v.val->as_fn_def()) {
 			cg.emit_global(fn->get_mangled_name());
 		}
 		return;

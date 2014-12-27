@@ -25,7 +25,7 @@ struct ExprIdent :Expr{
 	bool		is_variable_name()const	override;
 	bool		is_placeholder()const			{return name==PLACEHOLDER;}
 	bool		is_undefined()const				{return is_placeholder();}
-	void		translate_typeparams(const TypeParamXlat& tpx) override;
+	void		translate_tparams(const TParamXlat& tpx) override;
 	CgValue		compile(CodeGen&cg, Scope* sc, CgValue input) override;
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags) override;
 	void		recurse(std::function<void(Node*)>&) override;
@@ -37,7 +37,7 @@ struct IdentWithTParams : ExprIdent{
 	void		dump(int depth)const override;
 	Node*		clone()const override;
 	Type*		make_type(Scope* sc) const;
-	void		translate_typeparams(const TypeParamXlat& tpx) override;
+	void		translate_tparams(const TParamXlat& tpx) override;
 	void		recurse(std::function<void(Node*)>&) override;
 	Node*		get_elem_node(int index)override;
 	int			get_elem_count()const override;
@@ -77,7 +77,7 @@ struct ExprLiteral : ExprDef {
 	bool is_undefined()const	{return false;}
 	const char* as_str()const	{return type_id==T_CONST_STRING?u.val_str:"";}
 	ResolveResult resolve(Scope* scope, const Type* desired,int flags);
-	void translate_typeparams(const TypeParamXlat& tpx);
+	void translate_tparams(const TParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue input) override;
 	ExprLiteral* as_literal() override{ return this;};
 };
@@ -108,7 +108,7 @@ struct ArgDef :ExprDef{
 	size_t alignment() const;	//todo, 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
 	
 	
-	void	translate_typeparams(const TypeParamXlat& tpx) override;
+	void	translate_tparams(const TParamXlat& tpx) override;
 	ResolveResult	resolve(Scope* sc, const Type* desired, int flags) override;
 	ArgDef*	as_arg_def()		{return this;}
 	void		recurse(std::function<void(Node*)>&) override;

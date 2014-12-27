@@ -127,7 +127,7 @@ CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc, CgValue){
 void
 ExprIdent::recurse(std::function<void(Node*)>&f){
 	if (!this)return;
-	// typeparams?
+	// tparams?
 	type()->recurse(f);
 }
 
@@ -160,11 +160,11 @@ void IdentWithTParams::recurse(std::function<void(Node*)>& f) {
 	}
 	type()->recurse(f);
 }
-void IdentWithTParams::translate_typeparams(const TypeParamXlat& tpx) {
+void IdentWithTParams::translate_tparams(const TParamXlat& tpx) {
 	// templated idents?
 	// TODO - these could be expresions - "concat[T,X]"
-	this->name.translate_typeparams(tpx);
-	for (auto x:given_tparams){x->translate_typeparams(tpx);}
+	this->name.translate_tparams(tpx);
+	for (auto x:given_tparams){x->translate_tparams(tpx);}
 	this->type()->translate_typeparams_if(tpx);
 }
 
@@ -177,17 +177,17 @@ Node* IdentWithTParams::clone()const {
 	return (Node*) iwt;
 }
 
-void Name::translate_typeparams(const TypeParamXlat& tpx) {
+void Name::translate_tparams(const TParamXlat& tpx) {
 	auto index=tpx.typeparam_index(*this);
 	if (index>=0){
 		ASSERT(tpx.given_types[index]->sub==0 && "TODO type-expressions for name? concat[],...");
 		*this=tpx.given_types[index]->name;
 	}
 }
-void ExprIdent::translate_typeparams(const TypeParamXlat& tpx) {
+void ExprIdent::translate_tparams(const TParamXlat& tpx) {
 	// templated idents?
 	// TODO - these could be expresions - "concat[T,X]"
-	this->name.translate_typeparams(tpx);
+	this->name.translate_tparams(tpx);
 	this->type()->translate_typeparams_if(tpx);
 }
 
@@ -216,7 +216,7 @@ void ExprLiteral::dump(int depth) const{
 // TODO : 'type==type' in our type-engine
 //	then we can just make function expressions for types.
 
-void	ExprLiteral::translate_typeparams(const TypeParamXlat& tpx){
+void	ExprLiteral::translate_tparams(const TParamXlat& tpx){
 	
 }
 
@@ -397,15 +397,15 @@ member_of()	{ // todo, implement for 'Variable' aswell, unify capture & member-o
 	return nullptr;
 }
 
-void ArgDef::translate_typeparams(const TypeParamXlat& tpx){
-	this->name.translate_typeparams(tpx);
+void ArgDef::translate_tparams(const TParamXlat& tpx){
+	this->name.translate_tparams(tpx);
 	if (this->get_type()){
 		if (!this->get_type()->is_anon_struct())
 			this->get_type()->set_struct_def(nullptr); // needs resolving again
-		this->get_type()->translate_typeparams(tpx);
+		this->get_type()->translate_tparams(tpx);
 	}
 	if (this->default_expr){
-		this->default_expr->translate_typeparams(tpx);
+		this->default_expr->translate_tparams(tpx);
 	}
 }
 

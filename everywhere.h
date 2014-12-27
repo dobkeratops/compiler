@@ -166,7 +166,7 @@ struct Type;
 struct Variable;
 //struct ResolveResult;
 struct Module;
-struct TypeParamXlat;
+struct TParamXlat;
 struct VarDecl;
 struct NamedItems;
 struct ExprMatch;

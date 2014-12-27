@@ -136,7 +136,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 }
 
 // TODO: we suspect this will be more complex, like Type translation (
-void Pattern::translate_typeparams(const TypeParamXlat& tpx){
+void Pattern::translate_tparams(const TParamXlat& tpx){
 	this->type()->translate_typeparams_if(tpx);
 	this->def->translate_typeparams_if(tpx);
 	auto i=tpx.typeparam_index(this->name);
@@ -144,7 +144,7 @@ void Pattern::translate_typeparams(const TypeParamXlat& tpx){
 		this->name=tpx.given_types[i]->name;
 	}
 	for (auto s=this->sub_pat(); s;s=s->next){
-		s->translate_typeparams(tpx);
+		s->translate_tparams(tpx);
 	}
 }
 

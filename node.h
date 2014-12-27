@@ -95,8 +95,8 @@ public:
 	virtual void find_vars_written(Scope* s,set<Variable*>& vars ) const	{return ;}
 	void find_vars_written_if(Scope*s, set<Variable*>& vars) const{ if(this)this->find_vars_written(s, vars);
 	}
-	void translate_typeparams_if(const TypeParamXlat& tpx){if (this) this->translate_typeparams(tpx);}
-	virtual void translate_typeparams(const TypeParamXlat& tpx){ error(this,"not handled for %s",this->kind_str()); };
+	void translate_typeparams_if(const TParamXlat& tpx){if (this) this->translate_tparams(tpx);}
+	virtual void translate_tparams(const TParamXlat& tpx){ error(this,"not handled for %s",this->kind_str()); };
 	virtual ExprOp* as_op()const			{error(this,"expected op, found %s:%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name as_name()const {
 		error(this,"expected named item at node %s kind=%s",str(this->name),this->kind_str());
@@ -224,7 +224,7 @@ struct ExprDef :Expr{
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
 	TypeDef(SrcPos p, Name n){this->pos=p; this->name=n;}
 	const char* kind_str()const{return "typedef";}
-	vector<TParamDef*> typeparams;
+	vector<TParamDef*> tparams;
 	Type*	type_def=0;
 	TypeDef*	clone()const;
 	void	dump(int depth) const;

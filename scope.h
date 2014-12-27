@@ -92,6 +92,7 @@ public:
 	Expr*		current_loop(int levels);
 	ExprStructDef* owner_struct() { return this->owner_fn?this->owner_fn->as_struct_def():nullptr;}
 private:
+	ExprFnDef*	get_owner_fn(){return this->owner_fn?this->owner_fn->as_fn_def():nullptr;}
 	void push_child(Scope* sub) { sub->owner_fn=this->owner_fn; sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 public:
 	Scope* parent_or_global()const{

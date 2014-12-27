@@ -25,7 +25,7 @@ struct ExprOp: public Expr{
 	bool	is_undefined()const				{return (lhs?lhs->is_undefined():false)||(rhs?rhs->is_undefined():false);}
 	ExprOp*		as_op()const override		{return const_cast<ExprOp*>(this);}
 	const char* kind_str()const override		{return"operator";}
-	void 		translate_typeparams(const TypeParamXlat& tpx) override;
+	void 		translate_tparams(const TParamXlat& tpx) override;
 	ResolveResult resolve(Scope* scope, const Type* desired,int flags) override;
 	void 		find_vars_written(Scope* s, set<Variable*>& vars) const override;
 	void 		verify() override;

@@ -6,7 +6,7 @@
 
 struct Name;
 struct Type : ExprDef {
-	vector<TParamDef*> typeparams;
+	vector<TParamDef*> tparams;
 	//ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
@@ -91,9 +91,9 @@ struct Type : ExprDef {
 	ExprStructDef*	get_struct_autoderef() const; // with autoderef
 	bool			is_coercible(const Type* other,Name self_t=0) const{return is_equal(other,true,self_t);};
 	bool			is_equal(const Type* other,bool coerce=false,Name self_t=0) const;
-	bool			is_equal(const Type* other, const TypeParamXlat& xlat ,Name self_t=0)const;
+	bool			is_equal(const Type* other, const TParamXlat& xlat ,Name self_t=0)const;
 	bool			is_equal_sub(const Type* other,bool coerce=false,Name self_t=0) const;
-	bool			is_equal_sub(const Type* other, const TypeParamXlat& xlat ,Name self_t=0)const;
+	bool			is_equal_sub(const Type* other, const TParamXlat& xlat ,Name self_t=0)const;
 	// todo 'is_equal' rename to iscompatible, is_equal/coercible call it with flags
 	int				is_equal_or_coercible(const Type* other, Name self_t=0) const{
 		if (is_equal(other,false,self_t)) return 10;
@@ -137,7 +137,7 @@ struct Type : ExprDef {
 	bool	is_void_ptr()const		{return this->is_pointer_not_ref() && this->sub && this->sub->name==VOID;}
 	int		num_derefs()const		{if (!this) return 0;int num=0; auto p=this; while (p->is_pointer()){num++;p=p->sub;} return num;}
 	Type*	deref_all() const		{if (!this) return nullptr;int num=0; auto p=this; while (p->is_pointer()||this->is_qualifier()){p=p->sub;}; return (Type*)p;}
-	void translate_typeparams_sub(const TypeParamXlat& tpx,Type* inherit_replace);
+	void translate_typeparams_sub(const TParamXlat& tpx,Type* inherit_replace);
 	Name as_name()const override{
 		return this->name;
 	}
@@ -146,7 +146,7 @@ struct Type : ExprDef {
 	ExprStructDef*	struct_def() const;
 	
 	
-	void			translate_typeparams(const TypeParamXlat& tpx) override;
+	void			translate_tparams(const TParamXlat& tpx) override;
 	virtual ResolveResult	resolve(Scope* s, const Type* desired,int flags);
 	virtual void verify();
 	CgValue	compile(CodeGen& cg, Scope* sc, CgValue input) override;

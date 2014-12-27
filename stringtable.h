@@ -49,7 +49,7 @@ struct Name {
 	bool operator==(const Name& b)const	{return m_index==b.m_index;}
 	bool operator==(int b)const			{return m_index==b;}
 	bool operator!=(const Name& b)const	{return m_index!=b.m_index;}
-	void translate_typeparams(const TypeParamXlat& tpx);
+	void translate_tparams(const TParamXlat& tpx);
 	bool operator!()const{return m_index==0;}
 	explicit operator bool()const{return m_index!=0;}
 	explicit operator int()const{return m_index;}
@@ -76,7 +76,7 @@ struct Name {
 	bool operator<=(int index)const {return m_index<=index;}
 	bool operator==(const Name& b)const	{return m_index==b.m_index;}
 	bool operator!=(const Name& b)const	{return m_index!=b.m_index;}
-	void translate_typeparams(const TypeParamXlat& tpx);
+	void translate_tparams(const TParamXlat& tpx);
 	bool operator!()const{return m_index==0;}
 	explicit operator bool()const{return m_index!=0;}
 	explicit operator int()const{return m_index;}

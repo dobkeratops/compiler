@@ -10,7 +10,7 @@ struct TraitDef;
 struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
 	// but its' backwards.
-	// it'll want TypeParams aswell.
+	// it'll want tparams aswell.
 	Name mangled_name=0;
 	Name vtable_name=0;
 	int		discriminant=0;
@@ -18,7 +18,7 @@ struct ExprStructDef: ExprDef {
 	bool m_is_variant=false;
 	bool m_is_enum=false;
 	bool is_enum() { return m_is_enum;}
-	vector<TParamDef*>	typeparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
+	vector<TParamDef*>	tparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	vector<Type*>		instanced_types;
 	vector<ArgDef*>			fields;
 	vector<ArgDef*>			static_virtual;
@@ -67,8 +67,8 @@ struct ExprStructDef: ExprDef {
 	ImplDef*		get_impl_for(TraitDef* t);	//optionally instantiates (like go)
 	Node*			clone_sub(ExprStructDef* into) const;
 	void			inherit_from(Scope* sc, Type* base);
-	void	translate_typeparams(const TypeParamXlat& tpx) override;
-	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the typeparams.
+	void	translate_tparams(const TParamXlat& tpx) override;
+	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the tparams.
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	
 	void			roll_vtable();
@@ -80,7 +80,7 @@ struct ExprStructDef: ExprDef {
 	int				vtable_size();
 	int				vtable_base_index();
 	ExprStructDef*	root_class();
-	vector<TParamDef*>*			get_typeparams() override { return &typeparams;}
+	vector<TParamDef*>*			get_typeparams() override { return &tparams;}
 	int				get_elem_count(){return this->fields.size();}
 	bool			is_vtable_built(){return this->vtable_name!=0;}
 	const ExprFnDef*		find_function_for_vtable(Name n, const Type* fn_type);
@@ -91,7 +91,7 @@ struct ExprStructDef: ExprDef {
 
 struct EnumDef  : ExprStructDef {
 	//	void dump(int depth)const;
-	//	virtual void translate_typeparams(const TypeParamXlat& tpx);
+	//	virtual void translate_tparams(const TParamXlat& tpx);
 	Node* clone()const;
 	const char* kind_str()const{return "enum";}
 	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){m_is_enum=true;};

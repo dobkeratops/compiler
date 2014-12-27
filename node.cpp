@@ -182,18 +182,18 @@ void	ExprDef::remove_ref(Node* ref){
 Node*
 ExprIdent::clone() const {
 	auto r=new ExprIdent(this->name,this->pos);
-	r->set_type(this->get_type());	// this is where given typeparams live.
+	r->set_type(this->get_type());	// this is where given tparams live.
 	r->clear_def();	// def will need re-resolving.
 	return r;
 }
 TypeDef* TypeDef::clone()const{
 	TypeDef* td = new TypeDef(this->pos, this->name);
-	// todo - clone typeparams
+	// todo - clone tparams
 	td->type_def = (Type*) this->type_def->clone();// actual ->type() will be translated
 	return td;
 }
 void TypeDef::dump(int depth) const{
-	newline(depth); dbprintf("%s %s",this->kind_str() ,this->name_str()); dump_typeparams(this->typeparams); dbprintf("=");
+	newline(depth); dbprintf("%s %s",this->kind_str() ,this->name_str()); dump_typeparams(this->tparams); dbprintf("=");
 	this->type_def->dump(-1);
 	if (this->type()){dbprintf(":"); this->type()->dump_if(depth);}
 	dbprintf(";");

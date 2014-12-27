@@ -175,7 +175,7 @@ ExprStructDef* dump_find_struct(Scope* s, Name name){
 }
 
 // compile time function in type system, available when you use
-// typeparams.
+// tparams.
 //
 // type 'grammar' is the same, its just the operators do different things
 //
@@ -287,20 +287,20 @@ int match_typeparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<
 
 int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vector<Expr*>& args,const Expr* callsite){
 	// TODO: allow the types to feedback in the math
-	matched.resize(f->typeparams.size());
+	matched.resize(f->tparams.size());
 	int score=0;
 #if DEBUG>=2
 	callsite->dump(0);newline(0);
 #endif
-	for (int i=0; i<f->typeparams.size();i++) matched[i]=0;
+	for (int i=0; i<f->tparams.size();i++) matched[i]=0;
 	for (int i=0; i<args.size(); i++) {
 #if DEBUG>=2
 		f->args[i]->type()->dump_if(-1); newline(0);
 		args[i]->dump_if(-1); newline(0);
 #endif
-		score+=match_typeparams_from_arg(matched,f->typeparams, args[i]->type(), f->args[i]->type());
+		score+=match_typeparams_from_arg(matched,f->tparams, args[i]->type(), f->args[i]->type());
 	}
-	score+=match_typeparams_from_arg(matched, f->typeparams, callsite->type(), f->ret_type);
+	score+=match_typeparams_from_arg(matched, f->tparams, callsite->type(), f->ret_type);
 	dbg_fnmatch("score matching gets %d\n",score);
 	return score;
 }
@@ -356,7 +356,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	
 	verify_all();
 	vector<Type*> matched_type_params;
-	for (int i=0; i<f->typeparams.size(); i++){matched_type_params.push_back(nullptr);}
+	for (int i=0; i<f->tparams.size(); i++){matched_type_params.push_back(nullptr);}
 
 	int score=0;
 	// no args needed or given.. score is 1..
@@ -395,7 +395,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 
 	if (f->variadic && args.size()> f->args.size())
 		score=1;	// variadic functoin can match anything?
-	if (!f->typeparams.size())
+	if (!f->tparams.size())
 	for (int i=0; i<args.size() && i<f->args.size(); i++) {
 		if (!f->args[i]->get_type() || (!args[i])) {
 			score++; //1 point for an 'any' arg on either side
@@ -404,7 +404,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			if (auto s=f->args[i]->get_type()->is_equal_or_coercible(args[i]->get_type())) {
 				score+=s+10;// 1 exact match worth more than any number of anys
 			} else{
-				//if (!is_generic_type(f->typeparams,f->args[i]->get_type())
+				//if (!is_generic_type(f->tparams,f->args[i]->get_type())
 				
 				{
 				// instant fail for incorrect concrete arg
@@ -416,8 +416,8 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			}
 		}
 	}
-	// find generic typeparams..
-	if (f->typeparams.size()){
+	// find generic tparams..
+	if (f->tparams.size()){
 #if DEBUG>=2
 		dbg_fnmatch("%s score=%d; before typaram match\n",str(f->name),score);
 		dbg_fnmatch("callsite: %d args\n",args.size());
@@ -431,14 +431,14 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 		dbg_fnmatch("\n");
 #endif
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
-			score+=match_typeparams_from_arg(matched_type_params,f->typeparams, args[i]->get_type(), f->args[i]->get_type() );
+			score+=match_typeparams_from_arg(matched_type_params,f->tparams, args[i]->get_type(), f->args[i]->get_type() );
 		}
-		score+=match_typeparams_from_arg(matched_type_params, f->typeparams,ret_type,f->ret_type);
+		score+=match_typeparams_from_arg(matched_type_params, f->tparams,ret_type,f->ret_type);
 		dbg_fnmatch("typaram matcher for %s\n",f->name_str());
 		dbg_fnmatch("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
-		dbg_fnmatch("%s score=%d; matched typeparams{:-\n",str(f->name),score);
-		for (auto i=0; i<f->typeparams.size(); i++){
-			dbg_fnmatch("[%d]%s = %s;\n", i,str(f->typeparams[i]->name),matched_type_params[i]?str(matched_type_params[i]->name):"not found" );
+		dbg_fnmatch("%s score=%d; matched tparams{:-\n",str(f->name),score);
+		for (auto i=0; i<f->tparams.size(); i++){
+			dbg_fnmatch("[%d]%s = %s;\n", i,str(f->tparams[i]->name),matched_type_params[i]?str(matched_type_params[i]->name):"not found" );
 			}
 		dbg_fnmatch("}\n");
 		dbg_fnmatch("\n");
@@ -649,17 +649,17 @@ void unexpected(int t){error(0,"unexpected %s\n",getString(t));}
 void
 gather_vtable(ExprStructDef* d) {
 }
-int TypeParamXlat::typeparam_index(const Name& n) const{
-	for (int i=0; i<this->typeparams.size(); i++){
-		if (this->typeparams[i]->name==n) return i;
+int TParamXlat::typeparam_index(const Name& n) const{
+	for (int i=0; i<this->tparams.size(); i++){
+		if (this->tparams[i]->name==n) return i;
 	}
 	return -1;
 }
-void TypeParamXlat::dump(int depth)const{
+void TParamXlat::dump(int depth)const{
 	dbprintf("[");
-	for (auto i=0; i<this->typeparams.size();i++){
+	for (auto i=0; i<this->tparams.size();i++){
 		if (i)dbprintf(",");
-		dbprintf("%s=",str(this->typeparams[i]->name));
+		dbprintf("%s=",str(this->tparams[i]->name));
 		this->given_types[i]->dump_if(-1);
 	}
 	dbprintf("]");

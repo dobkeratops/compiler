@@ -20,7 +20,7 @@ int ExprStructDef::get_elem_index(Name name)const {
 
 
 bool ExprStructDef::is_generic()const{
-	if (typeparams.size())
+	if (tparams.size())
 		return true;
 	for (auto f:fields){if (!f->type())return true;}//TODO: is typeparam?
 	return false;
@@ -79,18 +79,18 @@ ArgDef* ExprStructDef::try_find_field(const Name fname)const{
 	return nullptr;
 }
 
-void ExprStructDef::translate_typeparams(const TypeParamXlat& tpx)
+void ExprStructDef::translate_tparams(const TParamXlat& tpx)
 {
-	for (auto a:this->fields)		a->translate_typeparams(tpx);
-	for (auto f:functions)			f->translate_typeparams(tpx);
-	for (auto f:virtual_functions)	f->translate_typeparams(tpx);
-	for (auto f:static_functions)	f->translate_typeparams(tpx);
-	for (auto f:static_fields)		f->translate_typeparams(tpx);
-	for (auto f:static_virtual)		f->translate_typeparams(tpx);
-	for (auto s:structs)			s->translate_typeparams(tpx);
+	for (auto a:this->fields)		a->translate_tparams(tpx);
+	for (auto f:functions)			f->translate_tparams(tpx);
+	for (auto f:virtual_functions)	f->translate_tparams(tpx);
+	for (auto f:static_functions)	f->translate_tparams(tpx);
+	for (auto f:static_fields)		f->translate_tparams(tpx);
+	for (auto f:static_virtual)		f->translate_tparams(tpx);
+	for (auto s:structs)			s->translate_tparams(tpx);
 	((Node*)body)->translate_typeparams_if(tpx);
 	if (tpx.typeparams_all_set())
-		this->typeparams.resize(0);
+		this->tparams.resize(0);
 	this->type()->translate_typeparams_if(tpx);
 	dbg(this->dump(0));
 }
@@ -99,7 +99,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 	auto parent=this;
 	if (!this->is_generic())
 		return this;
-	// make the typeparams..
+	// make the tparams..
 	// search for existing instance
 	ExprStructDef* ins=parent->instances;
 	for (;ins; ins=ins->next_instance) {
@@ -117,23 +117,23 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 		vector<Type*> ty_params;
 		int i=0;
 		Type* tp=type->sub;
-		for (i=0; i<parent->typeparams.size() && tp; i++,tp=tp->next){
+		for (i=0; i<parent->tparams.size() && tp; i++,tp=tp->next){
 			ty_params.push_back(tp);
 		}
-		for (;i<parent->typeparams.size(); i++) {
-			ty_params.push_back(parent->typeparams[i]->defaultv);
+		for (;i<parent->tparams.size(); i++) {
+			ty_params.push_back(parent->tparams[i]->defaultv);
 		}
 		
-		ins = (ExprStructDef*)this->clone(); // todo: Clone could take typeparams
+		ins = (ExprStructDef*)this->clone(); // todo: Clone could take tparams
 							// cloning is usually for template instantiation?
 		ins->instanced_types=ty_params;
 		ins->instance_of=this;
 		ins->next_instance = this->instances; this->instances=ins;
-		ins->inherits_type= this->inherits_type; // TODO: typeparams! map 'parent' within context  to make new typeparam vector, and get an instance for that too.
+		ins->inherits_type= this->inherits_type; // TODO: tparams! map 'parent' within context  to make new typeparam vector, and get an instance for that too.
 		if (g_debug_get_instance)
 			for (auto i=0; i<ins->instanced_types.size();i++)
 				dbprintf(ins->instanced_types[i]->name_str());
-		ins->translate_typeparams(TypeParamXlat(this->typeparams, ins->instanced_types));
+		ins->translate_tparams(TParamXlat(this->tparams, ins->instanced_types));
 		dbg(printf("instances are now:-\n"));
 		dbg(this->dump_instances(0));
 	}
@@ -160,7 +160,7 @@ void ExprStructDef::recurse(std::function<void (Node *)> & f){
 	if(this) return;
 	for (auto a:this->args)		a->recurse(f);
 	for (auto x:this->fields)		x->recurse(f);
-	for (auto x:this->typeparams)	x->recurse(f);
+	for (auto x:this->tparams)	x->recurse(f);
 	for (auto x:this->functions)	x->recurse(f);
 	for (auto x:this->virtual_functions)x->recurse(f);
 	for (auto x:this->static_functions)x->recurse(f);
@@ -177,8 +177,8 @@ Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
 	d->discriminant=discriminant;
 	d->m_is_enum=m_is_enum;
 	d->m_is_variant=m_is_variant;
-	for (auto tp:this->typeparams){auto ntp=(TParamDef*)tp->clone();
-		d->typeparams.push_back(ntp);}
+	for (auto tp:this->tparams){auto ntp=(TParamDef*)tp->clone();
+		d->tparams.push_back(ntp);}
 	for (auto a:this->args) {d->args.push_back((ArgDef*)a->clone());}
 	for (auto m:this->fields) {d->fields.push_back((ArgDef*)m->clone());}
 	for (auto f:this->functions){d->functions.push_back((ExprFnDef*)f->clone());}
@@ -280,13 +280,13 @@ void ExprStructDef::roll_vtable() {
 void ExprStructDef::dump(int depth) const{
 	auto depth2=depth>=0?depth+1:depth;
 	newline(depth);
-	dbprintf("%s %s",this->kind_str(), getString(this->name));dump_typeparams(this->typeparams);
+	dbprintf("%s %s",this->kind_str(), getString(this->name));dump_typeparams(this->tparams);
 	dbprintf("[");
 	if (this->instanced_types.size()){
 		for (auto t:this->instanced_types)
 		{	t->dump(depth+1);dbprintf(",");};
 	}else{
-		for (auto t:this->typeparams)
+		for (auto t:this->tparams)
 			{t->dump(depth+1);dbprintf(",");}
 	}
 	dbprintf("]");
@@ -417,7 +417,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 			ins->get_mangled_name();
 			for (auto i0=st->instances;i0!=ins; i0=i0->next_instance){
 				if (i0->mangled_name==ins->mangled_name){
-					cg.emit_comment("ERROR DUPLICATE INSTANCE this shouldn't happen, its a bug from inference during struct initializers (starts with a uncertain instance, then eventually fills in typeparams - not quite sure how best to fix it right now\n");
+					cg.emit_comment("ERROR DUPLICATE INSTANCE this shouldn't happen, its a bug from inference during struct initializers (starts with a uncertain instance, then eventually fills in tparams - not quite sure how best to fix it right now\n");
 					goto cont;
 				}
 			}
@@ -505,7 +505,7 @@ Node* ImplDef::clone()const{
 void ImplDef::dump(int depth) const{
 	
 	newline(depth);
-	dbprintf("%s ",this->kind_str());dump_typeparams(this->typeparams);
+	dbprintf("%s ",this->kind_str());dump_typeparams(this->tparams);
 	if (this->impl_trait) {this->impl_trait->dump_if(-1);dbprintf(" for ");}
 	if (this->impl_for_type) this->impl_for_type->dump_if(-1);
 	

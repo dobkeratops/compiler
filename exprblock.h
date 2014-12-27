@@ -38,7 +38,7 @@ struct ExprBlock :public ExprScopeBlock{
 	Scope*	get_scope()	override			{return this->scope;}
 	void 			verify();
 	CgValue 		compile(CodeGen& cg, Scope* sc, CgValue) override;
-	void	translate_typeparams(const TypeParamXlat& tpx) override;
+	void	translate_tparams(const TParamXlat& tpx) override;
 	void	find_vars_written(Scope* s,set<Variable*>& vars )const override;
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags);
 	ResolveResult	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);

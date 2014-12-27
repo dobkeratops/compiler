@@ -26,10 +26,10 @@ struct FnName;
 
 
 typedef Type TParamVal;
-struct TypeParamXlat{
-	const vector<TParamDef*>& typeparams; const vector<TParamVal*>& given_types;
-	TypeParamXlat();
-	TypeParamXlat(	const vector<TParamDef*>& t, const vector<TParamVal*>& g):typeparams(t),given_types(g){}
+struct TParamXlat{
+	const vector<TParamDef*>& tparams; const vector<TParamVal*>& given_types;
+	TParamXlat();
+	TParamXlat(	const vector<TParamDef*>& t, const vector<TParamVal*>& g):tparams(t),given_types(g){}
 	bool typeparams_all_set()const{
 		for (int i=0; i<given_types.size(); i++) {
 			if (given_types[i]==0) return false;
