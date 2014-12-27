@@ -446,7 +446,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 			}
 			field=sd->fields[field_index++];
 			this->value.push_back(a);
-			dbg3(field->dump(0));dbg(printf("\n --set_to--> \n"));dbg(a->dump());dbg(newline(0));
+			dbg3(field->dump(0));dbg(printf("\n --set_to--> \n"));dbg(a->dump(0));dbg(newline(0));
 			a->resolve(sc,field->type(),flags); // todo, need generics!
 			t=a->type();
 			si->propogate_type_refs(flags,a,field->type_ref(),a->type_ref());

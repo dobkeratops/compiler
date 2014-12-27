@@ -224,44 +224,14 @@ CgValue MatchArm::compile(CodeGen& cg, Scope* sc, CgValue match_val){
 	auto armsc=arm->get_scope();
 	emit_local_vars(cg,arm,nullptr, armsc);
 	auto ret= cg.emit_if(arm->get_scope(), match_val, arm->pattern, arm->body, arm->next, arm->type());
-	/*
-	auto ret=cg.emit_if_sub
-	(
-		arm,
-		sc,
-		[&]{return arm->pattern->compile(cg,armsc, match_val);},
-		[&]{
-			arm->compile_bind_locals(cg,armsc,arm->pattern,match_val);
-			return arm->body->compile(cg,armsc,CgValue());},
-		[&]{return arm->next->compile(cg,armsc,input);},
-	 	this->type()
-	);*/
 	return ret;
 }
 
-// refactoring: To do this more cleanly,
-// we have to add an input-value to every '::compile' method - for most its' just void.
-// Perhaps there are other places where temporary variables can be eliminated?
-/*
-CgValue MatchArm::compile(CodeGen& cg, Scope* sc, CgValue input) {
-	auto armsc=arm->get_scope();
-	emit_local_vars(cg,arm,nullptr,armsc);
-	auto ret= cg.emit_if_sub(arm,sc, arm->pattern, arm->body, arm->next);
-}
-*/
 CgValue
 ExprMatch::compile(CodeGen& cg, Scope* sc,CgValue input){
-	// TODO - dedicated with one set of phi-nodes at the end.
-	// this is RETARDED!!!
-	// There are many ways match could be optimized.
-	// TODO - turn some cases into binary-chop (no 'if-guards' & single value test)
-	// TODO - turn some cases into vtable.
-	// TODO - extract common conditions.
 	cg.emit_comment("{Compile Match Expression");
 	auto match_val = this->expr->compile(cg,sc);
 	cg.emit_comment("Match Arms {");
-	//this->match_val=match_val;	// TODO this is a bit messy. the match arms get a backpointer
-								// The alternative is to add an extra value passed along expressions which most compile methods ignore.
 	auto r= this->arms->compile(cg, sc, match_val);
 	cg.emit_comment("}Match Arms}");
 	return r;

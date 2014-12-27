@@ -535,4 +535,20 @@ const char* Scope::name() const {
 	}  else return "<anon>";
 }
 
+struct ModuleContext {
+	Vec<string>	import_paths;
+	Vec<string> filenames;
+	void	try_import_file(Scope* sc, const char* filename);
+};
+ModuleContext g_UseContext;
+
+void
+ModuleContext::try_import_file(Scope* sc, const char* filename){
+}
+
+ResolveResult Use::resolve(Scope* sc, const Type* desired_type, int flags){
+	//
+	return COMPLETE;
+}
+
 

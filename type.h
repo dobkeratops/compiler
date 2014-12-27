@@ -108,9 +108,11 @@ struct Type : ExprDef {
 	static Type*	get_auto();
 	static Type*	get_bool();
 	static Type*	get_void();
+	static Type*	get_float();
 	static Type*	get_void_ptr();
 	static Type*	get_int();
 	static Type*	get_i32();
+	static Type*	get_u8();
 	static Type*	get_u32();
 	Node*	clone() const;
 	void	set_struct_def(ExprStructDef* sd);

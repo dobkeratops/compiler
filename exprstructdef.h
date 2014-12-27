@@ -4,6 +4,8 @@
 #include "exprfndef.h"
 #include "codegen.h"
 
+// data-structures. C structs,+handling of 'classes', 'enums', and by virtue of nesting, modules/namespaces.
+
 struct NamedItems;
 struct ImplDef;
 struct TraitDef;
@@ -18,6 +20,7 @@ struct ExprStructDef: ExprDef {
 	bool m_is_variant=false;
 	bool m_is_enum=false;
 	bool is_enum() { return m_is_enum;}
+	int max_variant_size=0;
 	vector<TParamDef*>	tparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	vector<Type*>		instanced_types;
 	vector<ArgDef*>			fields;
@@ -63,6 +66,7 @@ struct ExprStructDef: ExprDef {
 	void			dump_instances(int depth)const;
 	void			dump_struct_body(int depth) const;
 	size_t			size() const;
+	size_t			padding()const;
 	Node*			clone()const;
 	ImplDef*		get_impl_for(TraitDef* t);	//optionally instantiates (like go)
 	Node*			clone_sub(ExprStructDef* into) const;
@@ -70,7 +74,6 @@ struct ExprStructDef: ExprDef {
 	void	translate_tparams(const TParamXlat& tpx) override;
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the tparams.
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
-	
 	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	const Type*			get_elem_type(int i)const;//{return this->fields[i]->type();}
@@ -87,6 +90,7 @@ struct ExprStructDef: ExprDef {
 	bool			has_base_class(ExprStructDef* other)const;
 	int				num_instances()const {auto n=0;for (auto ins=instances;ins;ins=ins->next_instance){n++;} return n;}
 	void		recurse(std::function<void(Node*)>&);
+	void			calc_padding();
 };
 
 struct EnumDef  : ExprStructDef {

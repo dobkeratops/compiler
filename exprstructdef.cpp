@@ -324,6 +324,23 @@ int ExprStructDef::first_user_field_index() const{
 	return i;
 }
 
+void ExprStructDef::calc_padding(){
+	auto maxsize=0;
+	auto thissize=size();
+	for (auto s:structs){
+		auto sz=s->size();
+		if (sz > maxsize) maxsize=sz;
+	}
+	this->max_variant_size=maxsize;
+}
+size_t ExprStructDef::padding()const{
+	if (this->m_is_enum){return max_variant_size-size();}
+	if (this->discriminant>=0){
+		return inherits->max_variant_size-size();
+	}
+	return 0;
+}
+
 ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
 
 	definer_scope->add_struct(this);
@@ -338,6 +355,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 								this->fields.begin(),
 								new ArgDef(pos,__DISCRIMINANT,new Type(this->pos,I32)));
 			}
+			if (this->m_is_enum) calc_padding();
 		}
 
 		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
@@ -452,6 +470,10 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 		for (auto fi: st->fields){
 			cg.emit_type(fi->type(), false);
 		};
+		if (auto pad=st->padding()){
+			cg.emit_array_type(Type::get_u8(),pad);
+		}
+
 		cg.emit_struct_def_end();
 		
 	}

@@ -18,10 +18,13 @@ struct NamedItems {		// everything defined under a name
 	NamedItems(Name n,Scope* s){  name=n; owner=s;next=0;fn_defs=0;structs=0;types=0;}
 };
 
-struct Using : public Node {	// symbol aliasing
+struct Use : public Node {	// symbol aliasing
+	Vec<Name>	path;
+	Vec<Name>	symbols;
 	Name use_as;
 	TypeDef*	clone()const;
 	void	dump(PrinterRef depth) const;
+	ResolveResult	resolve(Scope* sc, const Type* desired, int flags) override;
 };
 struct Import : public Node {	// 'use mod' to retrofit into Rust-like syntax
 	Name use_as;				// 'use mod <relative_path> as <prefix>

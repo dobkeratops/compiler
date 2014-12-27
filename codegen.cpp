@@ -33,7 +33,7 @@ LLVMOp2 g_llvm_cmp_ops[]= {
 //};
 const char* g_llvm_type_str[]={
 	"i32","u32","i64",
-	"i8","i16","i32","i64","u8","u16","u32","u64","u128","i1","i1", //bool BOOL REG_BOOL
+	"i8","i16","i32","i64","i8","i16","i32","i64","i128","i1","i1", //bool BOOL REG_BOOL
 	"half","float","double","< 4 x float >", "i8", "i8*","void","void*",
 	nullptr
 };
@@ -621,7 +621,7 @@ void CodeGen::emit_array_type(const Type* t, int count, bool ref) { // should be
 	emit_nest_begin("[");
 	emit_txt("%d x ",count);
 	emit_type(t);
-	emit_nest_begin("]");
+	emit_nest_end("]");
 	if (ref) emit_pointer_end();
 }
 void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method.
@@ -676,6 +676,9 @@ void CodeGen::emit_type(const Type* t, bool ref) { // should be extention-method
 			//error(t,"no struct def");
 			for (auto i=0; i<sd->fields.size(); i++){
 				emit_type(sd->fields[i]->type(),false);
+			}
+			if (sd->discriminant>=0 || sd->is_enum()){
+				emit_array_type(Type::get_u8(), sd->padding());//get_u32
 			}
 			emit_struct_end();
 		}
