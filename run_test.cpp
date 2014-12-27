@@ -24,7 +24,9 @@ CompilerTest g_Tests[]={
 		fn main(argc:int,argv:**char)->int{
 			let x=Bar{};
 			let f=Foo{};
+			let pf:*Foo;
 			f=x;
+			pf=&x;	// TODO - coercion of reference doesn't work,only pointers & values, why not..
 			0
 		}
 		)====",
