@@ -47,6 +47,7 @@ TraitDef*	parse_trait(TokenStream& src);
 ExprMatch*	parse_match(TokenStream& src);
 
 typedef Vec<Expr*>* ExprLs;
+void parse_block_nodes(ExprLs nodes,int* delim_used, TokenStream& src,int close,int delim);
 
 void another_operand_so_maybe_flush(bool& was_operand, ExprLs nodes,
 									vector<SrcOp>& operators,

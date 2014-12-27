@@ -29,6 +29,7 @@ void Lexer::error(const char* str,...){
 	vsprintf(tmp, str, arglist );
 	va_end( arglist );
 	printf("\n"); error_newline=true;
+	error_end(nullptr);
 }
 Lexer::Lexer(const char* src,const char *filename_){
 	strncpy(filename,filename_,512);

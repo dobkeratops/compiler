@@ -62,8 +62,13 @@ Expr* remove_extraneous_layers(ExprBlock* b){
 }
 
 Expr* parse_expr(TokenStream&src) {
-	auto b= parse_block(src,0,0,nullptr);
-	return remove_extraneous_layers(b);
+//	auto b= parse_block(src,0,0,nullptr);
+//	return remove_extraneous_layers(b);
+	Vec<Expr*> nodes;
+	int delim;
+	parse_block_nodes(&nodes,&delim, src, 0,0);// TODO - retardation- its' allocating. Vec.num==1 could be inplace.
+	ASSERT(nodes.size()==1);
+	return nodes.pop_back();
 }
 
 void another_operand_so_maybe_flush(bool& was_operand, ExprLs nodes,
@@ -93,10 +98,11 @@ ExprMatch* parse_match(TokenStream& src){
 	auto m=new ExprMatch(); m->pos=src.pos;
 	
 	m->expr=parse_block(src,OPEN_BRACE,COMMA,0);
-	// todo, copied form parse_if , but it seems to turn it into a compound block, why?
-	
-//	m->expr=parse_expr(src);
-//	src.expect(OPEN_BRACE);
+
+// todo, copied form parse_if , but it seems to turn it into a compound block, why?
+// m->expr=parse_expr(src);
+// src.expect(OPEN_BRACE);
+
 	MatchArm** pp=&m->arms;
 	while (src.peek_tok()!=CLOSE_BRACE){
 		auto a=new MatchArm();
@@ -450,7 +456,6 @@ ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
 		return node;
 }
 
-void parse_block_nodes(ExprLs nodes,int* delim_used, TokenStream& src,int close,int delim, Expr* outer_op);
 
 ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_op) {
 	node->pos=src.pos;
@@ -460,13 +465,14 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 	int delim_used=0;
 	node->bracket_type=(close==CLOSE_BRACKET)?OPEN_BRACKET:close==CLOSE_PAREN?OPEN_PAREN:close==CLOSE_BRACE?OPEN_BRACE:0;
 
-	parse_block_nodes(&node->argls,&delim_used, src,close,delim,outer_op);
+	parse_block_nodes(&node->argls,&delim_used, src,close,delim);
 	node->delimiter=(short)delim_used;
+	node->call_expr=outer_op;
 	verify(node->type());
 	return node;
 }
 
-void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close,int delim, Expr* outer_op) {
+void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close,int delim) {
 	Vec<SrcOp> operators;
 	Vec<Expr*> operands;
 	bool	was_operand=false;
@@ -481,8 +487,7 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			if (src.eat_if(close))
 				break;
 			if (src.eat_if(wrong_close)) {
-				error(0,"unexpected %s, expected %s",getString(close),getString(wrong_close));
-				error_end(0);
+				src.error("unexpected %s, expected %s",getString(close),getString(wrong_close));
 			}
 		} else { // single expression mode - we dont consume delimiter.
 			auto peek=src.peek_tok();
@@ -551,11 +556,11 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			auto open_tp=src.eat_if(LT,OPEN_BRACKET,OPEN_TYPARAM);
 			if (open_tp && was_operand){
 				auto id=pop(operands)->as_ident();
-				if (!id){error(src.pos,"::<TypeParams> must follow identifier");}
+				if (!id){src.error("::<TypeParams> must follow identifier");}
 				auto itw=parse_tparams_for_ident(src,id,close_of(open_tp));
 				operands.push_back(itw);
 			} else {
-				error(src.pos,"::<TypeParams> must follow identifier");
+				src.error("::<TypeParams> must follow identifier");
 			}
 		}
 		else if (src.eat_if(WHERE)){
@@ -595,7 +600,7 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			if (was_operand){
 				operands.push_back(parse_block_sub(new ExprSubscript(), src,CLOSE_BRACKET,COMMA,operands.pop()));
 			} else {
-				error(src.pos,"TODO: array initializer");
+				src.error("TODO: array initializer");
 				operands.push_back(parse_block_sub(new ExprArrayInit,src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
 			}
@@ -633,7 +638,7 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			} else
 				if (is_operator(tok)) {
 					// struct initializer
-					if (close==CLOSE_BRACE && delim==COMMA && outer_op){// todo field-init operator
+					if (close==CLOSE_BRACE && delim==COMMA){// todo field-init operator
 						if (tok==COLON || tok==ASSIGN)
 							tok=FIELD_ASSIGN;
 					}
@@ -728,8 +733,7 @@ ExprLiteral* parse_literal(TokenStream& src) {
 		ln=new ExprLiteral(src.prev_pos,src.eat_string_alloc());
 	}
 	else{
-		error(0,"error parsing literal\n");
-		error_end(0);
+		src.error("error parsing literal\n");
 	}
 	return ln;
 }
