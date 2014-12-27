@@ -335,7 +335,7 @@ void ExprStructDef::calc_padding(){
 }
 size_t ExprStructDef::padding()const{
 	if (this->m_is_enum){return max_variant_size-size();}
-	if (this->discriminant>=0){
+	if (this->discriminant>=0 && inherits){
 		return inherits->max_variant_size-size();
 	}
 	return 0;
