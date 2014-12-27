@@ -32,10 +32,10 @@ void pop_operator_call( Vec<SrcOp>& operators,Vec<Expr*>& operands) {
 	operands.push_back((Expr*)p);
 }
 //   void fn(x:(int,int),y:(int,int))
-void flush_op_stack(ExprBlock* block, Vec<SrcOp>& ops,Vec<Expr*>& vals) {
+void flush_op_stack(ExprLs nodes, Vec<SrcOp>& ops,Vec<Expr*>& vals) {
 	while (ops.size()>0) pop_operator_call(ops,vals);
 	while (vals.size()) {
-		block->argls.push_back(pop(vals));
+		nodes->push_back(pop(vals));
 	}
 }
 void flatten_stack(Vec<SrcOp>& ops,Vec<Expr*>& vals){
@@ -66,14 +66,14 @@ Expr* parse_expr(TokenStream&src) {
 	return remove_extraneous_layers(b);
 }
 
-void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
+void another_operand_so_maybe_flush(bool& was_operand, ExprLs nodes,
 									Vec<SrcOp>& operators,
 									Vec<Expr*>& operands
 									
 									){
 	if (was_operand==true) {
 		//error(node,"warning undeliminated expression parsing anyway");
-		flush_op_stack(node,operators,operands);// keep going
+		flush_op_stack(nodes,operators,operands);// keep going
 	}
 	was_operand=true;
 }
@@ -449,17 +449,29 @@ ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
 	} else
 		return node;
 }
+
+void parse_block_nodes(ExprLs nodes,int* delim_used, TokenStream& src,int close,int delim, Expr* outer_op);
+
 ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_op) {
 	node->pos=src.pos;
 	node->call_expr=outer_op;
 	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
+	int delim_used=0;
+	node->bracket_type=(close==CLOSE_BRACKET)?OPEN_BRACKET:close==CLOSE_PAREN?OPEN_PAREN:close==CLOSE_BRACE?OPEN_BRACE:0;
+
+	parse_block_nodes(&node->argls,&delim_used, src,close,delim,outer_op);
+	node->delimiter=(short)delim_used;
+	verify(node->type());
+	return node;
+}
+
+void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close,int delim, Expr* outer_op) {
 	Vec<SrcOp> operators;
 	Vec<Expr*> operands;
 	bool	was_operand=false;
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
-	node->bracket_type=(close==CLOSE_BRACKET)?OPEN_BRACKET:close==CLOSE_PAREN?OPEN_PAREN:close==CLOSE_BRACE?OPEN_BRACE:0;
 	while (true) {
 		auto pos=src.pos;
 		if (src.peek_tok()==0) break;
@@ -486,31 +498,31 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 		}
 		// todo ... datatable to associate ID with parse function
 		else if (src.eat_if(LET)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_let(src));
 		}
 		else if (src.eat_if(STRUCT)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_struct(src));
 		}
 		else if (src.eat_if(TRAIT)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_trait(src));
 		}
 		else if (src.eat_if(IMPL)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_impl(src));
 		}
 		else if (src.eat_if(ENUM)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_enum(src));
 		}
 		else if (src.eat_if(MATCH)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_match(src));
 		}
 		else if (src.eat_if(EXTERN)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			/// TODO local functions should be sugar for rolling a closure bound to a variable.
 			auto abi=src.eat_if_string();
 			auto fnp=src.eat_if(FN);
@@ -519,7 +531,7 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 			operands.push_back(local_fn);
 		}
 		else if (src.eat_if(FN)) {
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			/// TODO local functions should be sugar for rolling a closure bound to a variable.
 			auto local_fn=parse_fn(src,nullptr);
 			operands.push_back(local_fn);
@@ -532,7 +544,7 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 			fndef->body=parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
 			auto prev=operands.back();
 			prev->as_block()->argls.push_back(fndef);
-			flush_op_stack(node,operators,operands);
+			flush_op_stack(nodes,operators,operands);
 			was_operand=false;
 		}
 		else if (src.eat_if(DOUBLE_COLON)||src.peek_tok()==OPEN_TYPARAM){ // eg array::<int,5>
@@ -558,15 +570,15 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 			operands.push_back(b2);
 		}
 		else if (src.eat_if(FOR)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_for(src));
 		}
 		else if (src.eat_if(IF)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_if(src));
 		}
 		else if (auto t=src.eat_if(BREAK,RETURN,CONTINUE)){
-			another_operand_so_maybe_flush(was_operand,node,operators,operands);
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_flow(src,t));
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
@@ -583,7 +595,7 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 			if (was_operand){
 				operands.push_back(parse_block_sub(new ExprSubscript(), src,CLOSE_BRACKET,COMMA,operands.pop()));
 			} else {
-				error(operands.back()?operands.back():node,"TODO: array initializer");
+				error(src.pos,"TODO: array initializer");
 				operands.push_back(parse_block_sub(new ExprArrayInit,src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
 			}
@@ -603,20 +615,20 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 					sub->create_anon_struct_initializer();
 			}
 		} else if (src.eat_if(delim)) {
-			flush_op_stack(node,operators,operands);
-			node->set_delim(delim);
+			flush_op_stack(nodes,operators,operands);
+			*delim_used=delim;
 			was_operand=false;
 		}
 		else if (src.eat_if(wrong_delim) && delim){ //allows ,,;,,;,,  TODO. more precise.
-			node->set_delim(wrong_delim);
-			flush_op_stack(node,operators,operands);// keep going
+			*delim_used=wrong_delim;
+			flush_op_stack(nodes,operators,operands);// keep going
 			was_operand=false;
 		}
 		else{
 			auto tok=src.eat_tok();
 			if (!was_operand && tok==OR){
 				src.begin_lambda_bar_arglist();
-				another_operand_so_maybe_flush(was_operand,node,operators,operands);
+				another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 				operands.push_back(parse_closure(src,OR));
 			} else
 				if (is_operator(tok)) {
@@ -661,7 +673,7 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 							was_operand=false;
 						}
 				} else {
-					another_operand_so_maybe_flush(was_operand,node,operators,operands);
+					another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 					operands.push_back(new ExprIdent(tok,pos));
 				}
 		}
@@ -670,16 +682,14 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 	};
 	if (operands.size()){
 		// final expression is also returnvalue,
-		flush_op_stack(node,operators,operands);
-	} else if (node->is_compound_expression() &&
+		flush_op_stack(nodes,operators,operands);
+	} else if (((close==CLOSE_BRACE && delim==SEMICOLON))/*node->is_compound_expression()*/ &&
 			   close!=OPEN_BRACE&& close!=FAT_ARROW)// not a if ...{  or match...{  match..if ..=>{}etc
 	{
-		node->argls.push_back(new ExprLiteral(src.prev_pos));
+		nodes->push_back(new ExprLiteral(src.prev_pos));
 	}
-	verify(node->get_type());
-	node->verify();
-	return node;
 }
+
 ExprOp* parse_flow(TokenStream& src,Name flow_statement){
 	// eg break,continue,return. generalized return values, so they are expr.
 	Expr* expr=nullptr;

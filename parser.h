@@ -46,10 +46,11 @@ EnumDef*	parse_enum(TokenStream& src);
 TraitDef*	parse_trait(TokenStream& src);
 ExprMatch*	parse_match(TokenStream& src);
 
+typedef Vec<Expr*>* ExprLs;
 
-void another_operand_so_maybe_flush(bool& was_operand, ExprBlock* node,
+void another_operand_so_maybe_flush(bool& was_operand, ExprLs nodes,
 									vector<SrcOp>& operators,
 									vector<Expr*>& operands
 									);
-void flush_op_stack(ExprBlock* block, vector<SrcOp>& ops,vector<Expr*>& vals);
+void flush_op_stack(ExprLs nodes, vector<SrcOp>& ops,vector<Expr*>& vals);
 void pop_operator_call( vector<SrcOp>& operators,vector<Expr*>& operands);
