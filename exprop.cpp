@@ -150,7 +150,9 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			resolved|=lhs->resolve_if(sc,desired,flags);
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
 
-			propogate_type_refs(flags,this, rhs->type_ref(), lhs->type_ref());
+			// get coersion right..
+			propogate_type_refs(flags,(Node*)this, rhs->type_ref(), lhs->type_ref());
+			propogate_type_refs(flags,(Node*)this, lhs->type_ref(), this->type_ref());
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
 			return propogate_type_fwd(flags,this, desired, type_ref());
 			//propogate_type(flags,this, type_ref(),rhs->type_ref());

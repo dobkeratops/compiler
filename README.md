@@ -36,10 +36,11 @@ Dont have a name yet hence 'hack'..
    * but its' relatively easy to do the parsing
    * might inspire getting a larger subset of Rust handled..
    * details - 'Self' type - in progress..
- * rust-style enum/match- works with dynamic alloc; base lacks padding
+ * rust-style enum/match- 
    * currently does a..b a..<b, a|b|c, (a,b,c), if guards, @; 
      * no slice patterns yet
    * have tried to add scalas idea of being able to reference vars in patterns (by unary @)
+   * just added padding of variants,like rust.
  * HKT (template-template parameters)
    * .. not extensively tested
 

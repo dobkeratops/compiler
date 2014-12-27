@@ -12,8 +12,8 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
-/*
-	{	"enum decls",__FILE__,__LINE__,R"====(
+
+	{	"enum decl/assign",__FILE__,__LINE__,R"====(
 		
 		fn"C" printf(s:str,...)->int;
 		enum Foo{
@@ -30,7 +30,7 @@ CompilerTest g_Tests[]={
 		)====",
 		nullptr,false
 	},
-*/
+
 	{	"parse struct-trait-impl",__FILE__,__LINE__,R"====(
 		extern"C" fn printf(s:str,...)->int;
 		struct Foo{
