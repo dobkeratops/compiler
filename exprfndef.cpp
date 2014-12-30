@@ -534,15 +534,18 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 	return CgValue(fn_node);
 }
 
-
 CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiver, ExprBlock* e){
 	// [1.1]evaluate arguments
 	vector<CgValue> l_args;
 	
+	/// TODO - why isn't recvp=receiver->compile() ??
 	// process function argumetns & load
-	if (receiver){
-		auto recr=receiver->compile(cg,sc);
-		l_args.push_back( recr /*cg.load(recr,recr.type) old behaviour - autoload args - not now because we have REF args too*/ );
+	if (receiver){	// optional 1st arg for method calls, operator new..
+		recvp=receiver->compile(cg,sc);
+	}
+	if (recvp.is_valid()){
+//		recvp=recr;
+		l_args.push_back( recvp /*cg.load(recr,recr.type) old behaviour - autoload args - not now because we have REF args too*/ );
 	}
 	for (auto arg:e->argls){
 		auto reg=arg->compile(cg,sc);

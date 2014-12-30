@@ -186,32 +186,10 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 	}
 	else if (op_ident==NEW ){
-		// new struct initializer ->  malloc(sizeof(struct)); codegen struct initializer 'inplace'; ret is ptr[S]
-		// can we generalize this:
-		//  ident{expr,..} actually means run the init expr in there, like 'with'
-		/// todo: generalize inference with wrapper , eg A vs X[B]. use for *t, &t, new t, t[i]
-		auto b=rhs->as_block();
-		if (!b && flags){
-			error(b,"new type[n] or new type{..} expected");
-		}
-		if (desired && !get_type()){
+		if (desired && !this->get_type()){
 			this->set_type(desired);
 		}
-		if (!desired && !get_type() && rhs->get_type()) {
-			this->set_type( new Type(this,PTR,(Type*)b->get_type()->clone()) );
-		}
-		if (get_type())
-			propogate_type_refs(flags, (Node*)this, this->get_type()->sub, b->type_ref());
-		
-		if (rhs->as_subscript()){
-			resolved|=b->call_expr->resolve_if(sc,get_type()?get_type()->sub:nullptr,flags);
-			b->set_type(b->call_expr->get_type());
-		}
-		else {
-			resolved|=b->resolve_if(sc, desired?desired->sub:nullptr, flags);
-			
-		}
-		
+		resolved|=rhs->resolve_operator_new(sc,desired,flags, this);
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
 	else if (op_ident==DELETE ){
@@ -415,7 +393,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 	if (opname==DOT || opname==ARROW){
 		if (rhs->as_block()){
 			// compile method call
-			return compile_function_call(cg,sc,e->lhs->compile(cg,sc),e->lhs,e->rhs->as_block());
+			return compile_function_call(cg,sc,CgValue(),e->lhs,e->rhs->as_block());
 		}
 		auto lhsv=e->lhs->compile(cg,sc);
 		// auto-deref is part of language semantics, done here..

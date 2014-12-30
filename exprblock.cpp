@@ -123,6 +123,44 @@ ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
 	}
 	return r;
 }
+ResolveResult	ExprCall::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
+	error(this,"new Constructor(args) not implemented yet");
+	auto b=this;
+	if (!desired && !op->get_type() && op->rhs->get_type()) {
+		op->set_type( new Type(op,PTR,(Type*)b->get_type()->clone()) );
+	}
+	if (op->get_type())
+		op->propogate_type_refs(flags, (Node*)op, op->get_type()->sub, b->type_ref());
+	
+	resolved|=b->resolve_if(sc, desired?desired->sub:nullptr, flags);
+	return resolved;
+}
+
+ResolveResult	ExprStructInit::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
+	auto b=this;
+	if (!desired && !op->get_type() && op->rhs->get_type()) {
+		op->set_type( new Type(op,PTR,(Type*)b->get_type()->clone()) );
+	}
+	if (op->get_type())
+		op->propogate_type_refs(flags, (Node*)op, op->get_type()->sub, b->type_ref());
+
+	resolved|=b->resolve_if(sc, desired?desired->sub:nullptr, flags);
+	return resolved;
+}
+ResolveResult	ExprSubscript::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
+	auto b=this;
+	if (!desired && !op->get_type() && op->rhs->get_type()) {
+		op->set_type( new Type(op,PTR,(Type*)b->get_type()->clone()) );
+	}
+	if (op->get_type())
+		op->propogate_type_refs(flags, (Node*)op, op->get_type()->sub, b->type_ref());
+	
+	resolved|=b->call_expr->resolve_if(sc,op->get_type()?op->get_type()->sub:nullptr,flags);
+	resolved|=b->argls[0]->resolve_if(sc,op->get_type()?op->get_type()->sub:nullptr,flags);
+	b->set_type(b->call_expr->get_type());
+	return resolved;
+}
+
 ResolveResult	ExprSubscript::resolve(Scope* sc, const Type* desired,int flags){
 	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
 		this->def->resolve_if(sc, nullptr, flags);
@@ -348,6 +386,11 @@ CgValue ExprCall::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	return compile_function_call(cg,sc,CgValue(),nullptr,this);
 }
 
+ResolveResult	ExprArrayInit::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
+	error(this,"todo array initializer\n");
+	return INCOMPLETE;
+}
+
 CgValue ExprArrayInit::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	error(this,"todo array initializer\n");
 	return CgValue();
@@ -500,6 +543,39 @@ CgValue ExprStructInit::compile_struct_init(CodeGen& cg,Scope *sc, RegisterName 
 		struct_val.addr=0;
 	}
 	return struct_val;
+}
+
+CgValue ExprCall::compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs){
+	auto new_ptr=cg.emit_malloc(t,1);	// init(alloc(), args);
+	
+	auto r= compile_function_call(cg, sc, new_ptr, nullptr, this);
+
+	return new_ptr;
+}
+
+CgValue ExprStructInit::compile_operator_new(CodeGen &cg, Scope *sc, const Type* t, const Expr *lhs){
+	auto reg=cg.emit_malloc(t,1);
+	auto st=this->call_expr->type()->get_struct_autoderef();
+	if (st->vtable){
+		auto vtref=cg.emit_getelementref(reg,__VTABLE_PTR);
+		cg.emit_store_global(vtref, st->vtable_name );
+	}
+	if (st->m_is_variant){
+		auto dref=cg.emit_getelementref(reg,__DISCRIMINANT);
+		cg.emit_store_i32(dref, st->discriminant );
+	}
+	return this->compile_struct_init(cg,sc,reg.reg);
+}
+CgValue ExprSubscript::compile_operator_new(CodeGen &cg, Scope *sc, const Type* t,const Expr *lhs){
+	// todo: multiply for multidimentional array?
+	if (argls.size()==1){
+		// TODO invoke constructors
+		auto num=argls[0]->compile(cg,sc);
+		return cg.emit_malloc_array(t,num);
+	} else{
+		error(this,"new [], only 1 dimension works");
+		return CgValue();
+	}
 }
 
 

@@ -481,32 +481,6 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 	}
 	return CgValue();	// todo: could return symbol? or its' constructor-function?
 }
-
-CgValue ExprStructInit::compile_operator_new(CodeGen &cg, Scope *sc, const Type* t, const Expr *lhs){
-	auto reg=cg.emit_malloc(t,1);
-	auto st=this->call_expr->type()->get_struct_autoderef();
-	if (st->vtable){
-		auto vtref=cg.emit_getelementref(reg,__VTABLE_PTR);
-		cg.emit_store_global(vtref, st->vtable_name );
-	}
-	if (st->m_is_variant){
-		auto dref=cg.emit_getelementref(reg,__DISCRIMINANT);
-		cg.emit_store_i32(dref, st->discriminant );
-	}
-	return this->compile_struct_init(cg,sc,reg.reg);
-}
-CgValue ExprSubscript::compile_operator_new(CodeGen &cg, Scope *sc, const Type* t,const Expr *lhs){
-	// todo: multiply for multidimentional array?
-	if (argls.size()==1){
-		// TODO invoke constructors
-		auto num=argls[0]->compile(cg,sc);
-		return cg.emit_malloc_array(t,num);
-	} else{
-		error(this,"new [], only 1 dimension works");
-		return CgValue();
-	}
-}
-
 Node* TraitDef::clone()const{
 	auto td=new TraitDef(this->pos, this->name);
 	return this->clone_sub(td);

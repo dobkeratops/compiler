@@ -12,7 +12,62 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+	
+	{	"struct new",__FILE__,__LINE__,R"====(
+		
+		struct FooStruct{x:int,y:int};
+		fn main(argc:int, argv:**char)->int{
+		x:=new FooStruct{1,2};
+			0
+		}
+		)===="
+		,nullptr
+	},
+	
+	{	"new",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		struct Foo{ x:int,y:int,  fn Foo(a:int){x=a;},}
+		fn main(argc:int, argv:**char)->int{
+			let f=new Foo(10);
+			printf("f.x=%d\n",f.x);
+		},
+		)====",
+		nullptr
+	},
+	{	"member functions+UFCS",__FILE__,__LINE__, R"====(
+		//SOURCE
+		fn"C" printf(s:str,...)->int;
+		struct Foo{
+		q:int,
+			fn method()->float{
+				printf("Foo.q=%d\n",q);2.0
+			}
+		}
+		struct Bar{
+		w:int,
+			fn method()->float{
+				printf("Bar.w=%d\n",w);2.0
+			}
+		}
+		fn func1(f:*Foo){printf("func1 says q=%d\n",f.q);}
+		fn main()->int{
+		x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;
+			printf("member function test..\n",x.q);
+			px.func1();
+			px.method();
+			py.method();
+			0
+		}
+		
+		)===="
+		,// EXPECTED RESULT
+		"member function test..\n"
+		"func1 says q=5\n"
+		"Foo.q=5\n"
+		"Bar.w=17\n"
+	},
 
+	
 	{	"enum decl/assign",__FILE__,__LINE__,R"====(
 		
 		fn"C" printf(s:str,...)->int;
@@ -522,16 +577,6 @@ CompilerTest g_Tests[]={
 		,nullptr
 	},
 
-	{	"struct new",__FILE__,__LINE__,R"====(
-
-		struct FooStruct{x:int,y:int};
-		fn main(argc:int, argv:**char)->int{
-			x:=new FooStruct{1,2};
-			0
-		}
-		)===="
-		,nullptr
-	},
 	{	"bool values ",__FILE__,__LINE__,R"====(
 
 		fn main(argc:int,argv:**char)->int{
@@ -608,38 +653,6 @@ CompilerTest g_Tests[]={
 		},
 		)===="
 		,nullptr
-	},
-	{	"member functions+UFCS",__FILE__,__LINE__, R"====(
-		//SOURCE
-		fn"C" printf(s:str,...)->int;
-		struct Foo{
-			q:int,
-			fn method()->float{
-				printf("Foo.q=%d\n",q);2.0
-			}
-		}
-		struct Bar{
-			w:int,
-			fn method()->float{
-				printf("Bar.w=%d\n",w);2.0
-			}
-		}
-		fn func1(f:*Foo){printf("func1 says q=%d\n",f.q);}
-		fn main()->int{
-			x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;
-			printf("member function test..\n",x.q);
-			px.func1();
-			px.method();
-			py.method();
-			0
-		}
-
-		)===="
-		,// EXPECTED RESULT
-		"member function test..\n"
-		"func1 says q=5\n"
-		"Foo.q=5\n"
-		"Bar.w=17\n"
 	},
 	{
 		"allocation",__FILE__,__LINE__,R"====(

@@ -43,6 +43,8 @@ public:
 	void clear_def();
 	virtual void dump(PrinterRef) const;
 	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(INCOMPLETE);};
+	virtual ResolveResult resolve_operator_new(Scope* scope, const Type* desired,int flags, ExprOp* opnew){error(this,"operator new not supported for %s",this->kind_str());return ResolveResult(INCOMPLETE);};
+
 	// wrapper handles 'this==nullptr', and propogation of 'resolved' flag.
 	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
 		if (this) {
