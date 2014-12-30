@@ -205,13 +205,17 @@ If another language has every feature I want in one place... great, I'll ditch t
     * differs by not having the 'rust' influence, but very similar goals
   * D - never grabbed me for some reason, but has many features of interest eg UFCS
     * (tends to focus on gc? and doesn't have expression syntax?)
-  * disqualified by CG, but still interesting:-
+  * disqualified by GarbageCollection, but still interesting:-
     * Julia
       * focus on overloading/multimethods instead of 'special parameter'
       * interactivity
     * Go - 
       * adhoc duck-type interface gather- want this;
       * interesting for doing a lot with a simple feature set
+    * Nim -
+      * nice features - overloading, do notation..
+      * the GC does at least have realtime control
+      * looks very clean
 
  * Features inspired by Rust & other languages:
   * 2 way inference
