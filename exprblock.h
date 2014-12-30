@@ -22,6 +22,7 @@ struct ExprBlock :public ExprScopeBlock{
 	// these are supposed to be mutually exclusive substates, this would be an enum ideally.
 	ExprBlock(){};
 	ExprBlock(const SrcPos& p);
+	ExprBlock(const SrcPos& p,Name n){pos=p; this->name=n;};
 	
 	// TODO: move these into dedicated nodes, starting with 'structInitializer' which will give us ScalaDefaultConstructor.
 	ExprFnDef*	get_fn_call()const;
@@ -76,6 +77,8 @@ struct StructInitializer{ // named initializer
 
 
 struct ExprStructInit : ExprBlock{
+	ExprStructInit(){};
+	ExprStructInit(const SrcPos& p, Expr* ce):ExprBlock(p){this->call_expr=ce;};
 	CgValue compile_struct_init(CodeGen& cg,Scope *sc, RegisterName force_dst);
 	const char* kind_str() const  override		{return "struct_init";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;

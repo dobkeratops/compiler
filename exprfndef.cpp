@@ -542,6 +542,8 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 	// process function argumetns & load
 	if (receiver){	// optional 1st arg for method calls, operator new..
 		recvp=receiver->compile(cg,sc);
+		dbg3(receiver->dump(0));dbg3(newline(0));
+		dbg3(recvp.dump());dbg3(newline(0));
 	}
 	if (recvp.is_valid()){
 //		recvp=recr;

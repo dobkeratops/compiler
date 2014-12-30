@@ -186,9 +186,9 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 	}
 	else if (op_ident==NEW ){
-		if (desired && !this->get_type()){
-			this->set_type(desired);
-		}
+//		if (desired && !this->get_type()){
+//			this->set_type(desired);
+//		}
 		resolved|=rhs->resolve_operator_new(sc,desired,flags, this);
 		return propogate_type_fwd(flags,this, desired, this->type_ref());
 	}
@@ -391,9 +391,9 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 		return compile_operator_overload(cg,sc);
 	}
 	if (opname==DOT || opname==ARROW){
-		if (rhs->as_block()){
+		if (auto c=rhs->as_block()){
 			// compile method call
-			return compile_function_call(cg,sc,CgValue(),e->lhs,e->rhs->as_block());
+			return compile_function_call(cg,sc,CgValue(),e->lhs,c);
 		}
 		auto lhsv=e->lhs->compile(cg,sc);
 		// auto-deref is part of language semantics, done here..

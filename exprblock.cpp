@@ -124,16 +124,28 @@ ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
 	return r;
 }
 ResolveResult	ExprCall::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
-	error(this,"new Constructor(args) not implemented yet");
-	auto b=this;
-	if (!desired && !op->get_type() && op->rhs->get_type()) {
+//	error(this,"new Constructor(args) not implemented yet");
+//	auto b=this;
+/*	if (!desired && !op->get_type() && op->rhs->get_type()) {
 		op->set_type( new Type(op,PTR,(Type*)b->get_type()->clone()) );
 	}
 	if (op->get_type())
 		op->propogate_type_refs(flags, (Node*)op, op->get_type()->sub, b->type_ref());
-	
+
 	resolved|=b->resolve_if(sc, desired?desired->sub:nullptr, flags);
-	return resolved;
+ */
+	// desugar self.
+	// new StructName(args..) --->  (new StructName{}).StructName(args..)
+
+	dbg("desugaring operator new\n");
+	op->name=DOT;
+	op->lhs =new ExprOp(NEW ,op->pos, op->lhs, new ExprStructInit(op->pos, (Expr*)this->call_expr->clone()));
+	//op->rhs(this) unchanged, it calls the new
+	op->dump(0);
+	resolved|=op->resolve(sc,desired,flags);
+	op->dump(0);
+
+	return resolved|INCOMPLETE;
 }
 
 ResolveResult	ExprStructInit::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
@@ -514,8 +526,8 @@ CgValue ExprStructInit::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	ASSERT(!input.is_valid());
 	return compile_struct_init(cg,sc,0);
 }
-CgValue ExprStructInit::compile_struct_init(CodeGen& cg,Scope *sc, RegisterName force_dst) {
-	auto e=this;
+
+CgValue compile_struct_init_args(ExprStructInit* e,CodeGen& cg, Scope* sc, RegisterName force_dst) {
 	StructInitializer si(sc,e); si.map_fields();
 	auto dbg=[&](){e->type()->dump(0);newline(0);};
 	auto struct_val= force_dst?CgValue(0,e->type(),force_dst):cg.emit_alloca_type(e, e->type());
@@ -545,6 +557,10 @@ CgValue ExprStructInit::compile_struct_init(CodeGen& cg,Scope *sc, RegisterName 
 	return struct_val;
 }
 
+CgValue ExprStructInit::compile_struct_init(CodeGen& cg,Scope *sc, RegisterName force_dst) {
+	return compile_struct_init_args(this, cg,sc,force_dst);
+}
+
 CgValue ExprCall::compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs){
 	auto new_ptr=cg.emit_malloc(t,1);	// init(alloc(), args);
 	
@@ -554,6 +570,7 @@ CgValue ExprCall::compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, co
 }
 
 CgValue ExprStructInit::compile_operator_new(CodeGen &cg, Scope *sc, const Type* t, const Expr *lhs){
+//	dbg2(t->dump(0));
 	auto reg=cg.emit_malloc(t,1);
 	auto st=this->call_expr->type()->get_struct_autoderef();
 	if (st->vtable){
@@ -564,7 +581,8 @@ CgValue ExprStructInit::compile_operator_new(CodeGen &cg, Scope *sc, const Type*
 		auto dref=cg.emit_getelementref(reg,__DISCRIMINANT);
 		cg.emit_store_i32(dref, st->discriminant );
 	}
-	return this->compile_struct_init(cg,sc,reg.reg);
+	this->compile_struct_init(cg,sc,reg.reg);
+	return reg;
 }
 CgValue ExprSubscript::compile_operator_new(CodeGen &cg, Scope *sc, const Type* t,const Expr *lhs){
 	// todo: multiply for multidimentional array?

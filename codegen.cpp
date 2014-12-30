@@ -91,13 +91,15 @@ CgValue CgValue::addr_op(CodeGen& cg,const Type* t)const { // take type calculat
 		ASSERT(t->name==PTR);
 		ASSERT(t->sub->is_equal(this->type));
 		return CgValue(addr,t,0);
-	} else if (auto v=this->val->as_variable()){
-		if (v->reg_is_addr){
-			return CgValue(v->reg_name, new Type(0,PTR,v->type()));
+	} else if (this->val){
+		if (auto v=this->val->as_variable()){
+			if (v->reg_is_addr){
+				return CgValue(v->reg_name, new Type(0,PTR,v->type()));
+			}
 		}
 	}
 	{
-		ASSERT(0 && "tryting to take adress of register");
+		ASSERT(0 && "bug/oversight.. tryting to take adress of register, ");
 		return CgValue();
 		//			return this->to_stack(cg).addr_op(cg,t);
 	}

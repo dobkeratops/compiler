@@ -24,15 +24,22 @@ CompilerTest g_Tests[]={
 		,nullptr
 	},
 	
-	{	"new",__FILE__,__LINE__,R"====(
+	{	"new with constructors",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
-		struct Foo{ x:int,y:int,  fn Foo(a:int){x=a;},}
+		struct Foo{ x:int,y:int,
+			fn Foo(a:int){x=a;this},
+			fn Foo(){x=15;this}
+		}
 		fn main(argc:int, argv:**char)->int{
-			let f=new Foo(10);
-			printf("f.x=%d\n",f.x);
+			let foo1=new Foo(10);
+			let foo2=new Foo();		// use of overloaded constructors
+			printf("foo1.x=%d\n",foo1.x);
+			printf("foo2.x=%d\n",foo2.x);
+			0
 		},
-		)====",
-		nullptr
+		)===="
+		,
+		"foo1.x=10\nfoo2.x=15\n"
 	},
 	{	"member functions+UFCS",__FILE__,__LINE__, R"====(
 		//SOURCE
