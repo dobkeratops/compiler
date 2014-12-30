@@ -3,7 +3,7 @@
 #include "scope.h"
 #include "exprfndef.h"
 #include "codegen.h"
-
+#include "pattern.h"
 // data-structures. C structs,+handling of 'classes', 'enums', and by virtue of nesting, modules/namespaces.
 
 struct NamedItems;

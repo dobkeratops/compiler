@@ -12,6 +12,25 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+	{	"new with constructors+stack constructors",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		struct Foo{ x:int,y:int,
+			fn Foo(a:int){x=a;this},
+			fn Foo(){x=15;this}
+		}
+		fn main(argc:int, argv:**char)->int{
+			let foo1=new Foo(10);
+			let foo2=new Foo();		// use of overloaded constructors
+			let foo3=Foo(17);
+			printf("foo1.x=%d\n",foo1.x);
+			printf("foo2.x=%d\n",foo2.x);
+			printf("foo3.x=%d\n",foo3.x);
+			0
+		},
+		)===="
+		,
+		"foo1.x=10\nfoo2.x=15\nfoo3.x=17\n"
+	},
 	
 	{	"struct new",__FILE__,__LINE__,R"====(
 		
@@ -24,23 +43,6 @@ CompilerTest g_Tests[]={
 		,nullptr
 	},
 	
-	{	"new with constructors",__FILE__,__LINE__,R"====(
-		extern"C"fn printf(s:str,...)->int;
-		struct Foo{ x:int,y:int,
-			fn Foo(a:int){x=a;this},
-			fn Foo(){x=15;this}
-		}
-		fn main(argc:int, argv:**char)->int{
-			let foo1=new Foo(10);
-			let foo2=new Foo();		// use of overloaded constructors
-			printf("foo1.x=%d\n",foo1.x);
-			printf("foo2.x=%d\n",foo2.x);
-			0
-		},
-		)===="
-		,
-		"foo1.x=10\nfoo2.x=15\n"
-	},
 	{	"member functions+UFCS",__FILE__,__LINE__, R"====(
 		//SOURCE
 		fn"C" printf(s:str,...)->int;

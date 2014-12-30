@@ -294,6 +294,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 }
 
 ResolveResult ExprCall::resolve(Scope* sc, const Type* desired, int flags) {
+	this->call_expr->def->dump_if(0);
 	return this->resolve_call_sub(sc,desired,flags,nullptr);
 }
 ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
@@ -327,7 +328,7 @@ ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int fla
 	}
 	else{
 		// an ident can't be just resolved like this
-		resolved|=this->call_expr->resolve_if(sc,nullptr,flags);
+		resolved|=this->call_expr->resolve_if(sc,nullptr,flags|R_CALL);
 		fn_type=this->call_expr->type();
 		
 		//			fn_type_r=this->call_expr->resolve(sc,nullptr,flags);

@@ -5,6 +5,7 @@
 #include "exprstructdef.h"
 #include "codegen.h"
 #include "assist.h"
+
 ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
 	if (this->is_placeholder()) {
@@ -15,11 +16,12 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	propogate_type_fwd(flags,this, desired,this->type_ref());
 	if (this->type())
 		resolved|=this->type()->resolve_if(scope,desired,flags);
-	if (auto sd=scope->find_struct_name_type_if(scope,this->name,this->type())) {
+	// depending on context we might only look for structs or functions. default is look for either.
+	if (auto sd=(flags&R_CALL)?nullptr:scope->find_struct_name_type_if(scope,this->name,this->type())) {
 		this->set_def(sd);
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
 	}else
-	if (auto sd=scope->find_struct_named(this->name)) {
+	if (auto sd=(flags&R_CALL)?nullptr:scope->find_struct_named(this->name)) {
 		this->set_def(sd);
 		if (!this->get_type()){
 			this->set_type(new Type(sd));

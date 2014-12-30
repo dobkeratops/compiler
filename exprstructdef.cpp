@@ -359,7 +359,7 @@ ExprStructDef::roll_constructor_wrappers(Scope* sc){
 		auto varname=getStringIndex("temp_object");
 		auto si=new ExprStructInit(fpos, new ExprIdent(fpos, this->name) ); // todo - tparams
 		si->call_expr->set_def(this);
-		auto l=new ExprOp(LET_ASSIGN,fpos, new ExprIdent(fpos,varname),si);
+		auto l=new ExprOp(LET_ASSIGN,fpos, (Expr*)new Pattern(fpos,varname),si);
 		auto call=new ExprCall();call->pos=fpos;
 		call->call_expr=new ExprIdent(fpos,this->name);
 		call->call_expr->set_def(srcf);
@@ -371,7 +371,7 @@ ExprStructDef::roll_constructor_wrappers(Scope* sc){
 		}
 		fbody->argls.push_back(l);
 		fbody->argls.push_back(call);
-		fbody->argls.push_back(new ExprIdent(fpos,this->name));
+		fbody->argls.push_back(new ExprIdent(fpos,varname));
 		
 		sc->parent_or_global()->add_fn(nf);
 		this->constructor_wrappers.push_back(nf);
@@ -416,7 +416,9 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 		for (auto f:virtual_functions){
 			resolved|=f->resolve_if(sc,nullptr,flags);
 		}
-
+		if (!this->constructor_wrappers.size()) this->roll_constructor_wrappers(sc);
+		for (auto m:constructor_wrappers)	{resolved|=m->resolve_if(sc,nullptr,flags);}
+		
 		if (this->inherits_type && !this->inherits){
 			resolved|=this->inherits_type->resolve_if(definer_scope,desired,flags);
 			this->inherits=definer_scope->find_struct_named(this->inherits_type->name);

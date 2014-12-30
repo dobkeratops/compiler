@@ -557,7 +557,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 	if (receiver) args_with_receiver.push_back(receiver);
 	args_with_receiver.insert(args_with_receiver.end(),block->argls.begin(),block->argls.end());
 
-	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_name(),block,args_with_receiver, desired,flags);
+	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_name(),block,args_with_receiver, desired,flags|R_CALL);
 	auto fnc=call_target;
 	if (!call_target){
 		return block->resolved|INCOMPLETE;

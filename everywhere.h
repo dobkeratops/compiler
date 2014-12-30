@@ -137,6 +137,7 @@ struct Span {
 #define R_FINAL 0x0001
 #define R_REVERSE_ONLY 0x0002
 #define R_FORWARD_ONLY 0x0004
+#define R_CALL 0x0008
 #define R_PUT_ON_STACK 0x8000
 
 extern void verify_all_sub();
