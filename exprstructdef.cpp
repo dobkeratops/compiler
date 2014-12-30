@@ -343,8 +343,51 @@ size_t ExprStructDef::padding()const{
 	return 0;
 }
 
-ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
 
+void
+ExprStructDef::roll_constructor_wrappers(Scope* sc){
+	// constructors are methods taking a this pointer.
+	// constructor-wrappers are functions with the same name as the type in the above scope,
+	// which instantiate a struct, invoke the constructor, and return the struct.
+	for (auto srcf:this->functions) {
+		if (srcf->name!=this->name) continue;
+		auto fpos=srcf->pos;
+		auto nf=new ExprFnDef(fpos);
+		nf->name=this->name;
+		auto fbody = new ExprBlock(fpos);
+		nf->body=fbody;
+		auto varname=getStringIndex("temp_object");
+		auto si=new ExprStructInit(fpos, new ExprIdent(fpos, this->name) ); // todo - tparams
+		si->call_expr->set_def(this);
+		auto l=new ExprOp(LET_ASSIGN,fpos, new ExprIdent(fpos,varname),si);
+		auto call=new ExprCall();call->pos=fpos;
+		call->call_expr=new ExprIdent(fpos,this->name);
+		call->call_expr->set_def(srcf);
+		call->argls.push_back(new ExprOp(ADDR,fpos, nullptr, new ExprIdent(fpos,varname)));
+		for (int i=1; i<srcf->args.size();i++){
+			auto a=srcf->args[i];
+			nf->args.push_back((ArgDef*)a->clone());
+			call->argls.push_back(new ExprIdent(fpos,a->name));
+		}
+		fbody->argls.push_back(l);
+		fbody->argls.push_back(call);
+		fbody->argls.push_back(new ExprIdent(fpos,this->name));
+		
+		sc->parent_or_global()->add_fn(nf);
+		this->constructor_wrappers.push_back(nf);
+		nf->dump(0);
+		nf->resolve_if(sc,nullptr,0);
+		//		call->call_expr->set_def(srcf);
+		//		call->call_expr->clear_type();
+		//		call->call_expr->set_type(srcf->fn_type);
+		nf->dump(0);
+	}
+}
+
+
+ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
+	if (m_recurse) return COMPLETE;
+	m_recurse=true;
 	definer_scope->add_struct(this);
 	if (!this->get_type()) {
 		this->set_type(new Type(this,this->name));	// name selects this struct
@@ -387,6 +430,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 			resolved|=ins->resolve_if(definer_scope,nullptr, flags);
 	}
 
+	m_recurse=false;
 	return propogate_type_fwd(flags,this, desired);
 }
 

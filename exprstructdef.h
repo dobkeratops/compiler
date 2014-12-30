@@ -19,6 +19,7 @@ struct ExprStructDef: ExprDef {
 	bool is_compiled=false;
 	bool m_is_variant=false;
 	bool m_is_enum=false;
+	bool m_recurse=false;
 	bool is_enum() { return m_is_enum;}
 	int max_variant_size=0;
 	vector<TParamDef*>	tparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
@@ -31,6 +32,7 @@ struct ExprStructDef: ExprDef {
 	vector<ExprFnDef*>		virtual_functions;
 	vector<ExprFnDef*>		functions;
 	vector<ExprFnDef*>		static_functions;
+	vector<ExprFnDef*>		constructor_wrappers;
 	vector<TypeDef*>		typedefs;
 	vector<ArgDef*>			args;		// default constructor form
 	ExprBlock*				body=0;		// for default constructor form.
@@ -91,6 +93,7 @@ struct ExprStructDef: ExprDef {
 	int				num_instances()const {auto n=0;for (auto ins=instances;ins;ins=ins->next_instance){n++;} return n;}
 	void		recurse(std::function<void(Node*)>&);
 	void			calc_padding();
+	void			roll_constructor_wrappers(Scope* sc);
 };
 
 struct EnumDef  : ExprStructDef {
