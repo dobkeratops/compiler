@@ -153,7 +153,7 @@ void Scope::compile_destructors(CodeGen& cg){
 	// every expression node should be able to compile a constructor & destructor.
 	for (auto v=this->vars; v;v=v->next_of_scope){
 		if (v->return_value) continue;
-		cg.compile_destructor(this,CgValue(v));
+		cg.compile_destructor(this,CgValue(v),true);
 	}
 }
 ExprFnDef*	Scope::find_fn_for_types(Name name, const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags){

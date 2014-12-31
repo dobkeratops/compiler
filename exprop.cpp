@@ -521,7 +521,12 @@ CgValue ExprOp::compile_operator_overload(CodeGen& cg,Scope* sc){
 	if (lhs)cg.emit_type_operand(lhsa);
 	if (rhs)cg.emit_type_operand(rhsa);
 	cg.emit_args_end();
-	return cg.emit_call_end();
+	cg.compile_destructor(sc,lhsa,false);
+	cg.compile_destructor(sc,rhsa,false);
+	auto ret_val=cg.emit_call_end();
+	ret_val.rvalue=true;
+	return ret_val;
+
 }
 
 

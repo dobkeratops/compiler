@@ -12,6 +12,26 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+	{	"RValue destructor",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		struct Qux{
+			fn Qux(){printf("Qux.ctor\n");this}
+			fn ~Qux(){printf("Qux.dtor\n");};
+		}
+		fn foo(x:&Qux){
+			printf("foo\n");
+		}
+		fn main(argc:int, argv:**char)->int{
+			let q=Qux();
+			foo(Qux());	// temporary created for argument should destruct after call.
+			foo(q);
+			foo(q);
+			0			// qux out of scope should destruct
+		},
+		)===="
+		,
+		"Qux.ctor\nQux.ctor\nfoo\nQux.dtor\nfoo\nfoo\nQux.dtor\n"
+	},
 	{	"stack constructor/destructor",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
 		struct Qux{
@@ -26,7 +46,6 @@ CompilerTest g_Tests[]={
 		,
 		"Qux constructor\nQux destructor\n"
 	},
-
 	{	"new with constructors+stack constructors",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
 		struct Foo{ x:int,y:int,
@@ -894,6 +913,7 @@ void run_tests(){
 					exit(-1);
 				else {
 					dbprintf("maybe bug with output capture so continuing..\n");
+					//exit(-1);
 				}
 			}
 			free(output);

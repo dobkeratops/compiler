@@ -533,10 +533,9 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 	cg.curr_fn=0;
 	return CgValue(fn_node);
 }
-
 CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiver, ExprBlock* e){
 	// [1.1]evaluate arguments
-	vector<CgValue> l_args;
+	Vec<CgValue> l_args;
 	
 	/// TODO - why isn't recvp=receiver->compile() ??
 	// process function argumetns & load
@@ -560,6 +559,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		}
 		l_args.push_back(reg /*cg.load(reg,arg->type()) Old behaviour - autoload args. not now because we have REF args*/);
 	}
+	auto original_args=l_args;
 	
 	//[1.2] evaluate call object..
 	auto call_fn=e->get_fn_call();
@@ -597,7 +597,7 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 		}
 		cg.emit_args_end();
 	};
-	
+	auto ret_val=CgValue();
 	//[1.4] make the call..
 	if (e->call_expr->is_function_name()) {
 		//[1.4.1] Calls where the fn name is a compile time symbol
@@ -633,14 +633,14 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			coerce_args(function_ptr.type);
 			cg.emit_call_begin(function_ptr);
 			l_emit_arg_list(CgValue());
-			return cg.emit_call_end();
+			ret_val= cg.emit_call_end();
 			
 		} else {
 			//[1.4.2] Direct Call
 			coerce_args(call_fn->type());
 			cg.emit_call_begin(CgValue(call_fn));
 			l_emit_arg_list(CgValue());
-			return cg.emit_call_end();
+			ret_val= cg.emit_call_end();
 		}
 	} else {
 		//[1.4.2] Indirect Call... Function Object
@@ -653,16 +653,25 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiv
 			auto envptr = cg.emit_getelementval(fn_obj,0,1,cg.i8ptr());
 			cg.emit_call_begin(fn_ptr);
 			l_emit_arg_list(envptr);
-			return cg.emit_call_end();
+			ret_val= cg.emit_call_end();
 		}else{
 			//[.2] ..Raw Function Pointer
 			cg.emit_call_begin(fn_obj.load(cg));
 			l_emit_arg_list(CgValue());
-			return cg.emit_call_end();
+			ret_val= cg.emit_call_end();
 		}
 	}
-
-	return CgValue();
+	// compile destructors for arguments. TODO - need to flag 'rvalues' . how? *this* is an rvalue, as is op result?
+	for (auto i=0;i<original_args.size();i++){
+		dbg2(original_args[i].dump());
+	}
+	dbg2(newline(0));
+	for (auto a:original_args){
+		cg.compile_destructor(sc, a,false);
+	}
+	ret_val.rvalue=true;
+	dbg2(ret_val.dump());dbg2(newline(0));
+	return ret_val;
 }
 
 

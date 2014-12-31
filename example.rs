@@ -164,7 +164,7 @@ fn main(argc:int,argv:**char)->int{
 	}
 
 	let v0=Vec3{1.0,0.0,0.0};	// structs can be initialized positionally or named
-	let v1=Vec3{vx:0.0,vy:1.0,vz:0.0};
+	let v1=Vec3{vx:0.0, vy:1.0, vz:0.0};
 
 	// Demo rust-style enums
 	let s1=Sphere{Vec3{1.0,1.0,1.0},1.0};
@@ -314,6 +314,8 @@ struct Qux : IBaz {
 	}
 	fn bar(){
 		printf("hello from Qux.bar this=%p this.x=%d\n",this,x);
+	}
+	fn drop() {// dtor.
 	}
 }
 

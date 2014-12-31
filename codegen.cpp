@@ -71,6 +71,7 @@ bool CgValue::is_valid()const{
 CgValue::CgValue(Node* n) {
 	// todo - unify with 'expr'
 	addr=0; reg=0; ofs=0;elem=-1;
+	rvalue=false;
 	val = n;
 	if (auto fd=n->as_fn_def()){ // variable is a function pointer?
 		reg=0; // it needs to be loaded
@@ -99,8 +100,12 @@ CgValue CgValue::addr_op(CodeGen& cg,const Type* t)const { // take type calculat
 		}
 	}
 	{
-		ASSERT(0 && "bug/oversight.. tryting to take adress of register, ");
-		return CgValue();
+//		ASSERT(0 && "bug/oversight.. tryting to take adress of register, ");
+		// comit to memory.
+		dbprintf("warning new untested codepath, storing a register to take its adress, probably better to have committed to stack earlier\n");
+		auto regval=cg.emit_alloca(this->type);
+		cg.emit_store(this->reg,this->type,regval.addr);
+		return regval;
 		//			return this->to_stack(cg).addr_op(cg,t);
 	}
 }
@@ -1402,14 +1407,19 @@ RegisterName	CodeGen::emit_extractvalue(RegisterName dst,const Type* type,Regist
 }
 
 void
-CodeGen::compile_destructor(Scope* sc, CgValue val){
+CodeGen::compile_destructor(Scope* sc, CgValue val,bool force){
 	auto f=sc->find_fn_for_types(__DESTRUCTOR, val.type, nullptr, nullptr, 0);
 	if (f){
 		// only if it was exact match. raw function search does autoref. so, T calls ~T(), but *T doesn't.
 		auto f_arg0_t=f->args[0]->type();
 		if (!f_arg0_t->sub->is_equal(val.type))
 			return;
-		dbg2(printf("emit destructor for %s:",val.val->name_str() ));dbg2(val.type->dump(-1)); dbg2(dbprintf(" \tdesutrctor arg0:"));dbg2(f->args[0]->type()->dump(-1));dbg2(newline(0));
+		if (!force){
+			if (!val.rvalue){	// it only destroys rvalues. use 'force' to override for vars at end-of-scope.
+				return;
+			}
+		}
+		dbg2(printf("emit destructor for %s:",val.val?val.val->name_str():"?" ));dbg2(val.type->dump(-1)); dbg2(dbprintf(" \tdesutrctor arg0:"));dbg2(f->args[0]->type()->dump(-1));dbg2(newline(0));
 		
 		this->emit_call(CgValue(f), val.addr_op(*this, f_arg0_t));
 	}
@@ -1543,6 +1553,7 @@ void CgValue::dump()const {
 	dbprintf("val=%p %s %s;",val,val?val->name_str():"",val?val->kind_str():"");
 	dbprintf("addr=%s;elem=%d;type:",str(addr),elem);
 	type->dump_if(-1);
+	dbprintf(" %s",rvalue?"RVal":"LVal");
 	dbprintf(")");
 }
 

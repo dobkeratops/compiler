@@ -163,7 +163,7 @@ public:
 		return this->get_elem_node(0);
 	}
 	virtual ~Node(){
-		dbg2(error("dont call delete, we haven't sorted out ownership of Types or nodes. compiler implementation doesn't need to free anything. Types will be owned by a manager, not the ast "));
+		//dbg2(error("dont call delete, we haven't sorted out ownership of Types or nodes. compiler implementation doesn't need to free anything. Types will be owned by a manager, not the ast "));
 	}
 	virtual const Expr*	get_return_expr()const	{return nullptr;}
 	virtual Expr*	loop_else_block()const			{return nullptr;}// for decoupling something

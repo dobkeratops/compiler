@@ -40,18 +40,19 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	int elem=-1;     // if its a struct-in-reg
 	RegisterName addr;
 	Node*	val;		// which AST node it corresponds to
+	bool	rvalue;
 
 	const Type* type;
 	int ofs;
 	//explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
 	explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){
-		elem=-1;addr=0;ofs=0;val=0;
+		elem=-1;addr=0;ofs=0;val=0;rvalue=false;
 	}
 	explicit CgValue(RegisterName v,const Type* t,RegisterName address_reg,int elem_index=-1):reg(v){
-		elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;
+		elem=elem_index;reg=v;addr=address_reg; type=t;ofs=0;val=0;rvalue=false;
 	}
 	explicit CgValue(Node* n);
-	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr){};
+	CgValue():reg(0),addr(0),ofs(0),val(0),type(nullptr),rvalue(false){};
 	bool is_struct_elem()const{return elem>=0;}
 	bool is_valid()const;
 	bool is_literal()const;
@@ -244,7 +245,7 @@ public:
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg);
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg1,const CgValue& arg2);
 	CgValue emit_conversion(const Node* n, const CgValue& src, const Type* to_type, const Scope* sc);
-	void compile_destructor(Scope* sc, CgValue val);
+	void compile_destructor(Scope* sc, CgValue val, bool force_emit);
 
 	CgValue load(const CgValue& v,const Type* result_type=0);
 	CgValue to_rvalue(const CgValue& lvalue_or_rvalue){
@@ -279,7 +280,9 @@ inline CgValue CodeGen::emit_getelementval(const CgValue& src, Name n,const Type
 	return emit_getelementref(src, n,t).load(*this);
 }
 inline CgValue CodeGen::emit_getelementval(const CgValue& src, int ar_i,int field_index,const Type* elem_t){
-	return emit_getelementref(src, ar_i, field_index,elem_t).load(*this);
+	// TODO - should this actually set 'rvalue' flag?
+	auto retval= emit_getelementref(src, ar_i, field_index,elem_t).load(*this);
+	return retval;
 }
 inline CgValue CgValue::to_rvalue(CodeGen& cg)const{return cg.to_rvalue(*this);}
 
