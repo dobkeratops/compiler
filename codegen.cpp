@@ -1401,6 +1401,22 @@ RegisterName	CodeGen::emit_extractvalue(RegisterName dst,const Type* type,Regist
 	return dst;
 }
 
+void
+CodeGen::compile_destructor(Scope* sc, CgValue val){
+	auto f=sc->find_fn_for_types(__DESTRUCTOR, val.type, nullptr, nullptr, 0);
+	if (f){
+		// only if it was exact match. raw function search does autoref. so, T calls ~T(), but *T doesn't.
+		auto f_arg0_t=f->args[0]->type();
+		if (!f_arg0_t->sub->is_equal(val.type))
+			return;
+		dbg2(printf("emit destructor for %s:",val.val->name_str() ));dbg2(val.type->dump(-1)); dbg2(dbprintf(" \tdesutrctor arg0:"));dbg2(f->args[0]->type()->dump(-1));dbg2(newline(0));
+		
+		this->emit_call(CgValue(f), val.addr_op(*this, f_arg0_t));
+	}
+}
+
+
+
 
 // extern function; - just use the function name, and mangle arguments given at the callsite.
 // this is the default assumed for unfound symbols?

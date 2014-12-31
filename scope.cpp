@@ -153,19 +153,9 @@ void Scope::compile_destructors(CodeGen& cg){
 	// every expression node should be able to compile a constructor & destructor.
 	for (auto v=this->vars; v;v=v->next_of_scope){
 		if (v->return_value) continue;
-		auto f=find_fn_for_types(__DESTRUCTOR, v->type(), nullptr, nullptr, 0);
-		if (f){
-			// only if it was exact match. raw function search does autoref. so, T calls ~T(), but *T doesn't.
-			auto f_arg0_t=f->args[0]->type();
-			if (!f_arg0_t->sub->is_equal(v->type()))
-				continue;
-			dbg2(printf("emit destructor for %s:",v->name_str() ));dbg2(v->type()->dump(-1)); dbg2(dbprintf(" fn_arg0:"));dbg2(f->args[0]->type()->dump(-1));dbg2(newline(0));
-			
-			cg.emit_call(CgValue(f), CgValue(v).addr_op(cg, f_arg0_t));
-		}
+		cg.compile_destructor(this,CgValue(v));
 	}
 }
-
 ExprFnDef*	Scope::find_fn_for_types(Name name, const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags){
 	static ExprDummy s_dummy_arg0;
 	static ExprDummy s_dummy_arg1;

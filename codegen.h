@@ -244,6 +244,7 @@ public:
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg);
 	CgValue emit_call(const CgValue& fnc, const CgValue& arg1,const CgValue& arg2);
 	CgValue emit_conversion(const Node* n, const CgValue& src, const Type* to_type, const Scope* sc);
+	void compile_destructor(Scope* sc, CgValue val);
 
 	CgValue load(const CgValue& v,const Type* result_type=0);
 	CgValue to_rvalue(const CgValue& lvalue_or_rvalue){
