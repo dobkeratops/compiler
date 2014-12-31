@@ -8,6 +8,7 @@
 ///thats why this is its own file..
 
 struct ExprOp: public Expr{
+	ExprOp(){}
 	Expr	*lhs=0,*rhs=0;
 	Node* clone() const;
 	void clear_reg()						{lhs->clear_reg(); rhs->clear_reg();}
@@ -36,3 +37,7 @@ struct ExprOp: public Expr{
 	CgValue compile_operator_overload(CodeGen& cg, Scope* sc);
 	void		recurse(std::function<void(Node*)>&);
 };
+struct ExprDummy: public ExprOp{
+	~ExprDummy() override{};
+};
+

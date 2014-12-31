@@ -116,6 +116,7 @@ struct ArgDef :ExprDef{
 
 struct Variable : ExprDef{
 	bool		on_stack=true;
+	bool		return_value=false;		// needed for RVO.
 	CaptureVars*	capture_in=0;	// todo: scope or capture could be unified? 'in this , or in capture ...'
 	VarKind		kind;
 	Scope*		owner=0;

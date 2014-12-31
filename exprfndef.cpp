@@ -511,7 +511,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 	}
 	emit_local_vars(cg, fn_node->body, fn_node, scope);
 	auto rtn=fn_node->get_return_expr();
-	
+
 	if (fn_node->fn_type->name==CLOSURE){
 		auto cp=fn_node->my_capture;
 		if (cp){

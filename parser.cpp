@@ -298,6 +298,17 @@ ExprFnDef* parse_fn(TokenStream&src, ExprStructDef* owner,Type* self_t, bool is_
 	}
 
 	auto tok=src.eat_tok();
+	if (tok==COMPLEMENT) {
+		tok=src.eat_tok();// ignore this but it should be owner->name
+		if (!owner || tok!=owner->name) {
+			error(src.prev_pos,"C++ style destructor must be defined in struct with same name");
+		}
+		// we name the destructor differently, to avoid confusion between C++/Rust
+		tok=__DESTRUCTOR;
+	}
+	if (tok==DROP){	// we rename rust style destuctors to drop too.
+		tok=__DESTRUCTOR;
+	}
 	if (tok!=OPEN_PAREN) {
 		if (!(is_ident(tok)|| is_operator(tok))){
 			dbprintf(str(tok));

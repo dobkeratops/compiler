@@ -592,12 +592,22 @@ CgValue CodeGen::emit_store_global(CgValue dst,Name globalvar){
 
 CgValue  CodeGen::emit_call(const CgValue& call_expr, const CgValue& arg1)
 {
-	emit_call_begin(call_expr); emit_type_operand(arg1); return emit_call_end();
+
+	emit_call_begin(call_expr);
+	emit_args_begin();
+	emit_type_operand(arg1);
+	emit_args_end();
+	return emit_call_end();
 }
 
 CgValue  CodeGen::emit_call(const CgValue& call_expr, const CgValue& arg1, const CgValue& arg2)
 {
-	emit_call_begin(call_expr); emit_type_operand(arg1); emit_type_operand(arg2); return emit_call_end();
+	emit_call_begin(call_expr);
+	emit_args_begin();
+	emit_type_operand(arg1);
+	emit_type_operand(arg2);
+	emit_args_end();
+	return emit_call_end();
 }
 
 void CodeGen::emit_type(CgValue& lv) {

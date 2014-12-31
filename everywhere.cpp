@@ -70,7 +70,7 @@ const char* g_token_str[]={
 	",",";",";;",
 	"...","..","..<","..>","..>=","..<=",
 	"_","",
-	"\"C\"","__vtable_ptr","__data_ptr","__parent_ptr","__env_ptr","__discriminant","__env_i8_ptr","__vector","__string","__unique_ptr","__dictionary","__gc_ptr","",
+	"\"C\"","__vtable_ptr","__data_ptr","__parent_ptr","__env_ptr","__discriminant","__env_i8_ptr","__vector","__string","__unique_ptr","__dictionary","__gc_ptr","__destructor","drop",
 	NULL,
 };
 const char* g_operator_symbol[]={

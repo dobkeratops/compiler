@@ -12,6 +12,21 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+	{	"stack constructor/destructor",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		struct Qux{
+			fn Qux(){printf("Qux constructor\n");this}
+			fn ~Qux(){printf("Qux destructor\n");};
+		}
+		fn main(argc:int, argv:**char)->int{
+			let foo=Qux();
+			0
+		},
+		)===="
+		,
+		"Qux constructor\nQux destructor\n"
+	},
+
 	{	"new with constructors+stack constructors",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
 		struct Foo{ x:int,y:int,

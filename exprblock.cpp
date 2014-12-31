@@ -89,10 +89,17 @@ void ExprBlock::translate_tparams(const TParamXlat& tpx){
 CgValue ExprBlock::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	if (!argls.size())
 		return CgValue();
+
 	for (int i=0; i<argls.size()-1; i++){
 		this->argls[i]->compile(cg,sc);
 	}
-	return this->argls.back()->compile(cg,sc);
+
+	auto ret= this->argls.back()->compile(cg,sc);
+
+	//TODO- how to invoke destructors for all values
+	sc->compile_destructors(cg);
+	
+	return ret;
 }
 
 
@@ -238,6 +245,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	verify_all();
 	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
 	this->def->resolve_if(sc, nullptr, flags);
+	// RVO
 	
 	/// loose end? if this is a method-call, we dont resolve the symbol here,
 	/// in other contexts we do
@@ -289,6 +297,12 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	dbg(this->type()->dump_if(-1));
 	dbg(this->argls.back()->dump_if(-1));
 	dbg(newline(0));
+
+	// RVO - this is ov
+	if (auto d=this->argls.back()->def){
+		if (auto v=d->as_variable())
+			v->return_value=true;
+	}
 
 	return propogate_type_refs(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
 }
