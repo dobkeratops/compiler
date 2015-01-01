@@ -16,7 +16,7 @@ CompilerTest g_Tests[]={
 		extern"C"fn printf(s:str,...)->int;
 		struct Qux{
 			fn Qux(){printf("Qux.ctor\n");this}
-			fn Qux(x:&Qux){printf("Qux.copy\n");this}
+//			fn Qux(x:&Qux){printf("Qux.copy\n");this}
 			fn Qux(x:&&Qux){printf("Qux.move\n");this}
 			fn ~Qux(){printf("Qux.dtor\n");};
 		}
@@ -25,14 +25,13 @@ CompilerTest g_Tests[]={
 		}
 		fn main(argc:int, argv:**char)->int{
 			let q=Qux();
-			foo(Qux());	// temporary created for argument should destruct after call.
-			foo(q);
-			foo(q);
+			foo(Qux(Qux()));
+			foo(Qux(q));
 			0			// qux out of scope should destruct
 		},
 		)===="
 		,
-		"Qux.ctor\nQux.ctor\nfoo\nQux.dtor\nfoo\nfoo\nQux.dtor\n"
+		"Qux.ctor\nQux.ctor\nQux.move\nQux.dtor\nQux.copy\nfoo\nQux.dtor\nQux.dtor\n"
 	},
 
 	{	"RValue destructor",__FILE__,__LINE__,R"====(

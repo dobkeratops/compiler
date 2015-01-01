@@ -113,7 +113,7 @@ CgValue CgValue::deref_op(CodeGen& cg) const {
 	return deref_op(cg,type->sub);
 }
 
-CgValue CgValue::ref_op(CodeGen& cg,const Type* t) const { // take type calculated by sema
+CgValue CgValue::ref_op(CodeGen& cg,const Type* t) const { // take type calculated earlier
 	ASSERT(this->type);
 #if DEBUG>=2
 	this->type->dump(0);
@@ -893,11 +893,16 @@ void CodeGen::emit_fn_cast_global(Name n,const Type* srct, const Type *dstt){
 }
 
 CgValue CodeGen::emit_alloca_type(Expr* holder, const Type* t) {
+//	if (holder) {
+//		if (holder->reg_name)	// dont emit 'alloca' twice if the holder already has
+//			return CgValue(0,t,holder->reg_name);
+//	}
 	if (t->is_void()){
 		if (holder)emit_comment("void value not allocated for %d",holder->pos.line);
 		return CgValue();
 	}
-	RegisterName r= holder?holder->get_reg(*this, false):next_reg();
+	RegisterName r= holder?holder->get_reg(*this, true):next_reg();
+	//RegisterName r= next_reg();
 	emit_ins_begin(r,"alloca"); emit_type(t,false);
 	emit_txt(", align %zu", orelse(t->alignment(),g_DefaultAlignment));
 	emit_ins_end();
