@@ -29,6 +29,9 @@ struct ExprIdent :Expr{
 	CgValue		compile(CodeGen&cg, Scope* sc, CgValue input) override;
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags) override;
 	void		recurse(std::function<void(Node*)>&) override;
+	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
+	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+
 };
 // Identifier with given type-parameters
 struct IdentWithTParams : ExprIdent{
@@ -80,6 +83,9 @@ struct ExprLiteral : ExprDef {
 	void translate_tparams(const TParamXlat& tpx);
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue input) override;
 	ExprLiteral* as_literal() override{ return this;};
+	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
+	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+
 };
 
 /// 'ArgDef' used for function arguments and struct-fields.

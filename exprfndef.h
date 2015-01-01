@@ -77,6 +77,6 @@ struct  ExprFnDef : ExprDef {
 	virtual Scope*	get_scope()				{return this->scope;}
 	void		recurse(std::function<void(Node*)>&) override;
 };
-CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiver, ExprBlock* e);
+CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, const Expr* receiver, const ExprBlock* e);
 
 

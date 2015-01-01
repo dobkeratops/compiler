@@ -609,10 +609,16 @@ CgValue ExprSubscript::compile_operator_new(CodeGen &cg, Scope *sc, const Type* 
 	}
 }
 
+CgValue
+ExprCall::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs)
+{
+	return compile_function_call(cg,sc,CgValue(),lhs,this);
+}
 
-
-
-
-
-
-
+ResolveResult
+ExprCall::resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op){
+	auto method_name=this->call_expr->name;
+	this->resolve_call_sub(sc, desired, flags, op->lhs);
+	return propogate_type_refs(flags,op,this->type(),op->type_ref());
+	
+}

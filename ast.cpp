@@ -127,6 +127,40 @@ CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc, CgValue){
 	return CgValue(var);
 }
 
+	
+CgValue
+ExprIdent::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* a_lhs)
+{
+	auto lhs=const_cast<Expr*>(a_lhs);
+	auto lhsv=lhs->compile(cg,sc);
+	// auto-deref is part of language semantics, done here..
+	while (lhsv.type->num_pointers()+(lhsv.addr?1:0) > 1){
+		cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
+		lhsv = lhsv.deref_for_dot(cg,0);
+	}
+
+	return lhsv.get_elem(cg,this,sc);
+}
+ResolveResult
+ExprIdent::resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)
+{
+	if (auto st=sc->find_struct_of(op->lhs)){
+		if (auto f=st->find_field(this)){
+			propogate_type_refs(flags,op, f->type_ref(), op->type_ref());
+			auto ret=f->type();
+			return propogate_type_refs(flags,op, ret,op->type_ref());
+		}
+	}
+	if (flags&R_FINAL) {
+		dump_field_info(op,sc);
+	}
+	// no good.
+	return ResolveResult();
+}
+
+
+
+
 void
 ExprIdent::recurse(std::function<void(Node*)>&f){
 	if (!this)return;
@@ -301,6 +335,38 @@ ExprLiteral::~ExprLiteral(){
 	if (type_id==T_CONST_STRING) {
 		free((void*)u.val_str);
 	}
+}
+
+
+CgValue
+ExprLiteral::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* a_lhs)
+{
+	auto lhs=const_cast<Expr*>(a_lhs);
+	auto lhsv=lhs->compile(cg,sc);
+	// auto-deref is part of language semantics, done here..
+	while (lhsv.type->num_pointers()+(lhsv.addr?1:0) > 1){
+		cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
+		lhsv = lhsv.deref_for_dot(cg,0);
+	}
+
+	if (isNumStart(*str(this->name),0)){
+		return lhsv.get_elem_index(cg, getNumberInt(this->name));
+	}
+	error(this,"unhandled case, dot operator");
+	return CgValue();
+}
+ResolveResult
+ExprLiteral::resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)
+{
+	if (isNumStart(*str(op->rhs->name),0)){
+		auto fi=getNumberInt(op->rhs->name);
+		if (auto t=op->lhs->type()){
+			auto elem_t = t->get_elem(fi);
+			op->propogate_type_expr_ref(flags, op, elem_t);
+			return op->propogate_type_fwd(flags,op, desired, op->type_ref());
+		}
+	}
+	return INCOMPLETE;
 }
 /*if (auto cp=var->capture_in){
 	varr=CgValue(cp->reg_name,cp->type(),0,var->capture_index);

@@ -104,6 +104,9 @@ struct ExprTuple : ExprBlock{
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const override	{return (Node*)clone_sub(new ExprTuple());}
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
+	//CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
+	//ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+
 };
 struct ExprCall : ExprBlock{
 	const char* kind_str() const  override		{return "call";}
@@ -113,6 +116,9 @@ struct ExprCall : ExprBlock{
 	ResolveResult resolve_call_sub(Scope* sc, const Type* desired, int flags,Expr* receiver);
 	CgValue compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 	ResolveResult	resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
+	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+
 };
 struct ExprArrayInit : ExprBlock{
 	const char* kind_str() const  override		{return "array_init";}

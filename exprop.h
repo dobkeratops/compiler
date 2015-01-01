@@ -40,4 +40,5 @@ struct ExprOp: public Expr{
 struct ExprDummy: public ExprOp{
 	~ExprDummy() override{};
 };
+void dump_field_info(Node* n,Scope* sc);
 

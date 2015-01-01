@@ -533,9 +533,10 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 	cg.curr_fn=0;
 	return CgValue(fn_node);
 }
-CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, Expr* receiver, ExprBlock* e){
+CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, const Expr* a_receiver, const ExprBlock* e){
 	// [1.1]evaluate arguments
 	Vec<CgValue> l_args;
+	auto receiver=const_cast<Expr*>(a_receiver);
 	
 	/// TODO - why isn't recvp=receiver->compile() ??
 	// process function argumetns & load

@@ -131,47 +131,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
 		verify_all();
 		if (t) {
-			t=t->deref_all();
-			// now we have the elem..
-			verify_expr_op(this);
-			//			verify_expr_ident(rhs);
-			//			ASSERT(rhs->as_ident());
-			
-			if (isNumStart(*str(rhs->name),0)){
-				auto fi=getNumberInt(rhs->name);
-				if (auto t=this->lhs->type()){
-					auto elem_t = t->get_elem(fi);
-					propogate_type_expr_ref(flags, this, elem_t);
-					return propogate_type_fwd(flags,this, desired, this->type_ref());
-				}
-			}
-			else if (auto field_name=rhs->as_ident()){
-				if (auto st=sc->find_struct_of(lhs)){
-					if (auto f=st->find_field(rhs)){
-						propogate_type_refs(flags,this, f->type_ref(), this->type_ref());
-						ret=f->type();
-						return propogate_type_refs(flags,this, ret,this->type_ref());
-					}
-				}
-				if (flags&R_FINAL) {
-					dump_field_info(this,sc);
-				}
-				// no good.
-				return ResolveResult();
-			} else if (auto call=dynamic_cast<ExprCall*>(rhs)){
-				auto method_name=call->call_expr->name;
-				// TODO - should there be a dedicated MethodCall node?
-				// should the parser just accumulate the receiver into the argument list already?
-				//				dbprintf("method call: %s\n",str(method_name));
-				call->resolve_call_sub(sc, desired, flags, lhs);
-				return propogate_type_refs(flags,this,call->type(),this->type_ref());
-			} else {
-				if (flags & R_FINAL){
-					error_begin(this,"dot operator not call or field acess %s.%s %d", t->name_str(), this->rhs->name_str(), is_number(this->rhs->name));
-					error(this,"cant find struct %s", t->name_str());
-					error_end(this);
-				}
-			}
+			rhs->resolve_operator_dot(sc, desired, flags, this);
 		}
 		verify_all();
 		return ResolveResult(INCOMPLETE);
@@ -420,24 +380,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 		return compile_operator_overload(cg,sc);
 	}
 	if (opname==DOT || opname==ARROW){
-		if (auto c=rhs->as_block()){
-			// compile method call
-			return compile_function_call(cg,sc,CgValue(),e->lhs,c);
-		}
-		auto lhsv=e->lhs->compile(cg,sc);
-		// auto-deref is part of language semantics, done here..
-		while (lhsv.type->num_pointers()+(lhsv.addr?1:0) > 1){
-			cg.emit_comment("dot: auto deref from level=%d",lhsv.type->num_pointers()+(lhsv.addr?1:0));
-			lhsv = lhsv.deref_for_dot(cg,0);
-		}
-		if (isNumStart(*str(rhs->name),0)){
-			return lhsv.get_elem_index(cg, getNumberInt(rhs->name));
-		}
-		if (rhs->as_ident()) {
-			return lhsv.get_elem(cg,e->rhs,sc);
-		}
-		error(this,"unhandled case, dot operator");
-		return CgValue();
+		return rhs->compile_operator_dot(cg, sc, nullptr, lhs);
 	}
 	else if (opname==BREAK){
 		cg.emit_comment("BREAK EXPRESSION");
