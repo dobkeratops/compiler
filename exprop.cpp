@@ -89,79 +89,6 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (op_ident==FIELD_ASSIGN){
 		error(this,"field-assign operator not handled, should only appear in struct-initializer (TODO: keyword args)");
 	}
-	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==DECLARE_WITH_TYPE) {
-		if (op_ident==LET_ASSIGN){
-			ASSERT(this->lhs && this->rhs);
-			resolved|=rhs->resolve_if(sc,desired,flags);
-			dbg(lhs->dump(0));dbg(printf(".let="));
-			dbg(rhs->dump(0));dbg(newline(0));
-			auto vname=lhs->as_name();	//todo: rvalue malarchy.
-			if (desired) {
-				desired->dump(-1);
-			}
-			auto rhs_t = rhs->get_type();
-			if (lhs->as_ident()){
-				auto new_var=sc->create_variable(this,vname,Local);
-				lhs->set_def(new_var);
-				if (rhs_t){
-					lhs->set_type(rhs_t);
-					this->set_type(rhs_t);
-				}
-			}
-			
-			//new_var->force_type_todo_verify(rhs_t);
-			resolved|=lhs->resolve_if(sc,rhs->type(),flags);
-			propogate_type_fwd(flags, this, desired, lhs->type_ref());
-			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
-		}
-		else if (op_ident==DECLARE_WITH_TYPE){ // create a var, of given type,like let lhs:rhs;
-			const Type* tt=rhs?rhs->as_type():nullptr; if (!tt) tt=this->type(); if (!tt) tt=desired;
-			resolved|=lhs->resolve_if(sc, tt,flags);
-			if (!lhs->is_ident())
-				return propogate_type_refs(flags, this, lhs->type_ref(),type_ref());
-			auto vname=lhs->as_name();	//todo: rvalue malarchy.
-			// todo: get this in the main parser
-			auto lhsi=expect_cast<ExprIdent>(lhs);
-			//			auto v=sc->find_variable_rec(this->argls[0]->name);
-			auto v=sc->get_or_create_scope_variable(this,lhsi->name,Local);
-			auto t=v->get_type();
-			if (rhs){
-				resolved|=rhs->resolve_if(sc,desired,flags);
-				t=expect_cast<Type>(rhs);
-				v->set_type(t);
-			}
-			lhs->set_def(v);
-			if (t){
-				if (t->name>=IDENT && !t->sub) {
-					t->set_struct_def(sc->find_struct(t));
-				}
-			}
-			if (auto t=v->get_type()) {
-				sc->try_find_struct(t);// instantiate
-			}
-
-			return propogate_type_refs(flags, this, v->type_ref(),type_ref());
-		}
-		else if (op_ident==ASSIGN){
-			ASSERT(this->lhs && this->rhs);
-			dbg(::dump(this->lhs->type(),this->rhs->type()));
-			resolved|=rhs->resolve_if(sc,nullptr,flags);
-
-			resolved|=lhs->resolve_if(sc,desired,flags);
-			dbg(::dump(this->lhs->type(),this->rhs->type());)
-
-			// get coersion right..
-			propogate_type_refs(flags,(Node*)this, rhs->type_ref(), lhs->type_ref());
-			propogate_type_refs(flags,(Node*)this, lhs->type_ref(), this->type_ref());
-			dbg(::dump(this->lhs->type(),this->rhs->type());)
-			return propogate_type_fwd(flags,this, desired, type_ref());
-			//propogate_type(flags,this, type_ref(),rhs->type_ref());
-			//return propogate_type(flags, this, type_ref(),lhs->type_ref());
-		} else{
-			ASSERT(0);
-			return resolved;
-		}
-	}
 	else if (op_ident==COLON){ // TYPE ASSERTION
 		// todo: get this in the main parser
 		ASSERT(rhs->as_ident()); // todo- not just that
@@ -255,6 +182,79 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		return propogate_type_fwd(flags, this, desired, this->type_ref());
 	}
 
+	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==DECLARE_WITH_TYPE) {
+		if (op_ident==LET_ASSIGN){
+			ASSERT(this->lhs && this->rhs);
+			resolved|=rhs->resolve_if(sc,desired,flags);
+			dbg(lhs->dump(0));dbg(printf(".let="));
+			dbg(rhs->dump(0));dbg(newline(0));
+			auto vname=lhs->as_name();	//todo: rvalue malarchy.
+			if (desired) {
+				desired->dump(-1);
+			}
+			auto rhs_t = rhs->get_type();
+			if (lhs->as_ident()){
+				auto new_var=sc->create_variable(this,vname,Local);
+				lhs->set_def(new_var);
+				if (rhs_t){
+					lhs->set_type(rhs_t);
+					this->set_type(rhs_t);
+				}
+			}
+			
+			//new_var->force_type_todo_verify(rhs_t);
+			resolved|=lhs->resolve_if(sc,rhs->type(),flags);
+			propogate_type_fwd(flags, this, desired, lhs->type_ref());
+			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
+		}
+		else if (op_ident==DECLARE_WITH_TYPE){ // create a var, of given type,like let lhs:rhs;
+			const Type* tt=rhs?rhs->as_type():nullptr; if (!tt) tt=this->type(); if (!tt) tt=desired;
+			resolved|=lhs->resolve_if(sc, tt,flags);
+			if (!lhs->is_ident())
+				return propogate_type_refs(flags, this, lhs->type_ref(),type_ref());
+			auto vname=lhs->as_name();	//todo: rvalue malarchy.
+			// todo: get this in the main parser
+			auto lhsi=expect_cast<ExprIdent>(lhs);
+			//			auto v=sc->find_variable_rec(this->argls[0]->name);
+			auto v=sc->get_or_create_scope_variable(this,lhsi->name,Local);
+			auto t=v->get_type();
+			if (rhs){
+				resolved|=rhs->resolve_if(sc,desired,flags);
+				t=expect_cast<Type>(rhs);
+				v->set_type(t);
+			}
+			lhs->set_def(v);
+			if (t){
+				if (t->name>=IDENT && !t->sub) {
+					t->set_struct_def(sc->find_struct(t));
+				}
+			}
+			if (auto t=v->get_type()) {
+				sc->try_find_struct(t);// instantiate
+			}
+			
+			return propogate_type_refs(flags, this, v->type_ref(),type_ref());
+		}
+		else if (op_ident==ASSIGN){
+			ASSERT(this->lhs && this->rhs);
+			dbg(::dump(this->lhs->type(),this->rhs->type()));
+			resolved|=rhs->resolve_if(sc,nullptr,flags);
+			
+			resolved|=lhs->resolve_if(sc,desired,flags);
+			dbg(::dump(this->lhs->type(),this->rhs->type());)
+			
+			// get coersion right..
+			propogate_type_refs(flags,(Node*)this, rhs->type_ref(), lhs->type_ref());
+			propogate_type_refs(flags,(Node*)this, lhs->type_ref(), this->type_ref());
+			dbg(::dump(this->lhs->type(),this->rhs->type());)
+			return propogate_type_fwd(flags,this, desired, type_ref());
+			//propogate_type(flags,this, type_ref(),rhs->type_ref());
+			//return propogate_type(flags, this, type_ref(),lhs->type_ref());
+		} else{
+			ASSERT(0);
+			return resolved;
+		}
+	}
 
 	if (op_ident==ADDR){  //result=&lhs
 		// todo: we can assert give type is one less pointer, if given
@@ -301,9 +301,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		}
 		else return resolved;
 	}
-	
-	
-	
+
 	if (is_condition(op_ident)){
 		lhs->resolve_if(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
 		rhs->resolve_if(sc,lhs->type_ref(),flags);
@@ -362,7 +360,36 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 	if (!num_non_prim)
 		return false;
 	vector<Expr*> args;if (lhs)args.push_back(lhs);if (rhs)args.push_back(rhs);
-	auto fnd=sc->find_fn(this->name, this, args,desired,flags&(~R_FINAL));
+	
+	auto opname=this->name;
+	ExprFnDef* fnd=nullptr;
+	// TODO: assignment operator overload with PATTERNS needs more thought
+#ifdef OVERLOAD_ASSIGN_OP
+	if ((this->name==ASSIGN || this->name==LET_ASSIGN) && lhs->type() && rhs->type()){
+		// assignment tries to call constructor first
+		auto tname=lhs->type()->deref_all()->name;
+		fnd=sc->find_fn(tname, this, args,desired,flags&(~R_FINAL));
+		// .. then cast operator? ..
+		if (fnd){
+			dbg2(printf("overloaded assign- found constructor %s\n",tname.s));
+			dbg2(this->dump(-1));
+			dbg2(printf("\n"););
+			dbg2(lhs->type()->dump_if(-1));
+			dbg2(printf("->"););
+			dbg2(rhs->type()->dump_if(-1));
+			dbg2(printf("\n"););
+			dbg2(fnd->fn_type->dump_if(-1));
+			dbg2(printf("\n"););
+		}
+		if (!fnd){
+			fnd=sc->find_fn(AS, this, args,desired,flags&(~R_FINAL));
+		}
+	}
+#endif
+
+	if (!fnd){
+		fnd=sc->find_fn(this->name, this, args,desired,flags&(~R_FINAL));
+	}
 	if (fnd) {
 #if DEBUG >=2
 		dbprintf("\nusing overload %s( ",str(this->name));this->lhs->type()->dump_if(-1);dbprintf(" ");this->rhs->type()->dump_if(-1);dbprintf(" )\n");
@@ -513,6 +540,7 @@ CgValue ExprOp::compile_operator_overload(CodeGen& cg,Scope* sc){
 	auto call_fn=const_cast<ExprFnDef*>(this->get_fn());
 
 	CgValue lhsa,rhsa;
+	//dbg2(this->dump(0));dbg2(newline(0));
 	if (this->lhs)
 		lhsa=cg.emit_conversion(lhs, lhs->compile(cg,sc), call_fn->args[0]->type(),sc);
 	if (this->rhs)

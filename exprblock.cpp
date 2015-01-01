@@ -164,6 +164,7 @@ ResolveResult	ExprStructInit::resolve_operator_new(Scope *sc, const Type *desire
 		op->propogate_type_refs(flags, (Node*)op, op->get_type()->sub, b->type_ref());
 
 	resolved|=b->resolve_if(sc, desired?desired->sub:nullptr, flags);
+	this->type()->set_rvalue();
 	return resolved;
 }
 ResolveResult	ExprSubscript::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
@@ -300,10 +301,13 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	dbg(newline(0));
 
 	// RVO - this is ov
-	if (auto d=this->argls.back()->def){
-		if (auto v=d->as_variable())
-			v->return_value=true;
+	if (this->argls.size()){
+		if (auto d=this->argls.back()->def){
+			if (auto v=d->as_variable())
+				v->return_value=true;
+		}
 	}
+	this->type()->set_rvalue();
 
 	return propogate_type_refs(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
 }

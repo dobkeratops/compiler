@@ -1631,6 +1631,8 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 		return this->emit_cast_ref(src,to_type);
 	}
 
+	dbprintf("\nwhen copmiling..:-\n");
+	n->dump_if(0);newline(0);
 	dbprintf("\ntried to convert:-\n");
 	src0.dump();
 	dbprintf("\n--to-->\n");
