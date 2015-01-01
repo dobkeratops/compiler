@@ -98,6 +98,10 @@ CgValue Node::compile_operator_new(CodeGen &cg, Scope *sc,const Type* t,const Ex
 	error(this,"operator new not supported for %s",this->kind_str());
 	return CgValue();
 }
+CgValue Node::compile_operator_dot(CodeGen &cg, Scope *sc,const Type* t,const Expr *lhs){
+	error(this,"operator dot not supported for %s",this->kind_str());
+	return CgValue();
+}
 
 
 

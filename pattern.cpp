@@ -231,7 +231,7 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 		else if (ptn->def){
 			if (auto var=ptn->def->as_variable()){
 				auto varr=var->compile(cg,sc,CgValue());
-				
+				// TODO: overload assign operator as constructor would go here
 				
 				
 				

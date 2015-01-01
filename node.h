@@ -43,7 +43,11 @@ public:
 	void clear_def();
 	virtual void dump(PrinterRef) const;
 	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(INCOMPLETE);};
+	// double dispatch for operators combined with various nodes
+	// new struct-init,fncall, ident, subscript, array-init
 	virtual ResolveResult resolve_operator_new(Scope* scope, const Type* desired,int flags, ExprOp* opnew){error(this,"operator new not supported for %s",this->kind_str());return ResolveResult(INCOMPLETE);};
+	// dot ident, literal(.0 .1..), fncall(method/UFCS), tuple(multi-field acess), block(with notation)
+	virtual ResolveResult resolve_operator_dot(Scope* scope, const Type* desired,int flags, ExprOp* opdot){error(this,"operator new not supported for %s",this->kind_str());return ResolveResult(INCOMPLETE);};
 
 	// wrapper handles 'this==nullptr', and propogation of 'resolved' flag.
 	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
@@ -115,6 +119,7 @@ public:
 
 	virtual CgValue compile(CodeGen& cg, Scope* sc, CgValue input);
 	virtual CgValue compile_operator_new(CodeGen &cg, Scope *sc, const Type* t,const Expr *lhs);
+	virtual CgValue compile_operator_dot(CodeGen &cg, Scope *sc, const Type* t,const Expr *lhs);
 	CgValue compile(CodeGen& cg, Scope* sc);
 	CgValue compile_if(CodeGen& cg, Scope* sc);
 	virtual Node* instanced_by()const{return nullptr;}

@@ -131,20 +131,8 @@ ExprBlock* ExprBlock::clone_sub(ExprBlock* r)const{
 	return r;
 }
 ResolveResult	ExprCall::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
-//	error(this,"new Constructor(args) not implemented yet");
-//	auto b=this;
-/*	if (!desired && !op->get_type() && op->rhs->get_type()) {
-		op->set_type( new Type(op,PTR,(Type*)b->get_type()->clone()) );
-	}
-	if (op->get_type())
-		op->propogate_type_refs(flags, (Node*)op, op->get_type()->sub, b->type_ref());
 
-	resolved|=b->resolve_if(sc, desired?desired->sub:nullptr, flags);
- */
-	// desugar self.
-	// new StructName(args..) --->  (new StructName{}).StructName(args..)
-
-	dbg("desugaring operator new\n");
+	dbg2("desugaring operator new\n");
 	op->name=DOT;
 	op->lhs =new ExprOp(NEW ,op->pos, op->lhs, new ExprStructInit(op->pos, (Expr*)this->call_expr->clone()));
 	//op->rhs(this) unchanged, it calls the new
