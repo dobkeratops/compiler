@@ -209,14 +209,21 @@ ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 }
 void ExprTuple::set_tuple_component_types(){
 	if (!this->get_type()) {
-		auto t=new Type(this, TUPLE);
+		bool typed=true;
 		for (size_t i=0; i<this->argls.size();i++){
 			auto ct=this->argls[i]->get_type();
-			if (!ct) ct=Type::get_auto();
-			t->push_back(ct);
+			if (!ct) typed=false;
 		}
-		t->set_def(t);
-		this->set_type(t);
+		if (typed){
+			auto t=new Type(this, TUPLE);
+			for (size_t i=0; i<this->argls.size();i++){
+				auto ct=this->argls[i]->get_type();
+				if (!ct) ct=(Type*)Type::get_auto()->clone();
+				t->push_back(ct);
+			}
+			t->set_def(t);
+			this->set_type(t);
+		}
 	}
 }
 CgValue ExprTuple::compile(CodeGen& cg,Scope *sc, CgValue input) {
@@ -244,14 +251,44 @@ CgValue ExprTuple::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, c
 
 }
 
-ResolveResult	ExprTuple::resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op) {
+ResolveResult	ExprTuple::resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref) {
 	// tuple is ..
 	auto subt=desired?desired->sub:nullptr;
-	for (int i=0; i<argls.size(); i++,subt=subt?subt->next:nullptr){
-		resolved|=argls[i]->resolve_operator_dot(sc,subt,flags,op);
+	// brute force sorry. complete mess. if type was a vector tree this would be easier. inference needs a ref location to update. however types are stored as linklists, only suiting traversal.
+	Vec<Type*> elem_ts; elem_ts.resize(argls.size());
+	if (auto tt=this->get_type()){
+		int i=0;
+		for (auto tsubt=tt->sub;tsubt;tsubt=tsubt->next,i++){
+			elem_ts[i]=tsubt;
+		}
+		// take ownership;
+		i=0;
+		for (auto tsubt=tt->sub;tsubt;tsubt=tsubt->next,i++){
+			elem_ts[i]->next=nullptr;
+		}
+		tt->sub=nullptr;
 	}
-	set_tuple_component_types();
-	return resolved;
+	// resolve tuple components..
+	for (int i=0; i<argls.size(); i++,subt=subt?subt->next:nullptr){
+		if (!elem_ts[i] && subt)
+			elem_ts[i]=(Type*)subt->clone();// inference will write to it, fill in type gaps..
+		else if (elem_ts[i] && subt){
+			propogate_type_fwd(flags, (const Node*)this, subt, elem_ts[i]);
+		}
+		Type* tmp_tref=0;
+		resolved|=argls[i]->resolve_operator_dot(sc,subt,flags,lhs, tmp_tref);
+		if (tmp_tref && !elem_ts[i]){
+			elem_ts[i]=(Type*)tmp_tref->clone();
+		} // else fill in the gaps.
+	}
+	// put components back into linklist form . eugh.
+	if (!this->get_type()){
+		this->set_type(new Type(this, TUPLE));
+	}
+	for (size_t i=0; i<this->argls.size();i++){
+		this->get_type()->push_back(elem_ts[i]);
+	}
+	return resolved|propogate_type_refs(flags,(const Node*)this, this->type_ref(),tref);
 }
 
 ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
@@ -644,9 +681,9 @@ ExprCall::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr
 }
 
 ResolveResult
-ExprCall::resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op){
+ExprCall::resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref){
 	auto method_name=this->call_expr->name;
-	this->resolve_call_sub(sc, desired, flags, op->lhs);
-	return propogate_type_refs(flags,op,this->type(),op->type_ref());
+	this->resolve_call_sub(sc, desired, flags, lhs);
+	return propogate_type_refs(flags,(const Node*)this,this->type(),tref);
 	
 }

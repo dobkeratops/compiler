@@ -12,6 +12,20 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+	{	"multiple field read",__FILE__,__LINE__,R"====(
+												  
+		extern"C"fn printf(s:str,...)->int;
+		struct XYZ{ vx:int,vy:int,vz:int};
+		
+		fn main(argc:int,argv:**char)->int{
+			let apple=XYZ{15,16,17};
+			let yz=apple.(vy,vz);
+			printf("(%d %d)\n", yz.0, yz.1);
+			0	}
+		)===="
+		,"(16 17)\n"
+	},
+	
 	{	"RValue references",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
 		struct Qux{
@@ -401,7 +415,7 @@ CompilerTest g_Tests[]={
 		)===="
 		,nullptr
 	},
- 
+
 	{	"struct default constructor",__FILE__,__LINE__,R"====(
 		
 		struct Extents(min:float,max:float){
@@ -409,7 +423,7 @@ CompilerTest g_Tests[]={
 			size:float	=diff/2
 		} where {
 			let sum=min+max;
-			let size=max-min;
+			let diff=max-min;
 		}
 		fn main(argc:int,argv:**char)->int{
 			0	}

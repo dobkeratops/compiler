@@ -106,7 +106,7 @@ struct ExprTuple : ExprBlock{
 	void set_tuple_component_types();
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
-	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref)override;
 
 };
 struct ExprCall : ExprBlock{
@@ -118,7 +118,7 @@ struct ExprCall : ExprBlock{
 	CgValue compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 	ResolveResult	resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
 	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
-	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref)override;
 
 };
 struct ExprArrayInit : ExprBlock{

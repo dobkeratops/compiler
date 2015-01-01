@@ -131,7 +131,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// TODO: assert that lhs is a pointer or struct? we could be really subtle here..
 		verify_all();
 		if (t) {
-			rhs->resolve_operator_dot(sc, desired, flags, this);
+			return rhs->resolve_operator_dot(sc, desired, flags, this->lhs, this->type_ref());
 		}
 		verify_all();
 		return ResolveResult(INCOMPLETE);

@@ -384,7 +384,6 @@ ExprStructDef::roll_constructor_wrappers(Scope* sc){
 	}
 }
 
-
 ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
 	if (m_recurse) return COMPLETE;
 	m_recurse=true;

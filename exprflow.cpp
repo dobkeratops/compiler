@@ -33,7 +33,6 @@ ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags)
 	return resolved;
 }
 
-
 void ExprIf::translate_tparams(const TParamXlat& tpx){
 	this->cond->translate_typeparams_if(tpx);
 	this->body->translate_typeparams_if(tpx);
@@ -61,7 +60,6 @@ void ExprFor::recurse(std::function<void(Node*)>& f){
 	this->pattern->recurse(f);
 	this->type()->recurse(f);
 }
-
 
 Node* ExprFor::clone()const{
 	auto n=new ExprFor(this->pos);

@@ -142,24 +142,21 @@ ExprIdent::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Exp
 	return lhsv.get_elem(cg,this,sc);
 }
 ResolveResult
-ExprIdent::resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)
+ExprIdent::resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs, Type*& tref)
 {
-	if (auto st=sc->find_struct_of(op->lhs)){
+	if (auto st=sc->find_struct_of(lhs)){
 		if (auto f=st->find_field(this)){
-			propogate_type_refs(flags,op, f->type_ref(), op->type_ref());
-			auto ret=f->type();
-			return propogate_type_refs(flags,op, ret,op->type_ref());
+			return propogate_type_refs(flags,(const Node*)this, f->type_ref(), tref);
+//			auto ret=f->type();
+//			return propogate_type_refs(flags,op, ret,op->type_ref());
 		}
 	}
 	if (flags&R_FINAL) {
-		dump_field_info(op,sc);
+		dump_field_info(lhs,sc);
 	}
 	// no good.
 	return ResolveResult();
 }
-
-
-
 
 void
 ExprIdent::recurse(std::function<void(Node*)>&f){
@@ -356,14 +353,13 @@ ExprLiteral::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const E
 	return CgValue();
 }
 ResolveResult
-ExprLiteral::resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)
+ExprLiteral::resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs, Type*& tref)
 {
-	if (isNumStart(*str(op->rhs->name),0)){
-		auto fi=getNumberInt(op->rhs->name);
-		if (auto t=op->lhs->type()){
+	if (isNumStart(*str(this->name),0)){
+		auto fi=getNumberInt(this->name);
+		if (auto t=lhs->type()){
 			auto elem_t = t->get_elem(fi);
-			op->propogate_type_expr_ref(flags, op, elem_t);
-			return op->propogate_type_fwd(flags,op, desired, op->type_ref());
+			return this->propogate_type_refs(flags,(const Node*)this, elem_t, tref);
 		}
 	}
 	return INCOMPLETE;

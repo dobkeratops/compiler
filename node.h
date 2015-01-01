@@ -47,7 +47,7 @@ public:
 	// new struct-init,fncall, ident, subscript, array-init
 	virtual ResolveResult resolve_operator_new(Scope* scope, const Type* desired,int flags, ExprOp* opnew){error(this,"operator new not supported for %s",this->kind_str());return ResolveResult(INCOMPLETE);};
 	// dot ident, literal(.0 .1..), fncall(method/UFCS), tuple(multi-field acess), block(with notation)
-	virtual ResolveResult resolve_operator_dot(Scope* scope, const Type* desired,int flags, ExprOp* opdot){error(this,"operator new not supported for %s",this->kind_str());return ResolveResult(INCOMPLETE);};
+	virtual ResolveResult resolve_operator_dot(Scope* scope, const Type* desired,int flags, Expr *lhs,Type*& tref){error(this,"operator new not supported for %s",this->kind_str());return ResolveResult(INCOMPLETE);};
 
 	// wrapper handles 'this==nullptr', and propogation of 'resolved' flag.
 	ResolveResult resolve_if(Scope* scope, const Type* desired,int flags){
@@ -223,7 +223,7 @@ struct ExprScopeBlock : Expr{
 	const Expr*	get_return_expr()const override	{return this;}
 };
 
-/// any node that is a Definition, maintains list of refs
+/// any node that is a Definition maintains list of refs
 struct ExprDef :Expr{
 	Node*	refs=0;
 	void	remove_ref(Node* ref);

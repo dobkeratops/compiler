@@ -30,9 +30,9 @@ struct ExprIdent :Expr{
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags) override;
 	void		recurse(std::function<void(Node*)>&) override;
 	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
-	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
-
+	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref)override;
 };
+
 // Identifier with given type-parameters
 struct IdentWithTParams : ExprIdent{
 	ExprIdent*			ident;
@@ -84,7 +84,7 @@ struct ExprLiteral : ExprDef {
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue input) override;
 	ExprLiteral* as_literal() override{ return this;};
 	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
-	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref)override;
 
 };
 
