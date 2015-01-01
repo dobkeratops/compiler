@@ -31,7 +31,8 @@ Dont have a name yet hence 'hack'..
 #### WIP
  * Copying details of C++ RAII
    * destructors when vars/rvals go out of scope
-   * doesn't invoke copy/conversion/RValue-ref constructors yet
+   * RValue-ref work in some cases, not fully implemented
+   * doesn't compose ctor/dtor yet
  * Parsing rust Trait/Impl
    * not planning on getting a full implementation done soon,
    * I prefer UFCS/overloading
@@ -39,7 +40,7 @@ Dont have a name yet hence 'hack'..
    * might inspire getting a larger subset of Rust handled..
    * details - 'Self' type - in progress..
  * rust-style enum/match- 
-   * currently does a..b a..<b, a|b|c, (a,b,c), if guards, @; 
+   * currently does a..b a..<b, a|b|c, (a,b,c), if guards, @,nesting; 
      * no slice patterns yet
    * have tried to add scalas idea of being able to reference vars in patterns (by unary @)
    * just added padding of variants,like rust.
@@ -59,10 +60,10 @@ https://github.com/dobkeratops/compiler/blob/master/example.rs
  * 4 Add features inspired by Rust, keep syntax close
  * 5 dedicated features for parallelism, shader+GPGPU programming ?
  * 6 Aim to actually compile a subset of Rust, 
-   * unless it proves impossible to reconcile with goals 1,2,3..
+   * unless proves impossible to reconcile with goals 1,2,3
  * 7 a subset should make a passable embedded dynamic language
    * think of 1 language to handle the C++-&-embedded-Lua usecase. recover @ptr..
-   * but dont' compromise goals 1,2,.. over this.
+   * but dont' compromise goals 1-6 over this.
 
 ### Short Term Priorities
 
@@ -88,7 +89,7 @@ https://github.com/dobkeratops/compiler/blob/master/example.rs
 
 Basically trying to combine everything I like from C++ & Rust, dropping what I dont like, plus what i've always missed.
 
-This could all be done as a fork of a C++ compiler, or as a fork of Rust. However neither community shares these specific goals and it is hard to make complex changes to existing projects - retrofitting 2way inference/openclasses to C++? or retrofitting adhoc-overloading to Rust? 
+This could all be done as a fork of a C++ compiler, or as a fork of Rust. however maintaining a fork againt commnity momentum (and trying to make such changes with either complex sourcebase) would be hard.
 
 .. Anything here could be considered 'feature requests' for C++ or Rust.
 
@@ -100,7 +101,7 @@ Also I value performance+productivity over compile-time safety. You need to writ
 
 I beleive C++'s main 'curse' is the way "headers & classes interact", and the asymetry between functions and methods has always been frustrating.(I have worked mostly on platforms where vtables were unacceptable). The standard libraries are messy but easily replaced. UFCS would be a big step forward.
 
-Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code.
+Other C++ flaws are acceptable due to its evolutionary path and need to represent low level code
 
 Rust on the other hand is a little too restrictive; in particular I want to be able to think primarily in Functions & Structs - not classes,traits, or hierachical modules. Rust Traits are good but I'd prefer them optional & duck-typed. Rusts philosophy edges toward verbosity,'costs must be explicit' -IMO costs should be deterministic sure, but typing more for slow code doesn't make it faster- it wastes time on setup,tools,tests.. What is important is expressivity, ability to write optimal code more elegantly.
 Rust has to *over-estimate* safety to be sure. Some performant patterns are still safe, without being compile-time provable. empirical tests are usually good enough.
