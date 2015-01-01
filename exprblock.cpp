@@ -204,6 +204,10 @@ ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 		resolved|=this->argls[i]->resolve_if(sc,desired_sub,flags);
 	}
 	// todo: we need to get better at filling in the gaps.
+	this->set_tuple_component_types();
+	return propogate_type_fwd(flags,(Node*)this, desired,this->type_ref());
+}
+void ExprTuple::set_tuple_component_types(){
 	if (!this->get_type()) {
 		auto t=new Type(this, TUPLE);
 		for (size_t i=0; i<this->argls.size();i++){
@@ -214,7 +218,6 @@ ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 		t->set_def(t);
 		this->set_type(t);
 	}
-	return propogate_type_fwd(flags,(Node*)this, desired,this->type_ref());
 }
 CgValue ExprTuple::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	auto tuple=cg.emit_alloca_type(this, this->type());
@@ -224,6 +227,31 @@ CgValue ExprTuple::compile(CodeGen& cg,Scope *sc, CgValue input) {
 		elem.store(cg,val);
 	}
 	return tuple;
+}
+// these would be less verbose if they desugared to primitives, but we'd be allocating during compile passes.
+// compute types -> use types to emit code seems ok,?
+
+CgValue ExprTuple::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* a_lhs) {
+	// TODO ensure this makes *refs* in an lvalue position so we can do expr.(x,y,z)=(..,..,..);
+	auto lhs=const_cast<Expr*>(a_lhs);
+	auto tuple=cg.emit_alloca_type(this, this->type());
+	for (int i=0; i<this->argls.size(); i++){
+		auto val=this->argls[i]->compile_operator_dot(cg, sc, this->argls[i]->type(), a_lhs);
+		auto elem=tuple.get_elem_index(cg,i);
+		elem.store(cg,val);
+	}
+	return tuple;
+
+}
+
+ResolveResult	ExprTuple::resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op) {
+	// tuple is ..
+	auto subt=desired?desired->sub:nullptr;
+	for (int i=0; i<argls.size(); i++,subt=subt?subt->next:nullptr){
+		resolved|=argls[i]->resolve_operator_dot(sc,subt,flags,op);
+	}
+	set_tuple_component_types();
+	return resolved;
 }
 
 ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {

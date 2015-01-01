@@ -245,7 +245,6 @@ fn main(argc:int,argv:**char)->int{
 	
 
 	let fv=Foo{vx:13,vy:14,vz:15}; // initialize struct on stack, named fields
-
 	something_foo(&fv,&fv);
 	printf("fv.vx=%d\n",fv.vx);
 

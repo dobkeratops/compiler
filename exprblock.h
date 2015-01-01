@@ -103,9 +103,10 @@ struct ExprTuple : ExprBlock{
 	const char* kind_str() const  override		{return "tuple";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const override	{return (Node*)clone_sub(new ExprTuple());}
+	void set_tuple_component_types();
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
-	//CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
-	//ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
+	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
 
 };
 struct ExprCall : ExprBlock{
