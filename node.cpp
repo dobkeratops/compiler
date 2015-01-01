@@ -17,7 +17,7 @@ void Node::set_def(ExprDef *d){
 	else {
 		if (d==0 && this->def){ ASSERT("use clear_def(), not set_def(0)");}
 		if (d!=this->def){
-			dbprintf("WARNING!!-was %d %s now %d %s\n",def->pos.line,def->name_str(), d->pos.line,d->name_str());
+			dbprintf("WARNING!!-was %d %s:%s now %d %s:%s\n",def->pos.line,def->name_str(),def->kind_str(), d->pos.line,d->name_str(),d->kind_str());
 			//			ASSERT(d==this->def);
 		}
 		def->remove_ref(this);

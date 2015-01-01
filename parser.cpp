@@ -802,7 +802,10 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 			ret=new Type(owner,PTR);
 			ret->sub=parse_type(src,close,owner);
 		}
-		else if (tok==AND) {
+		else if (tok==LOG_AND) {
+			ret=new Type(owner,RVALUE_REF);
+			ret->sub=parse_type(src,close,owner);
+		}else if (tok==AND) {
 			ret=new Type(owner,REF);
 			ret->sub=parse_type(src,close,owner);
 		}else {
@@ -853,7 +856,7 @@ ArgDef* parse_arg_or_self(int index,TokenStream& src, Type* self_t, int close) {
 		dbg(dbprintf("default expr needs cleanup- move to not consuming close"));
 		a->default_expr=parse_expr(src);
 	}
-	if (self_t && (a->pattern->name==REF || a->pattern->name==PTR) && a->pattern->sub->name==SELF){
+	if (self_t && (a->pattern->name==RVALUE_REF ||a->pattern->name==REF || a->pattern->name==PTR) && a->pattern->sub->name==SELF){
 		a->name= THIS;
 		g_leak_hack.push_back(a->pattern);
 		a->pattern=nullptr;

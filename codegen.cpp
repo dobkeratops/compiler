@@ -120,11 +120,11 @@ CgValue CgValue::ref_op(CodeGen& cg,const Type* t) const { // take type calculat
 	t->dump(0);newline(0);
 #endif
 	if (!reg && (bool)addr) {	// we were given a *reference*, we make the vlaue the adress
-		ASSERT(t->name==REF);
+		ASSERT(t->is_ref());
 		ASSERT(t->sub->is_equal(this->type));
 		return CgValue(addr,t);
 	}else if (reg && !addr){
-		ASSERT(t->name==REF && this->type->name!=REF);
+		ASSERT(t->is_ref() && !this->type->is_ref());
 		ASSERT(t->sub->is_equal(this->type));
 		cg.emit_comment("TODO: REMOVE THE AUTO LOAD OF ARGUMENTS, DEFER THAT TO 'ARG CONVERSION- that should check if arg is a 'ref', and not load it. currently we store then load!");
 		auto r=cg.emit_alloca_type((Expr*)t, this->type);
@@ -359,7 +359,7 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 	src_in_reg.dump();
 	dbprintf("\n");
 #endif
-	if (src_in_reg.type->name==REF && src_in_reg.type->sub->is_equal(dst.type)){
+	if (src_in_reg.type->is_ref() && src_in_reg.type->sub->is_equal(dst.type)){
 		src_in_reg=CgValue(0,src_in_reg.type->sub,src_in_reg.reg).load(*this);
 #if DEBUG>=3
 		dbprintf("\nsrc in reg loaded again because it was a ref=\n");
@@ -1574,7 +1574,7 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 			src=src0.load(*this);
 		}
 	}
-	if ((src.type->name==REF && to_type->name!=REF) ||(src0.type->is_pointer_or_ref() && src0.addr && src0.reg==0)
+	if ((src.type->is_ref() && !to_type->is_ref()) ||(src0.type->is_pointer_or_ref() && src0.addr && src0.reg==0)
 		){
 		src=src.load(*this);
 	}
@@ -1587,7 +1587,7 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 	// We must convert..
 	// is it a trivial pointer conversion?
 
-	if (src.type->name!=REF && to_type->name==REF){
+	if (!src.type->is_ref() && to_type->is_ref()){
 		if (!src.reg && src.elem<0 && src.addr){
 			return CgValue(src.addr, to_type);
 		} else {
@@ -1611,7 +1611,7 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 		return src.load(*this);
 	}
 	// load reference->value?
-	if (src0.type->name==REF && to_type->name!=REF){
+	if (src0.type->is_ref() && !to_type->is_ref()){
 		if (!src0.type->sub->is_equal(to_type)){
 			error(n,"\ncan't convert,bug\n");
 		}

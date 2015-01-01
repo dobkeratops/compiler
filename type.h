@@ -132,7 +132,10 @@ struct Type : ExprDef {
 	bool	is_name(int n1)	const{return this->name==n1;}
 	bool	is_name(int n1, int n2)const{return this->name==n1||this->name==n2;}
 	bool	is_name(int n1, int n2,int n3)const	{return this->name==n1||this->name==n2||this->name==n3;}
-	bool	is_pointer_or_ref()const		{return this->strip_qualifiers()->is_name(PTR,REF);}
+	bool	is_pointer_or_ref()const		{return this->strip_qualifiers()->is_name(PTR,REF,RVALUE_REF);}
+	bool	is_ref()const{return this->strip_qualifiers()->is_name(REF,RVALUE_REF);}
+	bool	is_lvalue_ref()const{return this->strip_qualifiers()->is_name(REF);}
+	bool	is_rvalue_ref()const{return this->strip_qualifiers()->is_name(RVALUE_REF);}
 	bool	is_pointer()const		{return this->strip_qualifiers()->is_pointer_or_ref();}//TODO deprecate, must be specific since pointers & references have subtle differences.
 	bool 	is_pointer_not_ref()const	{if (!this) return false; return this->strip_qualifiers()->name==PTR;}
 	bool	is_void()const			{return !this || this->name==VOID;}

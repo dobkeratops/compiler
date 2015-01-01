@@ -13,16 +13,15 @@ Dont have a name yet hence 'hack'..
 #### Currently supports:-
 
  * most C operators, functions, structs,if-else, 
-  * (todo ++/--;and currently &p[i] instead of ptr arithmetic)
  * 'everything is an expression' syntax
  * rust-like 'enum/Match' - tagged-unions & pattern-matching
  * C for loops + break../else{..} expressions
+ * RAII (destructors)
  * function overloading+UFCS
  * limited operator overloading (no conversions yet)
  * Forward+Reverse Type Inference within functions, 
   * forward between functions -by adhoc template sugar
  * stack-based closures 
-  * (workaround: if need escape,use a class)
  * templated functions & structs
  * new/delete ,and a ordered or named struct field initializer
  * limited C++-style internal vtables & single inheritance
@@ -30,6 +29,9 @@ Dont have a name yet hence 'hack'..
 
 
 #### WIP
+ * Copying details of C++ RAII
+   * destructors when vars/rvals go out of scope
+   * doesn't invoke copy/conversion/RValue-ref constructors yet
  * Parsing rust Trait/Impl
    * not planning on getting a full implementation done soon,
    * I prefer UFCS/overloading
@@ -43,6 +45,8 @@ Dont have a name yet hence 'hack'..
    * just added padding of variants,like rust.
  * HKT (template-template parameters)
    * .. not extensively tested
+ * Missing operators
+  * (todo ++/--;and currently &p[i] instead of ptr arithmetic)
 
 example source..
 https://github.com/dobkeratops/compiler/blob/master/example.rs

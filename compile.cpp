@@ -44,6 +44,10 @@ void name_mangle_append_type(char* dst,int size, const Type* t){
 		//name_mangle_append_name(dst,size,t->struct_def->get_mangled_name());
 
 	auto n=t->name;
+	if (n==REF){ strcat(dst,"R");}
+	else
+	if (n==RVALUE_REF){ strcat(dst,"O");}
+	else
 	if (n==PTR){ strcat(dst,"P");}
 	else if (n>=RAW_TYPES && n<=VOIDPTR) {
 		strcat(dst,g_mangle_type[(int)n-RAW_TYPES]);

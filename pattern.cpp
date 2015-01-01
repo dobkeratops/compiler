@@ -161,7 +161,7 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 		} else
 			return rhs;
 	}
-	if (ptn->name==PTR ||ptn->name==REF){
+	if (ptn->name==PTR ||ptn->name==REF||ptn->name==RVALUE_REF){
 		return ptn->sub->compile(cg, sc, val.is_valid()?val.deref_op(cg):val);
 	}
 	if (ptn->name==PLACEHOLDER){

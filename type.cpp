@@ -36,7 +36,7 @@ bool Type::is_userdefined()const{
 	if (!this)return false;
 	if (this->name==PTR)
 		return false;
-	if (this->name==REF||this->is_qualifier())
+	if (this->is_ref()||this->is_qualifier())
 		return this->sub->is_userdefined();
 	if (this->name>=IDENT)
 		return true;
@@ -46,7 +46,7 @@ bool Type::is_primitive()const{
 	if (!this)return false;
 	if (this->name==PTR)
 		return false;
-	if (this->name==REF || this->is_qualifier())
+	if (this->is_ref() || this->is_qualifier())
 		return this->sub->is_primitive();
 	if (this->name>=IDENT)
 		return true;
@@ -182,10 +182,10 @@ bool Type::is_equal(const Type* other, bool coerce, Name self_t) const{
 		if (this->name==MUT && other->name!=MUT){	// non-const coerces to const just fine - too mutability
 			return this->sub->is_equal(other, coerce, self_t);
 		}
-		if (this->name==REF && other->name!=REF) {	// ref coerces to value
+		if (this->is_ref() && !other->is_ref()) {	// ref coerces to value
 			return this->sub->is_equal(other,coerce,self_t);
 		}
-		if (this->name!=REF && other->name==REF) {	// object coerces to ref fine
+		if (!this->is_ref() && other->is_ref()) {	// object coerces to ref fine
 			return this->is_equal(other->sub,coerce,self_t);
 		}
 	}
@@ -243,10 +243,10 @@ bool Type::is_equal(const Type* other,const TParamXlat& xlat,Name self_t) const{
 		if (this->name==MUT && other->name!=MUT){	// non-const coerces to const just fine - too mutability
 			return this->sub->is_equal(other, xlat, self_t);
 		}
-		if (this->name==REF && other->name!=REF) {	// ptr coerces to ref fine.
+		if (this->is_ref() && !other->is_ref()) {	// ref coerces to val fine.
 			return this->sub->is_equal(other,xlat,self_t);
 		}
-		if (this->name!=REF && other->name==REF) {	// object coerces to ref fine
+		if (!this->is_ref() && other->is_ref()) {	// val coerces to ref fine
 			return this->is_equal(other->sub,xlat,self_t);
 		}
 	}
@@ -377,13 +377,13 @@ bool Type::is_struct()const{
 }
 int Type::num_pointers() const {
 	if (!this) return 0;
-	if (this->name==PTR || this->name==REF)
+	if (this->is_pointer_or_ref())
 		return 1+this->sub->is_pointer();
 	else return 0;
 }
 int Type::num_pointers_and_arrays() const {
 	if (!this) return 0;
-	if (this->name==PTR || this->name==REF|| this->name==ARRAY)
+	if (this->is_pointer_or_ref()|| this->name==ARRAY)
 		return 1+this->sub->is_pointer();
 	else return 0;
 }

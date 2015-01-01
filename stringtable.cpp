@@ -35,7 +35,10 @@ Name get_prefix_operator(Name tok) {
 		case POST_DEC: return Name(PRE_DEC);
 		case SUB: return Name(NEG);
 		case MUL: return Name(DEREF);
-		case AND: return Name(ADDR);
+		case AND:
+			return Name(ADDR);
+		case LOG_AND:
+			return Name(RVALUE_REF);
 		default: return tok;
 	}
 }
@@ -48,6 +51,7 @@ Name get_infix_operator(Name tok) {
 		case NEG: return Name(SUB);
 		case DEREF: return Name(MUL);
 		case ADDR: return Name(AND);
+		case RVALUE_REF: return Name(LOG_AND);
 		default: return tok;
 	}
 }
