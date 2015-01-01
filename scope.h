@@ -93,6 +93,7 @@ public:
 	NamedItems* find_named_items_local(Name name);
 	NamedItems* get_named_items_local(Name name);
 	NamedItems* find_named_items_rec(Name name);
+	void		resolve();
 	Expr*		current_loop(int levels);
 	ExprStructDef* owner_struct() { return this->owner_fn?this->owner_fn->as_struct_def():nullptr;}
 private:

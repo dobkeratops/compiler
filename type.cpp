@@ -296,6 +296,7 @@ bool Type::is_equal_sub(const Type* other,const TParamXlat& xlat,Name self_t) co
 
 void Type::dump_sub(int flags)const{
 	if (!this) return;
+	if (!this->is_rvalue()) dbprintf("L.");
 	if (this->name==TUPLE) {
 		dbprintf("(");
 		for (auto t=sub; t; t=t->next){
@@ -476,6 +477,7 @@ Type::clone() const{
 		p=&((*p)->next);
 		src=src->next;
 	}
+	r->rvalue=this->rvalue;
 	return r;
 }
 

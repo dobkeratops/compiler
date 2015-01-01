@@ -243,6 +243,7 @@ ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
 
 ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
 	verify_all();
+	this->get_scope()->resolve();
 	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
 	this->def->resolve_if(sc, nullptr, flags);
 	// RVO
@@ -309,7 +310,12 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 
 ResolveResult ExprCall::resolve(Scope* sc, const Type* desired, int flags) {
 	this->call_expr->def->dump_if(0);
-	return this->resolve_call_sub(sc,desired,flags,nullptr);
+	auto r=this->resolve_call_sub(sc,desired,flags,nullptr);
+	if (this->type()){
+		this->type()->set_rvalue();
+	}
+
+	return r;
 }
 ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int flags,Expr* receiver) {
 	// TODO: distinguish 'partially resolved' from fully-resolved.

@@ -471,6 +471,13 @@ Variable* Scope::try_capture_var(Name name) {
 	return this->create_variable(name,k);
  }
  */
+void Scope::resolve(){
+	if (!this) return;
+	for (auto v=this->vars;v;v=v->next_of_scope){
+		if (v->type())
+			v->type()->rvalue=false;
+	}
+}
 Variable* Scope::create_variable(Node* ast_pos, Name name,VarKind k){
 	auto exv=this->find_scope_variable(name);
 	if (exv) return exv;

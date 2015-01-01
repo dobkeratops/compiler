@@ -16,7 +16,7 @@ CompilerTest g_Tests[]={
 		extern"C"fn printf(s:str,...)->int;
 		struct Qux{
 			fn Qux(){printf("Qux.ctor\n");this}
-//			fn Qux(x:&Qux){printf("Qux.copy\n");this}
+			fn Qux(x:&Qux){printf("Qux.copy\n");this}
 			fn Qux(x:&&Qux){printf("Qux.move\n");this}
 			fn ~Qux(){printf("Qux.dtor\n");};
 		}
@@ -31,7 +31,7 @@ CompilerTest g_Tests[]={
 		},
 		)===="
 		,
-		"Qux.ctor\nQux.ctor\nQux.move\nQux.dtor\nQux.copy\nfoo\nQux.dtor\nQux.dtor\n"
+		"Qux.ctor\nQux.ctor\nQux.move\nQux.dtor\nfoo\nQux.dtor\nQux.copy\nfoo\nQux.dtor\nQux.dtor\n"
 	},
 
 	{	"RValue destructor",__FILE__,__LINE__,R"====(

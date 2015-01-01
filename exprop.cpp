@@ -370,6 +370,8 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 		this->set_fn(fnd);
 		//override any type that might have been infered by intrinsic operators.
 		this->set_type(fnd->return_type());
+		if (this->type())
+			this->type()->set_rvalue();
 		return true;
 	}
 	return false;

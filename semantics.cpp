@@ -351,6 +351,17 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	if (!f->is_enough_args((int)args.size()) || f->too_many_args((int)args.size())){
 		if (0==(this->flags&R_FINAL)) return;
 	}
+#if DEBUG >=2
+	int num_rvals=0;
+	for (int i=0; i<args.size();i++) {
+		if (args[i]->type()->is_rvalue()){
+			dbg2(printf("got rvalue argument %s\n",f->name_str())); num_rvals++;
+		}
+	}
+	if (!num_rvals){
+		dbg2(dbprintf("no rvalue args %s",f->name_str()));
+	}
+#endif
 	// TODO: may need to continually update the function match, eg during resolving, as more types are found, more specific peices may appear?
 	// Find max number of matching arguments
 	
@@ -374,7 +385,19 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	}
 #endif
 	for (int i=0; i<args.size(); i++) {
-		auto at=args[i]->get_type(); if (!at) continue;
+		auto at=args[i]->get_type();
+		if (!at) continue;
+		if (i<f->args.size()){
+			if (auto fa=f->args[i]) {
+				if (auto ft=fa->get_type()){
+					if (ft->is_rvalue_ref()){
+						if (at->is_rvalue()){
+							score+=1;
+						}
+					}
+				}
+			}
+		}
 		for (int jj=i; jj<f->args.size(); jj++) {
 			auto j=jj%args.size();
 			if (auto s=f->args[j]->get_type()->is_equal_or_coercible(at)){

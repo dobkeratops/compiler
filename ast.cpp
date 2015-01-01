@@ -8,6 +8,7 @@
 
 ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// todo: not if its' a typename,argname?
+	if (this->type()) this->type()->rvalue=false;// identifiers are not rvalues.
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled .
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
