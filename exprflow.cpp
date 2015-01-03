@@ -7,9 +7,12 @@ void ExprIf::find_vars_written(Scope* s, set<Variable*>& vars) const{
 	else_block->find_vars_written_if(s,vars);
 }
 
-
 ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags){
+	return this->resolve_for_sub(outer_scope,desired,flags);
+}
+ResolveResult	ExprFor::resolve_for_sub(Scope* outer_scope,const Type* desired,int flags){
 	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
+
 	resolved|=init->resolve_if(sc,0,flags);
 	resolved|=cond->resolve_if(sc,Type::get_bool(),flags);
 	resolved|=incr->resolve_if(sc,0,flags);
@@ -33,18 +36,9 @@ ResolveResult	ExprFor::resolve(Scope* outer_scope,const Type* desired,int flags)
 	return resolved;
 }
 
-void ExprIf::translate_tparams(const TParamXlat& tpx){
-	this->cond->translate_typeparams_if(tpx);
-	this->body->translate_typeparams_if(tpx);
-	this->else_block->translate_typeparams_if(tpx);
-	this->type()->translate_typeparams_if(tpx);
-}
-
 
 void ExprFor::translate_tparams(const TParamXlat& tpx)
 {
-	this->pattern->translate_typeparams_if(tpx);
-	this->expr->translate_typeparams_if(tpx);
 	
 	this->init->translate_typeparams_if(tpx);
 	this->cond->translate_typeparams_if(tpx);
@@ -59,20 +53,105 @@ void ExprFor::recurse(std::function<void(Node*)>& f){
 	this->init->recurse(f);
 	this->body->recurse(f);
 	this->else_block->recurse(f);
-	this->pattern->recurse(f);
 	this->type()->recurse(f);
 }
 
 Node* ExprFor::clone()const{
 	auto n=new ExprFor(this->pos);
-	n->pattern=(Pattern*)pattern->clone_if();
-	n->init=(Expr*)init->clone_if();
+	return clone_for_sub(n);
+}
+Node* ExprFor::clone_for_sub(ExprFor* n)const{
 	n->cond=(Expr*)cond->clone_if();
 	n->incr=(Expr*)cond->clone_if();
 	n->body=(Expr*)cond->clone_if();
 	n->else_block=(Expr*)cond->clone_if();
 	return n;
 }
+void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
+	incr->find_vars_written_if(s,vars);
+	cond->find_vars_written_if(s,vars);
+	body->find_vars_written_if(s,vars);
+	else_block->find_vars_written_if(s,vars);
+}
+
+
+void ExprFor::dump(PrinterRef d) const {
+	newline(d);dbprintf("(%s ",this->kind_str());
+	this->init->dump_if(d+1); newline(d);dbprintf(";");
+	this->cond->dump_if(d+1); newline(d);dbprintf(";");
+	this->incr->dump_if(d+1); newline(d);dbprintf(" {");
+/*	} else {
+		this->pattern->dump(d+1);
+		newline(d);dbprintf(" in ");
+		this->init->dump(d+1); newline(d);dbprintf(" {");
+	}
+ */
+	this->body->dump_if(d+1);
+	newline(d);dbprintf("}");
+	if (this->else_block){
+		newline(d);dbprintf("else{");
+		this->else_block->dump_if(d+1);
+		newline(d);dbprintf("}");
+	}
+	newline(d);dbprintf(")");
+	if(this->type()){
+		dbprintf(":");
+		this->type()->dump_if(d);
+	}
+}
+
+ResolveResult ExprForIn::resolve(Scope *outer_scope, const Type *desired, int flags){
+	auto sc=outer_scope->make_inner_scope(&this->scope,outer_scope->owner_fn,this);
+
+	// for pattern in expr {...}
+	// for __iter=expr; if let Some(pattern)=__iter.next();_ {....}
+	// aka while let
+	auto pos=this->pos;
+
+	if (!(this->init || this->cond || this->incr)){
+		// set the muthur up.
+		this->init=new ExprOp(LET_ASSIGN,pos,new ExprIdent(pos,__ITERATOR), this->expr);
+		this->cond=new ExprOp(// invokes a pattern binding vars
+				LET_ASSIGN,pos,
+				(Expr*)new Pattern(pos,E_SOME,this->pattern),
+				new ExprOp(DOT,pos,
+					new ExprIdent(pos,__ITERATOR),
+					new ExprCall(pos,NEXT)
+							  ));
+	}
+	dbg2({this->dump(0);newline(0);})
+	return resolve_for_sub(scope,desired,flags);
+}
+
+Node* ExprForIn::clone()const{
+	auto fi=new ExprForIn();
+	fi->pos=this->pos;
+	fi->pattern=(Pattern*)pattern->clone_if();
+	fi->init=(Expr*)init->clone_if();
+	
+	return this->clone_for_sub(fi);
+}
+
+void ExprForIn::translate_tparams(const TParamXlat& tpx) {
+	this->expr->translate_tparams(tpx);
+	this->pattern->translate_tparams(tpx);
+	this->ExprFor::translate_tparams(tpx);
+}
+
+
+
+CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc, CgValue input){
+	return cg.emit_for(this, this->init,this->cond, this->incr, this->body, this->else_block);
+}
+
+
+void ExprIf::translate_tparams(const TParamXlat& tpx){
+	this->cond->translate_typeparams_if(tpx);
+	this->body->translate_typeparams_if(tpx);
+	this->else_block->translate_typeparams_if(tpx);
+	this->type()->translate_typeparams_if(tpx);
+}
+
 Node* ExprIf::clone()const {
 	auto p=new ExprIf(this->pos);
 	p->cond=(Expr*)this->cond->clone_if();
@@ -91,7 +170,12 @@ void ExprIf::dump(PrinterRef depth) const {
 		newline(depth);dbprintf("}else{\n");
 		else_block->dump(depth+1);
 	}
-	newline(depth);dbprintf("})\n");
+	newline(depth);dbprintf("})");
+	if (this->type()) {
+		dbprintf(":");
+		this->type()->dump(-1);
+	}
+	newline(depth);
 };
 
 ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
@@ -102,18 +186,31 @@ ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 	resolved|=this->body->resolve_if(sc,desired,flags);
 	Type* bt=this->body->type();
 	if (else_block){
-		propogate_type_fwd(flags,this, desired,bt);
-		propogate_type_expr_ref(flags,this, body->type_ref());
-		resolved|=else_block->resolve_if(sc,bt,flags);
-		propogate_type_refs(flags,this, this->body->type_ref(), else_block->type_ref());
-		propogate_type_refs(flags,this, this->type_ref(), else_block->type_ref());
+		resolved|=else_block->resolve_if(sc,desired,flags);
+//		propogate_type_fwd(flags,this, desired,this->body->type_ref());
+//		propogate_type_fwd(flags,this, desired,this->else_block->type_ref());
+		// TODO: this belongs in 'propogate_type_refs' - merge 2 alternative types.
+		if (auto cb=this->body->type()->get_common_base(this->else_block->type())){
+			Type* t=nullptr;
+			if (this->body->type()->is_pointer()){
+				t=cb->ptr_type;
+			}else if (this->body->type()->is_ref()){
+				t=cb->ref_type;
+			} else
+				t=cb->struct_type;
+			return propogate_type_fwd(flags,this, t, this->type_ref());
+		} else {
+			propogate_type_expr_ref(flags,this, body->type_ref());
 		
+			propogate_type_refs(flags,this, this->body->type_ref(), else_block->type_ref());
+			propogate_type_refs(flags,this, this->type_ref(), else_block->type_ref());
 #if DEBUG >2
-		this->body->type()->dump_if(0);
-		this->else_block->type()->dump_if(0);
-		this->type()->dump_if(0);
+			this->body->type()->dump_if(0);
+			this->else_block->type()->dump_if(0);
+			this->type()->dump_if(0);
 #endif
-		return propogate_type_refs(flags,this, this->type_ref(), this->body->type_ref());
+			return propogate_type_refs(flags,this, this->type_ref(), this->body->type_ref());
+		}
 	}
 	else {
 		// TODO: Could it actually return Body|void ? perhaps we could implicityly ask for that?
@@ -130,44 +227,6 @@ void ExprIf::recurse(std::function<void(Node*)>& f){
 CgValue ExprIf::compile(CodeGen& cg,Scope* sc, CgValue input) {
 	// todo - while etc can desugar as for(;cond;)body, for(){ body if(cond)break}
 	return cg.emit_if(this->get_scope(), input, this->cond, this->body, this->else_block, this->type());
-}
-
-void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
-	incr->find_vars_written_if(s,vars);
-	cond->find_vars_written_if(s,vars);
-	body->find_vars_written_if(s,vars);
-	else_block->find_vars_written_if(s,vars);
-}
-
-
-void ExprFor::dump(PrinterRef d) const {
-	newline(d);dbprintf("(for ");
-	if (this->is_c_for()) {
-		this->init->dump(d+1); newline(d);dbprintf(";");
-		this->cond->dump(d+1); newline(d);dbprintf(";");
-		this->incr->dump(d+1); newline(d);dbprintf(" {");
-	} else {
-		this->pattern->dump(d+1);
-		newline(d);dbprintf(" in ");
-		this->init->dump(d+1); newline(d);dbprintf(" {");
-	}
-	this->body->dump_if(d+1);
-	newline(d);dbprintf("}");
-	if (this->else_block){
-		newline(d);dbprintf("else{");
-		this->else_block->dump_if(d+1);
-		newline(d);dbprintf("}");
-	}
-	newline(d);dbprintf(")");
-	if(this->type()){
-		dbprintf(":");
-		this->type()->dump_if(d);
-	}
-}
-
-
-CgValue ExprFor::compile(CodeGen& cg, Scope* outer_sc, CgValue input){
-	return cg.emit_for(this, this->init,this->cond, this->incr, this->body, this->else_block);
 }
 
 

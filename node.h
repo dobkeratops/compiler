@@ -108,6 +108,7 @@ public:
 	virtual void translate_tparams(const TParamXlat& tpx){ error(this,"not handled for %s",this->kind_str()); };
 	virtual ExprOp* as_op()const			{error(this,"expected op, found %s:%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name as_name()const {
+		this->dump(0);newline(0);
 		error(this,"expected named item at node %s kind=%s",str(this->name),this->kind_str());
 		return PLACEHOLDER;
 	};

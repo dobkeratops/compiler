@@ -95,6 +95,7 @@ struct ExprStructDef: ExprDef {
 	pair<ArgDef*,ExprStructDef*> 	get_field(Name n);
 	int				num_instances()const {auto n=0;for (auto ins=instances;ins;ins=ins->next_instance){n++;} return n;}
 	void		recurse(std::function<void(Node*)>&);
+	ExprStructDef*	get_common_base(ExprStructDef* other);
 	
 	// Inheritance mangaement
 	bool			has_base_class(ExprStructDef* other) const;

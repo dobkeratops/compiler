@@ -114,6 +114,12 @@ bool type_is_coercible(const Type* from,const Type* to,bool coerce){
 	return false;
 }
 
+ExprStructDef* Type::get_common_base(Type* other){
+	auto x=this->get_struct_autoderef();
+	auto y=other->get_struct_autoderef();
+	if (x&&y) return x->get_common_base(y);
+	else return nullptr;
+}
 
 bool  Type::has_typeparam(Scope* sc){
 	if (this->def) {if (this->def->as_tparam_def()) return true;}

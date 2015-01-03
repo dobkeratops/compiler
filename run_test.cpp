@@ -23,24 +23,27 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
-	{
+/*	{
 		"for in loop",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
+		enum Option{
+			Some(int),None()	// todo - roll enum variant constructors
+		};
 		struct Foo{
-			fn begin(){0}
-			fn end(){5}
+			index:int,
+			fn next(){ index+=1; if index<5{Some{index}}else{None} }
 		};
 		fn main(argc:int, argv:**char)->int{
-			let foo:=Foo{};
+			let foo=Foo{};
+			foo.index=0;
 			for x in foo {
 				printf("%d\n",x);
-				if i==5 {break 44;}
 			}
 		},
 		)===="
 		,"0\n1\n2\n3\n4\n"
 	},
-
+*/
 	{	"enum arg coerce",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		enum Foo{

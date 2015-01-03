@@ -251,7 +251,7 @@ ExprFnDef* parse_fn_args(TokenStream& src,int close){
 void parse_fn_args_ret(ExprFnDef* fndef,TokenStream& src,int close){
 	Name tok;
 	int i=0;
-	while ((tok=src.peek_tok())!=NONE) {
+	while ((tok=src.peek_tok())!=NO_TOK) {
 		if (tok==ELIPSIS){
 			fndef->variadic=true; src.eat_tok(); src.expect(close); break;
 		}
@@ -364,9 +364,15 @@ ExprOp* parse_let(TokenStream& src) {
 		t=parse_type(src,0,nullptr);
 	}
 	//nlet->lhs->set_type(t);// we dont need an operator, all nodes have type
-	
+	else
 	if (src.eat_if(ASSIGN)){
 		init=parse_expr(src);
+	}
+	else
+	if (src.peek_tok()!=SEMICOLON){
+		error_begin(ptn,"found %s,expected let pattern[[:type][=expr]]; ",str(src.peek_tok()));
+		
+		error_end(ptn);
 	}
 // cases..
 	if (!t && init){
@@ -938,7 +944,7 @@ ExprStructDef* parse_struct(TokenStream& src) {
 ExprStructDef* parse_tuple_struct_body_sub(TokenStream& src, ExprStructDef* sd){
 	Name tok;
 	int i=0;
-	while ((tok=src.peek_tok())!=NONE){
+	while ((tok=src.peek_tok())!=NO_TOK){
 		if (tok==CLOSE_PAREN){src.eat_tok(); break;}
 		sd->fields.push_back(new ArgDef(src.prev_pos,getNumberIndex(i),parse_type(src,0,sd)));
 		src.eat_if(COMMA); src.eat_if(SEMICOLON);
@@ -983,7 +989,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	// todo: type-params.
 	Name tok;
 	int f_index=0;
-	while ((tok=src.peek_tok())!=NONE){
+	while ((tok=src.peek_tok())!=NO_TOK){
 		// allow writing struct Foo{ .bar:int, .baz:int} for easy search
 		if (tok==DOT){ src.eat_tok();tok=src.peek_tok();}
 		if (tok==CLOSE_BRACE){src.eat_tok(); break;}
@@ -1094,7 +1100,7 @@ EnumDef* parse_enum(TokenStream& src) {
 		return ed;
 	// todo: type-params.
 	int index=0;		// TODO: computed discriminants; it will have to be subindex+expression
-	while ((tok=src.eat_tok())!=NONE){
+	while ((tok=src.eat_tok())!=NO_TOK){
 		auto subpos=src.pos;
 		if (tok==CLOSE_BRACE){break;}
 		// got an ident, now what definition follows.. =value, {fields}, (types), ..
@@ -1126,7 +1132,7 @@ EnumDef* parse_enum(TokenStream& src) {
 // for pattern=expression,..; condition; increment {body}
 
 ExprFor* parse_for(TokenStream& src){
-	auto p=new ExprFor(src.pos);
+	ExprFor* p=nullptr;
 	Expr* first=nullptr;
 	Pattern *ptn=nullptr;
 	if (src.peek_tok()!=SEMICOLON){
@@ -1135,18 +1141,21 @@ ExprFor* parse_for(TokenStream& src){
 		first=parse_block(src,SEMICOLON,COMMA,0);
 	}
 	if (src.eat_if(IN)){
-		p->pattern=ptn;
-		p->init=parse_block(src, OPEN_BRACE, 0, 0);
-		src.expect(OPEN_BRACE,"eg for x..in..{}");
+		auto fi=new ExprForIn(src.pos);
+		fi->pattern=ptn;
+		fi->expr=parse_block(src, OPEN_BRACE, 0, 0);
+//		src.expect(OPEN_BRACE,"eg for x..in..{}");
+		p=fi;
 	} else {//if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
 		// continue parsing initializer expression
+		auto ef=new ExprFor(src.pos);
 		first=parse_block_sub(new ExprBlock(src.pos),src,(Expr*)ptn,SEMICOLON,COMMA,nullptr);
 		
-		p->pattern=0;
-		p->init=first;
-		p->cond=parse_block(src,SEMICOLON,COMMA,0);
+		ef->init=first;
+		ef->cond=parse_block(src,SEMICOLON,COMMA,0);
 		//ssrc.expect(SEMICOLON,"eg for init;cond;inc{..}");
-		p->incr=parse_block(src,OPEN_BRACE,COMMA,0);
+		ef->incr=parse_block(src,OPEN_BRACE,COMMA,0);
+		p=ef;
 	}
  //else {
 	//		error(p,"for..in.. or c style for loop, expect for init;cond;incr{body}");

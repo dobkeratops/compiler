@@ -40,8 +40,7 @@ struct ExprIf :  ExprFlow {
 /// For-Else loop/expression. Currrently the lowest level loop construct
 /// implement other styles of loop as specializations that omit init, incr etc.
 struct ExprFor :  ExprFlow {
-	Pattern* pattern=0;			// iterator
-	Expr* expr=0;
+	ExprFor(){}
 	Expr* init=0;				// clike initializer or deduced from pattern/expr
 	Expr* cond=0;				// C-like condition, or deduced from pattern/expr
 	Expr* incr=0;				// clike increment, or deduced from patter/expr
@@ -49,22 +48,34 @@ struct ExprFor :  ExprFlow {
 	Expr* else_block=0;			// run if the loop exits without break.
 	Scope* scope=0;
 	void dump(PrinterRef depth) const;
-	ExprFor(const SrcPos& s)		{pos=s;name=0;pattern=0;init=0;cond=0;incr=0;body=0;else_block=0;scope=0;}
-	bool is_c_for()const			{return !pattern;}
-	bool is_for_in()const			{return pattern && cond==0 && incr==0;}
+	ExprFor(const SrcPos& s)		{pos=s;name=0;init=0;cond=0;incr=0;body=0;else_block=0;scope=0;}
+	//bool is_c_for()const			{return !pattern;}
+	//bool is_for_in()const			{return pattern && cond==0 && incr==0;}
 	~ExprFor(){}
 	const char* kind_str()const	 override	{return"for";}
 	bool is_undefined()const				{return /*(pattern&&pattern->is_undefined())||*/(init &&init->is_undefined())||(cond&&cond->is_undefined())||(incr&&incr->is_undefined())||(body&& body->is_undefined())||(else_block&&else_block->is_undefined());}
 	Expr* find_next_break_expr(Expr* prev=0);
 	Node* clone()const;
+	Node* clone_for_sub(ExprFor* f)const;
 	Scope*		get_scope()override			{return this->scope;}
 	ExprFor*	as_for()override			{return this;}
-	ResolveResult resolve(Scope* scope,const Type*,int flags);
+	ResolveResult resolve(Scope* scope,const Type*,int flags) override;
+	ResolveResult resolve_for_sub(Scope* scope,const Type*,int flags);
 	void find_vars_written(Scope* s,set<Variable*>& vars ) const override;
 	void translate_tparams(const TParamXlat& tpx) override;
 	CgValue compile(CodeGen&, Scope*,CgValue) override;
 	Expr*	loop_else_block()const override{return else_block;}
 	void	recurse(std::function<void(Node*)>& f)override;
+};
+struct ExprForIn : ExprFor{
+	ExprForIn(){};
+	ExprForIn(SrcPos p){pos=p;};
+	Pattern* pattern=nullptr;			// iterator
+	Expr* expr=nullptr;
+	Node* clone()const override;
+	const char* kind_str()const override{return "for_in";}
+	void translate_tparams(const TParamXlat& tpx) override;
+	ResolveResult resolve(Scope* scope,const Type*,int flags) override;
 };
 
 

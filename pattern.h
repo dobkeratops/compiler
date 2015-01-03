@@ -20,6 +20,7 @@ struct Pattern : Node {
 	const Expr* sub_expr()const{return sub?sub->as_expr():nullptr;}
 	void	set_sub_expr(Expr* e){ sub=(Pattern*)e;}
 	Pattern(SrcPos _pos, Name n){pos=_pos,name=n;}
+	Pattern(SrcPos _pos, Name n,Pattern* s){pos=_pos,name=n; push_back(s);}
 	int	get_elem_count();
 	Pattern*	get_elem(int i);
 	Pattern*	get_elem(int i,int ii){return get_elem(i)->get_elem(ii);}

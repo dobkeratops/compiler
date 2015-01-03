@@ -90,6 +90,7 @@ struct Type : ExprDef {
 	bool			is_userdefined()const;
 	int			num_pointers()const;
 	int			num_pointers_and_arrays()const;
+	ExprStructDef*	get_common_base(Type* other) ;
 	ExprStructDef*	struct_def_noderef()const;
 	ExprStructDef*	get_struct_autoderef() const; // with autoderef
 	bool			is_coercible(const Type* other,Name self_t=0) const{return is_equal(other,true,self_t);};
@@ -127,7 +128,7 @@ struct Type : ExprDef {
 	bool	is_function() const	{ return name==FN;}
 	bool	is_closure() const	{ return name==CLOSURE;}
 	Type*	fn_return() const	{ if (is_callable()) return sub->next; else return nullptr;}
-	Type*	fn_args_first() const		{ return sub->sub;} 	void	clear_reg()			{reg_name=0;};
+	Type*	fn_args_first() const		{ if (sub)return sub->sub;else return nullptr;} 	void	clear_reg()			{reg_name=0;};
 	const Type*	strip_qualifiers()const{
 		auto p=this;
 		if(!p) return nullptr;

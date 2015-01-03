@@ -17,6 +17,15 @@ int ExprStructDef::get_elem_index(Name name)const {
 	} return -1;
 }
 
+ExprStructDef*
+ExprStructDef::get_common_base(ExprStructDef* e){
+	for (auto x=this; x; x=x->inherits){
+		if (e->has_base_class(x)){
+			return x;
+		}
+	}
+	return nullptr;
+}
 
 
 bool ExprStructDef::is_generic()const{

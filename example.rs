@@ -210,6 +210,16 @@ fn main(argc:int,argv:**char)->int{
 		printf("\n");
 	};
 
+
+
+
+
+
+
+
+
+
+
 	// type inference with templates & lambdas
 	// unlike C++, the output type of the lambdas infer back to  'R' here
 	// in c++ you'd have  to specify the output type eg u.match_with<float>(....)

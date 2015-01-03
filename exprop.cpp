@@ -148,12 +148,12 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			resolved|=rhs->resolve_if(sc,desired,flags);
 			dbg(lhs->dump(0));dbg(printf(".let="));
 			dbg(rhs->dump(0));dbg(newline(0));
-			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			if (desired) {
 				desired->dump(-1);
 			}
 			auto rhs_t = rhs->get_type();
 			if (lhs->as_ident()){
+				auto vname=lhs->as_name();	//todo: rvalue malarchy.
 				auto new_var=sc->create_variable(this,vname,Local);
 				lhs->set_def(new_var);
 				if (rhs_t){
@@ -164,8 +164,15 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			
 			//new_var->force_type_todo_verify(rhs_t);
 			resolved|=lhs->resolve_if(sc,rhs->type(),flags);
+			resolved|=lhs->resolve_if(sc,rhs->type(),flags);
 			propogate_type_fwd(flags, this, desired, lhs->type_ref());
 			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
+
+			
+			
+			propogate_type_fwd(flags, this, desired, this->type_ref());
+//			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
+			return propogate_type_refs(flags,(const Node*)this, this->type_ref(),lhs->type_ref());
 		}
 		else if (op_ident==DECLARE_WITH_TYPE){ // create a var, of given type,like let lhs:rhs;
 			const Type* tt=rhs?rhs->as_type():nullptr; if (!tt) tt=this->type(); if (!tt) tt=desired;

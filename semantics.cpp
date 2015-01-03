@@ -201,13 +201,13 @@ bool type_compare(const Type* t,int a0, int a1){
 void dump_typeparams(const vector<TParamDef*>& ts) {
 	bool a=false;
 	if (ts.size()==0) return;
-	dbprintf("[");
+	dbprintf("<");
 	for (auto t:ts){
 		if (a)dbprintf(",");
 		print_tok(t->name);if (t->defaultv){dbprintf("=");t->defaultv->dump(-1);}
 		a=true;
 	}
-	dbprintf("]");
+	dbprintf(">");
 }
 
 //void find_printf(const char*,...){};

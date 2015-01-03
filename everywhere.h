@@ -258,7 +258,7 @@ extern int g_raw_types[];
 #define RT_SIZEMASK 0x0ff;
 // todo, for consistency make <X> and ?prefix version of all operators, not just a few special cased.
 enum Token {
-	NONE=0,
+	NO_TOK=0,
 	// top level structs & keywords. one,zero are coercible types..
 	RAW_TYPES,INT=RAW_TYPES,UINT,SIZE_T,I8,I16,I32,I64,U8,U16,U32,U64,U128,BOOL,BOOL_REG,	// int types
 	HALF,FLOAT,DOUBLE,FLOAT4,// floats
@@ -296,7 +296,7 @@ enum Token {
 	ELIPSIS,RANGE, RANGE_LT,RANGE_GT,RANGE_GE,RANGE_LE,GT_RANGE,GE_RANGE,LT_RANGE_LT,GT_RANGE_GT, // range operators
 	LIFETIME,PLACEHOLDER,UNDERSCORE=PLACEHOLDER,
 	IDENT,
-	EXTERN_C,__VTABLE_PTR,__DATA_PTR,__PARENT_PTR,__ENV_PTR,__DISCRIMINANT, __ENV_I8_PTR,DYNAMIC_ARRAY, STRING, UNIQUE_PTR,DICTIONARY, GC_PTR,
+	EXTERN_C,__VTABLE_PTR,__DATA_PTR,__ITERATOR,NEXT,BEGIN,END,E_SOME,E_NONE,__PARENT_PTR,__ENV_PTR,__DISCRIMINANT, __ENV_I8_PTR,DYNAMIC_ARRAY, STRING, UNIQUE_PTR,DICTIONARY, GC_PTR,
 	__DESTRUCTOR,	// ~ClassName() c++ destructor
 	DROP,		// token for Rust destructor, just translated into '__DESTRUCTOR'
 	__SET_DEFAULT_VALUES,	// inserted into constructor calls, sets up given default values

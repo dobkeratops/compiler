@@ -415,7 +415,7 @@ void ArgDef::recurse(std::function<void(Node*)>&f){
 }
 
 void ArgDef::dump(PrinterRef depth) const {
-	newline(depth);dbprintf("%s",getString(name));
+	newline(depth);dbprintf("%s ",getString(name));
 	this->pattern->dump_if(-1);
 	if (this->type()) {dbprintf(":");type()->dump(-1);}
 	if (default_expr) {dbprintf("=");default_expr->dump(-1);}

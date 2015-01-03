@@ -420,8 +420,10 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 				return CgValue(v);
 			}
 		}
-		dst.val->dump(0);
-		ASSERT(0 && "store case not handled, to var..");
+		//dst.val->dump(0);
+		//ASSERT(0 && "store case not handled, to var..");
+		dbprintf("warning, store case not handled, to var?");
+		return CgValue();
 	}
 	return dst;
 }
