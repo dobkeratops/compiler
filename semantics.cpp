@@ -293,13 +293,17 @@ int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vect
 	callsite->dump(0);newline(0);
 #endif
 	for (int i=0; i<f->tparams.size();i++) matched[i]=0;
-	for (int i=0; i<args.size(); i++) {
-#if DEBUG>=2
-		f->args[i]->type()->dump_if(-1); newline(0);
-		args[i]->dump_if(-1); newline(0);
+	for (int i=0; i<args.size() && i<f->args.size(); i++) {
+#if DEBUG>=4
+		if (f->args[i]){
+			f->args[i]->type()->dump_if(-1); newline(0);
+			args[i]->dump_if(-1); newline(0);
+		}
 #endif
 		score+=match_typeparams_from_arg(matched,f->tparams, args[i]->type(), f->args[i]->type());
 	}
+	if (args.size()>f->args.size() && !f->variadic)
+		score-=1000;
 	score+=match_typeparams_from_arg(matched, f->tparams, callsite->type(), f->ret_type);
 	dbg_fnmatch("score matching gets %d\n",score);
 	return score;

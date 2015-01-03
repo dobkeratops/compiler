@@ -462,7 +462,9 @@ void		ExprStructDef::insert_sub_constructor_calls_sub(ExprFnDef* ctor){
 			if (auto sd=f->type()->struct_def()){
 				auto subd=sd->get_or_create_constructor();
 				auto pos=ctor->pos;
-				ctor->push_body_front(new ExprCall(ctor->pos,subd,new ExprOp(ADDR,ctor->pos,nullptr,new ExprOp(DOT,ctor->pos, new ExprIdent(ctor->pos,THIS), new ExprIdent(ctor->pos,f->name)))));
+				ctor->push_body_front(new ExprCall(ctor->pos,subd,
+//												   new ExprOp(ADDR,ctor->pos,nullptr,
+															  new ExprOp(DOT,ctor->pos, new ExprIdent(ctor->pos,THIS), new ExprIdent(ctor->pos,f->name))));
 			} else{
 				error(this,"can't constructor yet");
 			}
@@ -480,7 +482,8 @@ void		ExprStructDef::insert_sub_destructor_calls(ExprFnDef* dtor){
 //				dtor->push_body_back(new ExprCall(dtor->pos,subd->name,new ExprOp(ADDR,dtor->pos,nullptr,new ExprOp(DOT,dtor->pos, new ExprIdent(dtor->pos,THIS), new ExprIdent(dtor->pos,f->name)))));
 				dtor->push_body_back(
 					new ExprOp(DOT,pos,
-						new ExprOp(ADDR,pos, nullptr, new ExprOp(DOT,pos, new ExprIdent(pos,THIS),new ExprIdent(pos,f->name))),
+						//new ExprOp(ADDR,pos, nullptr, new ExprOp(DOT,pos, new ExprIdent(pos,THIS),new ExprIdent(pos,f->name))),
+						new ExprOp(DOT,pos, new ExprIdent(pos,THIS),new ExprIdent(pos,f->name)),
 						new ExprCall(pos, subd->name))
 				);
 				dbg_raii(f->dump(0));

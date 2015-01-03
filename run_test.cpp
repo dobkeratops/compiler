@@ -19,24 +19,38 @@ CompilerTest g_Tests[]={
 			//fn ~Qux(){printf("Qux.dtor\n");};
 		};
 		struct Qux{
-			f:Foo;
+		f:Foo;
 			fn Qux(){printf("Qux.ctor\n");this}
 			fn ~Qux(){printf("Qux.dtor\n");};
 		};
 		struct Baz{
-			qux:Qux;
+		qux:Qux;
 			fn hello(){};
 		};
 		fn main(argc:int, argv:**char)->int{
 			let baz=Baz();
-			baz;
-			(&baz).hello();
 			0			// baz out of scope should destruct baz, qux
 		},
 		)===="
 		,
 		"Foo.ctor\nQux.ctor\nQux.dtor\n"
 	},
+
+	{	"receiver autoref",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		struct Baz{
+			fn hello(){printf("hello\n");};
+		};
+		fn main(argc:int, argv:**char)->int{
+			let baz:Baz;
+			baz.hello();
+			0			// baz out of scope should destruct baz, qux
+		},
+		)===="
+		,
+		"hello\n"
+	},
+
 
 	{	"multiple field read",__FILE__,__LINE__,R"====(
 												  

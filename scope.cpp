@@ -175,8 +175,36 @@ ExprFnDef*	Scope::find_fn_for_types(Name name, int numrecv,const Type* arg0_type
 	}
 	return find_fn(name,nullptr, numrecv,s_dummy_args,ret_type, flags);
 }
-
 ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, int numrecv,const vector<Expr*>& args,const Type* ret_type,int flags)  {
+	if (!strcmp(str(name),"hello"))
+	dbg_raii(printf("look for %s\n",str(name)));
+	
+	auto f=this->find_fn_sub(name,callsite,numrecv,args,ret_type,flags&~R_FINAL);
+	if (f)
+		return f;
+	if (!args.size() || !numrecv)
+		return nullptr;
+	return nullptr;
+	vector<Expr*> args2;
+	for (size_t i=0; i<args.size(); i++){
+		args2.push_back(args[i]);
+	}
+	static ExprDummy s_dummy_arg;
+	static Type* dummy_type;
+	if (!dummy_type) dummy_type=new Type(args[0]->pos,PTR);
+	dummy_type->sub=args[0]->type();
+	s_dummy_arg.clear_type();
+	s_dummy_arg.set_type(dummy_type);
+	dbg_raii(printf("try again for fn call %s,autoref\n",str(name)));
+	dbg_raii({args[0]->type()->dump(0);newline(0);});
+	dbg_raii({dummy_type->dump(0);newline(0);});
+	args2[0]=&s_dummy_arg;
+	auto f2= find_fn_sub(name,callsite,numrecv,args2,ret_type,flags);
+	dummy_type->sub=nullptr;
+	s_dummy_arg.clear_type();
+	return f2;
+}
+ExprFnDef*	Scope::find_fn_sub(Name name,const Expr* callsite, int numrecv,const vector<Expr*>& args,const Type* ret_type,int flags)  {
 	verify_all();
 	
 	// TODO: rework this to take Type* fn_type fn[(args),ret] - for symetry with anything using function pointers
