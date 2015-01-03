@@ -37,7 +37,7 @@ fn shape_vol(s:*Shape)->float= match s{
 		printf("match sphere vol\n");
 		4.0/3.0*3.142* my_radius*my_radius*my_radius
 	},
-	*Cuboid(vmin, vmax)=>{	// tuple-structs/named fields are generalized here.
+	*Cuboid(vmin,vmax)=>{	// tuple-structs/named fields are generalized here.
 		printf("match cuboid vol\n");
 		d:=vmax-vmin; d.vx*d.vy*d.vz 
 	},
