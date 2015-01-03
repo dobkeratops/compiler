@@ -11,7 +11,36 @@ struct CompilerTest {
 	bool		should_fail;
 };
 
+// c++ iterator protocol   for x:foo {...}
+// rust protocol  for x in foo {...}
+//
+// for lp=$expr,x:=lp.begin(); x_vars!=lp.end(); x_vars+=1{
+// }
+//
+// C++ iterator protocol is easier to implement, but not as composable as rusts?
+//
+// x_vars is an expression composed of 'x's vars - x => x, (x,y) =>(x,y), more->error
+// for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
+
 CompilerTest g_Tests[]={
+	{
+		"for in loop",__FILE__,__LINE__,R"====(
+		fn"C" printf(s:str,...)->int;
+		struct Foo{
+			fn begin(){0}
+			fn end(){5}
+		};
+		fn main(argc:int, argv:**char)->int{
+			let foo:=Foo{};
+			for x in foo {
+				printf("%d\n",x);
+				if i==5 {break 44;}
+			}
+		},
+		)===="
+		,"0\n1\n2\n3\n4\n"
+	},
+
 	{	"enum arg coerce",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		enum Foo{
@@ -796,7 +825,7 @@ CompilerTest g_Tests[]={
 		)===="
 		,nullptr
 	},
-		{
+	{
 		"for  else loop",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{

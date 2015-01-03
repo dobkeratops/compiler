@@ -6,6 +6,7 @@
 #include "pattern.h"
 // data-structures. C structs,+handling of 'classes', 'enums', and by virtue of nesting, modules/namespaces.
 
+using std::function;
 struct NamedItems;
 struct ImplDef;
 struct TraitDef;
@@ -61,9 +62,6 @@ struct ExprStructDef: ExprDef {
 	const char* kind_str()const	override{return"struct";}
 	ExprStructDef* next_of_name;
 	Name	get_mangled_name()const;
-	bool	has_vtable()const{
-		return this->virtual_functions.size()!=0||(this->inherits?this->inherits->has_vtable():0);
-	}
 	ExprStructDef(SrcPos sp,Name n)		{
 		name=n;pos=sp;name_ptr=0;inherits=0;inherits_type=0;next_of_inherits=0;
 		derived=0; name_ptr=0;next_of_name=0; instances=0;instance_of=0;next_instance=0;
@@ -80,28 +78,41 @@ struct ExprStructDef: ExprDef {
 	Node*			clone()const;
 	ImplDef*		get_impl_for(TraitDef* t);	//optionally instantiates (like go)
 	Node*			clone_sub(ExprStructDef* into) const;
-	void			inherit_from(Scope* sc, Type* base);
 	void	translate_tparams(const TParamXlat& tpx) override;
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the tparams.
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	void			init_types();
-	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	const Type*			get_elem_type(int i)const;//{return this->fields[i]->type();}
 	Name			get_elem_name(int i)const;// {return this->fields[i]->name;}
 	int 			get_elem_index(Name name)const;//{int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
 	int				override_index(ExprFnDef* f);
-	int				vtable_size();
-	int				vtable_base_index();
-	ExprStructDef*	root_class();
+
 	vector<TParamDef*>*			get_typeparams() override { return &tparams;}
 	int				get_elem_count(){return this->fields.size();}
 	bool			is_vtable_built(){return this->vtable_name!=0;}
 	const ExprFnDef*		find_function_for_vtable(Name n, const Type* fn_type);
-	bool			has_base_class(ExprStructDef* other)const;
+	pair<ArgDef*,ExprStructDef*> 	get_field(Name n);
 	int				num_instances()const {auto n=0;for (auto ins=instances;ins;ins=ins->next_instance){n++;} return n;}
 	void		recurse(std::function<void(Node*)>&);
-	void			calc_padding();
+	
+	// Inheritance mangaement
+	bool			has_base_class(ExprStructDef* other) const;
+	void			inherit_from(Scope* sc, Type* base);
+	ExprStructDef*	root_class();
+	void			calc_trailing_padding();
+	void			calc_base_padding();
+	
+	// VTable management
+	void			roll_vtable();
+	int				vtable_size();
+	int				vtable_base_index();
+	bool	has_vtable()const{
+		return this->virtual_functions.size()!=0||(this->inherits?this->inherits->has_vtable():0);
+	}
+	
+	// Constructor/Destructor Management
+
 	void			roll_constructor_wrappers(Scope* sc);
 	bool			has_sub_constructors() const;
 	bool 			has_constructors()const;

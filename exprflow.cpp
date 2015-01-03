@@ -43,10 +43,12 @@ void ExprIf::translate_tparams(const TParamXlat& tpx){
 
 void ExprFor::translate_tparams(const TParamXlat& tpx)
 {
+	this->pattern->translate_typeparams_if(tpx);
+	this->expr->translate_typeparams_if(tpx);
+	
 	this->init->translate_typeparams_if(tpx);
 	this->cond->translate_typeparams_if(tpx);
 	this->incr->translate_typeparams_if(tpx);
-	this->pattern->translate_typeparams_if(tpx);
 	this->body->translate_typeparams_if(tpx);
 	this->else_block->translate_typeparams_if(tpx);
 	this->type()->translate_typeparams_if(tpx);
@@ -63,7 +65,7 @@ void ExprFor::recurse(std::function<void(Node*)>& f){
 
 Node* ExprFor::clone()const{
 	auto n=new ExprFor(this->pos);
-	n->pattern=(Expr*)pattern->clone_if();
+	n->pattern=(Pattern*)pattern->clone_if();
 	n->init=(Expr*)init->clone_if();
 	n->cond=(Expr*)cond->clone_if();
 	n->incr=(Expr*)cond->clone_if();
@@ -294,6 +296,10 @@ void ExprIfLet::dump(PrinterRef depth)const{
 		newline(depth);dbprintf("}");
 	}
 }
+ResolveResult	ExprWhileLet::resolve(Scope* sc, const Type* desired, int flags){
+	return COMPLETE;
+}
+
 CgValue ExprWhileLet::compile(CodeGen& cg, Scope* sc, CgValue input) {
 	error("todo, while-let support");return CgValue();
 }

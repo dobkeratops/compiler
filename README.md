@@ -31,7 +31,7 @@ Dont have a name yet hence 'hack'..
 #### WIP
  * details of C++ RAII
    * RValue-refs work in simple cases,more tests needed
-   * ctor/dtors compose now, but need Foo():Bar()..{} syntax
+   * ctor/dtors compose now, but TODO Foo():Bar()..{} syntax
  * Parsing rust Trait/Impl
    * not planning on getting a full implementation done soon,
    * I prefer UFCS/overloading
@@ -48,6 +48,8 @@ Dont have a name yet hence 'hack'..
    * .. not extensively tested
  * Missing operators
   * (todo ++/--;and currently &p[i] instead of ptr arithmetic)
+  * deref for smartpointers!
+  * [] for collections
 
 example source..
 https://github.com/dobkeratops/compiler/blob/master/example.rs

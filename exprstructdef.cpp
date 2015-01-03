@@ -324,7 +324,7 @@ int ExprStructDef::first_user_field_index() const{
 	return i;
 }
 
-void ExprStructDef::calc_padding(){
+void ExprStructDef::calc_trailing_padding(){
 	auto maxsize=0;
 	auto thissize=size();
 	for (auto s:structs){
@@ -552,7 +552,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 								this->fields.begin(),
 								new ArgDef(pos,__DISCRIMINANT,new Type(this->pos,I32)));
 			}
-			if (this->m_is_enum) calc_padding();
+			if (this->m_is_enum) calc_trailing_padding();
 		}
 
 		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);

@@ -157,8 +157,8 @@ fn main(argc:int,argv:**char)->int{
 	take_closure(|x|{printf("closure1 says x=%d y=%d\n",x,captured_y);});
 
 	// sugar for closure as last arg, foo(..)do x{...}  === foo(..,|x|{...})
-	// similar to rusts' lost "DO" notation - 
-	// but 'do' keyword is still free for another use as a prefix
+	// similar to rusts' lost "DO" notation, also in Julia and Nim,swift.
+	// 'do' keyword is still free for another use as a prefix
 	// great for internal iterators (which are in turn nice for data-parallel)
 	take_closure() do x{
 		printf("closure2 says x=%d y=%d\n",x,captured_y);

@@ -47,7 +47,7 @@ ExprBlock* parse_block(TokenStream&src,int close,int delim, Expr* op);
 Expr* parse_expr(TokenStream&src) {
 	Vec<Expr*> nodes;
 	int delim;
-	parse_block_nodes(&nodes,&delim, src, 0,0);// TODO - retardation- its' allocating. Vec.num==1 could be inplace.
+	parse_block_nodes(&nodes,&delim, src,nullptr, 0,0);// TODO - retardation- its' allocating. Vec.num==1 could be inplace.
 	ASSERT(nodes.size()==1);
 	return nodes.pop_back();
 }
@@ -117,7 +117,7 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3, Pattern
 	Pattern* prev=0;
 	while (auto t=src.peek_tok()){
 		dbg(dbprintf("%s\n",str(t)));
-		if (t==close || t==close2||t==close3) {
+		if (t==close || t==close2||t==close3||t==ASSIGN||t==LET_ASSIGN||t==COLON) {
 			break;
 		}
 		if (t==LIFETIME){
@@ -417,10 +417,10 @@ void expect(TokenStream& src,bool expr,const char* msg){
 	}
 }
 
-ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_node);
+ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,Expr* insert,int close,int delim, Expr* outer_node);
 
 ExprBlock* parse_block(TokenStream& src,int close,int delim, Expr* outer_node) {
-	return parse_block_sub(new ExprCompound(), src,close,delim, outer_node);
+	return parse_block_sub(new ExprCompound(), src,nullptr,close,delim, outer_node);
 }
 
 ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
@@ -428,7 +428,7 @@ ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
 	auto pos=src.pos;
 	Vec<Expr*> nodes;
 	int delim_found=0;
-	parse_block_nodes(&nodes,&delim_found,src, CLOSE_PAREN,COMMA);
+	parse_block_nodes(&nodes,&delim_found,src,nullptr, CLOSE_PAREN,COMMA);
 	ExprBlock* r=nullptr;
 	if (nodes.size()>1 ||delim_found==COMMA){
 		r=new ExprTuple();
@@ -440,14 +440,14 @@ ExprBlock* parse_subexpr_or_tuple(TokenStream& src) {
 	return r;
 }
 
-ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim, Expr* outer_op) {
+ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,Expr* insert,int close,int delim, Expr* outer_op) {
 	node->pos=src.pos;
 	node->call_expr=outer_op;
 	if (!g_pRoot) g_pRoot=node;
 	verify(node->type());
 	int delim_used=0;
 
-	parse_block_nodes(&node->argls,&delim_used, src,close,delim);
+	parse_block_nodes(&node->argls,&delim_used, src,insert,close,delim);
 	node->call_expr=outer_op;
 	
 	if (delim_used==COMMA && !outer_op && close==CLOSE_BRACE)
@@ -457,12 +457,13 @@ ExprBlock* parse_block_sub(ExprBlock* node, TokenStream& src,int close,int delim
 	return node;
 }
 
-void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close,int delim) {
+void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,Expr* insert,int close,int delim) {
 	Vec<SrcOp> operators;
 	Vec<Expr*> operands;
 	bool	was_operand=false;
 	int wrong_delim=delim==SEMICOLON?COMMA:SEMICOLON;
 	int wrong_close=close==CLOSE_PAREN?CLOSE_BRACE:CLOSE_PAREN;
+	if (insert){operands.push(insert);was_operand=true;}
 	while (true) {
 		auto pos=src.pos;
 		if (src.peek_tok()==0) break;
@@ -576,7 +577,7 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
-				operands.push_back(parse_block_sub(new ExprCall(), src, CLOSE_PAREN,SEMICOLON, pop(operands)));
+				operands.push_back(parse_block_sub(new ExprCall(), src, nullptr,CLOSE_PAREN,SEMICOLON, pop(operands)));
 				// call result is operand
 			}
 			else {
@@ -586,17 +587,17 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			}
 		} else if (src.eat_if(OPEN_BRACKET)){
 			if (was_operand){
-				operands.push_back(parse_block_sub(new ExprSubscript(), src,CLOSE_BRACKET,COMMA,operands.pop()));
+				operands.push_back(parse_block_sub(new ExprSubscript(), src,nullptr,CLOSE_BRACKET,COMMA,operands.pop()));
 			} else {
 				src.error("TODO: array initializer");
-				operands.push_back(parse_block_sub(new ExprArrayInit,src,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
+				operands.push_back(parse_block_sub(new ExprArrayInit,src,nullptr,CLOSE_PAREN,COMMA,nullptr)); // just a subexpression
 				was_operand=true;
 			}
 		} else if (src.eat_if(OPEN_BRACE)){
 			//			error(operands.back()?operands.back():node,"struct initializer");
 			if (was_operand){// struct initializer
 				auto sname=operands.pop_back();
-				auto si=parse_block_sub(new ExprStructInit(), src,CLOSE_BRACE,COMMA,sname);
+				auto si=parse_block_sub(new ExprStructInit(), src,nullptr,CLOSE_BRACE,COMMA,sname);
 				operands.push_back(si);
 				si->set_type(sname->get_type()); //eg ident might have tparams.struct init uses given type
 				dbg(operands.back()->dump(0));
@@ -1119,15 +1120,28 @@ EnumDef* parse_enum(TokenStream& src) {
 	return ed;
 }
 
-// iterator protocol. value.init. increment & end test.
+// 3 cases
+// for ;condition;increment{body}
+// for pattern in expression {body }
+// for pattern=expression,..; condition; increment {body}
+
 ExprFor* parse_for(TokenStream& src){
 	auto p=new ExprFor(src.pos);
-	auto first=parse_block(src,SEMICOLON,COMMA,0);
+	Expr* first=nullptr;
+	Pattern *ptn=nullptr;
+	if (src.peek_tok()!=SEMICOLON){
+		ptn=parse_pattern(src, IN,SEMICOLON,OPEN_BRACE);
+	} else {
+		first=parse_block(src,SEMICOLON,COMMA,0);
+	}
 	if (src.eat_if(IN)){
-		p->pattern=first;
+		p->pattern=ptn;
 		p->init=parse_block(src, OPEN_BRACE, 0, 0);
 		src.expect(OPEN_BRACE,"eg for x..in..{}");
 	} else {//if (src.eat_if(SEMICOLON)){// cfor.  for init;condition;incr{body}
+		// continue parsing initializer expression
+		first=parse_block_sub(new ExprBlock(src.pos),src,(Expr*)ptn,SEMICOLON,COMMA,nullptr);
+		
 		p->pattern=0;
 		p->init=first;
 		p->cond=parse_block(src,SEMICOLON,COMMA,0);

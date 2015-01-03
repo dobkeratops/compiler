@@ -66,7 +66,7 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 
 				dbg(printf("invocation: wd=%s f=%s o=%s\n e=%s\n",wdir, filename, outname,exename));
 
-				char compile_cmd[512]; sprintf(compile_cmd,"clang %s -o %s", outname, exename);
+				char compile_cmd[512]; sprintf(compile_cmd,"clang++ %s -o %s", outname, exename);
 				if (flags & B_VERBOSE)printf("\nllvm src=%s\n executable=%s\nflags %x\n",outname,exename, flags);
 				if (flags & B_VERBOSE)printf("\n%s\n",compile_cmd);
 				auto ret= system(compile_cmd);
