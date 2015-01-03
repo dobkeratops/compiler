@@ -29,20 +29,20 @@ Dont have a name yet hence 'hack'..
 
 
 #### WIP
- * Copying details of C++ RAII
-   * destructors when vars/rvals go out of scope
-   * RValue-ref work in some cases, not fully implemented
-   * doesn't compose ctor/dtor yet
+ * details of C++ RAII
+   * RValue-refs work in simple cases,more tests needed
+   * ctor/dtors compose now, but need Foo():Bar()..{} syntax
  * Parsing rust Trait/Impl
    * not planning on getting a full implementation done soon,
    * I prefer UFCS/overloading
-   * but its' relatively easy to do the parsing
+   * but relatively easy to get it parsed
    * might inspire getting a larger subset of Rust handled..
    * details - 'Self' type - in progress..
  * rust-style enum/match- 
    * currently does a..b a..<b, a|b|c, (a,b,c), if guards, @,nesting; 
      * no slice patterns yet
    * have tried to add scalas idea of being able to reference vars in patterns (by unary @)
+   * works with  ptrs, matching C++ refs appears bugged
    * just added padding of variants,like rust.
  * HKT (template-template parameters)
    * .. not extensively tested

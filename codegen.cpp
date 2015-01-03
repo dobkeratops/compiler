@@ -167,7 +167,7 @@ CgValue CgValue::deref_for_dot(CodeGen& cg, const Type* t)const {
 CgValue CgValue::deref_op(CodeGen& cg, const Type* t)const {
 	/// todo: * C++ only loads a pointer.
 	/// if its a ref-to-ptr it has to load the pointer first
-	ASSERT(this->type->name==PTR && this->type->sub->is_equal(t));
+	ASSERT(this->type->is_pointer_or_ref() && this->type->sub->is_equal(t));
 	return deref_for_dot(cg,t);
 }
 
@@ -1102,6 +1102,17 @@ CgValue CodeGen::emit_cast_ref(CgValue src, const Type* rhst){
 	emit_ins_end();
 	return CgValue(0,rhst,dstr);
 }
+CgValue CodeGen::emit_cast_ref_to_ref_or_ptr(CgValue src, const Type* rhst){
+	ASSERT(src.addr);
+	auto dstr=this->next_reg();
+	emit_ins_begin(dstr, "bitcast");
+	emit_type_reg(src.type,true,src.addr);
+	emit_separator(" to ");
+	emit_type(rhst,false);
+	emit_ins_end();
+	return CgValue(dstr,rhst,0);
+}
+
 CgValue CodeGen::emit_cast_reg(RegisterName srcr,const  Type* lhst, const Type* rhst)
 {
 	if (lhst->type()->is_equal(rhst))
@@ -1601,7 +1612,11 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 
 	if (!src.type->is_ref() && to_type->is_ref()){
 		if (!src.reg && src.elem<0 && src.addr){
-			return CgValue(src.addr, to_type);
+//			ASSERT(to_type->is_pointer_or_ref())
+			if (to_type->is_pointer_or_ref())
+				return this->emit_cast_ref_to_ref_or_ptr(src,to_type);
+			else
+				return CgValue(src.addr, to_type);
 		} else {
 			this->emit_comment("TODO RVO, does llvm do it for us??");
 			return src.ref_op(*this,to_type);
@@ -1625,6 +1640,9 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 	// load reference->value?
 	if (src0.type->is_ref() && !to_type->is_ref()){
 		if (!src0.type->sub->is_equal(to_type)){
+			src0.type->dump(0);
+			to_type->dump(0);
+			newline(0);
 			error(n,"\ncan't convert,bug\n");
 		}
 		return src.load(*this);

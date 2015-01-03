@@ -148,6 +148,9 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3, Pattern
 				prev=new Pattern(src.pos, TUPLE);
 			}
 			auto np=parse_pattern(src,CLOSE_PAREN,0,0,prev);
+			if (!prev->sub){
+				prev->sub=new Pattern(src.pos,VOID);
+			}
 			src.expect(CLOSE_PAREN); // todo: we could avoid repeat arg encapsulated in lexer. 'push terminator'/'pop terminator'... 'src.is_terminator'
 		}else
  

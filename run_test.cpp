@@ -19,12 +19,15 @@ CompilerTest g_Tests[]={
 			Baz{x:float,y:float,z:int},
 			Qux,Boo
 		};
-		fn foo(f:*Foo){
-			printf("foo\n");
+		fn foo(f:&Foo){
+			match f {
+				Bar() =>{printf("bar\n");},
+				Baz() =>{printf("baz\n");}
+			}
 		}
 		fn main(argc:int,argv:**char)->int{
-			let pbar=new Bar{15,25};
-			foo(pbar);
+			let bar=Bar{15,25};
+			foo(bar);
 			0
 		}
 		)===="

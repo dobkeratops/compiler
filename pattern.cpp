@@ -35,9 +35,22 @@ ResolveResult
 Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	if (!this)
 		return ResolveResult(COMPLETE);
+	if (this->sub){
+		0==0;
+	}
+	if (this->name==VOID){
+		return ResolveResult(COMPLETE);
+	}
 	if (this->name==EXPRESSION){
 		((Node*)(this->sub))->resolve_if(sc,rhs,flags);
 		return propogate_type_refs(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
+	}
+	if (this->name==REF){
+		if (rhs&&rhs->name==REF){
+			resolved|=sub_pat()->resolve_with_type(sc, rhs->sub, flags);
+			this->set_type(new Type(this,REF,sub->type()));
+			return resolved;
+		}
 	}
 	if (this->name==PTR){
 		if (rhs&&rhs->name==PTR){
@@ -75,7 +88,21 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		for (auto subp=this->sub_pat(); subp; subp=subp->next, subt?subt=subt->next:nullptr){
 			resolved|=subp->resolve_with_type(sc,subt, flags);
 		}
-	} else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring
+	}
+	else if(rhs && rhs->is_ref() && this->sub && this->name!=REF){// ref to value - in pattern stays a ref
+		auto newsub=new Pattern(this->pos,this->name);
+		newsub->sub=this->sub;
+		this->sub=newsub;
+		this->name=REF;
+		//dbg(this->dump(0));
+		//dbg(newline(0));
+		return this->resolve_with_type(sc, rhs, flags);
+		//		resolved|=sub_pat()->resolve_with_type(sc, rhs->sub, flags);
+		//		this->set_type(new Type(this,REF,sub->type()));
+		//		return resolved;
+		
+	}
+	else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring
 		auto sd=sc->find_struct_type(this,rhs);// todo tparams from rhs, if given
 		if (sd){
 			int i=sd->first_user_field_index(); auto subp=this->sub;
@@ -89,8 +116,9 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		}
 	} // else its a var of given type, or just a constant?
 	else{
-		if (rhs)
+		if (rhs){
 			propogate_type_fwd(flags, (Node*)this, rhs,this->type_ref());
+		}
 		dbg(dbprintf("matching pattern %s with..",str(this->name)));dbg(rhs->dump_if(-1));dbg(newline(0));
 		if (auto sd=sc->find_struct_name_type_if(sc,this->name,this->type()))
 		{
@@ -153,7 +181,11 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 	// emit a condition to check if the runtime value  fits this pattern.
 	// TODO-short-curcuiting - requires flow JumpToElse.
 	dbg(val.dump());
+//	ASSERT(val.type);
 	// single variable bind.
+	if (ptn->name==VOID){
+		return CgValue();
+	}
 	if (ptn->name==EXPRESSION){
 		auto rhs=ptn->sub->compile(cg,sc,CgValue());
 		if (val.is_valid()){
@@ -254,7 +286,8 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 		}else
 			return cmpval;
 	}
-	dbg(ptn->dump(0));
+
+	dbg({ptn->dump(0);newline(0);});
 	dbg(dbprintf("uncompiled node %s\n",str(ptn->name)));
 	return CgValue();
 }
