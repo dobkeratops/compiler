@@ -170,8 +170,8 @@ fn main(argc:int,argv:**char)->int{
 	// Demo rust-style enums
 	let s1=Sphere{Vec3{1.0,1.0,1.0},1.0};
 	let s2=Cuboid{Vec3{1.0,1.0,1.0},Vec3{2.0,2.0,2.0}};
-	let sv1=shape_vol(&s1 as *Shape);
-	let sv2=shape_vol(&s2 as *Shape);
+	let sv1=shape_vol(&s1);
+	let sv2=shape_vol(&s2);
 
 	// let for introducing variable, rather than just ident:T
 	// :T would be used as a type-assertion
@@ -281,8 +281,8 @@ fn main(argc:int,argv:**char)->int{
 	let pbaz2= new Bar{y=77};
 
 
-	do_something(pbaz1 as*IBaz);//TODO autocoerce to base type
-	do_something(pbaz2 as*IBaz);
+	do_something(pbaz1);
+	do_something(pbaz2);
 
 	// if-else expressions like Rust.
 	let x1=if argc<2{printf("argc %d <2",argc);1}else{printf("argc %d >=2",argc);2};

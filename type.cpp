@@ -643,11 +643,13 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 		// error is stronger than incomplete. incomplete means keep going, error means give up
 		
 		dbg(n->dump(0));
+		a->is_coercible(b);
 		error_begin(n," type mismatch\n");
 		warning(a->get_origin(),"from here:");
 		a->dump(-1);
-		warning(b->get_origin(),"vs here");
+		warning(b->get_origin(),"vs here:");
 		b->dump(-1);
+		newline(0);
 #if DEBUG>=2
 		if (a->is_coercible(b)){
 		}

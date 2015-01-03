@@ -1630,7 +1630,7 @@ CgValue CodeGen::emit_conversion(const Node*n, const CgValue& src0, const Type* 
 		return src.load(*this);
 	}
 	// have a value, want a pointer, luckily we have a reference..
-	if (to_type->is_pointer() && src.type->is_equal(to_type->sub) && src.addr){
+	if (to_type->is_pointer_or_ref() && src.type->is_equal(to_type->sub) && src.addr){
 		return CgValue(src.addr,to_type,0);
 	}
 	

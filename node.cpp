@@ -130,18 +130,20 @@ ResolveResult Node::propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b) {
 	resolved|=propogate_type_refs(flags,(const Node*)n,n->type_ref(),b);
 	return resolved|=propogate_type_refs(flags,(const Node*)n,n->type_ref(),a);
 }
-ResolveResult Node::propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b) {
-	::verify(a,b);
-	if (!(a || b))
+ResolveResult Node::propogate_type_fwd(int flags,const Node* n, const Type* desired,Type*& b) {
+	::verify(desired,b);
+	if (!(desired || b))
 		return resolved|=ResolveResult(INCOMPLETE);
-	if (!a && b){
+	if (!desired && b){
 		return resolved|=ResolveResult(INCOMPLETE);
 	}
-	if (!b && a) {
-		b=(Type*)a;
+	if (!b && desired) {
+		b=(Type*)desired;
 		return resolved|=ResolveResult(COMPLETE);
 	}
-	return resolved|=assert_types_eq(flags,n, a,b);
+	// 'propogate type forward knows what *output* type is needed, so reverse the order here
+	// to check if 'b' can coerce to desired.
+	return resolved|=assert_types_eq(flags,n, b,desired);
 	
 	return ResolveResult(INCOMPLETE);
 }

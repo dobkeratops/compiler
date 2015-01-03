@@ -179,7 +179,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, int numrecv,const vect
 	if (!strcmp(str(name),"hello"))
 	dbg_raii(printf("look for %s\n",str(name)));
 	
-	auto f=this->find_fn_sub(name,callsite,numrecv,args,ret_type,flags&~R_FINAL);
+	auto f=this->find_fn_sub(name,callsite,numrecv,args,ret_type,flags);
 	if (f)
 		return f;
 	if (!args.size() || !numrecv)

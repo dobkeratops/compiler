@@ -12,6 +12,25 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+	{	"enum arg coerce",__FILE__,__LINE__,R"====(
+		fn"C" printf(s:str,...)->int;
+		enum Foo{
+			Bar{x:int,y:int},
+			Baz{x:float,y:float,z:int},
+			Qux,Boo
+		};
+		fn foo(f:*Foo){
+			printf("foo\n");
+		}
+		fn main(argc:int,argv:**char)->int{
+			let pbar=new Bar{15,25};
+			foo(pbar);
+			0
+		}
+		)===="
+		,"foo\n"
+	},
+
 	{	"ctor/dtor composition",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
 		struct Foo{

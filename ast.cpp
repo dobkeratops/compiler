@@ -14,7 +14,6 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		return propogate_type_fwd(flags,this, desired,this->type_ref());
 	}
 	
-	propogate_type_fwd(flags,this, desired,this->type_ref());
 	if (this->type())
 		resolved|=this->type()->resolve_if(scope,desired,flags);
 	// depending on context we might only look for structs or functions. default is look for either.
@@ -32,7 +31,8 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		if (auto v=scope->find_variable_rec(this->name)){ // look for scope variable..
 			v->on_stack|=flags&R_PUT_ON_STACK;
 			this->set_def(v);
-			return propogate_type_refs(flags,this, this->type_ref(),v->type_ref());
+			propogate_type_fwd(flags,this, desired,v->type_ref());
+			return propogate_type_refs(flags,this, v->type_ref(),this->type_ref());
 		}
 	if (auto sd=scope->get_receiver()) {
 		if (auto fi=sd->try_find_field(this->name)){

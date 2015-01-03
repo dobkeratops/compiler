@@ -415,7 +415,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 //		score-=1000;
 	}
 	else if (!f->is_enough_args((int)args.size()) || f->too_many_args((int)args.size())){
-		score-=1000;
+		score-=10000;
 		insert_candidate(f,score);
 		return;
 	}
@@ -428,7 +428,9 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 			score++; //1 point for an 'any' arg on either side
 		} else{
 			// both args are given:
-			if (auto s=f->args[i]->get_type()->is_equal_or_coercible(args[i]->get_type())) {
+			auto fn_arg_t=f->args[i]->get_type();
+			auto given_arg_t=args[i]->get_type();
+			if (auto s=given_arg_t->is_equal_or_coercible(fn_arg_t)) {
 				score+=s+10;// 1 exact match worth more than any number of anys
 			} else{
 				//if (!is_generic_type(f->tparams,f->args[i]->get_type())
@@ -436,7 +438,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 				{
 				// instant fail for incorrect concrete arg
 				//TODO consider conversion operators here.
-					score-=1000;
+					score-=10000;
 				//	if (candidates.size()>=4)
 				//		return;
 				}
