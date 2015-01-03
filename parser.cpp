@@ -120,6 +120,9 @@ Pattern* parse_pattern(TokenStream& src,int close,int close2,int close3, Pattern
 		if (t==close || t==close2||t==close3) {
 			break;
 		}
+		if (t==LIFETIME){
+			error(src.pos,"lifetime params can't appear in pattern\n");
+		}
 		t=src.eat_tok();
 		if (!prev && t==PATTERN_BIND){//backticks would be better since this can be @
 			auto np=new Pattern(src.pos, EXPRESSION);
@@ -482,6 +485,10 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,int close
 			was_operand=true;
 			continue;
 		}
+		else if (src.eat_if(LIFETIME)){	// just discard lifetimes for the timebeing, but we need to cache them under ptrs.
+			src.eat_ident();
+			continue;
+		}
 		// todo ... datatable to associate ID with parse function
 		else if (src.eat_if(LET)){
 			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
@@ -810,6 +817,9 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 			ret->sub=parse_type(src,close,owner);
 		}else if (tok==AND) {
 			ret=new Type(owner,REF);
+			if (src.eat_if(LIFETIME)){
+				src.eat_ident();
+			}
 			ret->sub=parse_type(src,close,owner);
 		}else {
 			// main: something[tparams]..

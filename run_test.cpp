@@ -19,7 +19,7 @@ CompilerTest g_Tests[]={
 			Baz{x:float,y:float,z:int},
 			Qux,Boo
 		};
-		fn foo(f:&Foo){
+		fn foo(f:&'a Foo){
 			match f {
 				Bar() =>{printf("bar\n");},
 				Baz() =>{printf("baz\n");}
@@ -31,7 +31,7 @@ CompilerTest g_Tests[]={
 			0
 		}
 		)===="
-		,"foo\n"
+		,"bar\n"
 	},
 
 	{	"ctor/dtor composition",__FILE__,__LINE__,R"====(

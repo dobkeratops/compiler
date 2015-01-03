@@ -69,7 +69,7 @@ const char* g_token_str[]={
 	"&&","*?","*!","&?","~[]","[]","&[]","??","<?>","<*>","<+>","<-->","</>","?->", // special pointers?
 	",",";",";;",
 	"...","..","..<","..>","..>=","..<=",">..",">=..",
-	"_","",
+	"\'","_","",
 	"\"C\"","__vtable_ptr","__data_ptr","__parent_ptr","__env_ptr","__discriminant","__env_i8_ptr","__vector","__string","__unique_ptr","__dictionary","__gc_ptr","__destructor","__set_default_values","__visit","__verify","drop",
 	NULL,
 };
@@ -90,7 +90,7 @@ const char* g_operator_symbol[]={
 	"rvalue_ref","opt_ptr","own_ptr","maybe_ref","own_vector","slice","slice_ref", "double_question_mark","tag_question_mark","tag_mul","tag_add","tag_sub","tag_div","maybe_arrow",
 	"comma","semicolon","doublesemicolon","ellipsis","dotdot",
 	"range_lt","range_gt","range_ge","range_le","gt_range","ge_range",
-	"placeholder",""
+	"lifetime","placeholder",""
 };
 
 
@@ -126,6 +126,6 @@ int g_tok_info[]={
 	0,0,17, // delim
 	0,
 	0,0,0,0,
-	0, //placeholder
+	0,0, //placeholder
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 };

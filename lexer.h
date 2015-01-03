@@ -92,6 +92,7 @@ struct Lexer {
 	void error(const char* str,...);
 	Lexer(const char* src,const char *filename_);
 	void advance_sub(bool (*sub)(char c,char c1));
+	void advance_lifetime_or_char();
 	void advance_operator();
 	void advance_string(char quote);
 	bool is_comment(const char* c);

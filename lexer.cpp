@@ -187,6 +187,21 @@ void Lexer::advance_tok() {
 	advance_tok_sub();
 	typeparam_hack();
 }
+void Lexer::advance_lifetime_or_char(){
+	//while (!isWhitespace(*tok_end) && *tok_end){
+	//	tok_end++;
+	//}
+	//if (tok_end==')
+	tok_end++;// not in the mood yet. just handle single char 'a' or escaped '\x' unicode,fourcc later...
+	if (tok_start[2]=='\''){tok_end=tok_start+3;}
+	if (tok_start[3]=='\''){tok_end=tok_start+4;}
+	if ((tok_end-tok_start)==1){
+		curr_tok=LIFETIME;
+	}
+	else{
+		curr_tok=getStringIndex(tok_start+1,tok_end-1);
+	}
+}
 void Lexer::advance_tok_sub() {
 	skip_whitespace();
 	tok_start=tok_end;
@@ -194,6 +209,7 @@ void Lexer::advance_tok_sub() {
 	if (!*tok_end) { this->curr_tok=0; return;}
 	auto c=*tok_end; auto c1=c?tok_end[1]:0;
 	if (c=='_' && tok_end[1] && !isSymbolCont(tok_end[1],0)) tok_end++; //placeholder
+	else if (c=='\'') advance_lifetime_or_char();
 	else if (isSymbolStart(c,c1))	advance_sub(isSymbolCont);
 	else if (isNumStart(c,c1)) advance_sub(isNum);
 	else if (c=='\"')
