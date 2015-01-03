@@ -121,8 +121,11 @@ CgValue	ExprIdent::compile(CodeGen& cg, Scope* sc, CgValue){
 		return var->compile(cg,sc,CgValue());
 	}
 	if (var && var!=n->def){
-		error(n,"var/def out of sync %s %s\n",n->name_str(),var->name_str());
-		return CgValue();
+		dbprintf("var/def out of sync");
+		var->dump(0);
+		n->def->dump_if(0);
+		dbprintf("var/def out of sync %s %s %s\n",n->name_str(),var->name_str(), n->def?n->def->name_str():"?");
+		return CgValue(var);
 	}
 	return CgValue(var);
 }
@@ -147,8 +150,6 @@ ExprIdent::resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr 
 	if (auto st=sc->find_struct_of(lhs)){
 		if (auto f=st->find_field(this)){
 			return propogate_type_refs(flags,(const Node*)this, f->type_ref(), tref);
-//			auto ret=f->type();
-//			return propogate_type_refs(flags,op, ret,op->type_ref());
 		}
 	}
 	if (flags&R_FINAL) {

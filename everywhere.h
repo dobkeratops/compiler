@@ -45,6 +45,7 @@ using std::move;
 
 #if DEBUG>=2
 #define dbg2(X) X
+#define dbg_raii(X) X
 #define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
@@ -76,6 +77,9 @@ using std::move;
 #endif
 #ifndef dbg
 #define dbg(X)
+#endif
+#ifndef dbg_raii
+#define dbg_raii(X)
 #endif
 
 #ifndef dbg_strings
@@ -292,7 +296,13 @@ enum Token {
 	ELIPSIS,RANGE, RANGE_LT,RANGE_GT,RANGE_GE,RANGE_LE,GT_RANGE,GE_RANGE,
 	PLACEHOLDER,UNDERSCORE=PLACEHOLDER,
 	IDENT,
-	EXTERN_C,__VTABLE_PTR,__DATA_PTR,__PARENT_PTR,__ENV_PTR,__DISCRIMINANT, __ENV_I8_PTR,DYNAMIC_ARRAY, STRING, UNIQUE_PTR,DICTIONARY, GC_PTR,__DESTRUCTOR,DROP,  NUM_STRINGS
+	EXTERN_C,__VTABLE_PTR,__DATA_PTR,__PARENT_PTR,__ENV_PTR,__DISCRIMINANT, __ENV_I8_PTR,DYNAMIC_ARRAY, STRING, UNIQUE_PTR,DICTIONARY, GC_PTR,
+	__DESTRUCTOR,	// ~ClassName() c++ destructor
+	DROP,		// token for Rust destructor, just translated into '__DESTRUCTOR'
+	__SET_DEFAULT_VALUES,	// inserted into constructor calls, sets up given default values
+	__VISIT,	// an auto-rolled function for reflection, visits all fields with given object
+	__VERIFY,	// an auto-rolled function calling '__verify' on components
+	NUM_STRINGS
 };
 extern CgValue CgValueVoid();
 
@@ -416,8 +426,9 @@ struct Vec{
 	}
 	void insert(int pos,T item){
 		resize(num+1);
-		for (int i=num-1; i>pos; i++){
-			data[i]=data[i-1];
+		ASSERT(data!=nullptr);
+		for (int32_t i=num-1; i>pos; i--){
+			this->data[i]=this->data[i-1];
 		}
 		ASSERT(pos<num);
 		data[pos]=item;
@@ -437,7 +448,7 @@ struct Vec{
 	}
 	inline void push_front(T item){
 		insert(0,item);
-		resize(num-1);
+
 	}
 	inline void push_back(T item){
 		insert(num,item);

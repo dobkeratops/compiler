@@ -37,7 +37,8 @@ struct  ExprFnDef : ExprDef {
 	vector<ArgDef*> args;
 	Expr* body=0;
 	ExprFnDef(){};
-	ExprFnDef(SrcPos sp)	{pos=sp;variadic=false;scope=0;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;name=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
+	ExprFnDef(SrcPos sp,Name n)	{name=n;pos=sp;variadic=false;scope=0;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
+	ExprFnDef(SrcPos sp):ExprFnDef(sp,0){};
 	void			set_receiver_if_unset(ExprStructDef* sd); // not sure if it'll be arbitrary type
 	ExprStructDef*	get_receiver();
 	int		get_name()const {return index(name);}
@@ -76,6 +77,11 @@ struct  ExprFnDef : ExprDef {
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue input) override;
 	virtual Scope*	get_scope()				{return this->scope;}
 	void		recurse(std::function<void(Node*)>&) override;
+	// helpers for building functions
+	ExprCompound*	convert_body_to_compound();
+	void	push_body(Expr* e,bool front);
+	void 	push_body_back(Expr* e)	{push_body(e,false);}
+	void 	push_body_front(Expr* e){push_body(e,true);}
 };
 CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, const Expr* receiver, const ExprBlock* e);
 

@@ -50,6 +50,8 @@ struct Type : ExprDef {
 	bool	is_callable()const	{return name==FN||name==CLOSURE;}
 	bool	is_qualifier()const	{return name==CONST||name==MUT;}
 	bool	is_qualifier_or_ptr_or_ref()const{return is_qualifier()||is_pointer_or_ref();}
+	bool	has_sub_destructors()const;
+	bool	has_sub_constructors()const;
 	struct FnInfo{ Type* args; Type* ret;Type* receiver;};
 	FnInfo	get_fn_info(){
 		if (!is_callable()) return FnInfo{nullptr,nullptr,nullptr};

@@ -128,6 +128,7 @@ public:
 	virtual ExprLiteral*		as_literal() 		{return nullptr;}
 	virtual const ExprIdent*	as_ident() const{return nullptr;}
 	virtual const ExprCompound*	as_compound() const{return nullptr;}
+	virtual ExprCompound*	as_compound(){return nullptr;}
 	virtual ExprFor* 			as_for() 		{return nullptr;}
 	virtual ExprFnDef*			as_fn_def() 	{return nullptr;}
 	virtual const ExprFnDef*	as_fn_def() const {return nullptr;}
@@ -145,9 +146,13 @@ public:
 	ArgDef*			as_field() 			{return this->as_arg_def();}
 	virtual void verify() {};
 	// abstract interface to 'struct-like' entities;
-	virtual const Type* get_elem_type(int index)const {error(this,"tried to get elem on name=%s kind=%s",str(this->name),this->kind_str());return nullptr;}
+	virtual const Type* get_elem_type(int index)const {
+		error(this,"tried to get elem on name=%s kind=%s",str(this->name),this->kind_str());return nullptr;
+	}
 	virtual Name get_elem_name(int index)const {return const_cast<Node*>(this)->get_elem_node(index)->name;}
-	virtual int get_elem_index(Name name){error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return -1;}
+	virtual int get_elem_index(Name name){
+		error(this,"tried to get elem on %s %s",str(this->name),this->kind_str());return -1;
+	}
 	int get_elem_index(Name name)const{return const_cast<Node*>(this)->get_elem_index(name);}
 	virtual int get_elem_count()const{return 0;}
 	virtual size_t alignment()const {return 16;} // unless you know more..
@@ -188,7 +193,7 @@ public:
 #endif
 	}
 	const Type* type_if()const	{if (this)return this->type();else return nullptr;}
-	Type*& type()				{::verify(this->m_type);return this->m_type;}
+	Type*& type()				{::verify(this->m_type);return this->m_type;;}
 	const Type* type()const		{::verify(this->m_type);return this->m_type;}
 	void type(const Type* t)	{::verify(t);this->m_type=(Type*)t;}
 	void set_type(const Type* t);

@@ -21,6 +21,24 @@ void Type::verify(){
 	for (auto x=this->sub; x;x=x->next)
 		x->verify();
 }
+bool Type::has_sub_constructors()const{
+	if (!this) return false;
+	if (this->name==TUPLE){
+		for (auto subt=this->sub; subt;subt=subt->next)
+			if (subt->has_sub_constructors())return true;
+	} else if (auto sd=this->struct_def())
+		return sd->has_sub_constructors();
+	return false;
+}
+bool Type::has_sub_destructors()const{
+	if (!this) return false;
+	if (this->name==TUPLE){
+		for (auto subt=this->sub; subt;subt=subt->next)
+			if (subt->has_sub_destructors())return true;
+	} else if (auto sd=this->struct_def())
+		return sd->has_sub_destructors();
+	return false;
+}
 
 const Type* Type::get_elem(int index)const{
 	if (this->struct_def())

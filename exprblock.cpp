@@ -20,7 +20,7 @@ void ExprBlock::dump(PrinterRef depth) const {
 	newline(depth);
 	auto b="{\0}\0";
 	dbprintf(b+0);
-	dbprintf(this->kind_str());
+	dbprintf("%s ",this->kind_str());
 	this->call_expr->dump_if(-100);
 	for (const auto x:this->argls) {
 		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
@@ -141,6 +141,28 @@ ResolveResult	ExprCall::resolve_operator_new(Scope *sc, const Type *desired, int
 	op->dump(0);
 
 	return resolved|INCOMPLETE;
+}
+ExprCall::ExprCall(SrcPos sp, Name fname, Expr* arg1):ExprCall(sp,new ExprIdent(sp,fname),arg1,nullptr,nullptr){
+}
+ExprCall::ExprCall(SrcPos sp, Name fname, Expr* arg1,Expr* arg2):ExprCall(sp,new ExprIdent(sp,fname),arg1,arg2,nullptr){
+}
+
+ExprCall::ExprCall(SrcPos sp, Expr* call, Expr* arg1, Expr* arg2,Expr* arg3){
+	this->pos=sp;
+	this->call_expr=call;
+	if (arg1){
+		this->argls.push_back(arg1);
+		if (arg2){
+			this->argls.push_back(arg2);
+			if (arg3){
+				this->argls.push_back(arg3);
+			}
+		}
+	}
+}
+ExprCall::ExprCall(SrcPos sp, ExprFnDef* f, Expr* arg1, Expr* arg2):ExprCall(sp,new ExprIdent(sp,f->name),arg1,arg2,nullptr){
+	// todo - explicit FnRef node.
+	this->call_expr->set_def(f);
 }
 
 ResolveResult	ExprStructInit::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){

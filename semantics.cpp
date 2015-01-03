@@ -482,6 +482,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 }
 void FindFunction::find_fn_sub(Expr* src) {
 	verify_all();
+	dbg_raii(src->dump(0));dbg_raii(newline(0));
 	if (auto sb=dynamic_cast<ExprBlock*>(src)) {
 		for (auto x:sb->argls) {
 			find_fn_sub(x);

@@ -23,6 +23,7 @@ fn take_closure(funcp:|int|){
 	funcp(10);
 }
 
+
 // Rust style enum (tagged-union)
 enum Shape {
 	Sphere(Vec3,float),

@@ -384,6 +384,134 @@ ExprStructDef::roll_constructor_wrappers(Scope* sc){
 	}
 }
 
+// this needs to be called on a type, since it might be a tuple..
+// oh and what about enums!
+bool ExprStructDef::has_constructors()const{
+	auto sd=this;
+	if (!sd) return false;
+	for (auto f:sd->functions){
+		if (f->name==sd->name)
+			return true;
+	}
+	return has_sub_constructors();
+}
+bool ExprStructDef::has_sub_constructors()const{
+	for (auto f:fields){
+		if (!f->get_type()) continue;
+		if (auto sd=f->type()->struct_def()->has_constructors()){
+			return true;
+		}
+	}
+	if (this->inherits) if (this->inherits->has_sub_constructors()) return true;
+	return this->inherits_type?this->inherits_type->has_sub_constructors():false;
+}
+bool ExprStructDef::has_sub_destructors()const{
+	for (auto f:functions){
+		if (f->name==__DESTRUCTOR){
+			dbg_raii(f->dump(0));dbg_raii(newline(0));
+			return true;
+		}
+	}
+	for (auto f:fields){
+		if (!f->get_type()) continue;
+		if (auto sd=f->type()->has_sub_destructors()){
+			return true;
+		}
+	}
+	if (this->inherits) if (this->inherits->has_sub_destructors()) return true;
+	return this->inherits_type?this->inherits_type->has_sub_destructors():false;
+}
+
+void	ExprStructDef::insert_sub_constructor_calls(){
+	if (m_ctor_composed) return;
+	if (!this->has_sub_constructors())
+		return;
+	get_or_create_constructor();
+	m_ctor_composed=true;
+	for (auto f:functions){
+		if (f->name!=this->name)
+			continue;
+		dbg_raii(printf("inserting component constructors on %s\n",this->name_str()));
+		dbg_raii(f->dump(0));
+		insert_sub_constructor_calls_sub(f);
+		dbg_raii(f->dump(0));
+	}
+}
+
+void		ExprStructDef::insert_sub_constructor_calls_sub(ExprFnDef* ctor){
+	if (this->inherits)
+		this->inherits->insert_sub_constructor_calls_sub(ctor);
+	for (auto f:fields){
+		if (f->type()->struct_def()->has_constructors()){
+			if (auto sd=f->type()->struct_def()){
+				auto subd=sd->get_or_create_constructor();
+				auto pos=ctor->pos;
+//				auto call=new ExprCall(ctor->pos,subd,new ExprOp(ADDR,ctor->pos,nullptr,elem));
+//				auto elem=new ExprOp(DOT,ctor->pos, new ExprIdent(ctor->pos,THIS), 	new ExprIdent(ctor->pos,f->name));
+				ctor->push_body_front(new ExprCall(ctor->pos,subd,new ExprOp(ADDR,ctor->pos,nullptr,new ExprOp(DOT,ctor->pos, new ExprIdent(ctor->pos,THIS), new ExprIdent(ctor->pos,f->name)))));
+/*
+				ctor->push_body_front(
+					new ExprOp(
+						DOT,pos,
+						new ExprOp(DOT,pos,
+							new ExprIdent(pos,THIS),
+							new ExprIdent(pos,f->name)
+						),
+						new ExprCall(pos,subd)
+							   ));
+ */
+			} else{
+				error(this,"can't constructor yet");
+			}
+		}
+	}
+}
+void		ExprStructDef::insert_sub_destructor_calls(ExprFnDef* dtor){
+	for (auto f:fields){
+		if (f->type()->has_sub_destructors()){
+			if (auto sd=f->type()->struct_def()){
+				auto subd=sd->get_or_create_destructor();
+				dtor->push_body_back(new ExprCall(dtor->pos,subd,new ExprOp(ADDR,dtor->pos,nullptr,new ExprOp(DOT,dtor->pos, new ExprIdent(dtor->pos,THIS), new ExprIdent(dtor->pos,f->name)))));
+			} else{
+				error(this,"can't make destructor yet");
+			}
+		}
+	}
+	if (this->inherits)
+		this->inherits->insert_sub_destructor_calls(dtor);
+}
+ExprFnDef* create_method(ExprStructDef* s,Name nm){
+	dbg_raii(dbprintf("creating method %s::%s()\n", s->name_str(),str(nm)));
+	auto f=new ExprFnDef(s->pos, nm);
+	f->set_receiver_if_unset(s);
+	f->args.push_back(new ArgDef(s->pos, THIS,s->ptr_type));
+	s->functions.push_back(f);
+	return f;
+}
+ExprFnDef*	ExprStructDef::get_or_create_destructor(){
+	for (auto f:functions){
+		if (f->name==__DESTRUCTOR)
+			return f;
+	}
+	return create_method(this,__DESTRUCTOR);
+}
+ExprFnDef*	ExprStructDef::get_or_create_constructor(){
+	// get which constructor?.. the default
+	for (auto f:functions){
+		if (f->name==this->name && (f->args.size()==1||(f->m_receiver && f->args.size()==0)))
+			return f;
+	}
+	return create_method(this,this->name);
+}
+
+void ExprStructDef::init_types(){
+	if (!this->struct_type){
+		this->struct_type=new Type(this->pos,this);
+		this->ptr_type=new Type(this,PTR, this->struct_type);
+		this->ref_type=new Type(this,REF, this->struct_type);
+	}
+}
+
 ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
 	if (m_recurse) return COMPLETE;
 	m_recurse=true;
@@ -391,8 +519,15 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 	if (!this->get_type()) {
 		this->set_type(new Type(this,this->name));	// name selects this struct
 	}
+	init_types();
 
 	if (!this->is_generic()){
+		// ctor/dtor composition...
+		this->insert_sub_constructor_calls();
+		if (this->has_sub_destructors()){
+			this->insert_sub_destructor_calls(this->get_or_create_destructor());
+		}
+
 		if (this->m_is_variant || this->m_is_enum){
 			if (!this->fields.size()||this->fields.front()->name!=__DISCRIMINANT){
 				this->fields.insert(
@@ -426,6 +561,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 		
 		/// TODO clarify that we dont resolve a vtable.
 		//if (this->vtable) this->vtable->resolve(definer_scope,desired,flags);
+		
 	} else{
 		for (auto ins=this->instances; ins; ins=ins->next_instance)
 			resolved|=ins->resolve_if(definer_scope,nullptr, flags);

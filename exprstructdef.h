@@ -9,6 +9,7 @@
 struct NamedItems;
 struct ImplDef;
 struct TraitDef;
+// TODO - this has turned into merge of class, modules.. split off a base 'StructDef' and call this ClassDef
 struct ExprStructDef: ExprDef {
 	// lots of similarity to a function actually.
 	// but its' backwards.
@@ -20,6 +21,8 @@ struct ExprStructDef: ExprDef {
 	bool m_is_variant=false;
 	bool m_is_enum=false;
 	bool m_recurse=false;
+	bool m_ctor_composed=false;
+	bool m_dtor_composed=false;
 	bool is_enum() { return m_is_enum;}
 	int max_variant_size=0;
 	vector<TParamDef*>	tparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
@@ -32,13 +35,18 @@ struct ExprStructDef: ExprDef {
 	vector<ExprFnDef*>		virtual_functions;
 	vector<ExprFnDef*>		functions;
 	vector<ExprFnDef*>		static_functions;
-	vector<ExprFnDef*>		constructor_wrappers;
+	vector<ExprFnDef*>		constructor_wrappers;	// generated; eg Foo(y){ x:=Foo{}; x.Foo(y);return x;}
+
 	vector<TypeDef*>		typedefs;
 	vector<ArgDef*>			args;		// default constructor form
 	ExprBlock*				body=0;		// for default constructor form.
 	ImplDef*				impls=0;
 	int 	first_user_field_index()const;
 	Type*	inherits_type=0;
+	// cache types for using this struct as a type.
+	Type*	struct_type=nullptr;
+	Type*	ptr_type=nullptr;
+	Type*	ref_type=nullptr;
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
 	ExprStructDef* vtable=0;
@@ -76,6 +84,7 @@ struct ExprStructDef: ExprDef {
 	void	translate_tparams(const TParamXlat& tpx) override;
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the tparams.
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
+	void			init_types();
 	void			roll_vtable();
 	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	const Type*			get_elem_type(int i)const;//{return this->fields[i]->type();}
@@ -94,6 +103,15 @@ struct ExprStructDef: ExprDef {
 	void		recurse(std::function<void(Node*)>&);
 	void			calc_padding();
 	void			roll_constructor_wrappers(Scope* sc);
+	bool			has_sub_constructors() const;
+	bool 			has_constructors()const;
+	bool			has_sub_destructors() const;
+	bool 			has_destructor()const;
+	void			insert_sub_constructor_calls();
+	void			insert_sub_constructor_calls_sub(ExprFnDef* ctor);
+	void			insert_sub_destructor_calls(ExprFnDef* dtor);
+	ExprFnDef*		get_or_create_destructor();
+	ExprFnDef*		get_or_create_constructor();
 };
 
 struct EnumDef  : ExprStructDef {

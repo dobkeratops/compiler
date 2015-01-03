@@ -12,6 +12,30 @@ struct CompilerTest {
 };
 
 CompilerTest g_Tests[]={
+	{	"ctor/dtor composition",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		struct Foo{
+			fn Foo(){printf("Foo.ctor\n");this}
+			//fn ~Qux(){printf("Qux.dtor\n");};
+		};
+		struct Qux{
+			f:Foo;
+			fn Qux(){printf("Qux.ctor\n");this}
+			//fn ~Qux(){printf("Qux.dtor\n");};
+		};
+		struct Baz{
+			qux:Qux;
+			fn Baz(){printf("Baz.ctor\n");this}
+		};
+		fn main(argc:int, argv:**char)->int{
+			let baz=Baz();
+			0			// baz out of scope should destruct baz, qux
+		},
+		)===="
+		,
+		"Qux.ctor\nQux.dtor\n"
+	},
+
 	{	"multiple field read",__FILE__,__LINE__,R"====(
 												  
 		extern"C"fn printf(s:str,...)->int;
@@ -25,6 +49,7 @@ CompilerTest g_Tests[]={
 		)===="
 		,"(16 17)\n"
 	},
+	
 	
 	{	"RValue references",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;

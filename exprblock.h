@@ -44,6 +44,7 @@ struct ExprBlock :public ExprScopeBlock{
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags) override;
 	ResolveResult	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
 	ResolveResult	resolve_elems(Scope* scope, const Type* sub_desired, int flags);
+	void push_back_if(Expr* e){if (e) argls.push_back(e);}
 
 	int	get_elem_count()const override{return this->argls.size();}
 	Node*	get_elem_node(int i) override{return this->argls[i];}
@@ -92,9 +93,13 @@ struct ExprParens : ExprBlock{
 	Node* 	clone() const override	{return (Node*)clone_sub(new ExprParens());}
 };
 struct ExprCompound : ExprBlock{
+	ExprCompound(){}
+	ExprCompound(SrcPos sp){pos=sp;}
+	ExprCompound(SrcPos sp,Expr* e1,Expr*e2=nullptr,Expr* e3=nullptr){pos=sp;push_back_if(e1);push_back_if(e2);push_back_if(e3);}
 	const char* kind_str() const  override		{return "expr_compound";}
-	Node* 	clone() const override	{return (Node*)clone_sub(new ExprCompound());}
+	Node* 	clone() const override	{return (Node*)clone_sub(new ExprCompound(this->pos));}
 	const ExprCompound*	as_compound() const override{return this;}
+	ExprCompound*	as_compound() override{return this;}
 	virtual const Expr*	get_return_expr()const override	{return (argls.size())?argls.back():nullptr;}
 
 };
@@ -107,11 +112,17 @@ struct ExprTuple : ExprBlock{
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref)override;
-
 };
+
 struct ExprCall : ExprBlock{
 	const char* kind_str() const  override		{return "call";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
+	// constructors for building from internal code generators
+	ExprCall(){}
+	ExprCall(SrcPos pos, Name fname, Expr* arg);
+	ExprCall(SrcPos pos, Name fname, Expr* arg1, Expr* arg2);
+	ExprCall(SrcPos pos, ExprFnDef* f, Expr* arg1=nullptr, Expr* arg2=nullptr);
+	ExprCall(SrcPos pos, Expr* call, Expr* arg1=nullptr, Expr* arg2=nullptr,Expr* arg3=nullptr);
 	Node* 	clone() const override	{return (Node*)clone_sub(new ExprCall());}
 	ResolveResult	resolve(Scope* sc, const Type* desired,int flags) override;
 	ResolveResult resolve_call_sub(Scope* sc, const Type* desired, int flags,Expr* receiver);
@@ -119,8 +130,8 @@ struct ExprCall : ExprBlock{
 	ResolveResult	resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
 	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref)override;
-
 };
+			 
 struct ExprArrayInit : ExprBlock{
 	const char* kind_str() const  override		{return "array_init";}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;

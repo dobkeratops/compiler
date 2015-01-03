@@ -424,6 +424,29 @@ Expr*			ExprFnDef::last_expr()const{
 	else return body;
 }
 
+void ExprFnDef::push_body(Expr* e,bool front){
+	if (!body)body=e;
+	else{
+		convert_body_to_compound();
+		ASSERT(body->as_compound());
+		if (front)
+			body->as_compound()->argls.push_front(e);
+		else
+			body->as_compound()->argls.push_back(e);
+	}
+}
+ExprCompound* ExprFnDef::convert_body_to_compound(){
+	if (!this->body){
+		this->body=new ExprCompound(this->pos);
+	}
+	if (auto b=this->body->as_compound()){
+		return b;
+	}
+	auto b=new ExprCompound(this->pos);
+	b->argls.push_back(this->body);
+	this->body=b;
+	return b;
+}
 
 void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc) {
 	auto ofp=cg.ofp;
@@ -637,6 +660,10 @@ CgValue compile_function_call(CodeGen& cg, Scope* sc,CgValue recvp, const Expr* 
 			ret_val= cg.emit_call_end();
 			
 		} else {
+			if (!call_fn){
+				e->dump(0);
+				error(e,"call not resolved\n");
+			}
 			//[1.4.2] Direct Call
 			coerce_args(call_fn->type());
 			cg.emit_call_begin(CgValue(call_fn));
