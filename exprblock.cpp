@@ -97,7 +97,8 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	auto ret= this->argls.back()->compile(cg,sc);
 
 	//TODO- how to invoke destructors for all values
-	sc->compile_destructors(cg);
+	dbg_raii(dbprintf("this=%s:%s; scope %p %s;  this->scope %p \n", this->name_str(),this->kind_str(),sc,sc->name(), this->get_scope()));
+	this->get_scope()->compile_destructors_if(cg);
 	
 	return ret;
 }
@@ -142,6 +143,9 @@ ResolveResult	ExprCall::resolve_operator_new(Scope *sc, const Type *desired, int
 
 	return resolved|INCOMPLETE;
 }
+ExprCall::ExprCall(SrcPos sp, Name fname):ExprCall(sp,new ExprIdent(sp,fname),nullptr,nullptr,nullptr){
+}
+
 ExprCall::ExprCall(SrcPos sp, Name fname, Expr* arg1):ExprCall(sp,new ExprIdent(sp,fname),arg1,nullptr,nullptr){
 }
 ExprCall::ExprCall(SrcPos sp, Name fname, Expr* arg1,Expr* arg2):ExprCall(sp,new ExprIdent(sp,fname),arg1,arg2,nullptr){

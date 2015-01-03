@@ -550,8 +550,9 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 			arg->pattern->compile(cg,scope, scope->find_scope_variable(arg->name)->compile(cg,scope,CgValue()));
 		}
 	}
-	
-	cg.emit_return(fn_node->body->compile(cg,scope));
+	auto retval=fn_node->body->compile(cg,scope);
+	fn_node->get_scope()->compile_destructors(cg);
+	cg.emit_return(retval);
 	cg.emit_nest_end("}\n");
 	cg.curr_fn=0;
 	return CgValue(fn_node);

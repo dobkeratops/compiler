@@ -149,14 +149,18 @@ ExprFnDef* Scope::find_unique_fn_named(const Node* name_node,int flags, const Ty
 }
 
 void Scope::compile_destructors(CodeGen& cg){
+	if (!this) return;
 	// TODO - how do we compile R-Value destructors, (and RValue constructors for that matter)
 	// every expression node should be able to compile a constructor & destructor.
 	for (auto v=this->vars; v;v=v->next_of_scope){
 		if (v->return_value) continue;
-		cg.compile_destructor(this,CgValue(v),true);
+		if (v->kind==Local){// todo, we should for args? but need 'find with no autocoerce'
+			dbg_raii(printf("invoking destructors for %s.%s\n",str(this->name()),v->name_str()));
+			cg.compile_destructor(this,CgValue(v),true);
+		}
 	}
 }
-ExprFnDef*	Scope::find_fn_for_types(Name name, const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags){
+ExprFnDef*	Scope::find_fn_for_types(Name name, int numrecv,const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags){
 	static ExprDummy s_dummy_arg0;
 	static ExprDummy s_dummy_arg1;
 	static vector<Expr*> s_dummy_args;
@@ -169,10 +173,10 @@ ExprFnDef*	Scope::find_fn_for_types(Name name, const Type* arg0_type,const Type*
 		s_dummy_args.push_back(&s_dummy_arg1);
 		s_dummy_arg1.set_type(arg1_type);
 	}
-	return find_fn(name,nullptr, s_dummy_args,ret_type, flags);
+	return find_fn(name,nullptr, numrecv,s_dummy_args,ret_type, flags);
 }
 
-ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags)  {
+ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, int numrecv,const vector<Expr*>& args,const Type* ret_type,int flags)  {
 	verify_all();
 	
 	// TODO: rework this to take Type* fn_type fn[(args),ret] - for symetry with anything using function pointers

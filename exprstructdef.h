@@ -112,6 +112,7 @@ struct ExprStructDef: ExprDef {
 	void			insert_sub_destructor_calls(ExprFnDef* dtor);
 	ExprFnDef*		get_or_create_destructor();
 	ExprFnDef*		get_or_create_constructor();
+	void			ensure_constructors_return_thisptr();
 };
 
 struct EnumDef  : ExprStructDef {

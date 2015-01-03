@@ -348,7 +348,7 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 #endif
 
 	if (!fnd){
-		fnd=sc->find_fn(this->name, this, args,desired,flags&(~R_FINAL));
+		fnd=sc->find_fn(this->name, this,0, args,desired,flags&(~R_FINAL));
 	}
 	if (fnd) {
 #if DEBUG >=2

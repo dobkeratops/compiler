@@ -119,6 +119,7 @@ struct ExprCall : ExprBlock{
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	// constructors for building from internal code generators
 	ExprCall(){}
+	ExprCall(SrcPos pos, Name fname);
 	ExprCall(SrcPos pos, Name fname, Expr* arg);
 	ExprCall(SrcPos pos, Name fname, Expr* arg1, Expr* arg2);
 	ExprCall(SrcPos pos, ExprFnDef* f, Expr* arg1=nullptr, Expr* arg2=nullptr);

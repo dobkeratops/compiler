@@ -21,19 +21,21 @@ CompilerTest g_Tests[]={
 		struct Qux{
 			f:Foo;
 			fn Qux(){printf("Qux.ctor\n");this}
-			//fn ~Qux(){printf("Qux.dtor\n");};
+			fn ~Qux(){printf("Qux.dtor\n");};
 		};
 		struct Baz{
 			qux:Qux;
-			fn Baz(){printf("Baz.ctor\n");this}
+			fn hello(){};
 		};
 		fn main(argc:int, argv:**char)->int{
 			let baz=Baz();
+			baz;
+			(&baz).hello();
 			0			// baz out of scope should destruct baz, qux
 		},
 		)===="
 		,
-		"Qux.ctor\nQux.dtor\n"
+		"Foo.ctor\nQux.ctor\nQux.dtor\n"
 	},
 
 	{	"multiple field read",__FILE__,__LINE__,R"====(

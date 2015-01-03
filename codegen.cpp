@@ -90,7 +90,14 @@ CgValue CgValue::addr_op(CodeGen& cg,const Type* t)const { // take type calculat
 	ASSERT(this->type);
 	if (!reg && (bool)addr) {	// we were given a *reference*, we make the vlaue the adress
 		ASSERT(t->name==PTR);
-		ASSERT(t->sub->is_equal(this->type));
+		if (!t->sub->is_equal(this->type)){
+			dbprintf("type error taking adress:-\n");
+			t->dump(0);
+			dbprintf("vs-\n");
+			this->type->dump(0);
+			dbprintf("type error\n");
+			ASSERT(0);
+		}
 		return CgValue(addr,t,0);
 	} else if (this->val){
 		if (auto v=this->val->as_variable()){
@@ -1413,7 +1420,7 @@ RegisterName	CodeGen::emit_extractvalue(RegisterName dst,const Type* type,Regist
 
 void
 CodeGen::compile_destructor(Scope* sc, CgValue val,bool force){
-	auto f=sc->find_fn_for_types(__DESTRUCTOR, val.type, nullptr, nullptr, 0);
+	auto f=sc->find_fn_for_types(__DESTRUCTOR, 1,val.type, nullptr, nullptr, 0);
 	if (f){
 		// only if it was exact match. raw function search does autoref. so, T calls ~T(), but *T doesn't.
 		auto f_arg0_t=f->args[0]->type();

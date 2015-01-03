@@ -84,8 +84,8 @@ public:
 	ExprStructDef*	find_struct(const Node* node);
 	ExprStructDef*	find_struct_type(const Node* node,const Type* t);
 	ExprFnDef*	find_unique_fn_named(const Node* name_node,int flags=0, const Type* fn_type=nullptr); // todo: replace with fn type.
-	ExprFnDef*	find_fn(Name name,const Expr* callsite, const vector<Expr*>& args,const Type* ret_type,int flags);
-	ExprFnDef*	find_fn_for_types(Name name, const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags);
+	ExprFnDef*	find_fn(Name name,const Expr* callsite, int numrecv,const vector<Expr*>& args,const Type* ret_type,int flags);
+	ExprFnDef*	find_fn_for_types(Name name, int numrecv,const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags);
 	void	add_struct(ExprStructDef*);
 	void	add_fn(ExprFnDef*);
 	void	add_fn_def(ExprFnDef*);
@@ -101,6 +101,8 @@ private:
 	void push_child(Scope* sub) { sub->owner_fn=this->owner_fn; sub->next=this->child; this->child=sub;sub->parent=this; sub->global=this->global;}
 public:
 	void	compile_destructors(CodeGen& gc);
+	void	compile_destructors_if(CodeGen& cg){if (this){
+		this->compile_destructors(cg);}}
 	Scope* parent_or_global()const{
 		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
 	}

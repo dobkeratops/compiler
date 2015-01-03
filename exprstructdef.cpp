@@ -408,7 +408,7 @@ bool ExprStructDef::has_sub_constructors()const{
 bool ExprStructDef::has_sub_destructors()const{
 	for (auto f:functions){
 		if (f->name==__DESTRUCTOR){
-			dbg_raii(f->dump(0));dbg_raii(newline(0));
+//			dbg_raii(f->dump(0));dbg_raii(newline(0));
 			return true;
 		}
 	}
@@ -437,6 +437,22 @@ void	ExprStructDef::insert_sub_constructor_calls(){
 		dbg_raii(f->dump(0));
 	}
 }
+void	ExprStructDef::ensure_constructors_return_thisptr(){
+	for (auto f:functions){
+		if (f->name!=this->name)
+			continue;
+		if (auto ls=f->get_return_expr()){
+			if (auto id=ls->as_ident())
+				if (id->name==THIS)
+					continue;
+		}
+		dbg_raii(f->dump(0));
+		f->convert_body_to_compound();
+		f->push_body_back(new ExprIdent(f->pos,THIS));
+		dbg_raii(f->dump(0));
+	}
+}
+
 
 void		ExprStructDef::insert_sub_constructor_calls_sub(ExprFnDef* ctor){
 	if (this->inherits)
@@ -446,20 +462,7 @@ void		ExprStructDef::insert_sub_constructor_calls_sub(ExprFnDef* ctor){
 			if (auto sd=f->type()->struct_def()){
 				auto subd=sd->get_or_create_constructor();
 				auto pos=ctor->pos;
-//				auto call=new ExprCall(ctor->pos,subd,new ExprOp(ADDR,ctor->pos,nullptr,elem));
-//				auto elem=new ExprOp(DOT,ctor->pos, new ExprIdent(ctor->pos,THIS), 	new ExprIdent(ctor->pos,f->name));
 				ctor->push_body_front(new ExprCall(ctor->pos,subd,new ExprOp(ADDR,ctor->pos,nullptr,new ExprOp(DOT,ctor->pos, new ExprIdent(ctor->pos,THIS), new ExprIdent(ctor->pos,f->name)))));
-/*
-				ctor->push_body_front(
-					new ExprOp(
-						DOT,pos,
-						new ExprOp(DOT,pos,
-							new ExprIdent(pos,THIS),
-							new ExprIdent(pos,f->name)
-						),
-						new ExprCall(pos,subd)
-							   ));
- */
 			} else{
 				error(this,"can't constructor yet");
 			}
@@ -467,11 +470,22 @@ void		ExprStructDef::insert_sub_constructor_calls_sub(ExprFnDef* ctor){
 	}
 }
 void		ExprStructDef::insert_sub_destructor_calls(ExprFnDef* dtor){
+	if (m_dtor_composed) return;
 	for (auto f:fields){
 		if (f->type()->has_sub_destructors()){
 			if (auto sd=f->type()->struct_def()){
 				auto subd=sd->get_or_create_destructor();
-				dtor->push_body_back(new ExprCall(dtor->pos,subd,new ExprOp(ADDR,dtor->pos,nullptr,new ExprOp(DOT,dtor->pos, new ExprIdent(dtor->pos,THIS), new ExprIdent(dtor->pos,f->name)))));
+				dbg_raii(printf("%s using %s::~%s()\n",str(this->name),str(sd->name),str(subd->name)));
+				auto pos=dtor->pos;
+//				dtor->push_body_back(new ExprCall(dtor->pos,subd->name,new ExprOp(ADDR,dtor->pos,nullptr,new ExprOp(DOT,dtor->pos, new ExprIdent(dtor->pos,THIS), new ExprIdent(dtor->pos,f->name)))));
+				dtor->push_body_back(
+					new ExprOp(DOT,pos,
+						new ExprOp(ADDR,pos, nullptr, new ExprOp(DOT,pos, new ExprIdent(pos,THIS),new ExprIdent(pos,f->name))),
+						new ExprCall(pos, subd->name))
+				);
+				dbg_raii(f->dump(0));
+				dbg_raii(dtor->dump(0));
+				m_dtor_composed=true;
 			} else{
 				error(this,"can't make destructor yet");
 			}
@@ -522,11 +536,12 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 	init_types();
 
 	if (!this->is_generic()){
-		// ctor/dtor composition...
+		// ctor/dtor composition,fixup.
 		this->insert_sub_constructor_calls();
 		if (this->has_sub_destructors()){
 			this->insert_sub_destructor_calls(this->get_or_create_destructor());
 		}
+		ensure_constructors_return_thisptr();	// makes rolling wrappers easier.
 
 		if (this->m_is_variant || this->m_is_enum){
 			if (!this->fields.size()||this->fields.front()->name!=__DISCRIMINANT){
