@@ -231,7 +231,12 @@ CgValue	ExprLiteral::compile(CodeGen& cg, Scope* sc, CgValue ) {
 	return CgValue(this);
 }
 
-
+ExprLiteral::ExprLiteral(const SrcPos& p,bool b ){
+	this->set_type(Type::get_bool());
+	this->name=b?BOOL_TRUE:BOOL_FALSE;
+	this->type_id=T_BOOL;
+	this->u.val_bool=b;
+}
 void ExprLiteral::dump(PrinterRef depth) const{
 	if (!this) return;
 	newline(depth);

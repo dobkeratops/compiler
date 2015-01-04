@@ -121,6 +121,10 @@ struct ExprIfLet : ExprMatch{	// sugar for match 1arm. parses+prints different. 
 	void		dump(PrinterRef depth)const;
 	Node*		clone() const override {return this->clone_into(new ExprIfLet);}
 	const char*		kind_str() const {return "kind str";}
+	ExprIfLet(){};
+	ExprIfLet(SrcPos p,Pattern* ptn, Expr* _expr, Expr* _body, Expr* _else);
+
+
 };
 struct ExprWhileLet : ExprFor{	// from rust, alternate sugar for destructuring assignment loop.
 	//void		dump(int depth)const;

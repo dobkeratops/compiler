@@ -106,20 +106,40 @@ ResolveResult ExprForIn::resolve(Scope *outer_scope, const Type *desired, int fl
 	// for pattern in expr {...}
 	// for __iter=expr; if let Some(pattern)=__iter.next();_ {....}
 	// aka while let
-	auto pos=this->pos;
+	auto p=this->pos;
+//	for __iter:=$expr;true;{
+//		if let Some($pat)=&__iter.next(){$body;} else {break};
+//	};
 
 	if (!(this->init || this->cond || this->incr)){
 		// set the muthur up.
-		this->init=new ExprOp(LET_ASSIGN,pos,new ExprIdent(pos,__ITERATOR), this->expr);
-		this->cond=new ExprOp(// invokes a pattern binding vars
-				LET_ASSIGN,pos,
-				(Expr*)new Pattern(pos,E_SOME,this->pattern),
-				new ExprOp(DOT,pos,
-					new ExprIdent(pos,__ITERATOR),
-					new ExprCall(pos,NEXT)
-							  ));
+		this->pattern->dump(0);newline(0);
+		this->expr->dump(0);newline(0);
+		this->body->dump(0);newline(0);
+		if (this->else_block){this->else_block->dump(0);newline(0);}
+		auto body_sub=body;
+		auto elseb=this->else_block;
+		auto _expr=this->expr;
+		this->expr=nullptr;
+		this->else_block=nullptr;
+		this->body=nullptr;
+		this->init=new ExprOp(LET_ASSIGN,p,(Expr*)new Pattern(pos,__ITERATOR), _expr);
+		this->cond=new ExprLiteral(p,true);
+		this->incr=new ExprLiteral(p,VOID);
+		this->body=new ExprIfLet(// invokes a pattern binding vars
+				p,
+				new Pattern(p,E_SOME,this->pattern),
+				new ExprOp(ADDR,p, // expression itr.next()
+					nullptr,
+					new ExprOp(DOT,p,
+						new ExprIdent(p,__ITERATOR),
+						new ExprCall(p,NEXT))),
+				body_sub,         // loop body
+				new ExprOp(BREAK,p,nullptr,elseb?elseb:new ExprLiteral(p)));
+		this->else_block=elseb?(Expr*)elseb->clone():new ExprLiteral(p);
+		dbg2({this->dump(0);newline(0);})
+		dbg2({this->body->dump(0);newline(0);})
 	}
-	dbg2({this->dump(0);newline(0);})
 	return resolve_for_sub(scope,desired,flags);
 }
 
@@ -355,6 +375,25 @@ void ExprIfLet::dump(PrinterRef depth)const{
 		newline(depth);dbprintf("}");
 	}
 }
+ExprIfLet::ExprIfLet(SrcPos p,Pattern* ptn, Expr* _expr, Expr* _body, Expr* _else){
+	auto iflet=this;
+	iflet->pos=p;
+	MatchArm* arm=new MatchArm(); // if-let is a single match arm with different syntax.
+	iflet->arms=arm;
+	iflet->expr=_expr;
+	arm->pattern=ptn;
+	arm->body = _body;
+	// 'else' if effectively an arm with _=>{}
+	if (_else){
+		auto else_arm=new MatchArm();
+		arm->next=else_arm;
+		else_arm->pattern=new Pattern(p,PLACEHOLDER);
+		else_arm->body=_else;
+	}
+//	this->dump(0);newline(0);
+}
+
+
 ResolveResult	ExprWhileLet::resolve(Scope* sc, const Type* desired, int flags){
 	return COMPLETE;
 }

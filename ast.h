@@ -73,6 +73,7 @@ struct ExprLiteral : ExprDef {
 	ExprLiteral(const SrcPos&s,int i);
 	ExprLiteral(const SrcPos&s,const char* start,int length);
 	ExprLiteral(const SrcPos&s,const char* start);// take ownership
+	ExprLiteral(const SrcPos&s,bool b);
 	~ExprLiteral();
 	Node* clone() const;
 	size_t strlen() const;

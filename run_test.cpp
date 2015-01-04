@@ -23,9 +23,29 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
-	
 	{
 		"for in loop",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		enum Option{
+			Some(int),None()	// todo - roll enum variant constructors
+		};
+		struct Range{
+			start:int,end:int,index:int,
+			fn Range(s:int,e:int){start=s;end=e;index=start;}
+			fn next()->Option{ if index<end{let ret=index;index+=1;Some{ret}}else{None{}} }
+		};
+		fn main(argc:int, argv:**char)->int{
+			for x in Range(1,6){
+				printf("x=%d\n",x);
+			};
+			0
+		};
+		)===="
+		,"x=1\nx=2\nx=3\nx=4\nx=5\n"
+	},
+
+	{
+		"testing iterator protocol manually",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
 		enum Option{
 			Some(int),None()	// todo - roll enum variant constructors
@@ -37,7 +57,6 @@ CompilerTest g_Tests[]={
 		};
 		fn main(argc:int, argv:**char)->int{
 			for foo:=Foo(2,8);true;{
-//				match &foo.next(){Some(x) =>{printf("x=%d\n",x);},None() =>break};
 				if let Some(x)=&foo.next(){printf("x=%d\n",x);} else {break};
 			};
 			0
