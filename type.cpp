@@ -337,12 +337,12 @@ void Type::dump_sub(int flags)const{
 			dbprintf("( def=%s )", str(this->def->get_mangled_name()));
 #endif
 		if (sub){
-			dbprintf("[");
+			dbprintf("<");
 			for (auto t=sub; t; t=t->next){
 				t->dump_sub(flags);
 				if(t->next)dbprintf(",");
 			};
-			dbprintf("]");
+			dbprintf(">");
 		}
 	}
 }
@@ -667,6 +667,21 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 		return ResolveResult(RS_ERROR);
 	}
 	return ResolveResult(COMPLETE);
+}
+
+void dump_typeparams(const vector<TParamDef*>& ts, const vector<Type*>* given) {
+	bool a=false;
+	if (ts.size()==0) return;
+	dbprintf("<");
+	for (int i=0; i<ts.size(); i++){
+		if (a)dbprintf(",");
+		print_tok(ts[i]->name);
+		Type* tv=nullptr; if (i<given->size()) tv=given->at(i);
+		if (!tv) tv=ts[i]->defaultv;
+		if (tv){dbprintf("=");tv->dump(-1);}
+		a=true;
+	}
+	dbprintf(">");
 }
 
 

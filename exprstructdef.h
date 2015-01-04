@@ -24,6 +24,7 @@ struct ExprStructDef: ExprDef {
 	bool m_recurse=false;
 	bool m_ctor_composed=false;
 	bool m_dtor_composed=false;
+	bool m_symbols_added=false;
 	bool is_enum() { return m_is_enum;}
 	int max_variant_size=0;
 	vector<TParamDef*>	tparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
@@ -48,6 +49,7 @@ struct ExprStructDef: ExprDef {
 	Type*	struct_type=nullptr;
 	Type*	ptr_type=nullptr;
 	Type*	ref_type=nullptr;
+	Type*	get_struct_type();
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
 	ExprStructDef* vtable=0;
@@ -69,7 +71,7 @@ struct ExprStructDef: ExprDef {
 	size_t		alignment() const;
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
 	void			set_discriminant(int value){discriminant=value;m_is_variant=true;}
-	void			set_variant_of(ExprStructDef* owner, int index){set_discriminant(index); ASSERT(inherits==0); inherits=owner;}
+	void			set_variant_of(ExprStructDef* owner, int index);
 	void			dump(PrinterRef depth)const;
 	void			dump_instances(int depth)const;
 	void			dump_struct_body(int depth) const;
@@ -103,6 +105,7 @@ struct ExprStructDef: ExprDef {
 	ExprStructDef*	root_class();
 	void			calc_trailing_padding();
 	void			calc_base_padding();
+	bool			is_base_known()const;
 	
 	// VTable management
 	void			roll_vtable();

@@ -199,7 +199,7 @@ TypeDef* TypeDef::clone()const{
 	return td;
 }
 void TypeDef::dump(PrinterRef depth) const{
-	newline(depth); dbprintf("%s %s",this->kind_str() ,this->name_str()); dump_typeparams(this->tparams); dbprintf("=");
+	newline(depth); dbprintf("%s %s",this->kind_str() ,this->name_str()); dump_typeparams(this->tparams,&this->instanced_types); dbprintf("=");
 	this->type_def->dump(-1);
 	if (this->type()){dbprintf(":"); this->type()->dump_if(depth);}
 	dbprintf(";");

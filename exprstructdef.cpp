@@ -286,20 +286,21 @@ void ExprStructDef::roll_vtable() {
 	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??
 }
 
+void ExprStructDef::set_variant_of(ExprStructDef* owner, int index){
+	set_discriminant(index);
+	ASSERT(inherits==0);
+	inherits=owner;
+	inherits_type=owner->get_struct_type();
+//	new Type(this->pos, owner->name);
+}
+
+
 void ExprStructDef::dump(PrinterRef depth) const{
 	auto depth2=depth>=0?depth+1:depth;
 	newline(depth);
-	dbprintf("%s %s",this->kind_str(), getString(this->name));dump_typeparams(this->tparams);
-	dbprintf("[");
-	if (this->instanced_types.size()){
-		for (auto t:this->instanced_types)
-		{	t->dump(depth+1);dbprintf(",");};
-	}else{
-		for (auto t:this->tparams)
-			{t->dump(depth+1);dbprintf(",");}
-	}
-	dbprintf("]");
-	if (this->inherits) {dbprintf(" : %s", str(inherits->name));}
+	dbprintf("%s %s",this->kind_str(), getString(this->name));
+	dump_typeparams(this->tparams,&this->instanced_types);
+	if (this->inherits_type) {dbprintf(":"); this->inherits_type->dump_if(-1);}
 	if (this->args.size()){
 		dbprintf("(");for (auto a:this->args)	{a->dump(-1);dbprintf(",");};dbprintf(")");
 	}
@@ -455,6 +456,11 @@ void	ExprStructDef::ensure_constructors_return_thisptr(){
 				if (id->name==THIS)
 					continue;
 		}
+		if (f->return_type()){
+//			f->return_type()->dump(0);
+		}
+//		ASSERT(!f->return_type());
+		f->clear_return_type();
 		dbg_raii(f->dump(0));
 		f->convert_body_to_compound();
 		f->push_body_back(new ExprIdent(f->pos,THIS));
@@ -532,12 +538,34 @@ ExprFnDef*	ExprStructDef::get_or_create_constructor(){
 
 void ExprStructDef::init_types(){
 	if (!this->struct_type){
-		this->struct_type=new Type(this->pos,this);
+		auto st=this->struct_type=new Type(this->pos,this);
+		for (auto i=0; i<this->tparams.size(); i++){
+			auto tp=this->tparams[i];
+			if (i<this->instanced_types.size()){
+				st->push_back((TParamVal*)(this->instanced_types[i]->clone()));
+			}else{
+				st->push_back(new Type(this->pos, tp->name));
+			}
+		}
 		this->ptr_type=new Type(this,PTR, this->struct_type);
 		this->ref_type=new Type(this,REF, this->struct_type);
 	}
 }
-
+Type* ExprStructDef::get_struct_type(){
+	init_types();
+	return this->struct_type;
+}
+void combine_tparams(vector<TParamDef*>* dst,const vector<TParamDef*>* src){
+	if (src && dst){
+		for (auto t:*src)
+			dst->push_back((TParamDef*)t->clone());
+	}
+}
+bool ExprStructDef::is_base_known()const{
+	if (!this->inherits_type) return true;	// known to be null.
+	if (this->inherits) return true;
+	return false;
+}
 ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
 	if (m_recurse) return COMPLETE;
 	m_recurse=true;
@@ -546,14 +574,34 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 		this->set_type(new Type(this,this->name));	// name selects this struct
 	}
 	init_types();
+	auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
+	ensure_constructors_return_thisptr();	// makes rolling wrappers easier.
 
+/*	if (!this->m_symbols_added&& ){
+		if (this->is_base_known()){
+			if (this->inherits)
+				combine_tparams(&this->tparams,&this->inherits->tparams);
+			m_symbols_added=true;
+			for (auto s:structs){
+				if (s->inherits!=this)
+					combine_tparams(&s->tparams,&this->tparams);
+				resolved|=s->resolve_if(sc,nullptr,flags);
+			}
+			for (auto f:functions){
+				combine_tparams(&f->tparams,&this->tparams);
+				resolved|=f->resolve_if(sc,nullptr,flags);
+			}
+			
+			dbg_tparams({this->dump(0);newline(0);});
+		}
+	}
+*/
 	if (!this->is_generic()){
 		// ctor/dtor composition,fixup.
 		this->insert_sub_constructor_calls();
 		if (this->has_sub_destructors()){
 			this->insert_sub_destructor_calls(this->get_or_create_destructor());
 		}
-		ensure_constructors_return_thisptr();	// makes rolling wrappers easier.
 
 		if (this->m_is_variant || this->m_is_enum){
 			if (!this->fields.size()||this->fields.front()->name!=__DISCRIMINANT){
@@ -564,7 +612,6 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 			if (this->m_is_enum) calc_trailing_padding();
 		}
 
-		auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
 		for (auto m:fields)			{resolved|=m->resolve_if(sc,nullptr,flags&~R_FINAL);}
 		for (auto m:static_fields)	{resolved|=m->resolve_if(sc,nullptr,flags);}
 		for (auto m:static_virtual)	{resolved|=m->resolve_if(sc,nullptr,flags);}
@@ -711,7 +758,7 @@ Node* ImplDef::clone()const{
 void ImplDef::dump(PrinterRef depth) const{
 	
 	newline(depth);
-	dbprintf("%s ",this->kind_str());dump_typeparams(this->tparams);
+	dbprintf("%s ",this->kind_str());dump_typeparams(this->tparams,&this->instanced_types);
 	if (this->impl_trait) {this->impl_trait->dump_if(-1);dbprintf(" for ");}
 	if (this->impl_for_type) this->impl_for_type->dump_if(-1);
 	

@@ -109,7 +109,7 @@ void dbprintf(Node* n){n->dump(-1);}
 ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Scope* scope,const Type* desired,int flags);
 
 void print_tok(Name n){
-	dbprintf("%s ",getString(n));
+	dbprintf("%s",getString(n));
 };
 
 bool g_lisp_mode=false;
@@ -197,19 +197,6 @@ bool type_compare(const Type* t,int a0, int a1){
 					return true;
 	return false;
 }
-
-void dump_typeparams(const vector<TParamDef*>& ts) {
-	bool a=false;
-	if (ts.size()==0) return;
-	dbprintf("<");
-	for (auto t:ts){
-		if (a)dbprintf(",");
-		print_tok(t->name);if (t->defaultv){dbprintf("=");t->defaultv->dump(-1);}
-		a=true;
-	}
-	dbprintf(">");
-}
-
 //void find_printf(const char*,...){};
 #define find_printf dbprintf
 int num_known_arg_types(vector<Expr*>& args) {

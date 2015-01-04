@@ -34,6 +34,7 @@ struct  ExprFnDef : ExprDef {
 	
 	Name mangled_name=0;
 	vector<TParamDef*> tparams;
+	vector<Type*>		instanced_types;
 	vector<ArgDef*> args;
 	Expr* body=0;
 	ExprFnDef(){};
@@ -68,6 +69,10 @@ struct  ExprFnDef : ExprDef {
 	Type*				return_type()const {
 		auto x=get_return_expr(); if (x){if (auto xt=x->get_type()) return xt;}
 		return this->ret_type;
+	}
+	void	clear_return_type(){	// any change to type.. must recalc
+		this->fn_type=nullptr;
+		this->ret_type=nullptr;
 	}
 	bool	has_return_value() const;
 	Node*	clone() const;

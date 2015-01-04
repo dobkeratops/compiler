@@ -46,6 +46,7 @@ using std::move;
 #if DEBUG>=2
 #define dbg2(X) X
 #define dbg_raii(X) X
+#define dbg_tparams(X) X
 #define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
@@ -116,6 +117,9 @@ using std::move;
 #define dbg_varscope(x,...)
 #endif
 #ifndef dbg_resolve
+#define dbg_resolve(x,...)
+#endif
+#ifndef dbg_tparams
 #define dbg_resolve(x,...)
 #endif
 
@@ -199,7 +203,6 @@ void verify_expr_ident(const Node* p);
 void verify_expr_block(const Node* p);
 void verify_type(const Node* p);
 void verify_all_sub();
-void dump_typeparams(const std::vector<TParamDef*>& ts) ;
 bool type_is_coercible(const Type* from,const Type* to,bool coerce);
 bool type_compare(const Type* t,int a0, int a1);
 

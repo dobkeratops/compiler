@@ -23,6 +23,19 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
+	/*
+	{	"inherted tparams",__FILE__,__LINE__,R"====(
+		enum Option<T>{
+			Some(T),None()	// todo - roll enum variant constructors
+		};
+		fn main(argc:int, argv:**char)->int{
+			let x=Some{5};
+			0
+		}
+		)===="
+		,nullptr
+	},
+	*/
 	{
 		"for in loop",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;

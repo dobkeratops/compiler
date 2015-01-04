@@ -163,6 +163,8 @@ struct Type : ExprDef {
 	CgValue	compile(CodeGen& cg, Scope* sc, CgValue input) override;
 };
 void dump(const Type* a,const Type* b);
+void dump_typeparams(const std::vector<TParamDef*>& ts, const std::vector<Type*>* given) ;
+
 bool type_params_eq(const vector<Type*>& a, const Type* tp);
 bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b);
 void verify(const Type* a);

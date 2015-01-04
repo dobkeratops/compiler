@@ -52,7 +52,7 @@ void ExprFnDef::dump(PrinterRef ind) const {
 
 void ExprFnDef::dump_sub(int ind, Name prefix) const {
 	if (!this) return;
-	newline(ind);dbprintf("%s %s",getString(prefix),getString(name));dump_typeparams(this->tparams);dbprintf("(");
+	newline(ind);dbprintf("%s %s",getString(prefix),getString(name));dump_typeparams(this->tparams,&this->instanced_types);dbprintf("(");
 	for (int i=0; i<args.size();i++){
 		args[i]->dump(-1);
 		if (i<args.size()-1) dbprintf(",");

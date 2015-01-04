@@ -29,6 +29,7 @@ Dont have a name yet hence 'hack'..
 
 
 #### WIP
+ * rust-like iterator protocol
  * details of C++ RAII
    * RValue-refs work in simple cases,more tests needed
    * ctor/dtors compose now, but TODO Foo():Bar()..{} syntax
