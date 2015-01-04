@@ -633,9 +633,9 @@ void dump(const Type* a,const Type* b){
 
 
 ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type* b) {
-	if (!n->pos.line){
-		error(n,"AST node %s %s hasn't been given error location", n->kind_str(), n->name_str());
-	}
+///	if (!n->pos.line){
+//		error(n,"AST node %s %s hasn't been given error location", n->kind_str(), n->name_str());
+//	}
 	ASSERT(a && b);
 	// TODO: variadic args shouldn't get here:
 	if (a->name==ELIPSIS||b->name==ELIPSIS)

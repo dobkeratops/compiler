@@ -36,15 +36,15 @@ CompilerTest g_Tests[]={
 			fn next()->Option{ if index<end{let ret=index;index+=1;Some{ret}}else{None{}} }
 		};
 		fn main(argc:int, argv:**char)->int{
-			for foo:=Foo(3,9);true;{
-				match &foo.next(){Some(x) =>{printf("%d",x);},None() =>break};
+			for foo:=Foo(2,8);true;{
+//				match &foo.next(){Some(x) =>{printf("x=%d\n",x);},None() =>break};
+				if let Some(x)=&foo.next(){printf("x=%d\n",x);} else {break};
 			};
 			0
 		};
 		)===="
-		,"x=0\nx=1\nx=2\nx=3\nx=4\n"
+		,"x=2\nx=3\nx=4\nx=5\nx=6\nx=7\n"
 	},
-	
 
 	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
