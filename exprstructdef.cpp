@@ -456,11 +456,7 @@ void	ExprStructDef::ensure_constructors_return_thisptr(){
 				if (id->name==THIS)
 					continue;
 		}
-		if (f->return_type()){
-//			f->return_type()->dump(0);
-		}
-//		ASSERT(!f->return_type());
-		f->clear_return_type();
+		f->clear_return_type();// another resolve  pass will fill it in.
 		dbg_raii(f->dump(0));
 		f->convert_body_to_compound();
 		f->push_body_back(new ExprIdent(f->pos,THIS));
