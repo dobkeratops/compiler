@@ -17,15 +17,19 @@ Name ExprBlock::get_fn_name()const
 
 void ExprBlock::dump(PrinterRef depth) const {
 	if (!this) return;
-	newline(depth);
+	newline(depth+1);
 	auto b="{\0}\0";
 	dbprintf(b+0);
 	dbprintf("%s ",this->kind_str());
 	this->call_expr->dump_if(-100);
+	int i=0;
 	for (const auto x:this->argls) {
-		if (x) {x->dump(depth+1);}else{dbprintf("(none)");}
+		newline(depth+1);dbprintf("(%d/%d)",i,this->argls.size());
+		if (x) {x->dump(depth+2);}else{dbprintf("(none)");}
+		newline(depth+1);dbprintf(";");
+		i++;
 	}
-	newline(depth);dbprintf(b+2);
+	newline(depth+1);dbprintf(b+2);
 	if (this->get_type()){dbprintf(":");this->get_type()->dump_if(-1);}
 }
 

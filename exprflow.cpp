@@ -23,7 +23,7 @@ ResolveResult	ExprFor::resolve_for_sub(Scope* outer_scope,const Type* desired,in
 	}
 	//without an else bllock, we can't return
 	else{
-		propogate_type_fwd(flags, (Node*)this, Type::get_void(),this->body->type_ref());
+		//propogate_type_fwd(flags, (Node*)this, Type::get_void(),this->body->type_ref());
 	}
 	auto dbg=[&](){
 		newline(0);dbprintf("debug:for: this,else: this type\n");
@@ -77,9 +77,9 @@ void ExprFor::find_vars_written(Scope* s, set<Variable*>& vars) const{
 
 void ExprFor::dump(PrinterRef d) const {
 	newline(d);dbprintf("(%s ",this->kind_str());
-	this->init->dump_if(d+1); newline(d);dbprintf(";");
-	this->cond->dump_if(d+1); newline(d);dbprintf(";");
-	this->incr->dump_if(d+1); newline(d);dbprintf(" {");
+	this->init->dump_if(d+1); newline(d+1);dbprintf(";");
+	this->cond->dump_if(d+1); newline(d+1);dbprintf(";");
+	this->incr->dump_if(d+1); newline(d+1);dbprintf(" {");
 /*	} else {
 		this->pattern->dump(d+1);
 		newline(d);dbprintf(" in ");
@@ -87,13 +87,13 @@ void ExprFor::dump(PrinterRef d) const {
 	}
  */
 	this->body->dump_if(d+1);
-	newline(d);dbprintf("}");
+	newline(d+1);dbprintf("}");
 	if (this->else_block){
-		newline(d);dbprintf("else{");
+		newline(d+1);dbprintf("else{");
 		this->else_block->dump_if(d+1);
-		newline(d);dbprintf("}");
+		newline(d+1);dbprintf("}");
 	}
-	newline(d);dbprintf(")");
+	newline(d+1);dbprintf(")");
 	if(this->type()){
 		dbprintf(":");
 		this->type()->dump_if(d);

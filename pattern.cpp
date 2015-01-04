@@ -102,9 +102,14 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		//		return resolved;
 		
 	}
-	else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring
+	else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring/variant
 		auto sd=sc->find_struct_type(this,rhs);// todo tparams from rhs, if given
 		if (sd){
+			if (flags & R_FINAL) {
+				if (!this->type()->is_coercible(rhs)){
+					error(this,"can't match %s vs %s",str(rhs->name),str(sd->name));
+				}
+			}
 			int i=sd->first_user_field_index(); auto subp=this->sub;
 			// todo - sub types should resolve?!
 			for (; i<sd->fields.size() && subp; i++,subp=subp->next){
@@ -113,6 +118,8 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 				subp->resolve_with_type(sc,ft,flags);
 			}
 			this->set_struct_type(sd);
+		} else if (flags & R_FINAL){
+			error(this,"can't find ");
 		}
 	} // else its a var of given type, or just a constant?
 	else{
@@ -234,6 +241,7 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 			if (ptn->name==OR) {op=LOG_OR;index=0;}
 			else if(ptn->name==TUPLE){op=LOG_AND;index=0;}
 			else{
+				dbg2({val.dump();newline(0);})
 				auto disr=cg.emit_loadelement(val, __DISCRIMINANT);
 				auto ptns=ptn->type()->is_pointer_or_ref()?ptn->sub:ptn;
 				auto sd=ptns->def->as_struct_def();
@@ -245,6 +253,9 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 			}
 			//todo - this part moves to bind if not or/tuple
 			for (auto subp=ptn->sub; subp; subp=subp->next,index++){
+				if (subp->name==VOID){	// None(void) - needs something in the brackets.
+					continue;
+				}
 				auto elem=ptn->name!=OR?cg.emit_getelementref(val2,0, index,subp->type()):val;
 				auto b=subp->compile(cg, sc, elem);
 				if (ptn->name==OR || ptn->name==TUPLE){

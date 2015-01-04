@@ -23,7 +23,7 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
-
+	
 	{
 		"for in loop",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
@@ -31,26 +31,26 @@ CompilerTest g_Tests[]={
 			Some(int),None()	// todo - roll enum variant constructors
 		};
 		struct Foo{
-		index:int,
-			fn next()->Option{ index+=1; if index<5{Some{index}}else{None{}} }
+			index:int,
+			fn next()->Option{ if index<5{let ret=index;index+=1;Some{ret}}else{None{}} }
 		};
 		fn main(argc:int, argv:**char)->int{
 			let foo=Foo{};
 			foo.index=0;
-//			for x in foo {
-//				printf("%d\n",x);
-//			}
-			let index=0;
 			for ;true;{
-				if index>=5 {break;}
-				printf("%d\n",index);
-				index+=1;
+				match &foo.next(){
+					Some(x) =>printf("x=%d\n",x),
+					None() =>break
+				};
 			};
+//				foo.index+=10;
+//				printf("%d\n",foo.index);
 			0
-		},
+		};
 		)===="
-		,"0\n1\n2\n3\n4\n"
+		,"x=0\nx=1\nx=2\nx=3\nx=4\n"
 	},
+	
 
 	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
@@ -116,21 +116,6 @@ CompilerTest g_Tests[]={
 		)===="
 		,
 		"Foo.ctor\nQux.ctor\nQux.dtor\n"
-	},
-
-	{	"receiver autoref",__FILE__,__LINE__,R"====(
-		extern"C"fn printf(s:str,...)->int;
-		struct Baz{
-			fn hello(){printf("hello\n");};
-		};
-		fn main(argc:int, argv:**char)->int{
-			let baz:Baz;
-			baz.hello(); // like (&baz)->hello(); 'this' is a *ptr
-			0
-		},
-		)===="
-		,
-		"hello\n"
 	},
 
 
@@ -236,6 +221,21 @@ CompilerTest g_Tests[]={
 		,nullptr
 	},
 	
+	{	"receiver autoref",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		struct Baz{
+			fn hello(){printf("hello\n");};
+		};
+		fn main(argc:int, argv:**char)->int{
+			let baz:Baz;
+			baz.hello(); // like (&baz)->hello(); 'this' is a *ptr
+			0
+		},
+		)===="
+		,
+		"hello\n"
+	},
+
 	{	"member functions+UFCS",__FILE__,__LINE__, R"====(
 		//SOURCE
 		fn"C" printf(s:str,...)->int;

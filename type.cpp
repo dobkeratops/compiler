@@ -659,6 +659,9 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 #if DEBUG>=2
 		if (a->is_coercible(b)){
 		}
+		g_pRoot->dump(0);
+		newline(0);
+		dbprintf("type mismatch see above\n");
 #endif
 		error_end(n);
 		return ResolveResult(RS_ERROR);
