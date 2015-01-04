@@ -582,7 +582,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 		dbg_tparams(st->dump(-1));
 		sd=sd->get_instance(sc,st);
 		dbg_tparams(sd->dump(0));
-		dbg_tparams(sd->inherits->dump(0));
+		dbg_tparams(if (sd->inherits){sd->inherits->dump(0);});
 		dbprintf_tparams("\n");
 		si->call_expr->set_type(st);
 		si->call_expr->set_def(sd);

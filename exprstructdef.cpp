@@ -156,12 +156,32 @@ ExprStructDef* ExprStructDef::get_struct_named(Name n){
 ExprStructDef* ExprStructDef::find_instance(Scope* sc,const Type* type){
 	// scan the heirachy, because of nested structs. (parent -> child -> instances
 	if (this->owner){
+		auto p=this->owner->get_struct_named(this->name);
+		if (auto si=p->find_instance_sub(sc,type))
+			return si;
+
 		for (auto oi=this->owner->instances; oi;oi=oi->next_instance){
 			auto p=oi->get_struct_named(this->name);
 			if (auto si=p->find_instance_sub(sc,type))
 				return si;
 		}
 	}
+	if (this->inherits && this->m_is_variant){
+		auto p=this->inherits->get_struct_named(this->name);
+		if (auto si=p->find_instance_sub(sc,type))
+			return si;
+		
+		for (auto oi=this->inherits->instances; oi;oi=oi->next_instance){
+			auto p=oi->get_struct_named(this->name);
+			if (auto si=p->find_instance_sub(sc,type))
+				return si;
+		}
+	}
+
+//	for (auto oi=this->instance_of; oi;oi=oi->next_instance){
+//		auto p=oi->get_struct_named(this->name);
+//		if (auto si=p->find_instance_sub(sc,type))
+//			return si;
 	if (auto r=find_instance_sub(sc,type))
 		return r;
 	return nullptr;
@@ -814,6 +834,9 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 	if (this->is_compiled) return CgValue();
 	this->is_compiled=true;
 	calc_trailing_padding();
+	if (this->m_is_variant && !this->owner){
+		return CgValue();
+	}
 	auto st=this;
 	// instantiate the vtable
 	// todo: step back thru the hrc to find overrides
@@ -846,7 +869,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 */
 	if (this->instanced_types.size()>=this->tparams.size())
 	{
-		cg.emit_comment("%s<%s>",str(st->name),st->instanced_types.size()?str(st->instanced_types[0]->name):str(st->tparams[0]->name));
+		cg.emit_comment("%s<%s>",str(st->name),st->instanced_types.size()?str(st->instanced_types[0]->name):st->tparams.size()?str(st->tparams[0]->name):"");
 		cg.emit_comment("instance %s of %s in %s\t%p.%p.%p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st->owner,st->inherits, st);
 		
 		for (auto fi: st->fields){

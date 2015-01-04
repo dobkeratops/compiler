@@ -489,7 +489,7 @@ CgValue CodeGen::emit_getelementref(const CgValue& src, int i0, int field_index,
 		src.type->def->dump_if(0);
 		ASSERT(0 && "something wrong");
 	}
-	dbg2(dbprintf("num fields=%d\n",sd->as_struct_def()->fields.size()););
+	dbg2(if (sd->as_struct_def()){dbprintf("num fields=%d\n",sd->as_struct_def()->fields.size());};);
 	auto field_type=sd->get_elem_type(field_index);//fields[field_index]->type();
 	auto areg=this->next_reg();
 	this->emit_ins_begin(areg, "getelementptr inbounds  ");

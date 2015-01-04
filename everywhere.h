@@ -69,7 +69,7 @@ using std::move;
 #endif
 // Null out the debug expressions not used for this config.
 #ifndef dbg_all
-#define dbg_all
+#define dbg_all(X)
 #endif
 #ifndef dbg_all_printf
 #define dbg_all_printf(x,...)

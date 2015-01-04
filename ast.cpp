@@ -400,7 +400,7 @@ size_t ArgDef::size()const {
 	return this->type()?this->type()->size():0;
 }
 size_t ArgDef::alignment() const	{
-	return type()->alignment();
+	return type()?type()->alignment():0;
 }//todo, 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
 ResolveResult ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	dbg_resolve("resolving arg %s\n",this->name_str());
