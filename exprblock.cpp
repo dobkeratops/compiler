@@ -388,7 +388,9 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	}
 	this->type()->set_rvalue();
 
-	return propogate_type_refs(flags,(const Node*)this, this->type_ref(),this->argls.back()->type_ref());
+	return propogate_type_refs(flags,(const Node*)this,// order matters:
+						this->argls.back()->type_ref(),//coerce from
+						this->type_ref());			// <-coerce to
 }
 
 ResolveResult ExprCall::resolve(Scope* sc, const Type* desired, int flags) {

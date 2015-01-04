@@ -23,27 +23,55 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
-/*	{
+
+	{
 		"for in loop",__FILE__,__LINE__,R"====(
-		fn"C" printf(s:str,...)->int;
+		extern"C"fn printf(s:str,...)->int;
 		enum Option{
 			Some(int),None()	// todo - roll enum variant constructors
 		};
 		struct Foo{
-			index:int,
-			fn next(){ index+=1; if index<5{Some{index}}else{None} }
+		index:int,
+			fn next()->Option{ index+=1; if index<5{Some{index}}else{None{}} }
 		};
 		fn main(argc:int, argv:**char)->int{
 			let foo=Foo{};
 			foo.index=0;
-			for x in foo {
-				printf("%d\n",x);
-			}
+//			for x in foo {
+//				printf("%d\n",x);
+//			}
+			let index=0;
+			for ;true;{
+				if index>=5 {break;}
+				printf("%d\n",index);
+				index+=1;
+			};
+			0
 		},
 		)===="
 		,"0\n1\n2\n3\n4\n"
 	},
-*/
+
+	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
+		fn"C" printf(s:str,...)->int;
+		fn main(argc:int, argv:**char)->int{
+			for y:=0; y<8; y+=1{
+				for x:=0; x<8; x+=1{
+					match (x,y){
+						(2|5,_)=>printf("X"),
+						(_,2|5)=>printf("Y"),
+						_ if x==y || (7-x)==y =>printf("o"),
+							_=>printf(".")
+							};
+				}
+				printf("\n");
+			};
+			0
+		},
+		)====",
+		nullptr
+	},
+
 	{	"enum arg coerce",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		enum Foo{
@@ -290,26 +318,6 @@ CompilerTest g_Tests[]={
 		}
 		)====",
 		nullptr,false
-	},
-	
-	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
-		fn"C" printf(s:str,...)->int;
-		fn main(argc:int, argv:**char)->int{
-			for y:=0; y<8; y+=1{
-				for x:=0; x<8; x+=1{
-					match (x,y){
-						(2|5,_)=>printf("X"),
-						(_,2|5)=>printf("Y"),
-						_ if x==y || (7-x)==y =>printf("o"),
-						_=>printf(".")
-					};
-				}
-				printf("\n");
-			};
-			0
-		},
-		)====",
-		nullptr
 	},
 
 	{	"match val + ranges",__FILE__,__LINE__,R"====(

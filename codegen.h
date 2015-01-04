@@ -60,6 +60,7 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	bool is_elem()const {return elem>=0;}
 	bool is_any()const	{return is_literal()||is_reg();}
 	bool is_addr() const {return reg==0 && val==0;}
+	bool is_ref_or_ptr()const;
 	CgValue addr_op(CodeGen& cg,const Type* t)const;
 	CgValue ref_op(CodeGen& cg,const Type* t) const;
 	CgValue deref_op(CodeGen& cg, const Type* t)const;	//when you know the type, use for assertion

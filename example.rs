@@ -199,7 +199,7 @@ fn main(argc:int,argv:**char)->int{
 
 	// rust style matching.. nesting destructuring with |, if guards
 	for y:=0; y<8; y+=1{
-		for x:=0; x<8; x+=1{
+		for x:=0;x<8; x+=1{
 			match (x,y){
 				(2|5,_)                 =>printf("X"),
 				(_,2|5)                 =>printf("Y"),

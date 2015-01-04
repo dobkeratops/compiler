@@ -392,7 +392,7 @@ CgValue ExprOp::compile(CodeGen &cg, Scope *sc, CgValue) {
 	else if (opname==BREAK){
 		cg.emit_comment("BREAK EXPRESSION");
 		
-		cg.emit_break(rhs->compile(cg,sc),lhs?getNumberInt(lhs->name):1);
+		cg.emit_break(rhs->compile_if(cg,sc),lhs?getNumberInt(lhs->name):1);
 		return CgValue();
 	}
 	else if (opname==CONTINUE){

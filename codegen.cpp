@@ -86,6 +86,10 @@ CgValue::CgValue(Node* n) {
 	}
 	this->type=n->type();
 }
+bool CgValue::is_ref_or_ptr()const{
+	return is_addr() || this->type->is_pointer_or_ref();
+}
+
 CgValue CgValue::addr_op(CodeGen& cg,const Type* t)const { // take type calculated by sema
 	ASSERT(this->type);
 	if (!reg && (bool)addr) {	// we were given a *reference*, we make the vlaue the adress
@@ -356,8 +360,22 @@ CgValue CodeGen::store(const CgValue& v){// for read-modify-write
 }
 CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 	auto &cg=*this;
+	
+	if ( !src.type->is_equal(dst.type) && (!(dst.is_elem()||src.is_elem())) && (src.is_ref_or_ptr() && dst.is_ref_or_ptr())){
+		dbprintf("store: TODO coercion,details? \n");
+//		if ( src.type->is_equal(dst.type->sub)){
+//			dbprintf("its ok , storing to pointer \n");
+//		}
+		ASSERT(src.type->is_coercible(dst.type));
+		dbg2(src.dump());
+		dbg2(dst.dump());
+		dbg2(dbprintf("\n"));
+		auto src_conv=cg.emit_cast_ref(src, dst.type);
+		return this->store(dst,src_conv);
+	}
+	
 	auto src_in_reg=cg.load(src);
-#if DEBUG>=3
+#if DEBUG>=2
 	dbprintf("\nstore:\t");
 	src.dump();
 	dbprintf("\nto:\t");
@@ -395,12 +413,21 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 			return CgValue(newreg, dst.type);
 		}
 	}
-
 	if (dst.addr){
 		//ASSERT( dst.type->is_equal(src_in_reg.type));
-		
+		// coercebility?
+		if (!src.type->is_equal(dst.type)){
+			dbprintf("store: TODO coercion,details? E98235\n");
+//			auto src_conv=cg.emit_conversion(nullptr, src, dst.type, nullptr);
+//			auto src_conv=cg.emit_cast_ref_to_ref_or_ptr(src, dst.type);
+			//cg.emit_store(src_in_reg.reg, src.type, dst.addr);
+//			return cg.store(dst,src_conv);
+			cg.emit_store(src_in_reg.reg, dst.type, dst.addr);
+		} else{
+			cg.emit_store(src_in_reg.reg, dst.type, dst.addr);
+		}
 
-		cg.emit_store(src_in_reg.reg, dst.type, dst.addr);
+		//cg.emit_store(src_in_reg.reg, dst.type, dst.addr);
 	}
 	else if (dst.reg) {
 		cg.emit_store(src_in_reg.reg, dst.type, dst.reg);
@@ -936,7 +963,9 @@ CgValue CodeGen::emit_break(  CgValue v, int levels){
 	
 	auto i=this->flow_depth-levels;
 	ASSERT(i>=0);
-	this->flow_result[i].store(*this, v);
+	if (v.is_valid()){
+		this->flow_result[i].store(*this, v);
+	}
 	emit_branch(this->flow_break_to[i]);
 	return this->flow_result[i];
 }
@@ -1282,14 +1311,14 @@ CgValue CodeGen::emit_if(Scope* sc,CgValue input, Node* cond, Node* body, Node* 
 	cg.emit_label(label_if);
 	auto if_result=body->compile(cg,sc,input);
 	if (if_result.is_valid()){
-		if_result=cg.load(if_result,0);
+		//if_result=cg.load(if_result,0);
 		retvalref.store(cg,if_result);
 	}
 	cg.emit_branch(label_endif);
 	cg.emit_label(label_else);
 	auto else_result=else_block?else_block->compile(cg,sc,input):CgValue();
 	if (else_result.is_valid()){
-		else_result=cg.load(else_result,0);
+//		else_result=cg.load(else_result,0);
 		retvalref.store(cg,else_result);
 	}
 	cg.emit_branch(label_endif);

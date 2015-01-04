@@ -1137,8 +1137,6 @@ ExprFor* parse_for(TokenStream& src){
 	Pattern *ptn=nullptr;
 	if (src.peek_tok()!=SEMICOLON){
 		ptn=parse_pattern(src, IN,SEMICOLON,OPEN_BRACE);
-	} else {
-		first=parse_block(src,SEMICOLON,COMMA,0);
 	}
 	if (src.eat_if(IN)){
 		auto fi=new ExprForIn(src.pos);
