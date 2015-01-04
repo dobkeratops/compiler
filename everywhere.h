@@ -32,6 +32,8 @@ using std::move;
 
 
 #if DEBUG>=4
+#define dbg_all(X) X
+#define dbg_all_printf(X,...) {DBLOC();dbprintf(X,__VA_ARGS__);}
 #define dbg4(X) X
 #define DBLOC() dbprintf("%s:%d:",__FILE__,__LINE__);
 #endif
@@ -66,65 +68,72 @@ using std::move;
 #define DBLOC(X)
 #endif
 // Null out the debug expressions not used for this config.
+#ifndef dbg_all
+#define dbg_all
+#endif
+#ifndef dbg_all_printf
+#define dbg_all_printf(x,...)
+#endif
+
 #ifndef dbg4
-#define dbg4(X)
+#define dbg4(X) dbg_all(X)
 #endif
 
 #ifndef dbg3 
-#define dbg3(X)
+#define dbg3(X) dbg_all(X)
 #endif
 
 #ifndef dbg2
-#define dbg2(X)
+#define dbg2(X) dbg_all(X)
 #endif
 #ifndef dbg
-#define dbg(X)
+#define dbg(X) dbg_all(X)
 #endif
 #ifndef dbg_raii
-#define dbg_raii(X)
+#define dbg_raii(X) dbg_all(X)
 #endif
 
 #ifndef dbg_strings
-#define dbg_strings(x,...)
+#define dbg_strings(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_vcall
-#define dbg_vcall(x,...)
+#define dbg_vcall(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_vtable
-#define dbg_vtable(x,...)
+#define dbg_vtable(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_resolve
-#define dbg_resolve(x,...)
+#define dbg_resolve(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_lambdas
-#define dbg_lambdas(x,...)
+#define dbg_lambdas(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_fnmatch
-#define dbg_fnmatch(x,...)
+#define dbg_fnmatch(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_generic
-#define dbg_generic(x,...)
+#define dbg_generic(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_type
-#define dbg_type(x,...)
+#define dbg_type(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_instancing
-#define dbg_instancing(x,...)
+#define dbg_instancing(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_emitconv
-#define dbg_emitconv(x,...)
+#define dbg_emitconv(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_varscope
-#define dbg_varscope(x,...)
+#define dbg_varscope(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_resolve
-#define dbg_resolve(x,...)
+#define dbg_resolve(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_tparams
-#define dbg_tparams(x,...)
+#define dbg_tparams(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbprintf_tparams
-#define dbprintf_tparams(x,...)
+#define dbprintf_tparams(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 
 

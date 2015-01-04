@@ -188,6 +188,13 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 	if (this->inherits_type){
 		parent_sd=get_base_instance(sc,this->tparams, type,this->inherits_type);
 		dbg_tparams(parent_sd->dump(0));
+		if (this->m_is_variant){
+			// where to put the new instance, if its' a component of a enum.
+			// the owner gets instanced first.
+			auto parallel_this=parent_sd->get_struct_named(this->name);
+			if (parallel_this!=this)
+				return parallel_this->get_instance(sc,type);
+		}
 	}
 	auto ins=this->find_instance(sc,type);
 	if (!ins) {
@@ -196,6 +203,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 		for (auto t=type->sub;t;t=t->next)dbg_instancing("%s,",t->name_str());
 		dbg_instancing(">\n");
 		dbg_instancing("%s now has %d instances\n",this->name_str(),this->num_instances()+1);
+		dbg_instancing("owner=%p inherits=%p original=%p\n",this->owner,this->inherits,this);
 #endif
 		// TODO: store a tree of partial instantiations eg by each type..
 		MyVec<Type*> ty_params;
@@ -217,6 +225,14 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 		dbg_tparams({for (auto i=0; i<ins->instanced_types.size();i++)
 			dbprintf(ins->instanced_types[i]->name_str());});
 		ins->translate_tparams(TParamXlat(this->tparams, ty_params));
+		if (ins->inherits){
+			ins->inherits=ins->inherits->get_instance(this->scope,this->inherits_type);
+			dbg_tparams(ins->inherits->dump(0));
+		}
+		if (this->m_is_variant){
+			this->owner=this->inherits;
+		}
+
 		dbg(printf("instances are now:-\n"));
 		dbg(this->dump_instances(0));
 	}
@@ -269,7 +285,7 @@ Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
 	for (auto f:this->static_functions){d->static_functions.push_back((ExprFnDef*)f->clone());}
 	for (auto f:this->static_fields){d->static_fields.push_back((ArgDef*)f->clone());}
 	for (auto f:this->static_virtual){d->static_virtual.push_back((ArgDef*)f->clone());}
-	for (auto s:this->structs){d->structs.push_back((ExprStructDef*)s->clone());}
+	for (auto s:this->structs){d->structs.push_back((ExprStructDef*)s->clone());s->owner=d;}
 	for (auto l:this->literals){d->literals.push_back((ExprLiteral*)l->clone());}
 	for (auto l:this->typedefs){d->typedefs.push_back((TypeDef*)l->clone());}
 	d->inherits=this->inherits;
@@ -411,20 +427,48 @@ int ExprStructDef::first_user_field_index() const{
 void ExprStructDef::calc_trailing_padding(){
 	auto maxsize=0;
 	auto thissize=size();
+	if (this->inherits && this->m_is_variant){
+		if (thissize>this->inherits->max_variant_size){
+			this->inherits->max_variant_size=thissize;
+		}
+	}
+ 
+	for (auto ins=this->instances; ins; ins=ins->next_instance){
+		ins->calc_trailing_padding();
+	}
 	for (auto s:structs){
+		s->calc_trailing_padding();
 		auto sz=s->size();
-		if (sz > maxsize) maxsize=sz;
+		if (sz > maxsize)
+			maxsize=sz;
+//		for (auto ss=s->instances; ss;ss=ss->next_instance){
+//			s->calc_trailing_padding();
+//			auto sz=s->size();
+//			if (sz > maxsize)
+//				maxsize=sz;
+//		}
 	}
 	this->max_variant_size=maxsize;
 }
 size_t ExprStructDef::padding()const{
+	int r=0;
 	if (this->m_is_enum){
-		return max_variant_size-size();
+		r= max_variant_size-size();
 	}
 	if (this->m_is_variant && inherits){
-		return inherits->max_variant_size-size();
+		r= inherits->max_variant_size-size();
 	}
-	return 0;
+	if (r<0){
+		error_begin(this,"padding calcualtion broken\n");
+		this->inherits->dump(0);
+		dbprintf("\n");
+		this->dump(0);
+		dbprintf("parent type:-\n");
+		this->inherits_type->dump(0);
+		dbprintf("maxsize=%d this size=%d pad=%d\n",inherits->max_variant_size, this->size(),r);
+		error_end(this);
+	}
+	return r;
 }
 
 
@@ -668,8 +712,8 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 	auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
 	ensure_constructors_return_thisptr();	// makes rolling wrappers easier.
 
+	set_owner_pointers();
 	if (!this->m_symbols_added){
-		set_owner_pointers();
 
 		if (this->is_base_known()){
 			if (this->inherits)
@@ -767,26 +811,43 @@ void compile_vtable_data(CodeGen& cg, ExprStructDef* sd, Scope* sc,ExprStructDef
 }
 
 CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
+	if (this->is_compiled) return CgValue();
+	this->is_compiled=true;
+	calc_trailing_padding();
 	auto st=this;
-	if (st->is_generic()) {	// emit generic struct instances
+	// instantiate the vtable
+	// todo: step back thru the hrc to find overrides
+	if (this->vtable)
+		compile_vtable_data(cg, this,sc, this->vtable);
+	// compile inner structs. eg struct Scene{struct Mesh,..} struct Scene uses Mesh..
+	for( auto sub:st->structs){
+		sub->compile(cg,sc,input);
+	}
+	int i=0;
+	for (auto ins=st->instances; ins; ins=ins->next_instance,i++){
+		cg.emit_comment("instance %d: %s %s in %s %p",i,str(st->name),str(ins->name) ,sc->name(),ins);
+		ins->get_mangled_name();
+		for (auto i0=st->instances;i0!=ins; i0=i0->next_instance){
+			if (i0->mangled_name==ins->mangled_name){
+				cg.emit_comment("ERROR DUPLICATE INSTANCE this shouldn't happen, its a bug from inference during struct initializers (starts with a uncertain instance, then eventually fills in tparams - not quite sure how best to fix it right now\n");
+				goto cont;
+			}
+		}
+		ins->compile(cg, sc,input);
+	cont:;
+	}
+/*
+	if (st->is_generic()&&0) {	// emit generic struct instances
 		cg.emit_comment("instances of %s in %s %p",str(st->name), sc->name(),st);
 		int i=0;
 		dbg(this->dump_instances(0));
 		
-		for (auto ins=st->instances; ins; ins=ins->next_instance,i++){
-			cg.emit_comment("instance %d: %s %s in %s %p",i,str(st->name),str(ins->name) ,sc->name(),ins);
-			ins->get_mangled_name();
-			for (auto i0=st->instances;i0!=ins; i0=i0->next_instance){
-				if (i0->mangled_name==ins->mangled_name){
-					cg.emit_comment("ERROR DUPLICATE INSTANCE this shouldn't happen, its a bug from inference during struct initializers (starts with a uncertain instance, then eventually fills in tparams - not quite sure how best to fix it right now\n");
-					goto cont;
-				}
-			}
-			ins->compile(cg, sc,input);
-		cont:;
-		}
-	} else {
-		cg.emit_comment("instance %s of %s in %s %p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st);
+	} else
+*/
+	if (this->instanced_types.size()>=this->tparams.size())
+	{
+		cg.emit_comment("%s<%s>",str(st->name),st->instanced_types.size()?str(st->instanced_types[0]->name):str(st->tparams[0]->name));
+		cg.emit_comment("instance %s of %s in %s\t%p.%p.%p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st->owner,st->inherits, st);
 		
 		for (auto fi: st->fields){
 			if (!fi->type())
@@ -800,20 +861,13 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 				}
 			}
 		};
-		// instantiate the vtable
-		// todo: step back thru the hrc to find overrides
-		if (this->vtable)
-			compile_vtable_data(cg, this,sc, this->vtable);
-		// compile inner structs. eg struct Scene{struct Mesh,..} struct Scene uses Mesh..
-		for( auto sub:st->structs){
-			sub->compile(cg,sc,input);
-		}
 		
 		cg.emit_struct_def_begin(st->get_mangled_name());
 		for (auto fi: st->fields){
 			cg.emit_type(fi->type(), false);
 		};
 		if (auto pad=st->padding()){
+			dbprintf("%d\n",pad);
 			cg.emit_array_type(Type::get_u8(),pad);
 		}
 
