@@ -96,8 +96,8 @@ struct StringTable {
 	int	nextId= 0;
 	bool verbose;
 	map<string,int>	names;
-	vector<string> index_to_name; //one should be index into other lol
-	vector<char>	flags;
+	MyVec<string> index_to_name; //one should be index into other lol
+	MyVec<char>	flags;
 	StringTable(const char** initial);
 	int get_index(const char* str, const char* end,char flags);
 	void dump();
@@ -113,7 +113,7 @@ float getNumberFloat(Name n);
 const char* getString(const Name& index);
 void indent(int depth);
 inline const char* str(const Name& n){return getString(n);}
-inline const char* str(int i){return i?g_Names.index_to_name[i].c_str():"";}
+inline const char* str(int i){if (i<0) return "";return i?g_Names.index_to_name[i].c_str():"";}
 struct Type;
 void print_tok(Name n);
 bool is_type(int tok);

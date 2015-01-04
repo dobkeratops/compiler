@@ -96,7 +96,7 @@ public:
 	RegisterName get_reg_named(Name baseName, int* new_index, bool force_new);
 	RegisterName get_reg_named_new(Name baseName, int* new_index);
 	RegisterName get_reg_existing();
-	virtual	vector<TParamDef*>*			get_typeparams(){ return nullptr;}
+	virtual	MyVec<TParamDef*>*			get_typeparams(){ return nullptr;}
 	Node*	parent()					{return this->m_parent;}
 	void	set_parent(Node* p)			{this->m_parent=p;}
 	virtual CgValue codegen(CodeGen& cg,bool contents);
@@ -240,8 +240,8 @@ struct ExprDef :Expr{
 struct TypeDef : ExprDef{ // eg type yada[T]=ptr[ptr[T]]; or C++ typedef
 	TypeDef(SrcPos p, Name n){this->pos=p; this->name=n;}
 	const char* kind_str()const{return "typedef";}
-	vector<TParamDef*> tparams;			// todo: all defs can be parameterized.
-	vector<Type*>	instanced_types;
+	MyVec<TParamDef*> tparams;			// todo: all defs can be parameterized.
+	MyVec<Type*>	instanced_types;
 	Type*	type_def=0;
 	TypeDef*	clone()const;
 	void	dump(PrinterRef depth) const;

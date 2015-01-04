@@ -3,7 +3,7 @@
 
 //#define pop(X) ASSERT(X.size()>0); pop_sub(X);
 
-void dump(vector<Expr*>& v) {
+void dump(MyVec<Expr*>& v) {
 	for (int i=0; i<v.size(); i++) {
 		v[i]->dump_top();
 	}
@@ -32,10 +32,10 @@ void pop_operator_call( Vec<SrcOp>& operators,Vec<Expr*>& operands) {
 	operands.push_back((Expr*)p);
 }
 //   void fn(x:(int,int),y:(int,int))
-void flush_op_stack(ExprLs nodes, Vec<SrcOp>& ops,Vec<Expr*>& vals) {
+void flush_op_stack(ExprLs nodes, MyVec<SrcOp>& ops,MyVec<Expr*>& vals) {
 	while (ops.size()>0) pop_operator_call(ops,vals);
 	while (vals.size()) {
-		nodes->push_back(pop(vals));
+		nodes->push_back(vals.pop());
 	}
 }
 void flatten_stack(Vec<SrcOp>& ops,Vec<Expr*>& vals){
@@ -550,7 +550,7 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,Expr* ins
 		else if (src.eat_if(DOUBLE_COLON)||src.peek_tok()==OPEN_TYPARAM){ // eg array::<int,5>
 			auto open_tp=src.eat_if(LT,OPEN_BRACKET,OPEN_TYPARAM);
 			if (open_tp && was_operand){
-				auto id=pop(operands)->as_ident();
+				auto id=operands.pop()->as_ident();
 				if (!id){src.error("::<tparams> must follow identifier");}
 				auto itw=parse_tparams_for_ident(src,id,close_of(open_tp));
 				operands.push_back(itw);
@@ -583,7 +583,7 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,Expr* ins
 		}
 		else if (src.eat_if(OPEN_PAREN)) {
 			if (was_operand){
-				operands.push_back(parse_block_sub(new ExprCall(), src, nullptr,CLOSE_PAREN,SEMICOLON, pop(operands)));
+				operands.push_back(parse_block_sub(new ExprCall(), src, nullptr,CLOSE_PAREN,SEMICOLON, operands.pop()));
 				// call result is operand
 			}
 			else {
@@ -857,7 +857,7 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 // (x,y,z):(int,int,int)
 // foo:int
 // todo:
-vector<Pattern*> g_leak_hack;
+MyVec<Pattern*> g_leak_hack;
 ArgDef* parse_arg_or_self(int index,TokenStream& src, Type* self_t, int close) {
 	// temporary , translate the self type here for rust-like behaviour,
 	// until we've made the rest of it handle self; self should be like a typeparam
@@ -897,7 +897,7 @@ ArgDef* parse_arg_anon(TokenStream& src, int close) {
 	a->type()=parse_type(src,close,a);
 	return a;
 }
-void parse_typeparams_def(TokenStream& src,vector<TParamDef*>& out,int close) {
+void parse_typeparams_def(TokenStream& src,MyVec<TParamDef*>& out,int close) {
 	while (!src.eat_if(close)){
 		//		if (src.eat_if(CLOSE_BRACKET)) break;
 		out.push_back(
@@ -958,7 +958,7 @@ ExprStructDef* parse_tuple_struct_body_sub(TokenStream& src, ExprStructDef* sd){
 ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* force_inherit){
 	auto sd=new ExprStructDef(pos,name);
 	// todo, namespace it FFS.
-	vector<ArgDef*> args;
+	MyVec<ArgDef*> args;
 	if (src.eat_if(OPEN_PAREN)){ // constructor args eg struct Foo(x,y,z){field1=x+y,..}
 		int i=0;
 		while (!src.eat_if(CLOSE_PAREN)){
@@ -976,7 +976,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 		sd->inherits_type = force_inherit; // enum is sugar rolling a number of classes from base
 	}
 	// todo - tuple struct..
-	vector<ArgDef*> default_construct_args;
+	MyVec<ArgDef*> default_construct_args;
 	if (src.eat_if(OPEN_PAREN)){
 		return parse_tuple_struct_body_sub(src,sd);
 		// todo: if open brace follows, we actually have a default constructor & struct body combo.

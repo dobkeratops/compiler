@@ -138,7 +138,7 @@ void Node::dump_top() const {
 	dbprintf("%s ", getString(name));
 }
 
-int get_typeparam_index(const vector<TParamDef*>& tps, Name name) {
+int get_typeparam_index(const MyVec<TParamDef*>& tps, Name name) {
 	for (int i=(int)(tps.size()-1); i>=0; i--) {
 		if (tps[i]->name==name)
 			return i;
@@ -199,19 +199,16 @@ bool type_compare(const Type* t,int a0, int a1){
 }
 //void find_printf(const char*,...){};
 #define find_printf dbprintf
-int num_known_arg_types(vector<Expr*>& args) {
-	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
-}
-int num_known_arg_types(Vec<Expr*>& args) {
-	int n=0; for (auto i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
+index_t num_known_arg_types(MyVec<Expr*>& args) {
+	index_t n=0; for (index_t i=0; i<args.size(); i++) {if (args[i]->get_type()) n++;} return n;
 }
 
-//void match_generic_type_param_sub(const vector<TParamDef>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
+//void match_generic_type_param_sub(const MyVec<TParamDef>& tps, MyVec<Type*>& mtps, const Type* to_match, const Type* given) {
 	
 //}
-int match_tparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg );
+int match_tparams_from_arg_sub(MyVec<TParamVal*>& matched_tps, const MyVec<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg );
 
-int match_tparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg )
+int match_tparams_from_arg(MyVec<TParamVal*>& matched_tps, const MyVec<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg )
 {
 	if (!fn_arg) return 0;
 	if (!given_arg) return 0;
@@ -226,7 +223,7 @@ int match_tparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TParamD
 	return match_tparams_from_arg_sub(matched_tps,fn_tps, given_arg, fn_arg);
 }
 
-int match_tparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps, const Type* given_arg, const Type* fn_arg )
+int match_tparams_from_arg_sub(MyVec<TParamVal*>& matched_tps, const MyVec<TParamDef*>& fn_tps, const Type* given_arg, const Type* fn_arg )
 {
 	int ret_score=0;
 //	if (!fn_arg && !given_arg) return 0;
@@ -272,27 +269,52 @@ int match_tparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TPa
 	return ret_score;
 }
 
-void fill_given_tparams(vector<TParamVal*>& matched, const vector<TParamDef*>& arg_fmt, const vector<TParamVal*>& given_types)
+void fill_given_tparams(MyVec<TParamVal*>& matched, const MyVec<TParamDef*>& arg_fmt, const MyVec<TParamVal*>& given_types)
 {
 	// todo - you can specify types manually when you call, or infer them from args, or both..
 	
 }
+index_t get_arg_index(const MyVec<ArgDef*>& args, Expr* e,int flags=0){
+	auto nm=e->as_op()->lhs;
+	for (index_t i=0; i<args.size(); i<args.size()){
+		if (args[i]->name==nm->name)
+			return i;
+	}
+	if (flags&R_FINAL){
+		error_begin(e,"no field %s found\ngot:",nm->name_str());
+		for (auto x:args){ dbprintf("%s\t",x->name_str());}
+		error_end(e);
+	}
+	return -1;
+}
 
-int match_tparams(vector<TParamVal*>& matched, const vector<ArgDef*>& arg_defs,Type* ret_type, const vector<TParamDef*>& tparams, const vector<Expr*>& given_args,int first_arg_index, const Expr* callsite,bool variadic){
+int match_tparams(MyVec<TParamVal*>& matched, const MyVec<ArgDef*>& arg_defs,const Type* ret_type, const MyVec<TParamDef*>& tparams, const MyVec<Expr*>& given_args,int first_arg_index, const Expr* callsite,bool variadic){
 	matched.resize(tparams.size());
 	int score=0;
 #if DEBUG>=2
 	callsite->dump(0);newline(0);
 #endif
 	for (int i=0; i<tparams.size();i++) matched[i]=0;
-	for (int i=0; i<arg_defs.size() && i<arg_defs.size(); i++) {
+	int argi=first_arg_index;
+	for (int i=0; argi<arg_defs.size() && i<given_args.size(); i++,argi++) {
+		// named?
+		auto expr=given_args[i];
+		if (expr->name==FIELD_ASSIGN){
+			argi=get_arg_index(arg_defs,expr);
+			if (argi<0){
+				score-=1000;
+				continue;
+			}
+			expr=expr->as_op()->rhs;
+		}
+		auto argdef=arg_defs[argi];
 #if DEBUG>=4
 		if (arg_defs[i]){
 			arg_defs[i]->type()->dump_if(-1); newline(0);
 			given_args[i]->dump_if(-1); newline(0);
 		}
 #endif
-		score+=match_tparams_from_arg(matched,tparams, given_args[i]->type(), arg_defs[i]->type());
+		score+=match_tparams_from_arg(matched,tparams, expr->type(), argdef->type());
 	}
 	if (given_args.size()>arg_defs.size() && !variadic)
 		score-=1000;
@@ -300,10 +322,16 @@ int match_tparams(vector<TParamVal*>& matched, const vector<ArgDef*>& arg_defs,T
 	dbg_fnmatch("score matching gets %d\n",score);
 	return score;
 }
-int match_fn_tparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vector<Expr*>& args,const Expr* callsite){
+int match_fn_tparams(MyVec<TParamVal*>& matched, const ExprFnDef* f, const MyVec<Expr*>& args,const Expr* callsite){
 	// TODO: allow the types to feedback in the math
 	fill_given_tparams(matched, f->tparams, f->instanced_types);
 	return match_tparams(matched, f->args, f->ret_type, f->tparams, args, 0, callsite,false);
+}
+int match_struct_tparams(MyVec<TParamVal*>& matched, const ExprStructDef* sd, const MyVec<Expr*>& field_exprs,const Expr* callsite){
+	// TODO: allow the types to feedback in the math
+	fill_given_tparams(matched, sd->tparams, sd->instanced_types);
+	return match_tparams(matched, sd->fields, callsite->type(), sd->tparams, field_exprs, sd->first_user_field_index()
+, callsite,false);
 }
 
 
@@ -369,7 +397,7 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	// Find max number of matching arguments
 	
 	verify_all();
-	vector<Type*> matched_tparams;
+	MyVec<Type*> matched_tparams;
 	for (int i=0; i<f->tparams.size(); i++){matched_tparams.push_back(nullptr);}
 
 	int score=0;
@@ -528,14 +556,14 @@ void FindFunction::find_fn_from_scopes(Scope* s,Scope* ex)
 	}
 }
 
-void dbprint_find(const vector<ArgDef*>& args){
+void dbprint_find(const MyVec<ArgDef*>& args){
 	dbprintf("\n;find call with args(");
 	for (int i=0; i<args.size(); i++) {dbprintf(" %d:",i);dbprintf("%p\n",args[i]);if (args[i]->get_type()) args[i]->get_type()->dump(-1);}
 	dbprintf(")\n");
 }
 
 template<typename T>
-void dump(vector<T*>& src) {
+void dump(MyVec<T*>& src) {
 	for (int i=0; i<src.size(); i++) {
 		dbprintf(src[i]->dump());
 	}
@@ -582,9 +610,10 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 	}
 	verify_all();
 
-	vector<Expr*> args_with_receiver;
+	MyVec<Expr*> args_with_receiver;
 	if (receiver) args_with_receiver.push_back(receiver);
-	args_with_receiver.insert(args_with_receiver.end(),block->argls.begin(),block->argls.end());
+	//args_with_receiver.insert(args_with_receiver.end(),block->argls.begin(),block->argls.end());
+	args_with_receiver.append(block->argls);
 
 	ExprFnDef* call_target = scope->find_fn(block->call_expr->as_name(),block,receiver?1:0,args_with_receiver, desired,flags|R_CALL);
 	auto fnc=call_target;
@@ -693,12 +722,12 @@ void TParamXlat::dump(PrinterRef depth)const{
 	}
 	dbprintf("]");
 }
-bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b) {
+bool type_params_eq(const MyVec<Type*>& a, const MyVec<Type*>& b) {
 	if (a.size()!=b.size()) return false;
 	for (int i=0; i<a.size(); i++) { if (!a[i]->is_equal(b[i])) return false;}
 	return true;
 }
-bool type_params_eq(const vector<Type*>& a, const Type* tp){
+bool type_params_eq(const MyVec<Type*>& a, const Type* tp){
 	for (auto
 		 i=0; i<a.size() && tp;i++,tp=tp->next){
 		if (!a[i]->is_equal(tp))

@@ -27,20 +27,20 @@ struct ExprStructDef: ExprDef {
 	bool m_symbols_added=false;
 	bool is_enum() { return m_is_enum;}
 	int max_variant_size=0;
-	vector<TParamDef*>	tparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
-	vector<Type*>		instanced_types;
-	vector<ArgDef*>			fields;
-	vector<ArgDef*>			static_virtual;
-	vector<ArgDef*>			static_fields;
-	vector<ExprLiteral*>	literals;
-	vector<ExprStructDef*>	structs;
-	vector<ExprFnDef*>		virtual_functions;
-	vector<ExprFnDef*>		functions;
-	vector<ExprFnDef*>		static_functions;
-	vector<ExprFnDef*>		constructor_wrappers;	// generated; eg Foo(y){ x:=Foo{}; x.Foo(y);return x;}
+	MyVec<TParamDef*>	tparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
+	MyVec<Type*>		instanced_types;
+	MyVec<ArgDef*>			fields;
+	MyVec<ArgDef*>			static_virtual;
+	MyVec<ArgDef*>			static_fields;
+	MyVec<ExprLiteral*>	literals;
+	MyVec<ExprStructDef*>	structs;
+	MyVec<ExprFnDef*>		virtual_functions;
+	MyVec<ExprFnDef*>		functions;
+	MyVec<ExprFnDef*>		static_functions;
+	MyVec<ExprFnDef*>		constructor_wrappers;	// generated; eg Foo(y){ x:=Foo{}; x.Foo(y);return x;}
 
-	vector<TypeDef*>		typedefs;
-	vector<ArgDef*>			args;		// default constructor form
+	MyVec<TypeDef*>		typedefs;
+	MyVec<ArgDef*>			args;		// default constructor form
 	ExprBlock*				body=0;		// for default constructor form.
 	ImplDef*				impls=0;
 	int 	first_user_field_index()const;
@@ -83,6 +83,7 @@ struct ExprStructDef: ExprDef {
 	void	translate_tparams(const TParamXlat& tpx) override;
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the tparams.
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
+	Type*			get_struct_type_for_tparams(const MyVec<TParamVal*>& tps);
 	void			init_types();
 	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	const Type*			get_elem_type(int i)const;//{return this->fields[i]->type();}
@@ -90,7 +91,7 @@ struct ExprStructDef: ExprDef {
 	int 			get_elem_index(Name name)const;//{int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
 	int				override_index(ExprFnDef* f);
 
-	vector<TParamDef*>*			get_typeparams() override { return &tparams;}
+	MyVec<TParamDef*>*			get_typeparams() override { return &tparams;}
 	int				get_elem_count(){return this->fields.size();}
 	bool			is_vtable_built(){return this->vtable_name!=0;}
 	const ExprFnDef*		find_function_for_vtable(Name n, const Type* fn_type);
@@ -170,7 +171,7 @@ struct ModDef : ExprStructDef {
 	const char* kind_str()const{return "mod";}
 	ModDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
 };
-ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags);
+ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, const Name name, const MyVec<Expr*>& call_args, const Type* return_type,int flags);
 
 
 

@@ -12,11 +12,7 @@ struct Pattern;
 struct ImplDef;
 struct TypeDef;
 struct SrcOp{ Name op; SrcPos pos;};
-template<typename T>
-T pop(std::vector<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
-template<typename T>
-T pop(Vec<T>& v){ ASSERT(v.size()>0); return v.pop_back();}
-void dump(vector<Expr*>& v);
+void dump(MyVec<Expr*>& v);
 extern Node* g_pRoot;	// temporary hack
 // todo: plugin arch? Node::parse(), dispatch on registered keywords?
 ExprBlock*	parse_block(TokenStream& src,int close,int delim, Expr* op);
@@ -33,7 +29,7 @@ ExprOp*		parse_let(TokenStream& src);
 Expr*		parse_match_arm(TokenStream& src);
 ArgDef*		parse_arg(int index,TokenStream& src, int close);
 ArgDef* parse_arg_or_self(int index,TokenStream& src, Type* self_t, int close);
-void		parse_typeparams_def(TokenStream& src,vector<TParamDef*>& out,int close);
+void		parse_typeparams_def(TokenStream& src,MyVec<TParamDef*>& out,int close);
 void		parse_typeparams_given(TokenStream& src, Type* add_here, int close);
 IdentWithTParams*		parse_tparams_for_ident(TokenStream& src,ExprIdent* id,int close);
 ExprStructDef*	parse_struct(TokenStream& src);
@@ -50,8 +46,8 @@ typedef Vec<Expr*>* ExprLs;
 void parse_block_nodes(ExprLs nodes,int* delim_used, TokenStream& src,Expr* insert,int close,int delim);
 
 void another_operand_so_maybe_flush(bool& was_operand, ExprLs nodes,
-									vector<SrcOp>& operators,
-									vector<Expr*>& operands
+									MyVec<SrcOp>& operators,
+									MyVec<Expr*>& operands
 									);
-void flush_op_stack(ExprLs nodes, vector<SrcOp>& ops,vector<Expr*>& vals);
-void pop_operator_call( vector<SrcOp>& operators,vector<Expr*>& operands);
+void flush_op_stack(ExprLs nodes, MyVec<SrcOp>& ops,MyVec<Expr*>& vals);
+void pop_operator_call( MyVec<SrcOp>& operators,MyVec<Expr*>& operands);

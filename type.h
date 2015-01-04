@@ -6,7 +6,7 @@
 
 struct Name;
 struct Type : ExprDef {
-	vector<TParamDef*> tparams;
+	MyVec<TParamDef*> tparams;
 	//ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
 	Type*	sub=0;					// a type is itself a tree
 	Type*	next=0;
@@ -86,6 +86,7 @@ struct Type : ExprDef {
 	const Type*		get_elem_type(int index) const{
 		return get_elem(index);
 	}
+	Type*			get_type_sub(int index)const{ auto s=sub;for (; s && index>0; s=s->next,index--);return s;}
 	bool			is_primitive()const;
 	bool			is_userdefined()const;
 	int			num_pointers()const;
@@ -163,10 +164,10 @@ struct Type : ExprDef {
 	CgValue	compile(CodeGen& cg, Scope* sc, CgValue input) override;
 };
 void dump(const Type* a,const Type* b);
-void dump_typeparams(const std::vector<TParamDef*>& ts, const std::vector<Type*>* given) ;
+void dump_tparams(const MyVec<TParamDef*>& ts, const MyVec<TParamVal*>* given) ;
 
-bool type_params_eq(const vector<Type*>& a, const Type* tp);
-bool type_params_eq(const vector<Type*>& a, const vector<Type*>& b);
+bool type_params_eq(const MyVec<Type*>& a, const Type* tp);
+bool type_params_eq(const MyVec<Type*>& a, const MyVec<Type*>& b);
 void verify(const Type* a);
 void verify(const Type* a,const Type* b);
 void verify(const Type* a,const Type* b,const Type* c);

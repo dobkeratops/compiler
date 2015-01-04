@@ -562,7 +562,6 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 			}
 			return si->resolved|INCOMPLETE;
 		}
-		
 	}
 	dbg3(printf("=====struct init & desired type..=====\n"));
 	dbg3(desiredType->dump_if(0));
@@ -573,13 +572,32 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 		sc->add_struct(local_struct_def); // todo - why did we need this?
 		sd=local_struct_def;
 	}
+	if (sd->is_generic()){
+		dbprintf_tparams("matching with generic struct: %s, needs instantiating\n",sd->name_str());
+		MyVec<TParamVal*> match_tparams;
+		match_struct_tparams(match_tparams, sd, si->argls, si);
+		dump_tparams(sd->tparams,&match_tparams);
+		dbprintf_tparams("\n");
+		auto st=(Type*)sd->get_struct_type_for_tparams(match_tparams);
+		dbg_tparams(st->dump(-1));
+		sd=sd->get_instance(sc,st);
+		dbg_tparams(sd->dump(0));
+		dbg_tparams(sd->inherits->dump(0));
+		dbprintf_tparams("\n");
+		si->call_expr->set_type(st);
+		si->call_expr->set_def(sd);
+		si->set_def(sd);
+		si->set_type(st);
+		
+		
+	}
 	//if (!si->type()){
 	//	si->set_type(new Type(sd));
 	//}
 	si->propogate_type_refs(flags,(Node*)si, si->type_ref(),si->call_expr->type_ref());
 	si->propogate_type_fwd(flags,si, desiredType);
 	
-	si->call_expr->def=sd;
+	si->call_expr->set_def(sd);
 	si->def=sd;
 	this->struct_def=sd;
 	// assignment forms are expected eg MyStruct{x=...,y=...,z=...} .. or can we have MyStruct{expr0,expr1..} equally?

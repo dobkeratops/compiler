@@ -326,7 +326,7 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 	if (this->rhs)if (rhs->type()->is_userdefined()) num_non_prim++;
 	if (!num_non_prim)
 		return false;
-	vector<Expr*> args;if (lhs)args.push_back(lhs);if (rhs)args.push_back(rhs);
+	MyVec<Expr*> args;if (lhs)args.push_back(lhs);if (rhs)args.push_back(rhs);
 	
 	auto opname=this->name;
 	ExprFnDef* fnd=nullptr;

@@ -583,9 +583,9 @@ CompilerTest g_Tests[]={
 			let b:[int*4];			// __array<int,4>
 			let c:[int:string];		// __dictionary<int,string>
 			let d:~str;				// __string
-			let e:~[int];			// __vector<int>
+			let e:~[int];			// __MyVec<int>
 			let f:~Foo;				// __unique_ptr<Foo>
-			let g:~[~Foo];			// __vector<__unique_ptr<Foo>>
+			let g:~[~Foo];			// __MyVec<__unique_ptr<Foo>>
 			//let f:?Foo;			// __option<Foo>
 			//let f:?~Foo;			// __option<__unique_ptr<Foo>>
 			0	}

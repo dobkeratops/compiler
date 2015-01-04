@@ -117,7 +117,7 @@ public:
 		depth=0;
 		curr_fn=0;
 	}
-	vector<Node*> compile_later;
+	MyVec<Node*> compile_later;
 	typedef  size_t EmitLoc;
 	RegisterName next_reg();
 	RegisterName next_reg(Name name);
@@ -273,7 +273,7 @@ struct LoopPhiVar {
 };
 extern void emit_local_vars(CodeGen& cg, Expr* n, ExprFnDef* fn, Scope* sc);
 
-void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, Name l_end, bool extra);
+void emit_phi(CodeGen& cg, Scope* sc, MyVec<LoopPhiVar>& phi_vars,Name l_pre, Name l_end, bool extra);
 
 inline CgValue CgValue::load(CodeGen& cg)const { return cg.load(*this);}
 inline CgValue CgValue::store(CodeGen& cg)const {return cg.store(*this);}

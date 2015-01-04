@@ -514,12 +514,12 @@ void Type::translate_typeparams_sub(const TParamXlat& tpx,Type* inherit_replace)
 	// todo: replace wih 'instantiate' typparams, given complex cases
 	/*
 	 example:
-	 struct vector<T,N=int> {
+	 struct MyVec<T,N=int> {
  	data:*T;
  	count:N;
 	 }
 	 
-	 instantiate vector<string,short>
+	 instantiate MyVec<string,short>
 	 translate_tempalte_type( {T,N}, {string,short}, *T) -> *string
 	 translate_tempalte_type( {T,N}, {string,short}, N) -> short.
 	 
@@ -530,10 +530,10 @@ void Type::translate_typeparams_sub(const TParamXlat& tpx,Type* inherit_replace)
 	 instantiate tree<vector,int>
 	 we want:
 	 struct tree {
-	 vector< tree<vector,int>> sub;
+	 MyVec< tree<vector,int>> sub;
 	 }
 	 
-	 translate_tempalte_type( {S,T}, {vector,int}, S<tree<S,T>>)->    vector<tree<vector<int>>> //
+	 translate_tempalte_type( {S,T}, {vector,int}, S<tree<S,T>>)->    MyVec<tree<MyVec<int>>> //
 	 
 	 */
 	// TODO: assert there is no shadowing in this types' own definitions
@@ -669,15 +669,17 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 	return ResolveResult(COMPLETE);
 }
 
-void dump_typeparams(const vector<TParamDef*>& ts, const vector<Type*>* given) {
+void dump_tparams(const MyVec<TParamDef*>& ts, const MyVec<TParamVal*>* given) {
 	bool a=false;
-	if (ts.size()==0) return;
+	if (ts.size() && given->size()==0) return;
 	dbprintf("<");
-	for (int i=0; i<ts.size(); i++){
+	for (int i=0; i<ts.size() || i<given->size(); i++){
 		if (a)dbprintf(",");
-		print_tok(ts[i]->name);
+		if (i<ts.size()){
+			print_tok(ts[i]->name);
+		} else dbprintf("%d",i);
 		Type* tv=nullptr; if (i<given->size()) tv=given->at(i);
-		if (!tv) tv=ts[i]->defaultv;
+		if (!tv) {if (ts.size()){tv=ts[i]->defaultv;}}
 		if (tv){dbprintf("=");tv->dump(-1);}
 		a=true;
 	}

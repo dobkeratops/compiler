@@ -52,8 +52,8 @@ void ExprFnDef::dump(PrinterRef ind) const {
 
 void ExprFnDef::dump_sub(int ind, Name prefix) const {
 	if (!this) return;
-	newline(ind);dbprintf("%s %s",getString(prefix),getString(name));dump_typeparams(this->tparams,&this->instanced_types);dbprintf("(");
-	for (int i=0; i<args.size();i++){
+	newline(ind);dbprintf("%s %s",getString(prefix),getString(name));dump_tparams(this->tparams,&this->instanced_types);dbprintf("(");
+	for (index_t i=0; i<args.size();i++){
 		args[i]->dump(-1);
 		if (i<args.size()-1) dbprintf(",");
 	}
@@ -131,7 +131,7 @@ void ExprFnDef::dump_signature()const{
 	//	this->return_type()->dump_if(-1);
 	this->ret_type->dump_if(-1);
 }
-ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, const Name name, const vector<Expr*>& call_args, const Type* return_type,int flags) {
+ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, const Name name, const MyVec<Expr*>& call_args, const Type* return_type,int flags) {
 	verify_all();
 	dbg_generic("instantiating %s %d for call %s %d\n",str(name),srcfn->pos.line, pcallsite->name_str(),pcallsite->pos.line);
 	dbg_generic("\t%d args %d args inc receiver\n", pcallsite->get_elem_count(), call_args.size());
@@ -162,7 +162,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	
 	auto callsiteb=pcallsite;
 	ASSERT(callsiteb!=0 &&"ambiguity, when we come to do operator overloads, ExprOp & ExprBlock will call..");
-	vector<Type*>	ins_typarams;
+	MyVec<Type*>	ins_typarams;
 	match_fn_tparams(ins_typarams, srcfn,call_args, callsiteb);
 	TParamXlat xlat(srcfn->tparams, ins_typarams);
 	new_fn->translate_tparams(xlat);
@@ -259,7 +259,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 		// but dont need to terminate compiling until its instantiated properly
 		auto use_flags=(this->is_generic())?(flags&~R_FINAL):flags;
 			
-		for (int i=0; i<this->args.size() && i<this->args.size(); i++) {
+		for (index_t i=0; i<this->args.size() && i<this->args.size(); i++) {
 			this->args[i]->resolve_if(this->scope, nullptr, use_flags); // todo: call with defaultparams & init-expr
 			auto arg=this->args[i];
 			auto v=sc->find_scope_variable(arg->name);
@@ -357,7 +357,7 @@ CaptureVars* ExprFnDef::get_or_create_capture(ExprFnDef* src){
 }
 
 int ExprFnDef::type_parameter_index(Name n) const {
-	for (auto i=0; i<tparams.size(); i++){
+	for (index_t i=0; i<tparams.size(); i++){
 		if (n==tparams[i]->name)
 			return i;
 	}

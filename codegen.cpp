@@ -982,7 +982,7 @@ Name CodeGen::gen_label(const char* label,int index){
 	return getStringIndex(tmp);
 }
 
-void emit_phi(CodeGen& cg, Scope* sc, vector<LoopPhiVar>& phi_vars,Name l_pre, Name l_end, bool extra) {
+void emit_phi(CodeGen& cg, Scope* sc, MyVec<LoopPhiVar>& phi_vars,Name l_pre, Name l_end, bool extra) {
 	for (auto& v: phi_vars) {
 		if (v.var->on_stack) continue;
 		v.reg_end=v.var->reg_name;
@@ -1038,7 +1038,7 @@ CgValue emit_for_llvm(CodeGen& cg, ExprFor* e_for, Expr* e_init,Expr* e_cond, Ex
 	e_cond->find_vars_written_if(sc,emit_vars);
 	e_body->find_vars_written_if(sc,emit_vars);
 	e_incr->find_vars_written_if(sc,emit_vars);
-	vector<LoopPhiVar> phi_vars;
+	MyVec<LoopPhiVar> phi_vars;
 	for (auto v :emit_vars){
 		if (v->on_stack) continue; // no need for phi-nodes for stack vars.
 		LoopPhiVar phi;

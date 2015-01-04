@@ -56,7 +56,7 @@ private:
 public:
 	Scope(Scope* p){ASSERT(p==0);named_items=0; owner_fn=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
 	void visit_calls();
-	vector<TParamDef*>* get_tparams(){return owner_fn?owner_fn->get_typeparams():nullptr; // TODO: actually need to cascade them.
+	MyVec<TParamDef*>* get_tparams(){return owner_fn?owner_fn->get_typeparams():nullptr; // TODO: actually need to cascade them.
 	}
 	TParamDef*	get_typeparam_for(Type *t);
 	bool		is_typeparam(Type* t) {return get_typeparam_for(t)!=nullptr;}
@@ -84,8 +84,8 @@ public:
 	ExprStructDef*	find_struct(const Node* node);
 	ExprStructDef*	find_struct_type(const Node* node,const Type* t);
 	ExprFnDef*	find_unique_fn_named(const Node* name_node,int flags=0, const Type* fn_type=nullptr); // todo: replace with fn type.
-	ExprFnDef*	find_fn(Name name,const Expr* callsite, int numrecv,const vector<Expr*>& args,const Type* ret_type,int flags);
-	ExprFnDef*	find_fn_sub(Name name,const Expr* callsite, int numrecv,const vector<Expr*>& args,const Type* ret_type,int flags);
+	ExprFnDef*	find_fn(Name name,const Expr* callsite, int numrecv,const MyVec<Expr*>& args,const Type* ret_type,int flags);
+	ExprFnDef*	find_fn_sub(Name name,const Expr* callsite, int numrecv,const MyVec<Expr*>& args,const Type* ret_type,int flags);
 	ExprFnDef*	find_fn_for_types(Name name, int numrecv,const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags);
 	void	add_struct(ExprStructDef*);
 	void	add_fn(ExprFnDef*);

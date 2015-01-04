@@ -47,6 +47,7 @@ using std::move;
 #define dbg2(X) X
 #define dbg_raii(X) X
 #define dbg_tparams(X) X
+#define dbprintf_tparams(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_fnmatch(...) {DBLOC();dbprintf(__VA_ARGS__);}
@@ -64,7 +65,7 @@ using std::move;
 #ifndef DBLOC
 #define DBLOC(X)
 #endif
-
+// Null out the debug expressions not used for this config.
 #ifndef dbg4
 #define dbg4(X)
 #endif
@@ -122,8 +123,10 @@ using std::move;
 #ifndef dbg_tparams
 #define dbg_tparams(x,...)
 #endif
+#ifndef dbprintf_tparams
+#define dbprintf_tparams(x,...)
+#endif
 
-typedef size_t index_t;
 
 typedef int32_t OneBasedIndex;
 
@@ -220,11 +223,6 @@ using std::cout;
 using std::map;
 using std::pair;
 using std::initializer_list;
-template<typename T,typename S>
-T& operator<<(T& dst, const vector<S>&src) { for (auto &x:src){dst<<x;};return dst;};
-
-template<typename T>
-int get_index_in(const vector<T>& src, T& value) { int i=0; for (i=0; i<src.size(); i++) {if (src[i]==value) return i;} return -1;}
 
 
 template<typename T,typename U>
@@ -325,7 +323,7 @@ extern bool g_lisp_mode;
 extern const char* g_operator_symbol[];
 
 
-// simplified vector<T> easier to debug,
+// simplified MyVec<T> easier to debug,
 // break dependance on C++stdlib for easier transpile.
 
 template<typename T>
@@ -345,23 +343,32 @@ struct Slice{		// does not own
 	const T* end()const {return data+num;}
 	Slice<T> slice(int s,int e){return Slice(data+s,e-s);}
 };
+typedef int32_t index_t;
 template<typename T>
 struct Vec{
 	T* data=nullptr;
-	int32_t	num=0;// fills a 32gb machine fine.
-	int32_t	cap=0;
-	T& operator[](int i){
+	index_t	num=0;// fills a 32gb machine fine.
+	index_t	cap=0;
+	T& operator[](index_t i){
 		dbg(ASSERT(i>=0&&i<=num));return data[i];
 	}
-	const T& operator[](int i)const{
+	const T& operator[](index_t i)const{
 		dbg(ASSERT(i>=0&&i<=num));return data[i];
 	}
 	Vec(Vec<T>&& src){
 		this->take_from(src);
 	}
+	Vec<T>& operator=(const Vec<T>& src){
+		resize(0);
+		resize_sub(src.num,src.num);
+		for (index_t i=0; i<num; i++){
+			data[i]=src[i];
+		}
+		return *this;
+	}
 	Vec(const Vec<T>& src){
 		resize_sub(src.num,src.num);
-		for (auto i=0; i<num; i++){
+		for (index_t i=0; i<num; i++){
 			data[i]=src[i];
 		}
 	}
@@ -383,9 +390,9 @@ struct Vec{
 		src.num=0;
 		src.cap=0;
 	}
-	void resize_sub(int newsize,int newcap){
+	void resize_sub(index_t newsize,index_t newcap){
 		if (newcap<newsize) newcap=newsize;
-		int i;
+		index_t i;
 		for (i=newsize;i<num;i++){
 			data[i].~T();
 		}
@@ -395,15 +402,15 @@ struct Vec{
 		}
 		num=newsize;
 	}
-	void resize_tofit(int newsize){
+	void resize_tofit(index_t newsize){
 		resize_sub(newsize,newsize);
 	}
-	void resize(int newsize){
+	void resize(index_t newsize){
 		if (newsize!=num){
 			return resize_sub(newsize,newsize>cap?(cap?cap*2:newsize):(newsize<(cap/2)?(cap/2):cap));
 		}
 	}
-	int32_t size()const {return num;}
+	index_t size()const {return num;}
 	T* begin(){return data;}
 	T* end(){return data+num;}
 	const T* begin()const {return data;}
@@ -424,25 +431,29 @@ struct Vec{
 	T pop_front(){
 		ASSERT(num>0);
 		T ret=data[0];
-		for (int i=1; i<num; i++) data[i-1]=data[i];
+		for (index_t i=1; i<num; i++) data[i-1]=data[i];
 		return ret;
 	}
-	void insert(int pos,T item){
+	void insert(index_t pos,T item){
 		resize(num+1);
 		ASSERT(data!=nullptr);
-		for (int32_t i=num-1; i>pos; i--){
+		for (index_t i=num-1; i>pos; i--){
 			this->data[i]=this->data[i-1];
 		}
 		ASSERT(pos<num);
 		data[pos]=item;
 	}
-	T remove(int pos){
+	void append(const Vec<T>& src){
+		reserve(this->cap+src.cap);
+		for (auto&x:src) this->push_back(x);
+	}
+	T remove(index_t pos){
 		ASSERT(num>0);
 		auto x=data[pos];
 		for (int i=pos; i<num-1; i++) data[i]=data[i+1];
 		return x;
 	}
-	T remove_swap_back(int pos){
+	T remove_swap_back(index_t pos){
 		ASSERT(num>0);
 		auto x=data[pos];
 		data[pos]=back();
@@ -453,27 +464,29 @@ struct Vec{
 		insert(0,item);
 
 	}
+	inline T& at(index_t i){ return this->data[i];}
+	inline const T& at(index_t i)const { return this->data[i];}
 	inline void push_back(T item){
 		insert(num,item);
 	}
 	// grr. this is why we're writing new lang. want map((A)->B)->Vec<B>,filter etc
 	template<typename F>
-	void foreach(F& f){ for (int i=0; i<num; i++) f(data[i]);}
+	void foreach(F& f){ for (index_t i=0; i<num; i++) f(data[i]);}
 	template<typename F>
-	void foreach(const F& f)const { for (int i=0; i<num; i++) f(data[i]);}
+	void foreach(const F& f)const { for (index_t i=0; i<num; i++) f(data[i]);}
 	Slice<T> range(int s,int e){
 		return Slice<T>(data+s,e-s);
 	}
 	Slice<T> as_slice(){return range(0,num);}
 
 	void shrink_to_fit(){if (num!=cap)resize_sub(num,num);}
-	void reserve(int x){if (x!=cap){resize_sub(num,x);}}
+	void reserve(index_t x){if (x!=cap){resize_sub(num,x);}}
 	~Vec(){
 		resize_sub(0,0);
 	}
 	Vec(){
 	}
-	void realloc_sub(int newcap){
+	void realloc_sub(index_t newcap){
 		if (cap!=newcap){
 			data=(T*)realloc(data,sizeof(T)*newcap);
 			cap=newcap;
@@ -505,6 +518,19 @@ Vec<T> operator+(Vec<T>&& a, const T& b){
 	ret.data[a.size()]=b;
 	return ret;
 }
+template<typename T>
+using MyVec  = Vec<T>;
+template<typename T,typename S>
+T& operator<<(T& dst, const MyVec<S>&src) { for (auto &x:src){dst<<x;};return dst;};
+
+template<typename T>
+index_t get_index_in(const MyVec<T>& src, T& value) { index_t i=0; for (i=0; i<src.size(); i++) {if (src[i]==value) return i;} return -1;}
+
+
+//template<typename T>
+//T pop(std::MyVec<T>& v){ ASSERT(v.size()>0);auto r=v[v.size()-1];/*move?*/ v.pop_back(); return r;}
+//template<typename T>
+//T pop(Vec<T>& v){ ASSERT(v.size()>0); return v.pop_back();}
 
 
 

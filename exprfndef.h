@@ -33,9 +33,9 @@ struct  ExprFnDef : ExprDef {
 	Type* fn_type=0;				// eg (args)->return
 	
 	Name mangled_name=0;
-	vector<TParamDef*> tparams;
-	vector<Type*>		instanced_types;
-	vector<ArgDef*> args;
+	MyVec<TParamDef*> tparams;
+	MyVec<Type*>		instanced_types;
+	MyVec<ArgDef*> args;
 	Expr* body=0;
 	ExprFnDef(){};
 	ExprFnDef(SrcPos sp,Name n)	{name=n;pos=sp;variadic=false;scope=0;next_of_module=0;next_of_name=0;instance_of=0;instances=0;next_instance=0;body=0;callers=0;fn_type=0;ret_type=0;name_ptr=0;}
@@ -63,7 +63,7 @@ struct  ExprFnDef : ExprDef {
 	ResolveResult	resolve_call(Scope* scope,const Type* desired,int flags);
 	CaptureVars*		get_or_create_capture(ExprFnDef* src);
 	void			translate_tparams(const TParamXlat& tpx)override;
-	vector<TParamDef*>* get_typeparams() override{return &this->tparams;}
+	MyVec<TParamDef*>* get_typeparams() override{return &this->tparams;}
 	Expr*			last_expr()const;
 	const Expr*		get_return_expr() const override;
 	Type*				return_type()const {

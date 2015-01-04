@@ -101,13 +101,55 @@ void ExprStructDef::translate_tparams(const TParamXlat& tpx)
 	if (tpx.typeparams_all_set())
 		this->tparams.resize(0);
 	this->type()->translate_typeparams_if(tpx);
+	this->inherits_type->translate_typeparams_if(tpx);
 	dbg(this->dump(0));
 }
-
+Type* ExprStructDef::get_struct_type_for_tparams(const MyVec<TParamVal *> &given_types){
+	// todo: actually scan the instances, as it might already exist.
+	auto st=(Type*)new Type(this->pos,this->name);
+	for (auto tp:given_types)
+		st->push_back((Type*)tp->clone());
+	dbg_tparams({dbprintf("\nget_t=");st->dump(0);dbprintf("\n");});
+	return st;
+}
+index_t get_tparam_index(const Vec<TParamDef*>& tparams, const Node* n){
+	for (index_t i=0; i<tparams.size(); i++){
+		if (tparams[i]->name==n->name)
+			return i;
+	}
+	return -1;
+}
+ExprStructDef*	get_base_instance(Scope* sc, const Vec<TParamDef*>& context_tparams, const Type* context_type, Type* desired){
+	// translate a base class or method 'member' for a mix of tparams & given types.
+	Vec<TParamVal*> desired_tparams;
+//  eg
+	dbg_tparams({dbprintf("\ndesired=");desired->dump(0);});
+	dbg_tparams({dbprintf("\ncontext=");context_type->dump(0);});
+	dbprintf_tparams("\nfind param list..\n");
+	for (auto subt=desired->sub; subt; subt=subt->next){
+		auto i=get_tparam_index(context_tparams, subt);
+		if (i>=0){
+			auto dt=(TParamVal*)context_type->get_type_sub(i);
+			dbg_tparams({dt->dump(0);dbprintf("\n");});
+			desired_tparams.push_back(dt);
+		} else {
+			desired_tparams.push_back((TParamVal*)subt->clone());
+		}
+	}
+	auto sd=sc->find_struct_named(desired->name);
+	dbg_tparams({dump_tparams(sd->tparams,&desired_tparams);dbprintf("\n");});
+	return sd->get_instance(sc, sd->get_struct_type_for_tparams(desired_tparams));
+}
 ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 	auto parent=this;
 	if (!this->is_generic())
 		return this;
+	// first things first, if it inherits something - we need its' base class instanced too.
+	ExprStructDef* parent_sd=nullptr;
+	if (this->inherits_type){
+		parent_sd=get_base_instance(sc,this->tparams, type,this->inherits_type);
+		dbg_tparams(parent_sd->dump(0));
+	}
 	// make the tparams..
 	// search for existing instance
 	ExprStructDef* ins=parent->instances;
@@ -117,13 +159,13 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 	}
 	if (!ins) {
 #if DEBUG>=2
-		dbg_instancing("instantiating struct %s[",this->name_str());
+		dbg_instancing("instantiating struct %s<",this->name_str());
 		for (auto t=type->sub;t;t=t->next)dbg_instancing("%s,",t->name_str());
-		dbg_instancing("]\n");
+		dbg_instancing(">\n");
 		dbg_instancing("%s now has %d instances\n",this->name_str(),this->num_instances()+1);
 #endif
 		// TODO: store a tree of partial instantiations eg by each type..
-		vector<Type*> ty_params;
+		MyVec<Type*> ty_params;
 		int i=0;
 		Type* tp=type->sub;
 		for (i=0; i<parent->tparams.size() && tp; i++,tp=tp->next){
@@ -135,6 +177,7 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 		
 		ins = (ExprStructDef*)this->clone(); // todo: Clone could take tparams
 							// cloning is usually for template instantiation?
+//		ins->inherits = parent_sd;
 		ins->instanced_types=ty_params;
 		ins->instance_of=this;
 		ins->next_instance = this->instances; this->instances=ins;
@@ -156,7 +199,7 @@ void ExprStructDef::dump_instances(int depth)const{
 	int x=0;
 	newline(depth);	dbprintf("instances of %s{",this->name_str());
 	for (auto i=this->instances;i;i=i->next_instance,x++){
-		dbprintf("\n%s instance %d/%d",this->name_str(), x,this->num_instances());
+		dbprintf("\n/*%s instance %d/%d*/",this->name_str(), x,this->num_instances());
 		i->dump(depth+1);
 	}
 	newline(depth);	dbprintf("}",this->name_str());
@@ -199,6 +242,7 @@ Node* ExprStructDef::clone_sub(ExprStructDef* d)const {
 	for (auto l:this->literals){d->literals.push_back((ExprLiteral*)l->clone());}
 	for (auto l:this->typedefs){d->typedefs.push_back((TypeDef*)l->clone());}
 	d->inherits=this->inherits;
+	d->inherits_type=(Type*)this->inherits_type->clone_if();
 	d->body=(ExprBlock*)((Node*)this->body)->clone_if();
 	return d;
 }
@@ -257,7 +301,6 @@ void ExprStructDef::roll_vtable() {
 			if (fnt->sub){
 				if(fnt->sub->sub)
 					if (fnt->sub->sub->sub)
-			
 						fnt->sub->sub->sub->replace_name_if(this->name,SELF_T);
 				if (fnt->sub->next)
 					if (fnt->sub->next->next)
@@ -278,8 +321,8 @@ void ExprStructDef::roll_vtable() {
 	}
 	// base class gets a vtable pointer
 	if (this->vtable){
-		this->fields.insert(
-			this->fields.begin(),
+		this->fields.insert(0,
+//			this->fields.begin(),
 			new ArgDef(pos,__VTABLE_PTR,new Type(PTR,this->vtable)));
 	}
 
@@ -299,7 +342,7 @@ void ExprStructDef::dump(PrinterRef depth) const{
 	auto depth2=depth>=0?depth+1:depth;
 	newline(depth);
 	dbprintf("%s %s",this->kind_str(), getString(this->name));
-	dump_typeparams(this->tparams,&this->instanced_types);
+	dump_tparams(this->tparams,&this->instanced_types);
 	if (this->inherits_type) {dbprintf(":"); this->inherits_type->dump_if(-1);}
 	if (this->args.size()){
 		dbprintf("(");for (auto a:this->args)	{a->dump(-1);dbprintf(",");};dbprintf(")");
@@ -551,7 +594,7 @@ Type* ExprStructDef::get_struct_type(){
 	init_types();
 	return this->struct_type;
 }
-void combine_tparams(vector<TParamDef*>* dst,const vector<TParamDef*>* src){
+void combine_tparams(MyVec<TParamDef*>* dst,const MyVec<TParamDef*>* src){
 	if (src && dst){
 		for (auto t:*src)
 			dst->push_back((TParamDef*)t->clone());
@@ -602,7 +645,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 		if (this->m_is_variant || this->m_is_enum){
 			if (!this->fields.size()||this->fields.front()->name!=__DISCRIMINANT){
 				this->fields.insert(
-								this->fields.begin(),
+								0,//this->fields.begin(),
 								new ArgDef(pos,__DISCRIMINANT,new Type(this->pos,I32)));
 			}
 			if (this->m_is_enum) calc_trailing_padding();
@@ -754,7 +797,7 @@ Node* ImplDef::clone()const{
 void ImplDef::dump(PrinterRef depth) const{
 	
 	newline(depth);
-	dbprintf("%s ",this->kind_str());dump_typeparams(this->tparams,&this->instanced_types);
+	dbprintf("%s ",this->kind_str());dump_tparams(this->tparams,&this->instanced_types);
 	if (this->impl_trait) {this->impl_trait->dump_if(-1);dbprintf(" for ");}
 	if (this->impl_for_type) this->impl_for_type->dump_if(-1);
 	

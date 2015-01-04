@@ -3,6 +3,7 @@
 #include "exprfndef.h"
 #include "exprstructdef.h"
 #include "exprop.h"
+#include "semantics.h"
 #include "codegen.h"
 
 
@@ -68,9 +69,9 @@ struct StructInitializer{ // named initializer
 	Scope*			sc;
 	ExprStructDef*	struct_def=0;
 	ExprStructDef*	get_struct_def(){return struct_def;}
-	vector<int>		field_indices;
-	vector<ArgDef*> field_refs;
-	vector<Expr*>	value;
+	MyVec<int>		field_indices;
+	MyVec<ArgDef*> field_refs;
+	MyVec<Expr*>	value;
 	void map_fields()								{resolve(nullptr,0);}//todo..seperate out}
 	StructInitializer(Scope* s,ExprBlock* block)	{si=block,sc=s;};
 	ResolveResult resolve(const Type* desiredType,int flags);

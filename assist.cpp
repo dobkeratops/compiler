@@ -5,7 +5,7 @@ extern void find_completions(Name n,std::function<void(Name n,int score)> f);
 
 void assist_find_symbol(Node* n, Scope* sc, Name symbol){
 	int max=10;
-	vector<pair<Name,int>> completions;
+	MyVec<pair<Name,int>> completions;
 	dbprintf("...completions:-");
 	find_completions(symbol,
 		[&](Name s,int score)->void{

@@ -36,7 +36,7 @@ struct ExprIdent :Expr{
 // Identifier with given type-parameters
 struct IdentWithTParams : ExprIdent{
 	ExprIdent*			ident;
-	vector<TParamVal*>	given_tparams;
+	MyVec<TParamVal*>	given_tparams;
 	void		dump(PrinterRef depth)const override;
 	Node*		clone()const override;
 	Type*		make_type(Scope* sc) const;

@@ -163,7 +163,7 @@ void Scope::compile_destructors(CodeGen& cg){
 ExprFnDef*	Scope::find_fn_for_types(Name name, int numrecv,const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags){
 	static ExprDummy s_dummy_arg0;
 	static ExprDummy s_dummy_arg1;
-	static vector<Expr*> s_dummy_args;
+	static MyVec<Expr*> s_dummy_args;
 	s_dummy_args.resize(0);
 	if (arg0_type){
 		s_dummy_args.push_back(&s_dummy_arg0);
@@ -175,7 +175,7 @@ ExprFnDef*	Scope::find_fn_for_types(Name name, int numrecv,const Type* arg0_type
 	}
 	return find_fn(name,nullptr, numrecv,s_dummy_args,ret_type, flags);
 }
-ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, int numrecv,const vector<Expr*>& args,const Type* ret_type,int flags)  {
+ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, int numrecv,const MyVec<Expr*>& args,const Type* ret_type,int flags)  {
 	if (!strcmp(str(name),"hello"))
 	dbg_raii(printf("look for %s\n",str(name)));
 	
@@ -185,7 +185,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, int numrecv,const vect
 	if (!args.size() || !numrecv)
 		return nullptr;
 	return nullptr;
-	vector<Expr*> args2;
+	MyVec<Expr*> args2;
 	for (size_t i=0; i<args.size(); i++){
 		args2.push_back(args[i]);
 	}
@@ -204,7 +204,7 @@ ExprFnDef*	Scope::find_fn(Name name,const Expr* callsite, int numrecv,const vect
 	s_dummy_arg.clear_type();
 	return f2;
 }
-ExprFnDef*	Scope::find_fn_sub(Name name,const Expr* callsite, int numrecv,const vector<Expr*>& args,const Type* ret_type,int flags)  {
+ExprFnDef*	Scope::find_fn_sub(Name name,const Expr* callsite, int numrecv,const MyVec<Expr*>& args,const Type* ret_type,int flags)  {
 	verify_all();
 	
 	// TODO: rework this to take Type* fn_type fn[(args),ret] - for symetry with anything using function pointers
@@ -215,7 +215,7 @@ ExprFnDef*	Scope::find_fn_sub(Name name,const Expr* callsite, int numrecv,const 
 	ff.callsite=callsite;
 	
 	Scope* prev=nullptr;
-	vector<pair<ExprFnDef*,int>> candidates;
+	MyVec<pair<ExprFnDef*,int>> candidates;
 	
 	Scope* rec_scope=nullptr;
 	if (args.size()>0){
@@ -249,7 +249,7 @@ ExprFnDef*	Scope::find_fn_sub(Name name,const Expr* callsite, int numrecv,const 
 			
 			// For the best match, say what you'd have to do to fix, then show all matches
 			if (args.size()<best.f->min_args()){info(best.f,"maybe requires %d args, %d given",best.f->min_args(),args.size());}
-			vector<Type*> callsite_tys;
+			MyVec<Type*> callsite_tys;
 			match_fn_tparams(callsite_tys, best.f,args,callsite);
 			auto tpxlat=TParamXlat{best.f->tparams,callsite_tys};
 			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
