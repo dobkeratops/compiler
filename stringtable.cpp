@@ -5,6 +5,7 @@ const char* operator_symbol(Name ok);
 bool is_ident(Name tok){return tok>=IDENT;}
 bool is_type(Name tok){return tok<T_NUM_TYPES;}
 bool is_operator(Name tok){ return tok>=ARROW && tok<COMMA;}
+bool is_range_operator(Name tok){ return tok>=RANGE_FIRST && tok<=RANGE_LAST;}
 bool is_condition(Name tok){
 	return (tok>=LT && tok<=LOG_OR);
 }

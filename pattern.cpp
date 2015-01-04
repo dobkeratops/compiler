@@ -118,8 +118,13 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 				subp->resolve_with_type(sc,ft,flags);
 			}
 			this->set_struct_type(sd);
+		}
+		else if (is_range_operator(this->name)){
+			for (auto subp=this->sub; subp;subp=subp->next){
+				subp->resolve(sc,nullptr,flags);
+			}
 		} else if (flags & R_FINAL){
-			error(this,"can't find ");
+			error(this,"can't find %s",str(this->name));
 		}
 	} // else its a var of given type, or just a constant?
 	else{
@@ -219,14 +224,14 @@ CgValue Pattern::compile(CodeGen &cg, Scope *sc, CgValue val){
 		
 		return b;
 	}
-	else if (ptn->name==RANGE || ptn->name==RANGE_LT){
+	else if (ptn->name==RANGE || ptn->name==RANGE_LT|| ptn->name==LT_RANGE|| ptn->name==LT_RANGE_LT){
 		auto sp=ptn->sub;
 		auto lo=sp->compile(cg,sc,CgValue());
 		auto hi=sp->next->compile(cg,sc,CgValue());
 		return	cg.emit_instruction(
 									AND,Type::get_bool(),
-									cg.emit_instruction(GE,val,lo),
-									cg.emit_instruction(ptn->name==RANGE?LE:LT,val,hi)
+									cg.emit_instruction(ptn->name!=LT_RANGE||LT_RANGE_LT?GE:GT,val,lo),
+									cg.emit_instruction(ptn->name==RANGE_LT||LT_RANGE_LT?LT:LE,val,hi)
 									);
 	}
 	if (ptn->name==IF){
@@ -333,7 +338,7 @@ void Pattern::dump(PrinterRef depth)const{
 		} else if (name==PATTERN_BIND){
 			sub->dump(-1);dbprintf("@");
 			sub->next->dump_if(-1);
-		} else if(name==RANGE || name==RANGE_LT||name==RANGE_LE){
+		} else if(name==RANGE || name==RANGE_LT||name==LT_RANGE||name==LT_RANGE_LT){
 			sub->dump(-1);dbprintf("..");sub->next->dump(-1);
 		}else
 			dbprintf(str(name));

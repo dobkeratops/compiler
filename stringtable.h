@@ -118,6 +118,7 @@ struct Type;
 void print_tok(Name n);
 bool is_type(int tok);
 void find_completions(Name n,std::function<void(Name n,int)> f);
+bool is_range_operator(Name tok);
 
 struct LLVMType {
 	Name name;
