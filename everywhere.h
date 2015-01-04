@@ -120,7 +120,7 @@ using std::move;
 #define dbg_resolve(x,...)
 #endif
 #ifndef dbg_tparams
-#define dbg_resolve(x,...)
+#define dbg_tparams(x,...)
 #endif
 
 

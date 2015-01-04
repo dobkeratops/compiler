@@ -573,7 +573,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 	auto sc=definer_scope->make_inner_scope(&this->scope,this,this);
 	ensure_constructors_return_thisptr();	// makes rolling wrappers easier.
 
-/*	if (!this->m_symbols_added&& ){
+	if (!this->m_symbols_added){
 		if (this->is_base_known()){
 			if (this->inherits)
 				combine_tparams(&this->tparams,&this->inherits->tparams);
@@ -591,7 +591,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 			dbg_tparams({this->dump(0);newline(0);});
 		}
 	}
-*/
+
 	if (!this->is_generic()){
 		// ctor/dtor composition,fixup.
 		this->insert_sub_constructor_calls();
