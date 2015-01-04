@@ -58,8 +58,9 @@ struct FindFunction {
 	void insert_candidate(ExprFnDef* f,int score);
 	void dump();
 };
-int match_typeparams(vector<Type*>& matched, const ExprFnDef* f, const vector<Expr*>& args, const Expr* callsite);
-
+int match_fn_tparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vector<Expr*>& args, const Expr* callsite);
+int match_tparams(vector<TParamVal*>& matched, const vector<ArgDef*>& arg_fmt,const Type* ret_type,const vector<TParamDef*>& tparams, const vector<Expr*>& given_args,int first_arg_index, const Expr* callsite,bool variadic);
+void fill_given_tparams(vector<TParamVal*>& matched, const vector<TParamDef*>& arg_fmt, const vector<TParamVal*>& given_types);
 
 
 

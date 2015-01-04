@@ -163,7 +163,7 @@ ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* pcallsite, 
 	auto callsiteb=pcallsite;
 	ASSERT(callsiteb!=0 &&"ambiguity, when we come to do operator overloads, ExprOp & ExprBlock will call..");
 	vector<Type*>	ins_typarams;
-	match_typeparams(ins_typarams, srcfn,call_args, callsiteb);
+	match_fn_tparams(ins_typarams, srcfn,call_args, callsiteb);
 	TParamXlat xlat(srcfn->tparams, ins_typarams);
 	new_fn->translate_tparams(xlat);
 	dbg(new_fn->dump(0));

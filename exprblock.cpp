@@ -229,7 +229,7 @@ ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 	if (this->type()) this->type()->resolve_if(sc,nullptr,flags);
 	this->def->resolve_if(sc, nullptr, flags);
 
-	for (size_t i=0; i<this->argls.size(); i++) {
+	for (index_t i=0; i<this->argls.size(); i++) {
 		auto desired_sub=desired?desired->get_elem(i):nullptr;
 		resolved|=this->argls[i]->resolve_if(sc,desired_sub,flags);
 	}
@@ -240,13 +240,13 @@ ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 void ExprTuple::set_tuple_component_types(){
 	if (!this->get_type()) {
 		bool typed=true;
-		for (size_t i=0; i<this->argls.size();i++){
+		for (index_t i=0; i<this->argls.size();i++){
 			auto ct=this->argls[i]->get_type();
 			if (!ct) typed=false;
 		}
 		if (typed){
 			auto t=new Type(this, TUPLE);
-			for (size_t i=0; i<this->argls.size();i++){
+			for (index_t i=0; i<this->argls.size();i++){
 				auto ct=this->argls[i]->get_type();
 				if (!ct) ct=(Type*)Type::get_auto()->clone();
 				t->push_back(ct);
@@ -258,7 +258,7 @@ void ExprTuple::set_tuple_component_types(){
 }
 CgValue ExprTuple::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	auto tuple=cg.emit_alloca_type(this, this->type());
-	for (int i=0; i<this->argls.size(); i++){
+	for (index_t i=0; i<this->argls.size(); i++){
 		auto val=this->argls[i]->compile(cg,sc);
 		auto elem=tuple.get_elem_index(cg,i);
 		elem.store(cg,val);
@@ -272,7 +272,7 @@ CgValue ExprTuple::compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, c
 	// TODO ensure this makes *refs* in an lvalue position so we can do expr.(x,y,z)=(..,..,..);
 	auto lhs=const_cast<Expr*>(a_lhs);
 	auto tuple=cg.emit_alloca_type(this, this->type());
-	for (int i=0; i<this->argls.size(); i++){
+	for (index_t i=0; i<this->argls.size(); i++){
 		auto val=this->argls[i]->compile_operator_dot(cg, sc, this->argls[i]->type(), a_lhs);
 		auto elem=tuple.get_elem_index(cg,i);
 		elem.store(cg,val);
@@ -287,7 +287,7 @@ ResolveResult	ExprTuple::resolve_operator_dot(Scope *sc, const Type *desired, in
 	// brute force sorry. complete mess. if type was a vector tree this would be easier. inference needs a ref location to update. however types are stored as linklists, only suiting traversal.
 	Vec<Type*> elem_ts; elem_ts.resize(argls.size());
 	if (auto tt=this->get_type()){
-		int i=0;
+		index_t i=0;
 		for (auto tsubt=tt->sub;tsubt;tsubt=tsubt->next,i++){
 			elem_ts[i]=tsubt;
 		}
@@ -299,7 +299,7 @@ ResolveResult	ExprTuple::resolve_operator_dot(Scope *sc, const Type *desired, in
 		tt->sub=nullptr;
 	}
 	// resolve tuple components..
-	for (int i=0; i<argls.size(); i++,subt=subt?subt->next:nullptr){
+	for (index_t i=0; i<argls.size(); i++,subt=subt?subt->next:nullptr){
 		if (!elem_ts[i] && subt)
 			elem_ts[i]=(Type*)subt->clone();// inference will write to it, fill in type gaps..
 		else if (elem_ts[i] && subt){
@@ -315,7 +315,7 @@ ResolveResult	ExprTuple::resolve_operator_dot(Scope *sc, const Type *desired, in
 	if (!this->get_type()){
 		this->set_type(new Type(this, TUPLE));
 	}
-	for (size_t i=0; i<this->argls.size();i++){
+	for (index_t i=0; i<this->argls.size();i++){
 		this->get_type()->push_back(elem_ts[i]);
 	}
 	return resolved|propogate_type_refs(flags,(const Node*)this, this->type_ref(),tref);

@@ -209,24 +209,24 @@ int num_known_arg_types(Vec<Expr*>& args) {
 //void match_generic_type_param_sub(const vector<TParamDef>& tps, vector<Type*>& mtps, const Type* to_match, const Type* given) {
 	
 //}
-int match_typeparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg );
+int match_tparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg );
 
-int match_typeparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg )
+int match_tparams_from_arg(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps,  const Type* given_arg, const Type* fn_arg )
 {
 	if (!fn_arg) return 0;
 	if (!given_arg) return 0;
 
 	// type root coercsion rules
 	if (given_arg->name!=CONST && fn_arg->name==CONST)
-		return match_typeparams_from_arg(matched_tps,fn_tps, given_arg,fn_arg->sub);
+		return match_tparams_from_arg(matched_tps,fn_tps, given_arg,fn_arg->sub);
 	if (given_arg->name==MUT && fn_arg->name!=MUT)
-		return match_typeparams_from_arg(matched_tps,fn_tps, given_arg->sub,fn_arg);
+		return match_tparams_from_arg(matched_tps,fn_tps, given_arg->sub,fn_arg);
 	if (given_arg->name!=REF && fn_arg->name==REF)
-		return match_typeparams_from_arg(matched_tps,fn_tps, given_arg,fn_arg->sub);
-	return match_typeparams_from_arg_sub(matched_tps,fn_tps, given_arg, fn_arg);
+		return match_tparams_from_arg(matched_tps,fn_tps, given_arg,fn_arg->sub);
+	return match_tparams_from_arg_sub(matched_tps,fn_tps, given_arg, fn_arg);
 }
 
-int match_typeparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps, const Type* given_arg, const Type* fn_arg )
+int match_tparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<TParamDef*>& fn_tps, const Type* given_arg, const Type* fn_arg )
 {
 	int ret_score=0;
 //	if (!fn_arg && !given_arg) return 0;
@@ -239,7 +239,7 @@ int match_typeparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<
 	if (fn_arg->sub || given_arg->sub) {
 		dbg_fnmatch("[");
 		for (const Type* sub1=fn_arg->sub,*sub2=given_arg->sub; sub1&&sub2; sub1=sub1->	next,sub2=sub2->next) {
-			ret_score+=match_typeparams_from_arg_sub(matched_tps,fn_tps, sub2,sub1);
+			ret_score+=match_tparams_from_arg_sub(matched_tps,fn_tps, sub2,sub1);
 		}
 		dbg_fnmatch("]");
 	}
@@ -272,29 +272,41 @@ int match_typeparams_from_arg_sub(vector<TParamVal*>& matched_tps, const vector<
 	return ret_score;
 }
 
-int match_typeparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vector<Expr*>& args,const Expr* callsite){
-	// TODO: allow the types to feedback in the math
-	matched.resize(f->tparams.size());
+void fill_given_tparams(vector<TParamVal*>& matched, const vector<TParamDef*>& arg_fmt, const vector<TParamVal*>& given_types)
+{
+	// todo - you can specify types manually when you call, or infer them from args, or both..
+	
+}
+
+int match_tparams(vector<TParamVal*>& matched, const vector<ArgDef*>& arg_defs,Type* ret_type, const vector<TParamDef*>& tparams, const vector<Expr*>& given_args,int first_arg_index, const Expr* callsite,bool variadic){
+	matched.resize(tparams.size());
 	int score=0;
 #if DEBUG>=2
 	callsite->dump(0);newline(0);
 #endif
-	for (int i=0; i<f->tparams.size();i++) matched[i]=0;
-	for (int i=0; i<args.size() && i<f->args.size(); i++) {
+	for (int i=0; i<tparams.size();i++) matched[i]=0;
+	for (int i=0; i<arg_defs.size() && i<arg_defs.size(); i++) {
 #if DEBUG>=4
-		if (f->args[i]){
-			f->args[i]->type()->dump_if(-1); newline(0);
-			args[i]->dump_if(-1); newline(0);
+		if (arg_defs[i]){
+			arg_defs[i]->type()->dump_if(-1); newline(0);
+			given_args[i]->dump_if(-1); newline(0);
 		}
 #endif
-		score+=match_typeparams_from_arg(matched,f->tparams, args[i]->type(), f->args[i]->type());
+		score+=match_tparams_from_arg(matched,tparams, given_args[i]->type(), arg_defs[i]->type());
 	}
-	if (args.size()>f->args.size() && !f->variadic)
+	if (given_args.size()>arg_defs.size() && !variadic)
 		score-=1000;
-	score+=match_typeparams_from_arg(matched, f->tparams, callsite->type(), f->ret_type);
+	score+=match_tparams_from_arg(matched, tparams, callsite->type(), ret_type);
 	dbg_fnmatch("score matching gets %d\n",score);
 	return score;
 }
+int match_fn_tparams(vector<TParamVal*>& matched, const ExprFnDef* f, const vector<Expr*>& args,const Expr* callsite){
+	// TODO: allow the types to feedback in the math
+	fill_given_tparams(matched, f->tparams, f->instanced_types);
+	return match_tparams(matched, f->args, f->ret_type, f->tparams, args, 0, callsite,false);
+}
+
+
 void FindFunction::dump()
 {
 	for (int i=0; i<candidates.size();i++){
@@ -357,8 +369,8 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 	// Find max number of matching arguments
 	
 	verify_all();
-	vector<Type*> matched_type_params;
-	for (int i=0; i<f->tparams.size(); i++){matched_type_params.push_back(nullptr);}
+	vector<Type*> matched_tparams;
+	for (int i=0; i<f->tparams.size(); i++){matched_tparams.push_back(nullptr);}
 
 	int score=0;
 	// no args needed or given.. score is 1..
@@ -447,14 +459,14 @@ void FindFunction::consider_candidate(ExprFnDef* f) {
 		dbg_fnmatch("\n");
 #endif
 		for (int i=0; i<args.size() && i<f->args.size(); i++) {
-			score+=match_typeparams_from_arg(matched_type_params,f->tparams, args[i]->get_type(), f->args[i]->get_type() );
+			score+=match_tparams_from_arg(matched_tparams,f->tparams, args[i]->get_type(), f->args[i]->get_type() );
 		}
-		score+=match_typeparams_from_arg(matched_type_params, f->tparams,ret_type,f->ret_type);
+		score+=match_tparams_from_arg(matched_tparams, f->tparams,ret_type,f->ret_type);
 		dbg_fnmatch("typaram matcher for %s\n",f->name_str());
 		dbg_fnmatch("%s:%d: %s\n",g_filename,f->pos.line,str(f->name));
 		dbg_fnmatch("%s score=%d; matched tparams{:-\n",str(f->name),score);
 		for (auto i=0; i<f->tparams.size(); i++){
-			dbg_fnmatch("[%d]%s = %s;\n", i,str(f->tparams[i]->name),matched_type_params[i]?str(matched_type_params[i]->name):"not found" );
+			dbg_fnmatch("[%d]%s = %s;\n", i,str(f->tparams[i]->name),matched_tparams[i]?str(matched_tparams[i]->name):"not found" );
 			}
 		dbg_fnmatch("}\n");
 		dbg_fnmatch("\n");

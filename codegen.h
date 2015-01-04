@@ -118,7 +118,7 @@ public:
 		curr_fn=0;
 	}
 	vector<Node*> compile_later;
-	typedef  int EmitLoc;
+	typedef  size_t EmitLoc;
 	RegisterName next_reg();
 	RegisterName next_reg(Name name);
 	/// TODO: wrapper functions for every instruction codegen needs

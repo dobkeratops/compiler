@@ -250,7 +250,7 @@ ExprFnDef*	Scope::find_fn_sub(Name name,const Expr* callsite, int numrecv,const 
 			// For the best match, say what you'd have to do to fix, then show all matches
 			if (args.size()<best.f->min_args()){info(best.f,"maybe requires %d args, %d given",best.f->min_args(),args.size());}
 			vector<Type*> callsite_tys;
-			match_typeparams(callsite_tys, best.f,args,callsite);
+			match_fn_tparams(callsite_tys, best.f,args,callsite);
 			auto tpxlat=TParamXlat{best.f->tparams,callsite_tys};
 			for (auto i=0; i<args.size() && i<best.f->args.size(); i++){
 				

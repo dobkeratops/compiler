@@ -123,7 +123,7 @@ using std::move;
 #define dbg_tparams(x,...)
 #endif
 
-
+typedef size_t index_t;
 
 typedef int32_t OneBasedIndex;
 
