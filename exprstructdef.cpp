@@ -4,6 +4,11 @@ size_t		ExprStructDef::alignment() const {
 	size_t max_a=0; for (auto a:fields) max_a=std::max(max_a,a->alignment()); return max_a;
 }
 const Type*		ExprStructDef::get_elem_type(int i)const{
+	if (i<0|| i>fields.size()){
+		error_begin(this,"broken field acess %d/%d\n",i,fields.size());
+		this->dump(0);
+		error_end(this);
+	}
 	return this->fields[i]->type();
 }
 Name	ExprStructDef::get_elem_name(int i)const {
@@ -90,6 +95,8 @@ ArgDef* ExprStructDef::try_find_field(const Name fname)const{
 
 void ExprStructDef::translate_tparams(const TParamXlat& tpx)
 {
+	this->instanced_types=tpx.given_types;
+
 	for (auto a:this->fields)		a->translate_tparams(tpx);
 	for (auto f:functions)			f->translate_tparams(tpx);
 	for (auto f:virtual_functions)	f->translate_tparams(tpx);
@@ -140,23 +147,49 @@ ExprStructDef*	get_base_instance(Scope* sc, const Vec<TParamDef*>& context_tpara
 	dbg_tparams({dump_tparams(sd->tparams,&desired_tparams);dbprintf("\n");});
 	return sd->get_instance(sc, sd->get_struct_type_for_tparams(desired_tparams));
 }
+ExprStructDef* ExprStructDef::get_struct_named(Name n){
+	for (auto s:structs){
+		if (s->name==n) return s;
+	}
+	return nullptr;
+}
+ExprStructDef* ExprStructDef::find_instance(Scope* sc,const Type* type){
+	// scan the heirachy, because of nested structs. (parent -> child -> instances
+	if (this->owner){
+		for (auto oi=this->owner->instances; oi;oi=oi->next_instance){
+			auto p=oi->get_struct_named(this->name);
+			if (auto si=p->find_instance_sub(sc,type))
+				return si;
+		}
+	}
+	if (auto r=find_instance_sub(sc,type))
+		return r;
+	return nullptr;
+}
+
+ExprStructDef* ExprStructDef::find_instance_sub(Scope* sc,const Type* type){
+	for (auto ins=this->instances;ins; ins=ins->next_instance) {
+		// instances may themselves be in a tree? eg specialize one type, store the variations of others..
+		if (auto si=ins->find_instance_sub(sc,type))
+			return si;
+		if (type_params_eq(ins->instanced_types,type->sub))
+			return ins;
+	}
+	return nullptr;
+}
+
 ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 	auto parent=this;
 	if (!this->is_generic())
 		return this;
 	// first things first, if it inherits something - we need its' base class instanced too.
+	// if this was a component (enum..) this will also create component instances
 	ExprStructDef* parent_sd=nullptr;
 	if (this->inherits_type){
 		parent_sd=get_base_instance(sc,this->tparams, type,this->inherits_type);
 		dbg_tparams(parent_sd->dump(0));
 	}
-	// make the tparams..
-	// search for existing instance
-	ExprStructDef* ins=parent->instances;
-	for (;ins; ins=ins->next_instance) {
-		if (type_params_eq(ins->instanced_types,type->sub))
-			break;
-	}
+	auto ins=this->find_instance(sc,type);
 	if (!ins) {
 #if DEBUG>=2
 		dbg_instancing("instantiating struct %s<",this->name_str());
@@ -178,14 +211,12 @@ ExprStructDef* ExprStructDef::get_instance(Scope* sc, const Type* type) {
 		ins = (ExprStructDef*)this->clone(); // todo: Clone could take tparams
 							// cloning is usually for template instantiation?
 //		ins->inherits = parent_sd;
-		ins->instanced_types=ty_params;
 		ins->instance_of=this;
 		ins->next_instance = this->instances; this->instances=ins;
 		ins->inherits_type= this->inherits_type; // TODO: tparams! map 'parent' within context  to make new typeparam vector, and get an instance for that too.
-		if (g_debug_get_instance)
-			for (auto i=0; i<ins->instanced_types.size();i++)
-				dbprintf(ins->instanced_types[i]->name_str());
-		ins->translate_tparams(TParamXlat(this->tparams, ins->instanced_types));
+		dbg_tparams({for (auto i=0; i<ins->instanced_types.size();i++)
+			dbprintf(ins->instanced_types[i]->name_str());});
+		ins->translate_tparams(TParamXlat(this->tparams, ty_params));
 		dbg(printf("instances are now:-\n"));
 		dbg(this->dump_instances(0));
 	}
@@ -605,8 +636,29 @@ bool ExprStructDef::is_base_known()const{
 	if (this->inherits) return true;
 	return false;
 }
+void ExprStructDef::set_owner_pointers(){
+	for (auto s:structs){s->owner=this;s->set_owner_pointers();}
+//	for (auto f:functions){f->owner=this;}
+//	for (auto m:constructor_wrappers)	{m->owner=this;}
+
+}
+void
+ExprStructDef::setup_enum_variant(){
+	if (this->m_is_variant || this->m_is_enum){
+		if (!this->fields.size()||this->fields.front()->name!=__DISCRIMINANT){
+			this->fields.insert(
+								0,//this->fields.begin(),
+								new ArgDef(pos,__DISCRIMINANT,new Type(this->pos,I32)));
+			dbg2(this->dump(0));
+		}
+		if (this->m_is_enum)
+			calc_trailing_padding();
+	}
+}
+
 ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,int flags){
-	if (m_recurse) return COMPLETE;
+	setup_enum_variant();
+	if (m_recurse) return COMPLETE;	// TODO - this seems to have caused bugs, can we eliminate m_recures? it was added to stop infinite loop on constructor fixup.
 	m_recurse=true;
 	definer_scope->add_struct(this);
 	if (!this->get_type()) {
@@ -617,6 +669,8 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 	ensure_constructors_return_thisptr();	// makes rolling wrappers easier.
 
 	if (!this->m_symbols_added){
+		set_owner_pointers();
+
 		if (this->is_base_known()){
 			if (this->inherits)
 				combine_tparams(&this->tparams,&this->inherits->tparams);
@@ -636,20 +690,13 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 	}
 
 	if (!this->is_generic()){
+		this->m_fixup=true;
 		// ctor/dtor composition,fixup.
 		this->insert_sub_constructor_calls();
 		if (this->has_sub_destructors()){
 			this->insert_sub_destructor_calls(this->get_or_create_destructor());
 		}
 
-		if (this->m_is_variant || this->m_is_enum){
-			if (!this->fields.size()||this->fields.front()->name!=__DISCRIMINANT){
-				this->fields.insert(
-								0,//this->fields.begin(),
-								new ArgDef(pos,__DISCRIMINANT,new Type(this->pos,I32)));
-			}
-			if (this->m_is_enum) calc_trailing_padding();
-		}
 
 		for (auto m:fields)			{resolved|=m->resolve_if(sc,nullptr,flags&~R_FINAL);}
 		for (auto m:static_fields)	{resolved|=m->resolve_if(sc,nullptr,flags);}

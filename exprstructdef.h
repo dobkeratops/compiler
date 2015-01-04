@@ -18,6 +18,7 @@ struct ExprStructDef: ExprDef {
 	Name mangled_name=0;
 	Name vtable_name=0;
 	int		discriminant=0;
+	bool m_fixup=false;
 	bool is_compiled=false;
 	bool m_is_variant=false;
 	bool m_is_enum=false;
@@ -27,6 +28,7 @@ struct ExprStructDef: ExprDef {
 	bool m_symbols_added=false;
 	bool is_enum() { return m_is_enum;}
 	int max_variant_size=0;
+	ExprStructDef*	owner=nullptr;
 	MyVec<TParamDef*>	tparams;	// todo move to 'ParameterizedDef; strct,fn,typedef,mod?
 	MyVec<Type*>		instanced_types;
 	MyVec<ArgDef*>			fields;
@@ -38,7 +40,6 @@ struct ExprStructDef: ExprDef {
 	MyVec<ExprFnDef*>		functions;
 	MyVec<ExprFnDef*>		static_functions;
 	MyVec<ExprFnDef*>		constructor_wrappers;	// generated; eg Foo(y){ x:=Foo{}; x.Foo(y);return x;}
-
 	MyVec<TypeDef*>		typedefs;
 	MyVec<ArgDef*>			args;		// default constructor form
 	ExprBlock*				body=0;		// for default constructor form.
@@ -71,6 +72,7 @@ struct ExprStructDef: ExprDef {
 	size_t		alignment() const;
 	ExprStructDef*	as_struct_def()const	{return const_cast<ExprStructDef*>(this);}
 	void			set_discriminant(int value){discriminant=value;m_is_variant=true;}
+	void			set_owner_pointers();
 	void			set_variant_of(ExprStructDef* owner, int index);
 	void			dump(PrinterRef depth)const;
 	void			dump_instances(int depth)const;
@@ -82,6 +84,8 @@ struct ExprStructDef: ExprDef {
 	Node*			clone_sub(ExprStructDef* into) const;
 	void	translate_tparams(const TParamXlat& tpx) override;
 	ExprStructDef*	get_instance(Scope* sc, const Type* type); // 'type' includes all the tparams.
+	ExprStructDef*	find_instance(Scope* sc, const Type* type);	// doesn't create
+	ExprStructDef*	find_instance_sub(Scope* sc, const Type* type);	// doesn't create
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	Type*			get_struct_type_for_tparams(const MyVec<TParamVal*>& tps);
 	void			init_types();
@@ -90,7 +94,7 @@ struct ExprStructDef: ExprDef {
 	Name			get_elem_name(int i)const;// {return this->fields[i]->name;}
 	int 			get_elem_index(Name name)const;//{int i; for (i=0; i<this->fields.size(); i++){if (this->fields[i]->name==name)return i;} return -1;}
 	int				override_index(ExprFnDef* f);
-
+	ExprStructDef*	get_struct_named(Name name);
 	MyVec<TParamDef*>*			get_typeparams() override { return &tparams;}
 	int				get_elem_count(){return this->fields.size();}
 	bool			is_vtable_built(){return this->vtable_name!=0;}
@@ -99,7 +103,8 @@ struct ExprStructDef: ExprDef {
 	int				num_instances()const {auto n=0;for (auto ins=instances;ins;ins=ins->next_instance){n++;} return n;}
 	void		recurse(std::function<void(Node*)>&);
 	ExprStructDef*	get_common_base(ExprStructDef* other);
-	
+	void			setup_enum_variant();
+
 	// Inheritance mangaement
 	bool			has_base_class(ExprStructDef* other) const;
 	void			inherit_from(Scope* sc, Type* base);

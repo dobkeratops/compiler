@@ -383,6 +383,8 @@ bool Type::is_typeparam(Scope* sc)const{
 	return sc->get_typeparam_for(const_cast<Type*>(this))!=0;
 }
 void ExprFnDef::translate_tparams(const TParamXlat& tpx){
+	this->instanced_types=tpx.given_types;
+
 	dbg_generic("translate tparams for fn %s\n",this->name_str());
 	for (auto &a:args)
 		a->translate_tparams(tpx);

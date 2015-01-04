@@ -664,6 +664,10 @@ CgValue compile_struct_init_args(ExprStructInit* e,CodeGen& cg, Scope* sc, Regis
 	if (e->argls.size()!=si.value.size())
 		dbprintf("warning StructInitializer vs argls mismatch, %d,%d\n",e->argls.size(),si.value.size());
 	auto sd=si.get_struct_def();
+//	auto sderef=struct_val.type->deref_all();
+//	auto sd=sderef->def->as_struct_def();//struct_def();
+//	sd->dump(0);dbprintf("num fields=%d %s %d %d\n", sd->fields.size(), str(sd->fields[0]->name),(int)(sd->fields[0]->name), __DISCRIMINANT);
+
 	if (sd->m_is_variant){
 		auto ni=sd->get_elem_index(__DISCRIMINANT);
 		auto dis=struct_val.get_elem_index(cg,ni);
