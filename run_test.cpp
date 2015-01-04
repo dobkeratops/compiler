@@ -31,20 +31,14 @@ CompilerTest g_Tests[]={
 			Some(int),None()	// todo - roll enum variant constructors
 		};
 		struct Foo{
-			index:int,
-			fn next()->Option{ if index<5{let ret=index;index+=1;Some{ret}}else{None{}} }
+			start:int,end:int,index:int,
+			fn Foo(s:int,e:int){start=s;end=e;index=start;}
+			fn next()->Option{ if index<end{let ret=index;index+=1;Some{ret}}else{None{}} }
 		};
 		fn main(argc:int, argv:**char)->int{
-			let foo=Foo{};
-			foo.index=0;
-			for ;true;{
-				match &foo.next(){
-					Some(x) =>printf("x=%d\n",x),
-					None() =>break
-				};
+			for foo:=Foo(3,9);true;{
+				match &foo.next(){Some(x) =>{printf("%d",x);},None() =>break};
 			};
-//				foo.index+=10;
-//				printf("%d\n",foo.index);
 			0
 		};
 		)===="
