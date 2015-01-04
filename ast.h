@@ -56,6 +56,7 @@ struct TParamDef: ExprDef{
 	Node* clone() const override;
 	TParamDef*	as_tparam_def() override{return this;}
 	const char* kind_str()const{return "TParamDef";}
+	Type* default_or_auto()const;
 };
 
 struct ExprLiteral : ExprDef {

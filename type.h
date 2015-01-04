@@ -32,6 +32,7 @@ struct Type : ExprDef {
 	Type(SrcPos sp,ExprStructDef* sd):Type(sd){pos=sp;}
 	Type(Name outer, ExprStructDef* inner);
 	Type(Node* origin,Name i);
+	Type(Name n){name=n;};
 	Type(Name i,SrcPos sp);
 	Type(SrcPos sp,Name i):Type(i,sp){};	///TODO swap permanently, its more logical
 	Type() { name=0;sub=0;next=0;}
@@ -156,7 +157,7 @@ struct Type : ExprDef {
 	const Type* as_type()const{return this;}
 	ExprStructDef*	struct_def();
 	ExprStructDef*	struct_def() const;
-	
+	Type*	clone_or_auto();
 	
 	void			translate_tparams(const TParamXlat& tpx) override;
 	virtual ResolveResult	resolve(Scope* s, const Type* desired,int flags);

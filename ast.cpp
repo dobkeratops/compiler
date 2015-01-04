@@ -396,6 +396,11 @@ void Variable::dump(PrinterRef depth) const{
 	}
 }
 
+Type* TParamDef::default_or_auto()const
+{
+	return (Type*)(this->defaultv?this->defaultv->clone():new Type(this->pos,AUTO));
+}
+
 size_t ArgDef::size()const {
 	return this->type()?this->type()->size():0;
 }

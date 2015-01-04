@@ -111,11 +111,19 @@ void ExprStructDef::translate_tparams(const TParamXlat& tpx)
 	this->inherits_type->translate_typeparams_if(tpx);
 	dbg(this->dump(0));
 }
+// TParamDef
 Type* ExprStructDef::get_struct_type_for_tparams(const MyVec<TParamVal *> &given_types){
 	// todo: actually scan the instances, as it might already exist.
 	auto st=(Type*)new Type(this->pos,this->name);
-	for (auto tp:given_types)
-		st->push_back((Type*)tp->clone());
+	int i=0;
+	for (auto tp:given_types){
+		if (tp){
+			st->push_back((Type*)tp->clone());
+		} else {
+			st->push_back(this->tparams[i]->default_or_auto());
+		}
+		i++;
+	}
 	dbg_tparams({dbprintf("\nget_t=");st->dump(0);dbprintf("\n");});
 	return st;
 }
@@ -676,7 +684,7 @@ void ExprStructDef::init_types(){
 		for (auto i=0; i<this->tparams.size(); i++){
 			auto tp=this->tparams[i];
 			if (i<this->instanced_types.size()){
-				st->push_back((TParamVal*)(this->instanced_types[i]->clone()));
+				st->push_back((TParamVal*)(this->instanced_types[i]->clone_or_auto()));
 			}else{
 				st->push_back(new Type(this->pos, tp->name));
 			}

@@ -576,18 +576,28 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 		dbprintf_tparams("matching with generic struct: %s, needs instantiating\n",sd->name_str());
 		MyVec<TParamVal*> match_tparams;
 		match_struct_tparams(match_tparams, sd, si->argls, si);
+		if (si->type()){
+			int i=0;
+			for (auto subt=si->type()->sub; subt; subt=subt->next,i++){
+				if (!match_tparams[i] && subt->name!=AUTO)
+					match_tparams[i]=subt;
+			}
+		}
 		dump_tparams(sd->tparams,&match_tparams);
 		dbprintf_tparams("\n");
+		// TODO - Type Hash.
 		auto st=(Type*)sd->get_struct_type_for_tparams(match_tparams);
 		dbg_tparams(st->dump(-1));
 		sd=sd->get_instance(sc,st);
 		dbg_tparams(sd->dump(0));
 		dbg_tparams(if (sd->inherits){sd->inherits->dump(0);});
 		dbprintf_tparams("\n");
-		si->call_expr->set_type(st);
+		si->propogate_type_refs(flags,(const Node*)si, si->call_expr->type_ref(), st);
+		si->propogate_type_refs(flags,(const Node*)si, si->call_expr->type_ref(), st);
+//		si->call_expr->set_type(st);
 		si->call_expr->set_def(sd);
-		si->set_def(sd);
-		si->set_type(st);
+//		si->set_def(sd);
+//		si->set_type(st);
 		
 		
 	}

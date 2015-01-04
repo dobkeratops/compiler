@@ -181,6 +181,10 @@ Type::Type(Node* origin,Name i){
 	next=0;
 	name=i; //todo: resolve-type should happen here.
 }
+Type* Type::clone_or_auto(){
+	if (this) return (Type*)this->clone();
+	else return new Type(AUTO);
+}
 
 ExprStructDef*	Type::struct_def(){
 	return this->def?this->def->as_struct_def():nullptr;
@@ -220,10 +224,19 @@ bool Type::is_equal_sub(const Type* other,bool coerce,Name self_t) const{
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
 	if (this&&this->name==AUTO){
-		if (this->sub && other) return this->sub->is_equal(other->sub,coerce);
-		else return true;
+		if (other){
+			const_cast<Type*>(this)->name=other->name;
+		}
+		if (this->sub && other) {
+			return this->sub->is_equal(other->sub,coerce);
+		}
+		else {
+			return true;
+		}
 	}
 	if (other && other->name==AUTO){
+		if (this)
+			const_cast<Type*>(other)->name=this->name;
 		if (other->sub && this) return other->sub->is_equal(this->sub,coerce);
 		else return true;
 	}
@@ -672,6 +685,7 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 void dump_tparams(const MyVec<TParamDef*>& ts, const MyVec<TParamVal*>* given) {
 	bool a=false;
 	if (ts.size() && given->size()==0) return;
+	if (ts.size()==0 && given->size()==0) return;
 	dbprintf("<");
 	for (int i=0; i<ts.size() || i<given->size(); i++){
 		if (a)dbprintf(",");

@@ -24,6 +24,26 @@ struct CompilerTest {
 
 CompilerTest g_Tests[]={
 	
+	{
+		"for in loop",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		enum Option<T>{
+			Some(T),None()	// todo - roll enum variant constructors
+		};
+		struct Range{
+			start:int,end:int,index:int,
+			fn Range(s:int,e:int){start=s;end=e;index=start;}
+			fn next()->Option<int>{ if index<end{let ret=index;index+=1;Some{ret}}else{None{}} }
+		};
+		fn main(argc:int, argv:**char)->int{
+			for x in Range(1,6){
+				printf("x=%d\n",x);
+			};
+			0
+		};
+		)===="
+		,"x=1\nx=2\nx=3\nx=4\nx=5\n"
+	},
 	{	"inherted tparams",__FILE__,__LINE__,R"====(
 		enum Option<T>{
 			Some(T),None()	// todo - roll enum variant constructors
@@ -36,26 +56,6 @@ CompilerTest g_Tests[]={
 		,nullptr
 	},
 	
-	{
-		"for in loop",__FILE__,__LINE__,R"====(
-		extern"C"fn printf(s:str,...)->int;
-		enum Option{
-			Some(int),None()	// todo - roll enum variant constructors
-		};
-		struct Range{
-			start:int,end:int,index:int,
-			fn Range(s:int,e:int){start=s;end=e;index=start;}
-			fn next()->Option{ if index<end{let ret=index;index+=1;Some{ret}}else{None{}} }
-		};
-		fn main(argc:int, argv:**char)->int{
-			for x in Range(1,6){
-				printf("x=%d\n",x);
-			};
-			0
-		};
-		)===="
-		,"x=1\nx=2\nx=3\nx=4\nx=5\n"
-	},
 
 	{
 		"testing iterator protocol manually",__FILE__,__LINE__,R"====(
