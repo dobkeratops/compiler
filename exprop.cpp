@@ -139,6 +139,10 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	// remaining types are assumed overloadable.
 	//look for overload - infer fowards only first like C++
 	if (find_overloads(sc,desired,flags)){
+		// overloaded function was selected on inputs, but its' output may be refined!
+		auto fnd=this->get_fn();
+		dbprintf("%s\n",fnd->name_str());
+		propogate_type_fwd(flags,this, this->get_fn()->return_type(),this->type_ref());
 		return propogate_type_fwd(flags, this, desired, this->type_ref());
 	}
 
@@ -292,6 +296,10 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		propogate_type_refs(flags,this, rhs->type_ref(),type_ref());
 
 		if (flags & R_FINAL){
+			if (!lhs->type() || !rhs->type()){
+				error_begin(this,"operator %s arg types not resolved",this->name_str());
+				error_end(this);
+			}
 			if (!(lhs->type()->is_number() && rhs->type()->is_number())){
 				error_begin(this,"operator %s needs primitive args,given:",this->name_str());
 				info(lhs,lhs->type());
@@ -363,7 +371,7 @@ bool ExprOp::find_overloads(Scope *sc, const Type *desired, int flags){
 #endif
 		this->set_fn(fnd);
 		//override any type that might have been infered by intrinsic operators.
-		this->set_type(fnd->return_type());
+		this->set_type((Type*)fnd->return_type()->clone_if());
 		if (this->type())
 			this->type()->set_rvalue();
 		return true;

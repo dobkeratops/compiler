@@ -23,20 +23,97 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
+	{	"basic operator overload",__FILE__,__LINE__,R"====(
+		
+		fn"C" printf(s:str,...)->int;
+		struct Vec3{ vx:float,vy:float,vz:float};
+		struct Cuboid{min:Vec3,max:Vec3}
+		fn cuboid_vol(c:&Cuboid){
+			d:=c.max-c.min;
+			d.vx*d.vy*d.vz
+		}
+		fn main(argc:int,argv:**char)->int{
+			let v0=Vec3{1.0,2.0,3.0};
+			let v1=Vec3{2.0,2.0,4.0};
+			let v2:Vec3;
+			v2=v0+v1;
+//			let c=Cuboid{};
+//			cuboid_vol(c);
+			
+			0
+		};
+		fn -(a:&Vec3,b:&Vec3)=Vec3{a.vx-b.vx, a.vy-b.vy, a.vz-b.vz};
+		fn +(a:&Vec3,b:&Vec3)=Vec3{a.vx+b.vx, a.vy+b.vy, a.vz+b.vz};
+		)===="
+		,nullptr
+	},
+
+	{	"elaborate match example 2",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		// Rust style enum (tagged-union)
+		struct Vec3{ vx:float,vy:float,vz:float};
+		
+
+		enum Shape {
+			Sphere(Vec3,float),
+			Cuboid{min:Vec3,max:Vec3},
+			Cylinder(float,float),
+		};
+		
+		// Rust style match
+		fn shape_vol(s:*Shape)->float= match s{
+			*Sphere(my_centre, my_radius)=>{	// destructuring like rust
+				printf("match sphere vol\n");
+				4.0/3.0*3.142* my_radius*my_radius*my_radius
+			},
+			*Cuboid(vmin,vmax)=>{	// tuple-structs/named fields are generalized here.
+				printf("match cuboid vol\n");
+				d:=vmax-vmin; d.vx*d.vy*d.vz
+			},
+			*Cylinder(radius,height)=>3.142*radius*radius*height,
+			_ =>{printf("shape error\n");0.0}
+		};
+		
+		fn main(argc:int,argv:**char)->int{
+			let s1=Sphere{Vec3{1.0,1.0,1.0},1.0};
+			let s2=Cuboid{Vec3{1.0,1.0,1.0},Vec3{2.0,2.0,2.0}};
+			let sv1=shape_vol(&s1);
+			let sv2=shape_vol(&s2);
+			0
+		};
+		fn -(a:&Vec3,b:&Vec3)= Vec3{vx:a.vx-b.vx,vy:a.vy-b.vy,vz:a.vz-b.vz};
+		// operator overloading like C++. (using fn keyword allows parsing operators as names)
+		fn +(a:&Vec3,b:&Vec3){ Vec3{vx=a.vx+b.vx,vy=a.vy+b.vy,vz=a.vz+b.vz} }
+		
+		//single-expression syntax with struct-constructors. Infering the return type when you can see it is pleasant.
+		fn |(a:&Vec3,b:&Vec3)=a.vx*b.vx + a.vy*b.vy + a.vz*b.vz;
+		fn *(a:&Vec3,f:float)=Vec3{a.vx*f,a.vy*f,a.vz*f};
+		// eg cross product with less nesting.
+		fn ^(a:&Vec3,b:&Vec3)=Vec3{
+			a.vy*b.vz-a.vz*b.vy,
+			a.vz*b.vx-a.vx*b.vz,
+			a.vx*b.vy-a.vy*b.vx
+		};
+
+		)====",
+		nullptr
+	},
 	{	"internal vtable",__FILE__,__LINE__,R"====(
 		
 		fn"C" printf(s:str,...)->int;
-		struct Bar : Foo{
-			x:int,y:int,
-			fn v_foo(){printf("Bar.foo x=%d\n",x);},
-			fn bar(){printf("Bar.bar\n");},
-			fn baz(){printf("Bar.baz\n");},
-		}
 		struct Foo {
 		x:int,y:int,
 			virtual v_foo(){printf("Foo.foo x=%d %p\n",x,*(this as**void));},
 			virtual bar(){printf("Foo.bar\n");},
 			virtual baz(){printf("Foo.baz\n");},
+		}
+		
+
+		struct Bar : Foo{
+			x:int,y:int,
+			fn v_foo(){printf("Bar.foo x=%d\n",x);},
+			fn bar(){printf("Bar.bar\n");},
+			fn baz(){printf("Bar.baz\n");},
 		}
 
 		fn main(argc:int, argv:**char)->int{
@@ -634,20 +711,6 @@ CompilerTest g_Tests[]={
 		"y=1021 z=333 w=7\n"
 	},
 
-	{	"basic operator overload",__FILE__,__LINE__,R"====(
-		
-		fn"C" printf(s:str,...)->int;
-		struct Vec3{ x:float,y:float,z:float};
-		fn +(a:&Vec3,b:&Vec3)=Vec3{a.x+b.x, a.y+b.y, a.z+b.z};
-		fn main(argc:int,argv:**char)->int{
-			let v0=Vec3{1.0,2.0,3.0};
-			let v1=Vec3{2.0,2.0,4.0};
-			let v2:Vec3;
-			v2=v0+v1;
-			0	}
-		)===="
-		,nullptr
-	},
 
 	{	"struct default constructor",__FILE__,__LINE__,R"====(
 		

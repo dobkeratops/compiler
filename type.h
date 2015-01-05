@@ -38,7 +38,7 @@ struct Type : ExprDef {
 	Type() { name=0;sub=0;next=0;}
 	size_t	alignment() const;
 	size_t	size() const;
-	int	raw_type_flags()const	{int i=index(name)-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
+	int	raw_type_flags()const	{int i=((int)name)-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
 	bool	is_int()const		{return raw_type_flags()&RT_INTEGER;}
 	bool	is_float()const		{return raw_type_flags()&RT_FLOATING;}
 	bool	is_number()const	{return raw_type_flags()&(RT_FLOATING|RT_INTEGER);}

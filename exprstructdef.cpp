@@ -23,12 +23,12 @@ void ExprStructDef::gather_symbols(Scope* outer_sc){
 	for (auto f:structs) f->gather_symbols(this->scope);
 	for (auto f:typedefs) f->gather_symbols(this->scope);
 	for (auto f:fields) f->gather_symbols(this->scope);
-/*	for (auto f:functions) f->gather_symbols(this->scope);
+	for (auto f:functions) f->gather_symbols(this->scope);
 	for (auto f:virtual_functions) f->gather_symbols(this->scope);
 	for (auto f:static_functions) f->gather_symbols(this->scope);
 	for (auto f:static_virtual) f->gather_symbols(this->scope);
 	if (!this->constructor_wrappers.size()) this->roll_constructor_wrappers(this->scope);
- */
+ 
 }
 int ExprStructDef::get_elem_index(Name name)const {
 	int i;

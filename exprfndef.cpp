@@ -16,7 +16,7 @@ void ExprFnDef::verify(){
 }
 
 void ExprFnDef::gather_symbols(Scope* outer_sc){
-	//outer_sc->add_fn(this,false);
+	outer_sc->add_fn(this,false);
 	auto sc=outer_sc->make_inner_scope(&this->scope,this,this);
 	this->body->gather_symbols_if(this->get_scope());
 	// functions' inner functions are acessible too? not sure they should be.
@@ -304,7 +304,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 			this->fn_type->sub=0;
 		}
 		auto a=this->fn_type->fn_args_first();
-		for (int i=0; i<this->args.size(); i++,a=a->next){
+		for (int i=0; i<this->args.size() && a; i++,a=a->next){
 			auto ad=this->args[i];
 			if (a->name==AUTO && !ad->type()->is_auto()){
 				dbprintf("fn type updated\n");
