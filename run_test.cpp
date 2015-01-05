@@ -233,7 +233,8 @@ CompilerTest g_Tests[]={
 	},
 	{	"new with constructors+stack constructors",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
-		struct Foo{ x:int,y:int,
+		struct Foo{
+			x:int,y:int,
 			fn Foo(a:int){x=a;this},
 			fn Foo(){x=15;this}
 		}
@@ -281,7 +282,7 @@ CompilerTest g_Tests[]={
 		//SOURCE
 		fn"C" printf(s:str,...)->int;
 		struct Foo{
-		q:int,
+			q:int,
 			fn method()->float{
 				printf("Foo.q=%d\n",q);2.0
 			}
@@ -294,7 +295,7 @@ CompilerTest g_Tests[]={
 		}
 		fn func1(f:*Foo){printf("func1 says q=%d\n",f.q);}
 		fn main()->int{
-		x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;
+			x:=Foo{5};	px:=&x;	y:=Bar{17}; py:=&y;
 			printf("member function test..\n",x.q);
 			px.func1();
 			px.method();
