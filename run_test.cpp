@@ -23,27 +23,61 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
-	{	"basic operator overload",__FILE__,__LINE__,R"====(
+	{	"internal vtable",__FILE__,__LINE__,R"====(
+		
+		extern"C"fn printf(s:str,...)->int;
+		
+		struct Bar : Foo{
+		x:int;
+		y:int;
+			fn v_foo(){printf("Bar.foo x=%d\n",x);},
+			fn bar(){printf("Bar.bar\n");},
+			fn baz(){printf("Bar.baz\n");},
+		}
+		
+		struct Foo {
+		x:int;
+		y:int;
+			virtual v_foo(){printf("Foo.foo x=%d %p\n",x,*(this as**void));},
+			virtual bar(){printf("Foo.bar\n");},
+			virtual baz(){printf("Foo.baz\n");},
+		};
+		
+		fn main(argc:int, argv:**char)->int{
+			x1:= new Foo{x=10,y=0};
+			x2:= new Bar{x=20,y=0};
+			take_interface(x2);
+			x1.v_foo();
+			take_interface(x1);
+			0
+		}
+		fn take_interface(pf:*Foo){
+			pf.v_foo()
+		}
+		)===="
+		,nullptr
+	},
+
+	{	"basic operator overload 2",__FILE__,__LINE__,R"====(
 		
 		fn"C" printf(s:str,...)->int;
 		struct Vec3{ vx:float,vy:float,vz:float};
-		struct Cuboid{min:Vec3,max:Vec3}
-		fn cuboid_vol(c:&Cuboid){
-			d:=c.max-c.min;
-			d.vx*d.vy*d.vz
-		}
 		fn main(argc:int,argv:**char)->int{
 			let v0=Vec3{1.0,2.0,3.0};
 			let v1=Vec3{2.0,2.0,4.0};
 			let v2:Vec3;
 			v2=v0+v1;
-//			let c=Cuboid{};
-//			cuboid_vol(c);
-			
+			let c=Cuboid{};
+			cuboid_vol(c);
 			0
 		};
+		fn cuboid_vol(c:&Cuboid){
+		d:=c.max-c.min;
+			d.vx*d.vy*d.vz
+		}
 		fn -(a:&Vec3,b:&Vec3)=Vec3{a.vx-b.vx, a.vy-b.vy, a.vz-b.vz};
 		fn +(a:&Vec3,b:&Vec3)=Vec3{a.vx+b.vx, a.vy+b.vy, a.vz+b.vz};
+		struct Cuboid{min:Vec3,max:Vec3}
 		)===="
 		,nullptr
 	},
@@ -97,38 +131,6 @@ CompilerTest g_Tests[]={
 
 		)====",
 		nullptr
-	},
-	{	"internal vtable",__FILE__,__LINE__,R"====(
-		
-		fn"C" printf(s:str,...)->int;
-		struct Foo {
-		x:int,y:int,
-			virtual v_foo(){printf("Foo.foo x=%d %p\n",x,*(this as**void));},
-			virtual bar(){printf("Foo.bar\n");},
-			virtual baz(){printf("Foo.baz\n");},
-		}
-		
-
-		struct Bar : Foo{
-			x:int,y:int,
-			fn v_foo(){printf("Bar.foo x=%d\n",x);},
-			fn bar(){printf("Bar.bar\n");},
-			fn baz(){printf("Bar.baz\n");},
-		}
-
-		fn main(argc:int, argv:**char)->int{
-		x1:= new Foo{x=10,y=0};
-		x2:= new Bar{x=20,y=0};
-			take_interface(x2 as*Foo);
-			x1.v_foo();
-			take_interface(x1);
-			0
-		}
-		fn take_interface(pf:*Foo){
-			pf.v_foo()
-		}
-		)===="
-		,nullptr
 	},
 	
 

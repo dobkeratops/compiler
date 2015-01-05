@@ -105,6 +105,7 @@ public:
 	void	compile_destructors_if(CodeGen& cg){if (this){
 		this->compile_destructors(cg);}}
 	Scope* parent_or_global()const{
+		if (!this) return nullptr;
 		if (parent) return this->parent; else if (global && global!=this) return this->global; else return nullptr;
 	}
 	Scope* make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner);

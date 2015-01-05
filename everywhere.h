@@ -40,15 +40,16 @@ using std::move;
 
 #if DEBUG>=3
 #define dbg3(X) X
-#define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_emitconv(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_resolve(...) {DBLOC();dbprintf(__VA_ARGS__);}
+#define dbg_varscope(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #endif
 
 #if DEBUG>=2
 #define dbg2(X) X
 #define dbg_raii(X) X
 #define dbg_tparams(X) X
+#define dbg_scope(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbprintf_tparams(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_instancing(...) {DBLOC();dbprintf(__VA_ARGS__);}
 #define dbg_lambdas(...) {DBLOC();dbprintf(__VA_ARGS__);}
@@ -122,6 +123,9 @@ using std::move;
 #endif
 #ifndef dbg_emitconv
 #define dbg_emitconv(x,...) dbg_all_printf(x,__VA_ARGS__)
+#endif
+#ifndef dbg_scope
+#define dbg_scope(x,...) dbg_all_printf(x,__VA_ARGS__)
 #endif
 #ifndef dbg_varscope
 #define dbg_varscope(x,...) dbg_all_printf(x,__VA_ARGS__)

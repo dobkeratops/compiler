@@ -16,8 +16,8 @@ Name	ExprStructDef::get_elem_name(int i)const {
 }
 void ExprStructDef::gather_symbols(Scope* outer_sc){
 	auto sc=outer_sc->make_inner_scope(&this->scope,this,this);
+	dbg_scope("adding scope to %s::%s=%p\n", outer_sc->name_str(), this->name_str(), this->scope);
 	outer_sc->add_struct(this);
-
 
 	for (auto f:static_fields) f->gather_symbols(this->scope);
 	for (auto f:structs) f->gather_symbols(this->scope);
@@ -356,19 +356,31 @@ ExprStructDef* ExprStructDef::root_class(){
 	return this;
 }
 
-void ExprStructDef::roll_vtable() {
+bool ExprStructDef::roll_vtable() {
 	
 	if (this->is_vtable_built()){// ToDO: && is-class. and differentiate virtual functions. For the
-		return;
+		return true;
 	}
 	for (auto f:this->virtual_functions){// can't build it yet.
 		if (!f->fn_type)
-			return;
+			return false;
 	}
 
-	dbg_vtable("rolling vtable for %s,inherits %s\n",str(this->name),this->inherits?str(this->inherits->name):"void");
-	if (this->vtable){ return;} // done already
-	if (this->inherits) {this->inherits->roll_vtable();}
+	dbg_vtable("rolling vtable for %s,inherits %s, scope=%p\n",str(this->name),this->inherits?str(this->inherits->name):"void", this->scope);
+	if (this->vtable){
+		return true;} // done already
+	if (this->inherits) {
+		auto ps=this->inherits->get_scope();
+		if (!ps) {
+			this->inherits->dump(0);
+			return false;
+		}
+		if (this->inherits->has_vtable() && !this->inherits->vtable)
+			this->inherits->resolve(ps->parent_or_global(),nullptr,0);
+		auto r=this->inherits->roll_vtable();
+		if (!r)
+			return false;
+	}
 
 	this->vtable_name=getStringIndexConcat(name, "__vtable_instance");
 
@@ -386,7 +398,7 @@ void ExprStructDef::roll_vtable() {
 	}
 	else{
 		if (!this->virtual_functions.size())
-			return;
+			return true;
 		this->vtable=new ExprStructDef(this->pos,getStringIndexConcat(name,"__vtable_format"));
 		this->vtable->vtable_name=getStringIndex("void__vtable");
 
@@ -423,6 +435,7 @@ void ExprStructDef::roll_vtable() {
 	}
 
 	// TODO - more metadata to come here. struct layout; pointers,message-map,'isa'??
+	return this->vtable;
 }
 
 void ExprStructDef::set_variant_of(ExprStructDef* owner, int index){
@@ -790,7 +803,6 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 			this->insert_sub_destructor_calls(this->get_or_create_destructor());
 		}
 
-
 		for (auto m:fields)			{resolved|=m->resolve_if(sc,nullptr,flags&~R_FINAL);}
 		for (auto m:static_fields)	{resolved|=m->resolve_if(sc,nullptr,flags);}
 		for (auto m:static_virtual)	{resolved|=m->resolve_if(sc,nullptr,flags);}
@@ -810,8 +822,8 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 			resolved|=this->inherits_type->resolve_if(definer_scope,desired,flags);
 			this->inherits=definer_scope->find_struct_named(this->inherits_type->name);
 		}
-		roll_vtable();
 		
+		roll_vtable();
 		/// TODO clarify that we dont resolve a vtable.
 		//if (this->vtable) this->vtable->resolve(definer_scope,desired,flags);
 		

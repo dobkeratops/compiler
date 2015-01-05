@@ -105,6 +105,7 @@ struct ExprStructDef: ExprDef {
 	void		recurse(std::function<void(Node*)>&);
 	ExprStructDef*	get_common_base(ExprStructDef* other);
 	void			setup_enum_variant();
+	virtual Scope* get_scope()override				{return this->scope;}
 
 	// Inheritance mangaement
 	bool			has_base_class(ExprStructDef* other) const;
@@ -115,13 +116,13 @@ struct ExprStructDef: ExprDef {
 	bool			is_base_known()const;
 	
 	// VTable management
-	void			roll_vtable();
+	bool			roll_vtable();
 	int				vtable_size();
 	int				vtable_base_index();
 	bool	has_vtable()const{
 		return this->virtual_functions.size()!=0||(this->inherits?this->inherits->has_vtable():0);
 	}
-	
+	bool has_virtuals()const{ return this->has_vtable();}
 	// Constructor/Destructor Management
 
 	void			roll_constructor_wrappers(Scope* sc);
