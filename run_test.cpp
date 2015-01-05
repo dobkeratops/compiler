@@ -23,7 +23,21 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
-	
+/*	{	"pattern infer test",__FILE__,__LINE__,R"====(
+		enum Option<T>{
+			Some(T),None()	// todo - roll enum variant constructors
+		};
+		fn main(argc:int, argv:**char)->int{
+			let x=Some{5.0};
+			if let Some(y)=x{
+				printf("ok");
+			};
+			0
+		}
+		)===="
+		,nullptr
+	},
+
 	{
 		"for in loop",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
@@ -44,6 +58,7 @@ CompilerTest g_Tests[]={
 		)===="
 		,"x=1\nx=2\nx=3\nx=4\nx=5\n"
 	},
+ 
 	{	"inherted tparams",__FILE__,__LINE__,R"====(
 		enum Option<T>{
 			Some(T),None()	// todo - roll enum variant constructors
@@ -77,7 +92,7 @@ CompilerTest g_Tests[]={
 		)===="
 		,"x=2\nx=3\nx=4\nx=5\nx=6\nx=7\n"
 	},
-
+*/
 	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
@@ -1056,6 +1071,8 @@ CompilerTest g_todo[]={
 
 void run_tests(){
 	int index=0;
+	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
+
 	for (auto t=g_Tests; t->name; t++,index++){
 		char tmp[256]; sprintf(tmp,"test_%d.ll",index);
 		printf("\nRunning Test[%d]: %s\n\n",index,t->name);
@@ -1084,7 +1101,6 @@ void run_tests(){
 			free(output);
 		}
 	}
-	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
 
 }
 					

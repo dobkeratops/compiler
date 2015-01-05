@@ -51,6 +51,7 @@ struct ExprStructDef: ExprDef {
 	Type*	ptr_type=nullptr;
 	Type*	ref_type=nullptr;
 	Type*	get_struct_type();
+	void gather_symbols(Scope* sc)override;
 	Scope* scope=0;
 	ExprStructDef* inherits=0,*derived=0,*next_of_inherits=0; // walk the derived types of this.
 	ExprStructDef* vtable=0;

@@ -32,7 +32,7 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 	if (flags & B_AST){
 		node->dump(0);
 	}
-	
+	node->gather_symbols(&global);
 	if (flags & B_DEFS){
 		global.dump(0);
 	}

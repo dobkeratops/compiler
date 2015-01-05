@@ -26,6 +26,7 @@ struct ExprBlock :public ExprScopeBlock{
 	ExprBlock(const SrcPos& p,Name n){pos=p; this->name=n;};
 	
 	// TODO: move these into dedicated nodes, starting with 'structInitializer' which will give us ScalaDefaultConstructor.
+	virtual	const char*	bracket_delim()const {return "{;}";}
 	ExprFnDef*	get_fn_call()const;
 	Name		get_fn_name() const;
 	void		dump(PrinterRef depth) const;
@@ -46,7 +47,7 @@ struct ExprBlock :public ExprScopeBlock{
 	ResolveResult	resolve_sub(Scope* scope, const Type* desired,int flags,Expr* receiver);
 	ResolveResult	resolve_elems(Scope* scope, const Type* sub_desired, int flags);
 	void push_back_if(Expr* e){if (e) argls.push_back(e);}
-
+	void gather_symbols(Scope* sc)override;
 	int	get_elem_count()const override{return this->argls.size();}
 	Node*	get_elem_node(int i) override{return this->argls[i];}
 	void		recurse(std::function<void(Node*)>&) override;
@@ -88,6 +89,7 @@ struct ExprStructInit : ExprBlock{
 	ResolveResult	resolve(Scope* sc, const Type* desired,int flags) override;
 	ResolveResult	resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op);
 	CgValue compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
+	virtual	const char*	bracket_delim()const override {return "{,}";}
 };
 struct ExprParens : ExprBlock{
 	const char* kind_str() const  override		{return "expr_parens";}
@@ -113,6 +115,7 @@ struct ExprTuple : ExprBlock{
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref)override;
+	virtual	const char*	bracket_delim()const override {return "(,)";}
 };
 
 struct ExprCall : ExprBlock{
@@ -132,6 +135,7 @@ struct ExprCall : ExprBlock{
 	ResolveResult	resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
 	CgValue compile_operator_dot(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 	ResolveResult	resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref)override;
+	virtual	const char*	bracket_delim()const override {return "(,)";}
 };
 			 
 struct ExprArrayInit : ExprBlock{
@@ -150,4 +154,5 @@ struct ExprSubscript : ExprBlock{
 	ExprSubscript* as_subscript()override{return this;}
 	CgValue compile_operator_new(CodeGen& cg, Scope* sc, const Type* t, const Expr* lhs) override;
 	ResolveResult	resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op)override;
+	virtual	const char*	bracket_delim()const override {return "[,]";}
 };

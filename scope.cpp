@@ -52,10 +52,14 @@ Scope* Scope::make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner)
 	if (!*pp_scope){
 		auto sc=new Scope;
 #if DEBUG>=2
-		if (auto ofd=owner->as_fn_def()){
-			dbprintf("create scope in %p %s recv=%p\n",sc,ofd->name_str(),ofd->m_receiver);
-		}else{
-			dbprintf("create scope in %p %s \n",sc,owner->name_str());
+		if (owner){
+			if (auto ofd=owner->as_fn_def()){
+				dbprintf("create scope in %p %s recv=%p\n",sc,ofd->name_str(),ofd->m_receiver);
+			}else{
+				dbprintf("create scope in %p %s \n",sc,owner->name_str());
+			}
+		}else {
+			dbprintf("create scope %p,no 'owner'\n",sc);
 		}
 #endif
 		push_child(sc);
@@ -155,7 +159,7 @@ void Scope::compile_destructors(CodeGen& cg){
 	for (auto v=this->vars; v;v=v->next_of_scope){
 		if (v->return_value) continue;
 		if (v->kind==Local){// todo, we should for args? but need 'find with no autocoerce'
-			dbg_raii(printf("invoking destructors for %s.%s\n",str(this->name()),v->name_str()));
+			dbg_raii(printf("invoking destructors for %s.%s\n",this->name_str(),v->name_str()));
 			cg.compile_destructor(this,CgValue(v),true);
 		}
 	}
@@ -429,7 +433,7 @@ void Scope::add_fn(ExprFnDef* fnd){
 	ni->fn_defs=fnd;
 }
 void Scope::add_struct(ExprStructDef* sd){
-	dbg_instancing("adding struct %p %s ins of %p to %s\n",sd,sd->name_str(),sd->instance_of,this->name());
+	dbg_instancing("adding struct %p %s ins of %p to %s\n",sd,sd->name_str(),sd->instance_of,this->name_str());
 	if (sd->name_ptr)
 		return;
 	if (sd->instance_of){
@@ -523,16 +527,16 @@ Variable* Scope::get_or_create_scope_variable(Node* creator,Name name,VarKind k)
 	auto shadow_v=find_variable_rec(name);
 	if (exv) return exv;
 	if (shadow_v){
-		warning(creator,"warning shadowing variable %s in %s\n",str(name),this->name());
+		warning(creator,"warning shadowing variable %s in %s\n",str(name),this->name_str());
 	}
 	auto v=this->create_variable(creator,name,k);
 	return v;
 }
 void Scope::dump(PrinterRef depth)const {
-	newline(depth);dbprintf("scope: %s",this->name());
+	newline(depth);dbprintf("%s::",this->name_str());
+	dbprintf("{");
 	if (this->parent)
-		dbprintf("(of %s)", this->parent);
-	dbprintf("{",this->name());
+		dbprintf("super=%s", this->parent->name_str());
 	for (auto v=this->vars; v; v=v->next_of_scope) {
 		newline(depth+1); dbprintf("var %d %s:",index(v->name), getString(v->name));
 		if (auto t=v->get_type()) t->dump(-1);
@@ -590,7 +594,7 @@ ExprStructDef* Scope::get_receiver() {
 			return f->get_receiver();
 	return nullptr;
 }
-const char* Scope::name() const {
+const char* Scope::name_str() const {
 	if (owner_fn) return str(owner_fn->name);
 	if (!parent){
 		return"<global>";

@@ -73,10 +73,10 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 					dbprintf("warning 'this' but no receiver found via scope\n");
 					dbprintf("warning 'this' but no receiver in s=%p owner=%p\n",scope,scope->owner_fn);
 					if (scope->owner_fn){
-						dbprintf("warning 'this' but no receiver in %s %s\n",scope->owner_fn->kind_str(),scope->name());
+						dbprintf("warning 'this' but no receiver in %s %s\n",scope->owner_fn->kind_str(),scope->name_str());
 						auto fnd=scope->owner_fn->as_fn_def();
 						auto p=scope->owner_fn->parent();
-						dbprintf("warning 'this' but no receiver in %s %s\n",scope->owner_fn->kind_str(),scope->name());
+						dbprintf("warning 'this' but no receiver in %s %s\n",scope->owner_fn->kind_str(),scope->name_str());
 						
 						dbprintf("recv=%p\n",fnd->m_receiver);
 						scope->owner_fn->dump(0);
@@ -425,8 +425,17 @@ void ArgDef::recurse(std::function<void(Node*)>&f){
 }
 
 void ArgDef::dump(PrinterRef depth) const {
-	newline(depth);dbprintf("%s ",getString(name));
-	this->pattern->dump_if(-1);
+	newline(depth);
+	if (!this->pattern){
+		dbprintf("%s",getString(name));
+	} else {
+		if (this->pattern->name!=this->name){
+			dbprintf("%s=>",getString(name));
+			this->pattern->dump_if(-1);
+		} else {
+			dbprintf("%s",getString(name));
+		}
+	}
 	if (this->type()) {dbprintf(":");type()->dump(-1);}
 	if (default_expr) {dbprintf("=");default_expr->dump(-1);}
 }

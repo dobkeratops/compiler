@@ -149,9 +149,9 @@ ResolveResult Type::resolve(Scope* sc,const Type* desired,int flags)
 		if (!this->has_typeparam(sc)){
 			if (auto sd=sc->find_struct_named(this->name)){
 				this->set_struct_def(sd->get_instance(sc,this));
-				dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name(),this->struct_def(),this);
+				dbg_instancing("found struct %s in %s ins%p on t %p\n",this->name_str(), sc->name_str(),this->struct_def(),this);
 			}else{
-				dbg_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name());
+				dbg_instancing("failed to find struct %s in %s\n",this->name_str(), sc->name_str());
 #if DEBUG >=2
 				sd=sc->find_struct_named(this->name);
 				sc->dump(0);
@@ -330,10 +330,46 @@ bool Type::is_equal_sub(const Type* other,const TParamXlat& xlat,Name self_t) co
 	if (o || p) return false; // didnt reach both..
 	return true;
 }
-
+bool g_print_types_raw=false;
 void Type::dump_sub(int flags)const{
 	if (!this) return;
-	if (this->is_rvalue()) dbprintf("r.");
+	if (g_print_types_raw){
+		if (this->is_rvalue()) dbprintf("r.");
+	}
+	if (!g_print_types_raw){
+		if (this->is_pointer_or_ref()){
+			const char* sigil=0;
+			switch ((int)this->name){
+				case PTR: sigil="*"; break;
+				case REF: sigil="&"; break;
+				case RVALUE_REF: sigil="&&"; break;
+			}
+			if (sigil){
+				this->sub->dump(flags);
+				return;
+			}
+		}
+		if (this->name==FN || this->name==CLOSURE){
+			if (auto rect=this->get_elem_type(2)){
+				rect->dump_sub(flags);dbprintf("::");
+			}
+			if (this->name==FN) {
+				this->sub->dump_if(flags);
+				dbprintf("->");
+			} else {
+				dbprintf("|");
+				for (auto argt=this->sub->sub; argt; argt=argt->next){
+					argt->dump_if(flags);
+					if (argt->next)dbprintf(",");
+				}
+				dbprintf("|");
+				if (this->sub->next)
+					dbprintf("->");
+			}
+			this->sub->next->dump_if(flags);
+			return;
+		}
+	}
 	if (this->name==TUPLE) {
 		dbprintf("(");
 		for (auto t=sub; t; t=t->next){

@@ -93,7 +93,7 @@ void output_code(FILE* ofp, Scope* scope, int depth, int flags) {
 	if (!depth)
 		cg.emit_prelude();
 
-	cg.emit_comment("from scope %s\n;",scope->name());
+	cg.emit_comment("from scope %s\n;",scope->name_str());
 	// output all inner items that outer stuff depends on..
 	// literals first, because we setup llvm_strlen. TODO , more solid design pls.
 	for (auto l=scope->literals; l; l=l->next_of_scope) {

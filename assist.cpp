@@ -26,7 +26,7 @@ void assist_find_symbol(Node* n, Scope* sc, Name symbol){
 				info(sd,"\tstruct\t%s", str(sd->name)); 
 			}
 			for (auto fd=ni->fields; fd;fd=fd->next_of_name){
-				info(fd,"\tfield\t%s.'t%s:", fd->owner->name(), str(fd->name)); fd->type()->dump_if(-1);
+				info(fd,"\tfield\t%s.'t%s:", fd->owner->name_str(), str(fd->name)); fd->type()->dump_if(-1);
 			}
 		}
 	}	

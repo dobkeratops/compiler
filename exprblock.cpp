@@ -15,21 +15,33 @@ Name ExprBlock::get_fn_name()const
 	else return 0;
 }
 
+void ExprBlock::gather_symbols(Scope* outer_sc){
+	// bits declared in a functoin dont get gathered. only structs(nested classes,methods), and blocks
+	// TODO - this is indiscriminate, should only make scopes if there are definitions inside.
+//	outer_sc->make_inner_scope(&this->scope,outer_sc->owner_fn,this);
+	auto sc=outer_sc;
+	this->call_expr->gather_symbols_if(sc); // ambiguous,  where vs rest?
+	for (auto x:argls){
+		x->gather_symbols(sc);
+	}
+}
 void ExprBlock::dump(PrinterRef depth) const {
 	if (!this) return;
-	newline(depth+1);
-	auto b="{\0}\0";
-	dbprintf(b+0);
-	dbprintf("%s ",this->kind_str());
+	newline(depth);
+	auto b=this->bracket_delim();
+//	dbprintf("%s",this->kind_str());
 	this->call_expr->dump_if(-100);
+	dbprintf("%c",b[0]);
 	int i=0;
 	for (const auto x:this->argls) {
-		newline(depth+1);dbprintf("(%d/%d)",i,this->argls.size());
+		if(i){
+			dbprintf("%c",b[1]);
+		}
+		dbg4(newline(depth+1);dbprintf("(%d/%d)",i,this->argls.size()););
 		if (x) {x->dump(depth+2);}else{dbprintf("(none)");}
-		newline(depth+1);dbprintf(";");
 		i++;
 	}
-	newline(depth+1);dbprintf(b+2);
+	newline(depth);dbprintf("%c",b[2]);
 	if (this->get_type()){dbprintf(":");this->get_type()->dump_if(-1);}
 }
 
@@ -101,7 +113,7 @@ CgValue ExprBlock::compile(CodeGen& cg,Scope *sc, CgValue input) {
 	auto ret= this->argls.back()->compile(cg,sc);
 
 	//TODO- how to invoke destructors for all values
-	dbg_raii(dbprintf("this=%s:%s; scope %p %s;  this->scope %p \n", this->name_str(),this->kind_str(),sc,sc->name(), this->get_scope()));
+	dbg_raii(dbprintf("this=%s:%s; scope %p %s;  this->scope %p \n", this->name_str(),this->kind_str(),sc,sc->name_str(), this->get_scope()));
 	this->get_scope()->compile_destructors_if(cg);
 	
 	return ret;
@@ -185,6 +197,8 @@ ResolveResult	ExprStructInit::resolve_operator_new(Scope *sc, const Type *desire
 	this->type()->set_rvalue();
 	return resolved;
 }
+
+
 ResolveResult	ExprSubscript::resolve_operator_new(Scope *sc, const Type *desired, int flags, ExprOp *op){
 	auto b=this;
 	if (!desired && !op->get_type() && op->rhs->get_type()) {

@@ -363,9 +363,9 @@ void MatchArm::recurse(std::function<void(Node *)> &f){
 
 void ExprIfLet::dump(PrinterRef depth)const{
 	newline(depth);dbprintf("if let ");
-	this->arms->pattern->dump(-1);
+	this->arms->pattern->dump(-100);
 	dbprintf("=");
-	this->expr->dump(-1); dbprintf("{");
+	this->expr->dump(-100); dbprintf("{");
 	this->arms->body->dump(depth+1);
 	dbprintf("}");
 	newline(depth);

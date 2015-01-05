@@ -48,6 +48,8 @@ struct  ExprFnDef : ExprDef {
 	bool	is_closure() const			{return my_capture!=0 || m_closure;}
 	void	dump_signature() const;
 	int		type_parameter_index(Name n) const;
+	void gather_symbols(Scope* sc)override;
+
 	int		min_args();//					{for (int i=0; i<args.size();i++){if (args[i]->default_expr) return i;} return (int)args.size();}
 	int 	max_args()					{return variadic?1024:(int)args.size();}
 	bool	is_enough_args(int x)		{if (x<min_args()) return false; if (x> args.size() && !variadic) return false; return true;}

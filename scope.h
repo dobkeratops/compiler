@@ -50,7 +50,7 @@ struct Scope {
 	ExprFnDef*	templated_name_fns=0;// eg  fn FNAME[T,FNAME](x:T,y:T)->{...}  if the signature matches anything.. its' used. idea for implementing OOP & variants thru templates..
 	// locals;
 	// captures.
-	const char* name()const;
+	const char* name_str()const;
 private:
 	Scope(){named_items=0; owner_fn=0;node=0;parent=0;next=0;child=0;vars=0;global=0;literals=0;}
 public:

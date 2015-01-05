@@ -14,6 +14,20 @@ const Type*		ExprStructDef::get_elem_type(int i)const{
 Name	ExprStructDef::get_elem_name(int i)const {
 	return this->fields[i]->name;
 }
+void ExprStructDef::gather_symbols(Scope* outer_sc){
+	auto sc=outer_sc->make_inner_scope(&this->scope,this,this);
+	outer_sc->add_struct(this);
+	if (!this->constructor_wrappers.size()) this->roll_constructor_wrappers(this->scope);
+
+	for (auto f:fields) f->gather_symbols(this->scope);
+	for (auto f:functions) f->gather_symbols(this->scope);
+	for (auto f:virtual_functions) f->gather_symbols(this->scope);
+	for (auto f:static_functions) f->gather_symbols(this->scope);
+	for (auto f:static_fields) f->gather_symbols(this->scope);
+	for (auto f:structs) f->gather_symbols(this->scope);
+	for (auto f:typedefs) f->gather_symbols(this->scope);
+	for (auto f:static_virtual) f->gather_symbols(this->scope);
+}
 int ExprStructDef::get_elem_index(Name name)const {
 	int i;
 	for (i=0; i<this->fields.size(); i++){
@@ -433,7 +447,7 @@ void ExprStructDef::dump(PrinterRef depth) const{
 void ExprStructDef::dump_struct_body(int depth)const {
 	auto depth2=depth>=0?depth+1:depth;
 	if (this->m_is_variant){
-		newline(depth);dbprintf("__discriminant=%d ",this->discriminant);
+		newline(depth2);dbprintf("__discriminant=%d, ",this->discriminant);
 	}
 	for (auto m:this->literals)	{m->dump(depth2);}
 	for (auto m:this->fields)	{m->dump(depth2);}
@@ -732,7 +746,7 @@ ResolveResult ExprStructDef::resolve(Scope* definer_scope,const Type* desired,in
 	setup_enum_variant();
 	if (m_recurse) return COMPLETE;	// TODO - this seems to have caused bugs, can we eliminate m_recures? it was added to stop infinite loop on constructor fixup.
 	m_recurse=true;
-	definer_scope->add_struct(this);
+	//definer_scope->add_struct(this);
 	if (!this->get_type()) {
 		this->set_type(new Type(this,this->name));	// name selects this struct
 	}
@@ -856,7 +870,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 	}
 	int i=0;
 	for (auto ins=st->instances; ins; ins=ins->next_instance,i++){
-		cg.emit_comment("instance %d: %s %s in %s %p",i,str(st->name),str(ins->name) ,sc->name(),ins);
+		cg.emit_comment("instance %d: %s %s in %s %p",i,str(st->name),str(ins->name) ,sc->name_str(),ins);
 		ins->get_mangled_name();
 		for (auto i0=st->instances;i0!=ins; i0=i0->next_instance){
 			if (i0->mangled_name==ins->mangled_name){
@@ -878,7 +892,7 @@ CgValue ExprStructDef::compile(CodeGen& cg, Scope* sc, CgValue input) {
 	if (this->instanced_types.size()>=this->tparams.size())
 	{
 		cg.emit_comment("%s<%s>",str(st->name),st->instanced_types.size()?str(st->instanced_types[0]->name):st->tparams.size()?str(st->tparams[0]->name):"");
-		cg.emit_comment("instance %s of %s in %s\t%p.%p.%p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name(),st->owner,st->inherits, st);
+		cg.emit_comment("instance %s of %s in %s\t%p.%p.%p",str(st->name),st->instance_of?st->instance_of->name_str():"none" ,sc->name_str(),st->owner,st->inherits, st);
 		
 		for (auto fi: st->fields){
 			if (!fi->type())

@@ -162,7 +162,7 @@ ResolveResult propogate_type(int flags,const Node* n,ResolveResult& a,Type*& b,c
  */
 ExprStructDef* dump_find_struct(Scope* s, Name name){
 	for (;s;s=s->parent_or_global()){
-		dbprintf("find %s in in scope %s\n",getString(name),s->name());
+		dbprintf("find %s in in scope %s\n",getString(name),s->name_str());
 		for (auto ni=s->named_items;ni;ni=ni->next){
 			dbprintf("name %s\n",getString(ni->name));
 			for (auto sd=ni->structs; sd;sd=sd->next_of_name) {

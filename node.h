@@ -41,6 +41,8 @@ public:
 	void set_struct_type(ExprDef* d);
 
 	void clear_def();
+	virtual void gather_symbols(Scope* sc){};
+	void gather_symbols_if(Scope* sc){if (this && sc) this->gather_symbols(sc);}
 	virtual void dump(PrinterRef) const;
 	virtual ResolveResult resolve(Scope* scope, const Type* desired,int flags){dbprintf("empty? %s resolve not implemented", this->kind_str());return ResolveResult(INCOMPLETE);};
 	// double dispatch for operators combined with various nodes

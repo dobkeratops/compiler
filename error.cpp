@@ -133,7 +133,7 @@ void error(const Node* n,const Scope* s, const char* str, ... ){
 	va_end( arglist );
 	error_sub(n,E_ERROR,buffer);
 	error_newline();
-	info(s->owner_fn, "in scope %s\n",s->name());
+	info(s->owner_fn, "in scope %s\n",s->name_str());
 	error_maybe_end(n);
 }
 void error(const Node* n,const char* str, ... ){

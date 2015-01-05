@@ -15,6 +15,13 @@ void ExprFnDef::verify(){
 	for (auto s=this->instances; s;s=s->next_instance) s->verify();
 }
 
+void ExprFnDef::gather_symbols(Scope* outer_sc){
+	//outer_sc->add_fn(this);
+	auto sc=outer_sc->make_inner_scope(&this->scope,this,this);
+	this->body->gather_symbols_if(this->get_scope());
+	// functions' inner functions are acessible too? not sure they should be.
+}
+
 bool ExprFnDef::is_generic() const {
 	if(instances!=nullptr)
 		return true;
