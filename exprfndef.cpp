@@ -16,7 +16,7 @@ void ExprFnDef::verify(){
 }
 
 void ExprFnDef::gather_symbols(Scope* outer_sc){
-	//outer_sc->add_fn(this);
+	//outer_sc->add_fn(this,false);
 	auto sc=outer_sc->make_inner_scope(&this->scope,this,this);
 	this->body->gather_symbols_if(this->get_scope());
 	// functions' inner functions are acessible too? not sure they should be.

@@ -49,6 +49,15 @@ const Type* Type::get_elem(int index)const{
 	ASSERT(index==0);
 	return s;
 }
+const Type* Type::get_elem_type_if(int index)const{
+	if (this->struct_def())
+		return this->struct_def()->get_elem_type(index);
+	ASSERT(index>=0);
+	auto s=sub;
+	for (;s&&index>0;s=s->next,--index){};
+	return s;
+}
+
 
 bool Type::is_userdefined()const{
 	if (!this)return false;
@@ -350,7 +359,7 @@ void Type::dump_sub(int flags)const{
 			}
 		}
 		if (this->name==FN || this->name==CLOSURE){
-			if (auto rect=this->get_elem_type(2)){
+			if (auto rect=this->get_elem_type_if(2)){
 				rect->dump_sub(flags);dbprintf("::");
 			}
 			if (this->name==FN) {
@@ -366,7 +375,9 @@ void Type::dump_sub(int flags)const{
 				if (this->sub->next)
 					dbprintf("->");
 			}
-			this->sub->next->dump_if(flags);
+			if (this->sub){
+				this->sub->next->dump_if(flags);
+			}
 			return;
 		}
 	}

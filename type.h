@@ -87,6 +87,7 @@ struct Type : ExprDef {
 	const Type*		get_elem_type(int index) const{
 		return get_elem(index);
 	}
+	const Type*		get_elem_type_if(int index) const;
 	Type*			get_type_sub(int index)const{ auto s=sub;for (; s && index>0; s=s->next,index--);return s;}
 	bool			is_primitive()const;
 	bool			is_userdefined()const;

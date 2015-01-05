@@ -88,7 +88,7 @@ public:
 	ExprFnDef*	find_fn_sub(Name name,const Expr* callsite, int numrecv,const MyVec<Expr*>& args,const Type* ret_type,int flags);
 	ExprFnDef*	find_fn_for_types(Name name, int numrecv,const Type* arg0_type,const Type* arg1_type, const Type* ret_type,int flags);
 	void	add_struct(ExprStructDef*);
-	void	add_fn(ExprFnDef*);
+	void	add_fn(ExprFnDef*,bool assert=false);
 	void	add_fn_def(ExprFnDef*);
 	void	dump(PrinterRef depth) const;
 	NamedItems* find_named_items_local(Name name);

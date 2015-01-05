@@ -384,15 +384,18 @@ CgValue CodeGen::store(const CgValue& dst,const CgValue& src) {
 	src_in_reg.dump();
 	dbprintf("\n");
 #endif
-	if (src_in_reg.type->is_ref() && src_in_reg.type->sub->is_equal(dst.type)){
-		src_in_reg=CgValue(0,src_in_reg.type->sub,src_in_reg.reg).load(*this);
+	if (src_in_reg.type){
+		if (src_in_reg.type->is_ref() && src_in_reg.type->sub->is_equal(dst.type)){
+			src_in_reg=CgValue(0,src_in_reg.type->sub,src_in_reg.reg).load(*this);
 #if DEBUG>=3
 		dbprintf("\nsrc in reg loaded again because it was a ref=\n");
 		src_in_reg.dump();
 		dbprintf("\n");
 #endif
+		}
+	}else{
+		dbg2(dbprintf("srcinreg type unset?934234\n"));
 	}
-
 	if (dst.elem>=0){
 		auto newreg=next_reg_name(&cg.m_next_reg);
 		if ( dst.reg && !dst.addr){

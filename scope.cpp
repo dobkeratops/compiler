@@ -420,17 +420,27 @@ ExprStructDef* Scope::find_struct_named(Name name){
 	 return nullptr;
 }
 
-void Scope::add_fn(ExprFnDef* fnd){
+void Scope::add_fn(ExprFnDef* fnd,bool assert){
 	if (fnd->instance_of!=0) return; // we compile/match it by instance search.
-	if (fnd->name_ptr) return;
+	if (fnd->name_ptr) {
+		return;
+	}
 	if (fnd->type_parameter_index(fnd->name)>=0){
 		this->templated_name_fns=fnd;
 		fnd->next_of_name=this->templated_name_fns;
 	}
 	auto ni=get_named_items_local(fnd->name);
-	fnd->name_ptr=ni;
-	fnd->next_of_name=ni->fn_defs;
-	ni->fn_defs=fnd;
+	if (fnd->name_ptr){
+//		ASSERT(fnd->name_ptr==ni)
+		if (fnd->name_ptr!=ni){
+			dbg2(fnd->dump(-1));
+			dbg(dbprintf("moving function %s from %s to %s, bug??\n", this->name_str(), fnd->name_ptr->owner->name_str(), ni->owner->name_str()));
+		}
+	} else{
+		fnd->name_ptr=ni;
+		fnd->next_of_name=ni->fn_defs;
+		ni->fn_defs=fnd;
+	}
 }
 void Scope::add_struct(ExprStructDef* sd){
 	dbg_instancing("adding struct %p %s ins of %p to %s\n",sd,sd->name_str(),sd->instance_of,this->name_str());
