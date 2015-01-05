@@ -501,6 +501,7 @@ CgValue ExprFnDef::compile(CodeGen& cg,Scope* outer_scope, CgValue input){
 	auto ofp=cg.ofp;
 	
 	if (!fn_node){return CgValue();}
+	if (!fn_type){return CgValue();}	// hasn't been resolved - probably a trait-function decl
 	if (fn_node->is_undefined()) {
 		cg.emit_comment("fn %s prot",getString(fn_node->name));
 		cg.emit_function_signature(fn_node,EmitDeclaration);

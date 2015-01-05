@@ -154,6 +154,7 @@ struct TraitDef : ExprStructDef {
 	TraitDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
+//	void gather_symbols(Scope* sc) override{ sc->add_struct(this); /* trait fn's */};
 };
 
 /// a rust 'Impl' extends a struct with functions implementations

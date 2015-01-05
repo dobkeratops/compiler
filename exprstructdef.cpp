@@ -17,16 +17,18 @@ Name	ExprStructDef::get_elem_name(int i)const {
 void ExprStructDef::gather_symbols(Scope* outer_sc){
 	auto sc=outer_sc->make_inner_scope(&this->scope,this,this);
 	outer_sc->add_struct(this);
-	if (!this->constructor_wrappers.size()) this->roll_constructor_wrappers(this->scope);
 
-	for (auto f:fields) f->gather_symbols(this->scope);
-	for (auto f:functions) f->gather_symbols(this->scope);
-	for (auto f:virtual_functions) f->gather_symbols(this->scope);
-	for (auto f:static_functions) f->gather_symbols(this->scope);
+
 	for (auto f:static_fields) f->gather_symbols(this->scope);
 	for (auto f:structs) f->gather_symbols(this->scope);
 	for (auto f:typedefs) f->gather_symbols(this->scope);
+	for (auto f:fields) f->gather_symbols(this->scope);
+/*	for (auto f:functions) f->gather_symbols(this->scope);
+	for (auto f:virtual_functions) f->gather_symbols(this->scope);
+	for (auto f:static_functions) f->gather_symbols(this->scope);
 	for (auto f:static_virtual) f->gather_symbols(this->scope);
+	if (!this->constructor_wrappers.size()) this->roll_constructor_wrappers(this->scope);
+ */
 }
 int ExprStructDef::get_elem_index(Name name)const {
 	int i;
@@ -359,6 +361,11 @@ void ExprStructDef::roll_vtable() {
 	if (this->is_vtable_built()){// ToDO: && is-class. and differentiate virtual functions. For the
 		return;
 	}
+	for (auto f:this->virtual_functions){// can't build it yet.
+		if (!f->fn_type)
+			return;
+	}
+
 	dbg_vtable("rolling vtable for %s,inherits %s\n",str(this->name),this->inherits?str(this->inherits->name):"void");
 	if (this->vtable){ return;} // done already
 	if (this->inherits) {this->inherits->roll_vtable();}

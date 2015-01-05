@@ -10,6 +10,54 @@ extern"C"fn fread(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn fwrite(d:*void,z:size_t,n:size_t,f:*FILE)->size_t;
 extern"C"fn sqrt(f:float)->float;
 
+fn tuple_test2()->(int,float,int){	// tuples for multiple return,like Rust
+	(12,23.0,34)
+}
+fn tuple_test(){	// rturn type inference
+	(12,23,34)
+}
+
+fn do_something(p:*IBaz){
+	printf("do something %p\n",p);
+	p.foo();
+}
+
+// implementing vtable based 'classes', like C++
+// only single-inheritance planned.
+
+
+
+// multiple *named* return values as anonymous struct
+// need to write 'struct' because type-context doesn't  include braces
+// if we name it, it doesn't go into any scope at the minute.
+
+fn ret_anon_struct()->struct{x:int, y:int}{
+	let r; // infered from return value.
+	r.x=88;
+	r.y=99;
+	r
+	//could also write _{x:88,y:99}
+}
+fn foo_bar(i:int){
+}
+fn foo_bar(p:*void){
+}
+fn foo_bar(p:*Foo,f:float){
+	printf("2arg foo_bar %p %f\n",p,f);
+}
+// Rust style tuple pattern arguments
+fn foo_bar(p:*Foo,q:*Foo,(i,j,k):(int,int,int)){
+	printf("3arg foo_bar with tuple destructure %p %d %d %d\n",p,i,j,k);
+}
+fn foo_bar(p:*Foo,q:*Foo,w:*Foo){
+	printf("3ptr foo_bar %p %p\n",p,w);
+}
+
+fn take_banana(x){
+	printf("banana anon struct in adhoc template x=%d \n",x.uuu);
+}
+
+
 // trivial helpers - just omit types, they get typeparams
 // eg lerp<A,B,F>(a:A,b:B,f:F)... ; also single-expression sugar
 // there is a C++ proposal for this using 'auto' but its' more verbose
@@ -92,6 +140,29 @@ fn bilerp(a0:&Vec3,b0:&Vec3,a1:&Vec3,b1:&Vec3,u:float,v:float)=lerp(lerp(a0,a1,u
 // I wouldn't have bothered otherwise.
 // class heirachies & vtables are not the focus
 // ideally i'd just have UFCS and freefunctions
+
+
+struct Qux : IBaz {
+	x:int;
+	fn foo(){
+		printf("hello from Qux.foo this=%p this.x=%d\n",this,x);
+	}
+	fn bar(){
+		printf("hello from Qux.bar this=%p this.x=%d\n",this,x);
+	}
+	fn drop() {// dtor.
+	}
+}
+
+struct Bar : IBaz {
+	y:int;
+	fn foo(){
+		printf("hello from Bar.foo this.y=%d\n",y);
+	}
+	fn bar(){
+		printf("hello from Bar.bar this.y=%d\n",y);
+	}
+}
 
 struct IBaz {
 	// sugar: with other qualifiers, 'fn' is optional,assumed.
@@ -302,70 +373,5 @@ fn main(argc:int,argv:**char)->int{
 	0
 }
 
-fn tuple_test2()->(int,float,int){	// tuples for multiple return,like Rust
-	(12,23.0,34)
-}
-fn tuple_test(){	// rturn type inference
-	(12,23,34)
-}
 
-fn do_something(p:*IBaz){
-	printf("do something %p\n",p);
-	p.foo();
-}
-
-// implementing vtable based 'classes', like C++
-// only single-inheritance planned.
-
-struct Qux : IBaz {
-	x:int;
-	fn foo(){
-		printf("hello from Qux.foo this=%p this.x=%d\n",this,x);
-	}
-	fn bar(){
-		printf("hello from Qux.bar this=%p this.x=%d\n",this,x);
-	}
-	fn drop() {// dtor.
-	}
-}
-
-struct Bar : IBaz {
-	y:int;
-	fn foo(){
-		printf("hello from Bar.foo this.y=%d\n",y);
-	}
-	fn bar(){
-		printf("hello from Bar.bar this.y=%d\n",y);
-	}
-}
-
-// multiple *named* return values as anonymous struct
-// need to write 'struct' because type-context doesn't  include braces
-// if we name it, it doesn't go into any scope at the minute.
-
-fn ret_anon_struct()->struct{x:int, y:int}{
-	let r; // infered from return value.
-	r.x=88;
-	r.y=99;
-	r
-	//could also write _{x:88,y:99}
-}
-fn foo_bar(i:int){
-}
-fn foo_bar(p:*void){
-}
-fn foo_bar(p:*Foo,f:float){
-	printf("2arg foo_bar %p %f\n",p,f);
-}
-// Rust style tuple pattern arguments
-fn foo_bar(p:*Foo,q:*Foo,(i,j,k):(int,int,int)){
-	printf("3arg foo_bar with tuple destructure %p %d %d %d\n",p,i,j,k);
-}
-fn foo_bar(p:*Foo,q:*Foo,w:*Foo){
-	printf("3ptr foo_bar %p %p\n",p,w);
-}
-
-fn take_banana(x){
-	printf("banana anon struct in adhoc template x=%d \n",x.uuu);
-}
 

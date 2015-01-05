@@ -23,6 +23,38 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
+	{	"internal vtable",__FILE__,__LINE__,R"====(
+		
+		fn"C" printf(s:str,...)->int;
+		struct Bar : Foo{
+			x:int,y:int,
+			fn v_foo(){printf("Bar.foo x=%d\n",x);},
+			fn bar(){printf("Bar.bar\n");},
+			fn baz(){printf("Bar.baz\n");},
+		}
+		struct Foo {
+		x:int,y:int,
+			virtual v_foo(){printf("Foo.foo x=%d %p\n",x,*(this as**void));},
+			virtual bar(){printf("Foo.bar\n");},
+			virtual baz(){printf("Foo.baz\n");},
+		}
+
+		fn main(argc:int, argv:**char)->int{
+		x1:= new Foo{x=10,y=0};
+		x2:= new Bar{x=20,y=0};
+			take_interface(x2 as*Foo);
+			x1.v_foo();
+			take_interface(x1);
+			0
+		}
+		fn take_interface(pf:*Foo){
+			pf.v_foo()
+		}
+		)===="
+		,nullptr
+	},
+	
+
 /*	{	"pattern infer test",__FILE__,__LINE__,R"====(
 		enum Option<T>{
 			Some(T),None()	// todo - roll enum variant constructors
@@ -93,6 +125,123 @@ CompilerTest g_Tests[]={
 		,"x=2\nx=3\nx=4\nx=5\nx=6\nx=7\n"
 	},
 */
+	
+	{	"multi feature test 2",__FILE__,__LINE__,R"====(
+		
+		fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{
+			let result=init();
+			for index:=0; index<src.size(); index+=1 {
+				push_back(&result, f(get(src,index)));
+			}
+			result
+		}
+		fn"C" printf(s:str,...)->int;
+		fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{
+			if u.tag==0 { fx(&u.x)}
+			else { fy(&u.y)}
+		}
+		fn main(argc:int,argv:**char)->int{
+		fv:=Foo{vx=13,vy=14,vz=15};
+			u=:Union[int,float];
+			setv(&u,0.0);
+			setv(&u,0);
+		z:=debugme(&u,
+				   |x:*int|	{printf("union was set to int\n");10},
+				   |x:*float|	{printf("union was set to float\n");12}
+				   );
+			printf("map union returns %d\n", z);
+			xs=:array[int,512];
+		q:=xs[1]; p1:=&xs[1];
+			xs[2]=000;
+			xs[2]+=400;
+			*p1=30;
+		z:=5;
+		y:=xs[1]+z+xs[2];
+		x:=0;
+			something_foo(&fv,&fv);
+			for i:=0,j:=0; i<10; i+=1,j+=10 {
+				x+=i;
+				printf("i,j=%d,%d,x=%d\n",i,j,x);
+			}else{
+				printf("loop exit fine\n");
+			}
+			something_foo(&fv);
+			something(&fv);
+			take_closure(|x|{printf("closure says %d %d\n",x,y);})
+			
+		x:=if argc<2{printf("<2");1}else{printf(">2");2};
+			printf("yada yada yada\n");
+			printf("\nHello World %d\n", y );
+			0
+		}
+		fn lerp(a,b,f)->float{(b-a)*f+a};
+		fn foo(a:*char)->void;
+		struct Foo {
+		vx:int, vy:int, vz:int
+		}
+		fn something_foo(f:*Foo){
+			printf("f.x= %d\n", f.vx);
+		}
+		fn something_foo(f:*Foo,x:*Foo){
+			printf("something_foo with 2 args overloaded\n");
+			printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
+		}
+		fn something(f:*Foo){
+			printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
+		}
+		fn something(f:float){
+		}
+		fn something(f:float,x){
+		}
+		fn take_closure(funcp:(int)->void){
+			funcp(10);
+		}
+		struct Union[X,Y]{
+		tag:int,
+		x:X,y:Y,
+		};
+		fn setv[X,Y](u:*Union[X,Y],x:Y)->void{
+			printf("setv Y\n");
+		}
+		fn setv[X,Y](u:*Union[X,Y],x:X)->void{
+			printf("setv X\n");
+		}
+		
+		)====",
+		nullptr
+	},
+	
+	{	"parse struct-trait-impl",__FILE__,__LINE__,R"====(
+		extern"C" fn printf(s:str,...)->int;
+		struct Foo{
+		x:int,y:int
+			fn a_method(){
+				printf("Foo.a_method\n");
+			}
+		};
+		trait Object {
+			fn render(&self);
+			fn update(&self);
+		};
+		impl Obj for Foo {
+			fn render(&self){
+				printf("Foo.render\n");
+			}
+			fn update(&self){
+				printf("Foo.update\n");
+			}
+		}
+		fn main(argc:int, argv:**char)->int{
+			let x:Foo; let y=&x;
+			y.a_method();
+			y.render();
+			0
+		}
+		)====",
+		nullptr,false
+	},
+	
+
 	{	"nested ,guarded patterns",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
@@ -331,37 +480,6 @@ CompilerTest g_Tests[]={
 		)====",
 		nullptr,false
 	},
-
-	{	"parse struct-trait-impl",__FILE__,__LINE__,R"====(
-		extern"C" fn printf(s:str,...)->int;
-		struct Foo{
-			x:int,y:int
-			fn a_method(){
-				printf("Foo.a_method\n");
-			}
-		};
-		trait Object {
-			fn render(&self);
-			fn update(&self);
-		};
-		impl Obj for Foo {
-			fn render(&self){
-				printf("Foo.render\n");
-			}
-			fn update(&self){
-				printf("Foo.update\n");
-			}
-		}
-		fn main(argc:int, argv:**char)->int{
-			let x:Foo; let y=&x;
-			y.a_method();
-			y.render();
-			0
-		}
-		)====",
-		nullptr,false
-	},
-
 	{	"match val + ranges",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		fn main(argc:int, argv:**char)->int{
@@ -704,37 +822,7 @@ CompilerTest g_Tests[]={
 		,"loop ret=44\n"
 	},
 
-	{	"internal vtable",__FILE__,__LINE__,R"====(
-		
-		fn"C" printf(s:str,...)->int;
-		struct Foo {
-			x:int,y:int,
-			virtual v_foo(){printf("Foo.foo x=%d %p\n",x,*(this as**void));},
-			virtual bar(){printf("Foo.bar\n");},
-			virtual baz(){printf("Foo.baz\n");},
-		}
-		struct Bar : Foo{
-			x:int,y:int,
-			fn v_foo(){printf("Bar.foo x=%d\n",x);},
-			fn bar(){printf("Bar.bar\n");},
-			fn baz(){printf("Bar.baz\n");},
-		}
-		fn main(argc:int, argv:**char)->int{
-			x1:= new Foo{x=10,y=0};
-			x2:= new Bar{x=20,y=0};
-			take_interface(x2 as*Foo);
-			x1.v_foo();
-			take_interface(x1);
-			0
-		}
-		fn take_interface(pf:*Foo){
-		   pf.v_foo()
-		}
-		)===="
-		,nullptr
-	},
-
-	{	"member function+ufcs",__FILE__,__LINE__,R"====(
+	{	"member function+ufcs+overload",__FILE__,__LINE__,R"====(
 		fn"C" printf(s:str,...)->int;
 		struct Foo{
 			q:int,
@@ -877,91 +965,7 @@ CompilerTest g_Tests[]={
 		"u.tag=0\n"
 		"u.tag=1\n"
 	},
-	{	"multi feature test 2",__FILE__,__LINE__,R"====(
-		
-		fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{
-			let result=init();
-			for index:=0; index<src.size(); index+=1 {
-				push_back(&result, f(get(src,index)));
-			}
-			result
-		}
-		fn"C" printf(s:str,...)->int;
-		fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{
-			if u.tag==0 { fx(&u.x)}
-			else { fy(&u.y)}
-		}
-		fn main(argc:int,argv:**char)->int{
-		fv:=Foo{vx=13,vy=14,vz=15};
-			u=:Union[int,float];
-			setv(&u,0.0);
-			setv(&u,0);
-		z:=debugme(&u,
-				   |x:*int|	{printf("union was set to int\n");10},
-				   |x:*float|	{printf("union was set to float\n");12}
-				   );
-			printf("map union returns %d\n", z);
-			xs=:array[int,512];
-		q:=xs[1]; p1:=&xs[1];
-			xs[2]=000;
-			xs[2]+=400;
-			*p1=30;
-		z:=5;
-		y:=xs[1]+z+xs[2];
-		x:=0;
-			something_foo(&fv,&fv);
-			for i:=0,j:=0; i<10; i+=1,j+=10 {
-				x+=i;
-				printf("i,j=%d,%d,x=%d\n",i,j,x);
-			}else{
-				printf("loop exit fine\n");
-			}
-			something_foo(&fv);
-			something(&fv);
-			take_closure(|x|{printf("closure says %d %d\n",x,y);})
-			
-		x:=if argc<2{printf("<2");1}else{printf(">2");2};
-			printf("yada yada yada\n");
-			printf("\nHello World %d\n", y );
-			0
-		}
-		fn lerp(a,b,f)->float{(b-a)*f+a};
-		fn foo(a:*char)->void;
-		struct Foo {
-		vx:int, vy:int, vz:int
-		}
-		fn something_foo(f:*Foo){
-			printf("f.x= %d\n", f.vx);
-		}
-		fn something_foo(f:*Foo,x:*Foo){
-			printf("something_foo with 2 args overloaded\n");
-			printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
-		}
-		fn something(f:*Foo){
-			printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
-		}
-		fn something(f:float){
-		}
-		fn something(f:float,x){
-		}
-		fn take_closure(funcp:(int)->void){
-			funcp(10);
-		}
-		struct Union[X,Y]{
-		tag:int,
-		x:X,y:Y,
-		};
-		fn setv[X,Y](u:*Union[X,Y],x:Y)->void{
-			printf("setv Y\n");
-		}
-		fn setv[X,Y](u:*Union[X,Y],x:X)->void{
-			printf("setv X\n");
-		}
-		
-		)====",
-		nullptr
-	},
-	
+
 
 	{
 		nullptr,nullptr,0,nullptr,nullptr

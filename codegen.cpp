@@ -1244,7 +1244,9 @@ void CodeGen::emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode){
 			}
 		}
 	} else{
-		dbprintf("\ntrouble, %s ()trying to compile function that doesn't seem to be resolved?797987\n",fn_node->name_str());
+		dbprintf("\ntrouble, %s::%s%s() trying to compile function that doesn't seem to be resolved?797987\n",fn_node->m_receiver?fn_node->m_receiver->name_str():"",fn_node->name_str(), fn_node->is_generic()?"<generic>":"<>");
+		fn_node->dump(-1);
+		newline(0);
 	}
 	for (auto a:fn_node->args){
 		cg.emit_type(a->type(),false);//was a->is_complex. confusion here over pass by ref/val. we think fn sigs should be 1:1. but raw struct type should  be pass by val? will we have to copy struct val?
