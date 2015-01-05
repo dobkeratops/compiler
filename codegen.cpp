@@ -1236,11 +1236,15 @@ void CodeGen::emit_function_signature(ExprFnDef* fn_node, EmitFnMode mode){
 	cg.emit_args_begin();
 	int inter=0;
 	// add environment ptr as first param if its a closure
-	if (fn_node->fn_type->name==CLOSURE){
-		cg.emit_type(cg.i8ptr());
-		if (mode==EmitDefinition){
-			cg.emit_reg(__ENV_I8_PTR);
+	if (fn_node->fn_type){
+		if (fn_node->fn_type->name==CLOSURE){
+			cg.emit_type(cg.i8ptr());
+			if (mode==EmitDefinition){
+				cg.emit_reg(__ENV_I8_PTR);
+			}
 		}
+	} else{
+		dbprintf("\ntrouble, %s ()trying to compile function that doesn't seem to be resolved?797987\n",fn_node->name_str());
 	}
 	for (auto a:fn_node->args){
 		cg.emit_type(a->type(),false);//was a->is_complex. confusion here over pass by ref/val. we think fn sigs should be 1:1. but raw struct type should  be pass by val? will we have to copy struct val?

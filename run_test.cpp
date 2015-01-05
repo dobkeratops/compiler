@@ -1074,7 +1074,6 @@ CompilerTest g_todo[]={
 
 void run_tests(){
 	int index=0;
-	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
 
 	for (auto t=g_Tests; t->name; t++,index++){
 		char tmp[256]; sprintf(tmp,"test_%d.ll",index);
@@ -1104,6 +1103,7 @@ void run_tests(){
 			free(output);
 		}
 	}
+	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
 
 }
 					

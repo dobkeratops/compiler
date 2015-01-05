@@ -422,9 +422,9 @@ ExprStructDef* Scope::find_struct_named(Name name){
 
 void Scope::add_fn(ExprFnDef* fnd,bool assert){
 	if (fnd->instance_of!=0) return; // we compile/match it by instance search.
-	if (fnd->name_ptr) {
-		return;
-	}
+//	if (fnd->name_ptr) {
+//		return;
+//	}
 	if (fnd->type_parameter_index(fnd->name)>=0){
 		this->templated_name_fns=fnd;
 		fnd->next_of_name=this->templated_name_fns;
@@ -433,6 +433,10 @@ void Scope::add_fn(ExprFnDef* fnd,bool assert){
 	if (fnd->name_ptr){
 //		ASSERT(fnd->name_ptr==ni)
 		if (fnd->name_ptr!=ni){
+			if (fnd->name==ni->name){
+				dbg2(dbprintf(" %s() this looks like a constructor-wrapper,TODO which scope is it in. called globally but components need types'scope, maybe make second wrapper..\n",this->name_str()));
+				return;
+			}
 			dbg2(fnd->dump(-1));
 			dbg(dbprintf("moving function %s from %s to %s, bug??\n", this->name_str(), fnd->name_ptr->owner->name_str(), ni->owner->name_str()));
 		}
