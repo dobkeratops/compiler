@@ -140,8 +140,6 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	//look for overload - infer fowards only first like C++
 	if (find_overloads(sc,desired,flags)){
 		// overloaded function was selected on inputs, but its' output may be refined!
-		auto fnd=this->get_fn();
-		dbprintf("%s\n",fnd->name_str());
 		propogate_type_fwd(flags,this, this->get_fn()->return_type(),this->type_ref());
 		return propogate_type_fwd(flags, this, desired, this->type_ref());
 	}

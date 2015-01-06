@@ -222,6 +222,13 @@ public:
 
 };
 
+struct ModRef : Expr{// eg mod foo;
+	ModRef(SrcPos sp,Name n){name=n;pos=sp;}
+	Node* clone()const{return new ModRef(pos,name);}
+	const char* kind_str(){return "mod_ref";}
+};
+
+
 struct ExprDef;
 struct ExprStructDef;
 typedef Type TParamVal;

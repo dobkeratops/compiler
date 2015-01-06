@@ -26,6 +26,8 @@ Expr*		parse_if_let(TokenStream&src);
 TypeDef*	parse_typedef(TokenStream&src);
 ExprOp*		parse_flow(TokenStream& src,Name flow);
 ExprOp*		parse_let(TokenStream& src);
+Expr* parse_mod(TokenStream& src);
+Expr* parse_use(TokenStream& src);
 Expr*		parse_match_arm(TokenStream& src);
 ArgDef*		parse_arg(int index,TokenStream& src, int close);
 ArgDef* parse_arg_or_self(int index,TokenStream& src, Type* self_t, int close);

@@ -146,6 +146,14 @@ struct EnumDef  : ExprStructDef {
 	EnumDef(SrcPos sp, Name n):ExprStructDef(sp,n){m_is_enum=true;};
 	//CgValue compile(CodeGen& cg, Scope* sc); // different compile behaviour: discriminant+opaque
 };
+// Rust-style enum components, 'variants',
+// TODO - eliminate all use of 'm_variant' and replace with methods with overrides here.
+// eg. compile_init_instance(); compile_dynamic_cast(Type*);
+struct VariantDef : ExprStructDef{
+	const char* kind_str()const{return "variant";}
+	VariantDef(SrcPos sp, Name n):ExprStructDef(sp,n){}
+	Node*	clone()const;
+};
 
 /// a rust 'Trait' is a struct with only virtual functions (&typedefs)
 struct TraitDef : ExprStructDef {

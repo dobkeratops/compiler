@@ -969,6 +969,11 @@ void ImplDef::dump(PrinterRef depth) const{
 	dump_struct_body(depth);
 	newline(depth);dbprintf("}");
 }
+Node* VariantDef::clone()const{
+	return this->clone_sub(new VariantDef(this->pos, this->name));
+}
+
+
 //CgValue EnumDef::compile(CodeGen &cg, Scope *sc){
 //	return CgValue();
 //}

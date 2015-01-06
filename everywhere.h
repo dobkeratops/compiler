@@ -272,7 +272,7 @@ extern int g_raw_types[];
 #define RT_SIZEMASK 0x0ff;
 // todo, for consistency make <X> and ?prefix version of all operators, not just a few special cased.
 enum Token {
-	NO_TOK=0,
+	TOK_NONE=0,
 	// top level structs & keywords. one,zero are coercible types..
 	RAW_TYPES,INT=RAW_TYPES,UINT,SIZE_T,I8,I16,I32,I64,U8,U16,U32,U64,U128,BOOL,BOOL_REG,	// int types
 	HALF,FLOAT,DOUBLE,FLOAT4,// floats

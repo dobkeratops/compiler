@@ -199,8 +199,8 @@ struct Union[X,Y]{ // [T] and <T> both supported . want '[]' but <> is conventio
 	x:X,y:Y,
 };
 
-fn match_with[X,Y,R]( // we will need to make overloaded permutations
-	u:&Union[X,Y], // 1st param is a ref ,not pointer, so it can autoderef.
+fn match_with<X,Y,R>( // we will need to make overloaded permutations
+	u:&Union<X,Y>, // 1st param is a ref ,not pointer, so it can autoderef.
 	fx:|*X|->R,
 	fy:|*Y|->R)
 	->R{

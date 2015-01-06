@@ -251,7 +251,7 @@ ExprFnDef* parse_fn_args(TokenStream& src,int close){
 void parse_fn_args_ret(ExprFnDef* fndef,TokenStream& src,int close){
 	Name tok;
 	int i=0;
-	while ((tok=src.peek_tok())!=NO_TOK) {
+	while ((tok=src.peek_tok())!=TOK_NONE) {
 		if (tok==ELIPSIS){
 			fndef->variadic=true; src.eat_tok(); src.expect(close); break;
 		}
@@ -516,6 +516,10 @@ void parse_block_nodes(ExprLs nodes, int* delim_used, TokenStream& src,Expr* ins
 		else if (src.eat_if(ENUM)){
 			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
 			operands.push_back(parse_enum(src));
+		}
+		else if (src.eat_if(MOD)){
+			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
+			operands.push_back(parse_mod(src));
 		}
 		else if (src.eat_if(MATCH)){
 			another_operand_so_maybe_flush(was_operand,nodes,operators,operands);
@@ -803,10 +807,10 @@ Type* parse_type(TokenStream& src, int close,Node* owner) {
 		}
 		else if (tok==OPEN_BRACKET){
 			auto x=parse_type(src,0,owner);
-			if (src.eat_if(COLON)){
+			if (src.eat_if(COLON,FAT_ARROW)){
 				auto y=parse_type(src,0,owner);
 				ret=new Type(x,DICTIONARY,x,y);
-			} else if (src.eat_if(MUL)){
+			} else if (src.eat_if(MUL,SEMICOLON)){
 				auto y=parse_type(src,0,owner);
 				ret=new Type(x,ARRAY,x,y);
 				// calculated expression would have to be parenthesized.
@@ -944,7 +948,7 @@ ExprStructDef* parse_struct(TokenStream& src) {
 ExprStructDef* parse_tuple_struct_body_sub(TokenStream& src, ExprStructDef* sd){
 	Name tok;
 	int i=0;
-	while ((tok=src.peek_tok())!=NO_TOK){
+	while ((tok=src.peek_tok())!=TOK_NONE){
 		if (tok==CLOSE_PAREN){src.eat_tok(); break;}
 		sd->fields.push_back(new ArgDef(src.prev_pos,getNumberIndex(i),parse_type(src,0,sd)));
 		src.eat_if(COMMA); src.eat_if(SEMICOLON);
@@ -955,8 +959,7 @@ ExprStructDef* parse_tuple_struct_body_sub(TokenStream& src, ExprStructDef* sd){
 	return sd;
 }
 
-ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* force_inherit){
-	auto sd=new ExprStructDef(pos,name);
+ExprStructDef* parse_struct_body_sub(TokenStream& src,Type* force_inherit, ExprStructDef* sd){
 	// todo, namespace it FFS.
 	MyVec<ArgDef*> args;
 	if (src.eat_if(OPEN_PAREN)){ // constructor args eg struct Foo(x,y,z){field1=x+y,..}
@@ -989,7 +992,7 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	// todo: type-params.
 	Name tok;
 	int f_index=0;
-	while ((tok=src.peek_tok())!=NO_TOK){
+	while ((tok=src.peek_tok())!=TOK_NONE){
 		// allow writing struct Foo{ .bar:int, .baz:int} for easy search
 		if (tok==DOT){ src.eat_tok();tok=src.peek_tok();}
 		if (tok==CLOSE_BRACE){src.eat_tok(); break;}
@@ -1015,6 +1018,9 @@ ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* fo
 	}
 	// if there's any virtual functions, stuff a vtable pointer in the start
 	return sd;
+}
+ExprStructDef* parse_struct_body(TokenStream& src,SrcPos pos,Name name, Type* force_inherit){
+	return parse_struct_body_sub(src,force_inherit, new ExprStructDef(pos,name));
 }
 
 // trait: describes a vtable layout
@@ -1076,15 +1082,18 @@ ImplDef* parse_impl(TokenStream& src) {
 }
 
 
-ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
+ExprStructDef* parse_tuple_struct_body_s(TokenStream& src, ExprStructDef* sd){
 	Name tok;
-	auto sd=new ExprStructDef(pos,name);
+//	auto sd=new ExprStructDef(pos,name);
 	if (auto open=src.eat_if(OPEN_BRACKET,LT)) {
 		parse_typeparams_def(src,sd->tparams,close_of(open));
 	}
 	if (!src.eat_if(OPEN_PAREN))
 		return sd;
 	return parse_tuple_struct_body_sub(src,sd);
+}
+ExprStructDef* parse_tuple_struct_body(TokenStream& src, SrcPos pos, Name name){
+	return parse_tuple_struct_body_s(src,new ExprStructDef(pos,name));
 }
 EnumDef* parse_enum(TokenStream& src) {
 	auto pos=src.pos;
@@ -1100,18 +1109,18 @@ EnumDef* parse_enum(TokenStream& src) {
 		return ed;
 	// todo: type-params.
 	int index=0;		// TODO: computed discriminants; it will have to be subindex+expression
-	while ((tok=src.eat_tok())!=NO_TOK){
+	while ((tok=src.eat_tok())!=TOK_NONE){
 		auto subpos=src.pos;
 		if (tok==CLOSE_BRACE){break;}
 		// got an ident, now what definition follows.. =value, {fields}, (types), ..
 		auto peektok=src.peek_tok();
 		if (peektok==OPEN_BRACE){
-			auto sd=parse_struct_body(src,subpos,tok,nullptr);
+			auto sd=parse_struct_body_sub(src,nullptr, new VariantDef(subpos,tok));
 			sd->set_variant_of(ed,index++);
 			ed->structs.push_back(sd);
 			
 		} else if (peektok==OPEN_PAREN){
-			auto sd=parse_tuple_struct_body(src,subpos,tok);
+			auto sd=parse_tuple_struct_body_s(src,/*subpos,tok*/new VariantDef(subpos,tok));
 			sd->set_variant_of(ed,index++);
 			ed->structs.push_back(sd);
 		} else if (src.eat_if(ASSIGN)){
@@ -1130,6 +1139,20 @@ EnumDef* parse_enum(TokenStream& src) {
 // for ;condition;increment{body}
 // for pattern in expression {body }
 // for pattern=expression,..; condition; increment {body}
+
+Expr* parse_mod(TokenStream& src){
+	auto pos=src.pos;
+	auto name = Name(TOK_NONE);
+	if (src.peek_tok()!=OPEN_BRACE){
+		name=src.eat_ident();
+	}
+	if (src.eat_if(OPEN_BRACE)){
+		return parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
+	} else {
+		src.expect(SEMICOLON);
+		return new ModRef(pos,name);
+	}
+}
 
 ExprFor* parse_for(TokenStream& src){
 	ExprFor* p=nullptr;

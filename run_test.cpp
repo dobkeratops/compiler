@@ -23,6 +23,7 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
+
 	{	"internal vtable",__FILE__,__LINE__,R"====(
 		
 		extern"C"fn printf(s:str,...)->int;
@@ -1037,6 +1038,26 @@ CompilerTest g_Tests[]={
 	}
 };
 CompilerTest g_todo[]={
+	{
+		"c++ iterator for pattern:collection",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		struct Slice{
+		data:*T,
+		num:int
+			fn begin(){ data}
+			fn end(){&data[num]}
+		};
+		fn main(argc:int, argv:**char)->int{
+			let slice=Slice{new int[4],4};
+			for x:slice{
+				printf("%p\n",x);
+			};
+			0
+		};
+		)===="
+		,"x=1\nx=2\nx=3\nx=4\nx=5\n"
+	},
+
 	// broken, not really sure why
 	{	"HKT (template template parameters)",__FILE__,__LINE__, R"====(
 		
