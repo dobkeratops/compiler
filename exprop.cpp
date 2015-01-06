@@ -171,7 +171,6 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 
 			
-			
 			propogate_type_fwd(flags, this, desired, this->type_ref());
 //			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 			return propogate_type_refs(flags,(const Node*)this, this->type_ref(),lhs->type_ref());

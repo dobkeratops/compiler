@@ -206,91 +206,6 @@ CompilerTest g_Tests[]={
 	},
 */
 	
-	{	"multi feature test 2",__FILE__,__LINE__,R"====(
-		
-		fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{
-			let result=init();
-			for index:=0; index<src.size(); index+=1 {
-				push_back(&result, f(get(src,index)));
-			}
-			result
-		}
-		fn"C" printf(s:str,...)->int;
-		fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{
-			if u.tag==0 { fx(&u.x)}
-			else { fy(&u.y)}
-		}
-		fn main(argc:int,argv:**char)->int{
-		fv:=Foo{vx=13,vy=14,vz=15};
-			u=:Union[int,float];
-			setv(&u,0.0);
-			setv(&u,0);
-		z:=debugme(&u,
-				   |x:*int|	{printf("union was set to int\n");10},
-				   |x:*float|	{printf("union was set to float\n");12}
-				   );
-			printf("map union returns %d\n", z);
-			xs=:array[int,512];
-		q:=xs[1]; p1:=&xs[1];
-			xs[2]=000;
-			xs[2]+=400;
-			*p1=30;
-		z:=5;
-		y:=xs[1]+z+xs[2];
-		x:=0;
-			something_foo(&fv,&fv);
-			for i:=0,j:=0; i<10; i+=1,j+=10 {
-				x+=i;
-				printf("i,j=%d,%d,x=%d\n",i,j,x);
-			}else{
-				printf("loop exit fine\n");
-			}
-			something_foo(&fv);
-			something(&fv);
-			take_closure(|x|{printf("closure says %d %d\n",x,y);})
-			
-		x:=if argc<2{printf("<2");1}else{printf(">2");2};
-			printf("yada yada yada\n");
-			printf("\nHello World %d\n", y );
-			0
-		}
-		fn lerp(a,b,f)->float{(b-a)*f+a};
-		fn foo(a:*char)->void;
-		struct Foo {
-		vx:int, vy:int, vz:int
-		}
-		fn something_foo(f:*Foo){
-			printf("f.x= %d\n", f.vx);
-		}
-		fn something_foo(f:*Foo,x:*Foo){
-			printf("something_foo with 2 args overloaded\n");
-			printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
-		}
-		fn something(f:*Foo){
-			printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
-		}
-		fn something(f:float){
-		}
-		fn something(f:float,x){
-		}
-		fn take_closure(funcp:(int)->void){
-			funcp(10);
-		}
-		struct Union[X,Y]{
-		tag:int,
-		x:X,y:Y,
-		};
-		fn setv[X,Y](u:*Union[X,Y],x:Y)->void{
-			printf("setv Y\n");
-		}
-		fn setv[X,Y](u:*Union[X,Y],x:X)->void{
-			printf("setv X\n");
-		}
-		
-		)====",
-		nullptr
-	},
-	
 	{	"parse struct-trait-impl",__FILE__,__LINE__,R"====(
 		extern"C" fn printf(s:str,...)->int;
 		struct Foo{
@@ -1032,6 +947,91 @@ CompilerTest g_Tests[]={
 		"u.tag=1\n"
 	},
 
+		{	"multi feature test 2",__FILE__,__LINE__,R"====(
+			
+			fn map<V,A,B>(src:*V<A>, f:|*A|->B)-> V<B>{
+				let result=init();
+				for index:=0; index<src.size(); index+=1 {
+					push_back(&result, f(get(src,index)));
+				}
+				result
+			}
+			fn"C" printf(s:str,...)->int;
+			fn debugme[X,Y,R](u:*Union[X,Y], fx:(*X)->R,fy:(*Y)->R)->R{
+				if u.tag==0 { fx(&u.x)}
+				else { fy(&u.y)}
+			}
+			fn main(argc:int,argv:**char)->int{
+			fv:=Foo{vx=13,vy=14,vz=15};
+				u=:Union[int,float];
+				setv(&u,0.0);
+				setv(&u,0);
+			z:=debugme(&u,
+					   |x:*int|	{printf("union was set to int\n");10},
+					   |x:*float|	{printf("union was set to float\n");12}
+					   );
+				printf("map union returns %d\n", z);
+				xs=:array[int,512];
+			q:=xs[1]; p1:=&xs[1];
+				xs[2]=000;
+				xs[2]+=400;
+				*p1=30;
+			z:=5;
+			y:=xs[1]+z+xs[2];
+			x:=0;
+				something_foo(&fv,&fv);
+				for i:=0,j:=0; i<10; i+=1,j+=10 {
+					x+=i;
+					printf("i,j=%d,%d,x=%d\n",i,j,x);
+				}else{
+					printf("loop exit fine\n");
+				}
+				something_foo(&fv);
+				something(&fv);
+				take_closure(|x|{printf("closure says %d %d\n",x,y);})
+				
+			x:=if argc<2{printf("<2");1}else{printf(">2");2};
+				printf("yada yada yada\n");
+				printf("\nHello World %d\n", y );
+				0
+			}
+			fn lerp(a,b,f)->float{(b-a)*f+a};
+			fn foo(a:*char)->void;
+			struct Foo {
+			vx:int, vy:int, vz:int
+			}
+			fn something_foo(f:*Foo){
+				printf("f.x= %d\n", f.vx);
+			}
+			fn something_foo(f:*Foo,x:*Foo){
+				printf("something_foo with 2 args overloaded\n");
+				printf("f.x= %d,.y= %d,.z= %d\n", f.vx,f.vy,f.vz);
+			}
+			fn something(f:*Foo){
+				printf("f.x= %d,.y= %d,.z= %d\n", f.vx, f.vy, f.vz);
+			}
+			fn something(f:float){
+			}
+			fn something(f:float,x){
+			}
+			fn take_closure(funcp:(int)->void){
+				funcp(10);
+			}
+			struct Union[X,Y]{
+			tag:int,
+			x:X,y:Y,
+			};
+			fn setv[X,Y](u:*Union[X,Y],x:Y)->void{
+				printf("setv Y\n");
+			}
+			fn setv[X,Y](u:*Union[X,Y],x:X)->void{
+				printf("setv X\n");
+			}
+			
+			)====",
+			nullptr
+		},
+		
 
 	{
 		nullptr,nullptr,0,nullptr,nullptr

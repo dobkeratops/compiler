@@ -122,7 +122,7 @@ ResolveResult Node::propogate_type_refs(int flags,const Node*n, Type*& a,Type*& 
 		b=a;
 		return resolved|=ResolveResult(COMPLETE);
 	}
-	return resolved|=assert_types_eq(flags,n, a,b);
+	return resolved|=infer_and_cmp_types(flags,n, a,b);
 }
 ResolveResult Node::propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b) {
 	::verify(a,b);
@@ -143,7 +143,7 @@ ResolveResult Node::propogate_type_fwd(int flags,const Node* n, const Type* desi
 	}
 	// 'propogate type forward knows what *output* type is needed, so reverse the order here
 	// to check if 'b' can coerce to desired.
-	return resolved|=assert_types_eq(flags,n, b,desired);
+	return resolved|=infer_and_cmp_types_rev(flags,n, b,desired);
 	
 	return ResolveResult(INCOMPLETE);
 }

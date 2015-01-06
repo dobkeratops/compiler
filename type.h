@@ -5,6 +5,12 @@
 #include "exprstructdef.h"
 
 struct Name;
+
+#define TC_COERCE 0x0001
+#define TC_INFER_REV 0x0002
+#define TC_INFER_FWD 0x0004
+#define TC_INFER (TC_INFER_FWD|TC_INFER_REV)
+
 struct Type : ExprDef {
 	MyVec<TParamDef*> tparams;
 	//ExprDef* struct_def=0;	// todo: struct_def & sub are mutually exclusive.
@@ -39,6 +45,7 @@ struct Type : ExprDef {
 	size_t	alignment() const;
 	size_t	size() const;
 	int	raw_type_flags()const	{int i=((int)name)-RAW_TYPES; if (i>=0&&i<NUM_RAW_TYPES){return g_raw_types[i];}else return 0;}
+	void	replace_auto_with(const Type* src);
 	bool	is_int()const		{return raw_type_flags()&RT_INTEGER;}
 	bool	is_float()const		{return raw_type_flags()&RT_FLOATING;}
 	bool	is_number()const	{return raw_type_flags()&(RT_FLOATING|RT_INTEGER);}
@@ -96,14 +103,18 @@ struct Type : ExprDef {
 	ExprStructDef*	get_common_base(Type* other) ;
 	ExprStructDef*	struct_def_noderef()const;
 	ExprStructDef*	get_struct_autoderef() const; // with autoderef
-	bool			is_coercible(const Type* other,Name self_t=0) const{return is_equal(other,true,self_t);};
-	bool			is_equal(const Type* other,bool coerce=false,Name self_t=0) const;
+	bool			is_equal(const Type* other,int mode=0,Name self_t=0) const{return const_cast<Type*>(this)->is_equal_s(const_cast<Type*>(other),mode,self_t);}
+	bool			is_coercible(const Type* other,Name self_t=0) const{return const_cast<Type*>(this)->is_equal_s(const_cast<Type*>(other),TC_COERCE,self_t);};
+	bool			is_inferable( Type* other,Name self_t=0) {return const_cast<Type*>(this)->is_equal(const_cast<Type*>(other),TC_INFER,self_t);};
+	bool			is_inferable_rev( const Type* other,Name self_t=0) {return const_cast<Type*>(this)->is_equal(const_cast<Type*>(other),TC_INFER_REV,self_t);};
 	bool			is_equal(const Type* other, const TParamXlat& xlat ,Name self_t=0)const;
-	bool			is_equal_sub(const Type* other,bool coerce=false,Name self_t=0) const;
+	
+	bool			is_equal_s( Type* other,int mode=0,Name self_t=0) ;
+	bool			is_equal_sub( Type* other,int mode=0,Name self_t=0) ;
 	bool			is_equal_sub(const Type* other, const TParamXlat& xlat ,Name self_t=0)const;
 	// todo 'is_equal' rename to iscompatible, is_equal/coercible call it with flags
 	int				is_equal_or_coercible(const Type* other, Name self_t=0) const{
-		if (is_equal(other,false,self_t)) return 10;
+		if (is_equal(other,0,self_t)) return 10;
 		else if (is_coercible(other,self_t)) return 1;
 		else return 0;
 	}
@@ -174,5 +185,9 @@ void verify(const Type* a);
 void verify(const Type* a,const Type* b);
 void verify(const Type* a,const Type* b,const Type* c);
 ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type* b);
+ResolveResult infer_and_cmp_types(int flags, const Node* n,  Type*& a, Type*& b);
+// coercion direction matters, so we have both fwd/reverse only versions
+ResolveResult infer_and_cmp_types_rev(int flags, const Node* n,  Type*& a, const Type* b);
+ResolveResult infer_and_cmp_types_fwd(int flags, const Node* n,  const Type* a, Type*& b);
 
 

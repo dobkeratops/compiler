@@ -207,51 +207,73 @@ ExprStructDef* Type::struct_def_noderef()const { // without autoderef
 //	else return nullptr;
 	return struct_def();
 };
-bool Type::is_equal(const Type* other, bool coerce, Name self_t) const{
+bool Type::is_equal_s(Type* other, int mode, Name self_t) {
 	/// TODO this is redundant, move all to typeparam based matcher
 	/// and just pass tp==0
 	// handle root level coersions
 	if ((!this) && (!other)) return true;
-	if (coerce && this && other){
+	if ((mode & TC_COERCE) && this && other){
 		if (this->name!=CONST && other->name==CONST ){	// non-const coerces to const just fine - too mutability flag tracked on type itself, to handle mut/const from C++/rust. to be annotaed from fn
-			return is_equal(other->sub, coerce, self_t);
+			return is_equal_s(other->sub, mode, self_t);
 		}
 		if (this->name==MUT && other->name!=MUT){	// non-const coerces to const just fine - too mutability
-			return this->sub->is_equal(other, coerce, self_t);
+			return this->sub->is_equal_s(other, mode, self_t);
 		}
 		if (this->is_ref() && !other->is_ref()) {	// ref coerces to value
-			return this->sub->is_equal(other,coerce,self_t);
+			return this->sub->is_equal_s(other,mode,self_t);
 		}
 		if (!this->is_ref() && other->is_ref()) {	// object coerces to ref fine
-			return this->is_equal(other->sub,coerce,self_t);
+			return this->is_equal_s(other->sub,mode,self_t);
 		}
 	}
-	return is_equal_sub(other,coerce,self_t);
+	return is_equal_sub(other,mode,self_t);
 }
-bool Type::is_equal_sub(const Type* other,bool coerce,Name self_t) const{
+void Type::replace_auto_with(const Type* src) {
+	//TODO - also for absent tparams.
+	// replace auto slots in 'this' from 'src'
+	// handle cases like auto<X,Y> == B<X,Y> ,  auto<auto,Y> = B<X,Y> ...
+	if (!src) return;	// no source to replace from..
+	if (this->name==AUTO){
+		this->name = src->name;
+	}
+	auto d=this->sub; auto s=src->sub;
+	for (; d&& s; d=d->next, s=s->next){
+		d->replace_auto_with(s);
+	}
+	for (;s; s=s->next ) {
+		this->push_back((Type*)s->clone());
+	}
+
+}
+bool Type::is_equal_sub(Type* other,int mode,Name self_t){
 	/// TODO factor out common logic, is_coercible(),eq(),eq(,xlat)
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
-	if (this&&this->name==AUTO){
-		if (other){
-			const_cast<Type*>(this)->name=other->name;
+
+	if (this){
+		if (((!this->sub) || this->name==AUTO) && (mode & TC_INFER_REV)){
+			const_cast<Type*>(this)->replace_auto_with(other);
 		}
-		if (this->sub && other) {
-			return this->sub->is_equal(other->sub,coerce);
-		}
-		else {
-			return true;
+		if (this->name==AUTO){
+			if (this->sub && other) {
+				return this->sub->is_equal(other->sub,mode);
+			}
+			else {
+				return true;
+			}
 		}
 	}
-	if (other && other->name==AUTO){
-		if (this)
-			const_cast<Type*>(other)->name=this->name;
-		if (other->sub && this) return other->sub->is_equal(this->sub,coerce);
-		else return true;
+	if (other){
+		if (((!other->sub) || other->name==AUTO) &&(mode & TC_INFER_FWD))
+			const_cast<Type*>(other)->replace_auto_with(this);
+		if (other->name==AUTO){
+			if (other->sub && this) return other->sub->is_equal(this->sub,mode);
+			else return true;
+		}
 	}
 	if (!(this && other)) return false;
 	
-	if (type_is_coercible(this,other,coerce))
+	if (type_is_coercible(this,other,mode))
 		return true;
 	else{
 		if (this->name==SELF_T || other->name==SELF_T){
@@ -270,7 +292,7 @@ bool Type::is_equal_sub(const Type* other,bool coerce,Name self_t) const{
 	auto p=this->sub,o=other->sub;
 		
 	for (; p && o; p=p->next,o=o->next) {
-		if (!p->is_equal(o,false,self_t))// coercible only applies to root. eg vec<int>!=vec<bool> but int coerces to bool, ptr[Foo:>Bar] coerces to ptr[Bar]
+		if (!p->is_equal(o,mode & ~TC_COERCE,self_t))// coercible only applies to root. eg vec<int>!=vec<bool> but int coerces to bool, ptr[Foo:>Bar] coerces to ptr[Bar]
 			return false;
 	}
 	if (o || p)
@@ -692,10 +714,30 @@ void dump(const Type* a,const Type* b){
 }
 
 
+ResolveResult type_error(int flags, const Node* n, const Type* a, const Type* b){
+	if (!(flags & R_FINAL))
+		return ResolveResult(RS_ERROR);
+	// error is stronger than incomplete. incomplete means keep going, error means give up
+	
+	dbg(n->dump(0));
+	a->is_coercible(b);
+	error_begin(n," type mismatch\n");
+	warning(a->get_origin(),"from here:");
+	a->dump(-1);
+	warning(b->get_origin(),"vs here:");
+	b->dump(-1);
+	newline(0);
+#if DEBUG>=2
+	if (a->is_coercible(b)){
+	}
+	g_pRoot->dump(0);
+	newline(0);
+	dbprintf("type mismatch see above\n");
+#endif
+	error_end(n);
+	return ResolveResult(RS_ERROR);
+}
 ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type* b) {
-///	if (!n->pos.line){
-//		error(n,"AST node %s %s hasn't been given error location", n->kind_str(), n->name_str());
-//	}
 	ASSERT(a && b);
 	// TODO: variadic args shouldn't get here:
 	if (a->name==ELIPSIS||b->name==ELIPSIS)
@@ -704,30 +746,43 @@ ResolveResult assert_types_eq(int flags, const Node* n, const Type* a,const Type
 		if (a->is_coercible(b)){
 			return ResolveResult(COMPLETE);
 		}
-		if (!(flags & R_FINAL))
-			return ResolveResult(RS_ERROR);
-		// error is stronger than incomplete. incomplete means keep going, error means give up
-		
-		dbg(n->dump(0));
-		a->is_coercible(b);
-		error_begin(n," type mismatch\n");
-		warning(a->get_origin(),"from here:");
-		a->dump(-1);
-		warning(b->get_origin(),"vs here:");
-		b->dump(-1);
-		newline(0);
-#if DEBUG>=2
-		if (a->is_coercible(b)){
-		}
-		g_pRoot->dump(0);
-		newline(0);
-		dbprintf("type mismatch see above\n");
-#endif
-		error_end(n);
-		return ResolveResult(RS_ERROR);
+		return type_error(flags,n,a,b);
 	}
 	return ResolveResult(COMPLETE);
 }
+ResolveResult infer_and_cmp_types(int flags, const Node* n,  Type*& a, Type*& b) {
+	ASSERT(a && b);
+	// TODO: variadic args shouldn't get here:
+	if (a->name==ELIPSIS||b->name==ELIPSIS)
+		return ResolveResult(COMPLETE);
+	if (!a->is_equal(b)){
+		if (a->is_coercible(b)){
+			return ResolveResult(COMPLETE);
+		}
+		if (a->is_inferable(b)){
+			return (a->is_equal(b))?ResolveResult(COMPLETE):ResolveResult(INCOMPLETE);
+		}
+		return type_error(flags,n,a,b);
+	}
+	return ResolveResult(COMPLETE);
+}
+ResolveResult infer_and_cmp_types_rev(int flags, const Node* n,  Type*& a, const Type* b) {
+	ASSERT(a && b);
+	// TODO: variadic args shouldn't get here:
+	if (a->name==ELIPSIS||b->name==ELIPSIS)
+		return ResolveResult(COMPLETE);
+	if (!a->is_equal(b)){
+		if (a->is_coercible(b)){
+			return ResolveResult(COMPLETE);
+		}
+		if (a->is_inferable_rev(b)){
+			return (a->is_equal(b))?ResolveResult(COMPLETE):ResolveResult(INCOMPLETE);
+		}
+		return type_error(flags,n,a,b);
+	}
+	return ResolveResult(COMPLETE);
+}
+
 
 void dump_tparams(const MyVec<TParamDef*>& ts, const MyVec<TParamVal*>* given) {
 	bool a=false;
