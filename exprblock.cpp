@@ -190,9 +190,9 @@ ResolveResult	ExprStructInit::resolve_operator_new(Scope *sc, const Type *desire
 	if (!desired && !op->get_type() && op->rhs->get_type()) {
 		op->set_type( new Type(op,PTR,(Type*)b->get_type()->clone()) );
 	}
-	if (op->get_type())
-		op->propogate_type_refs(flags, (Node*)op, op->get_type()->sub, b->type_ref());
-
+	if (op->get_type()){
+		op->propogate_type_refs(flags, op->get_type()->sub, b->type_ref());
+	}
 	resolved|=b->resolve_if(sc, desired?desired->sub:nullptr, flags);
 	this->type()->set_rvalue();
 	return resolved;
@@ -205,7 +205,7 @@ ResolveResult	ExprSubscript::resolve_operator_new(Scope *sc, const Type *desired
 		op->set_type( new Type(op,PTR,(Type*)b->get_type()->clone()) );
 	}
 	if (op->get_type())
-		op->propogate_type_refs(flags, (Node*)op, op->get_type()->sub, b->type_ref());
+		op->propogate_type_refs(flags, op->get_type()->sub, b->type_ref());
 	
 	resolved|=b->call_expr->resolve_if(sc,op->get_type()?op->get_type()->sub:nullptr,flags);
 	resolved|=b->argls[0]->resolve_if(sc,op->get_type()?op->get_type()->sub:nullptr,flags);
@@ -332,7 +332,7 @@ ResolveResult	ExprTuple::resolve_operator_dot(Scope *sc, const Type *desired, in
 	for (index_t i=0; i<this->argls.size();i++){
 		this->get_type()->push_back(elem_ts[i]);
 	}
-	return resolved|propogate_type_refs(flags,(const Node*)this, this->type_ref(),tref);
+	return resolved|this->propogate_type_refs(flags, this->type_ref(),tref);
 }
 
 ResolveResult ExprBlock::resolve(Scope* sc, const Type* desired, int flags) {
@@ -406,7 +406,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 	}
 	this->type()->set_rvalue();
 
-	return propogate_type_refs(flags,(const Node*)this,// order matters:
+	return propogate_type_refs(flags,// order matters:
 						this->argls.back()->type_ref(),//coerce from
 						this->type_ref());			// <-coerce to
 }
@@ -606,8 +606,8 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 		dbg_tparams(sd->dump(0));
 		dbg_tparams(if (sd->inherits){sd->inherits->dump(0);});
 		dbprintf_tparams("\n");
-		si->propogate_type_refs(flags,(const Node*)si, si->call_expr->type_ref(), st);
-		si->propogate_type_refs(flags,(const Node*)si, si->call_expr->type_ref(), st);
+		si->propogate_type_refs(flags, si->call_expr->type_ref(), st);
+		si->propogate_type_refs(flags, si->call_expr->type_ref(), st);
 //		si->call_expr->set_type(st);
 		si->call_expr->set_def(sd);
 //		si->set_def(sd);
@@ -618,7 +618,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 	//if (!si->type()){
 	//	si->set_type(new Type(sd));
 	//}
-	si->propogate_type_refs(flags,(Node*)si, si->type_ref(),si->call_expr->type_ref());
+	si->propogate_type_refs(flags, si->type_ref(),si->call_expr->type_ref());
 	si->propogate_type_fwd(flags,si, desiredType);
 	
 	si->call_expr->set_def(sd);
@@ -640,7 +640,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 		if (op&&(op->name==FIELD_ASSIGN)){
 			field=sd->find_field(op->lhs);
 			si->resolved|=op->rhs->resolve_if(sc,field->type(),flags); // todo, need type params fwd here!
-			si->propogate_type_refs(flags,op,op->lhs->type_ref(),op->rhs->type_ref());
+			si->propogate_type_refs(flags,op, op->lhs->type_ref(),op->rhs->type_ref());
 			//				propogate_type(flags,op,op->rhs->type_ref());
 			op->lhs->def=field;
 			named_field_index=sd->field_index(op->lhs);
@@ -762,6 +762,6 @@ ResolveResult
 ExprCall::resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr *lhs,Type*& tref){
 	auto method_name=this->call_expr->name;
 	this->resolve_call_sub(sc, desired, flags, lhs);
-	return propogate_type_refs(flags,(const Node*)this,this->type(),tref);
+	return propogate_type_refs(flags,this->type(),tref);
 	
 }

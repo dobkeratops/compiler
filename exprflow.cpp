@@ -19,7 +19,7 @@ ResolveResult	ExprFor::resolve_for_sub(Scope* outer_scope,const Type* desired,in
 	resolved|=body->resolve_if(sc,desired,flags);
 	if (else_block) {
 		else_block->resolve_if(sc,desired,flags);
-		propogate_type_refs(flags, (Node*)this, this->type_ref(), else_block->type_ref());
+		propogate_type_refs(flags, this->type_ref(), else_block->type_ref());
 	}
 	//without an else bllock, we can't return
 	else{
@@ -222,14 +222,14 @@ ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 		} else {
 			propogate_type_expr_ref(flags,this, body->type_ref());
 		
-			propogate_type_refs(flags,this, this->body->type_ref(), else_block->type_ref());
-			propogate_type_refs(flags,this, this->type_ref(), else_block->type_ref());
+			propogate_type_refs(flags, this->body->type_ref(), else_block->type_ref());
+			propogate_type_refs(flags, this->type_ref(), else_block->type_ref());
 #if DEBUG >2
 			this->body->type()->dump_if(0);
 			this->else_block->type()->dump_if(0);
 			this->type()->dump_if(0);
 #endif
-			return propogate_type_refs(flags,this, this->type_ref(), this->body->type_ref());
+			return propogate_type_refs(flags, this->type_ref(), this->body->type_ref());
 		}
 	}
 	else {
@@ -337,8 +337,8 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 		resolved|=a->body->resolve_if(a->scope, this->type(), flags);
 		
 		//all arms outputs have same typeas the whole output
-		propogate_type_refs(flags,this, a->body->type_ref(),this->type_ref());
-		propogate_type_refs(flags,this, a->body->type_ref(),a->type_ref());
+		propogate_type_refs(flags, a->body->type_ref(),this->type_ref());
+		propogate_type_refs(flags, a->body->type_ref(),a->type_ref());
 		
 	}
 	return propogate_type_fwd(flags, desired, this->type_ref());

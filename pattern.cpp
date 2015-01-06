@@ -43,7 +43,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	}
 	if (this->name==EXPRESSION){
 		((Node*)(this->sub))->resolve_if(sc,rhs,flags);
-		return propogate_type_refs(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
+		return propogate_type_refs(flags, this->type_ref(), this->sub->type_ref());
 	}
 	if (this->name==REF){
 		if (rhs&&rhs->name==REF){
@@ -63,7 +63,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		ASSERT(sub_pat()->next);
 		sub_pat()->next->resolve_if(sc, nullptr, flags);
 		sub_pat()->resolve_with_type(sc, rhs, flags);
-		return propogate_type_refs(flags,(Node*)this, this->type_ref(), this->sub->type_ref());
+		return propogate_type_refs(flags, this->type_ref(), this->sub->type_ref());
 	}
 	if (this->name==OR){
 		for (auto s=this->sub_pat();s;s=s->next){
@@ -81,7 +81,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 			v->set_type((Type*)(p->type()->clone()));
 		}
 		resolved|=v->resolve_with_type(sc,p->type(),flags);
-		return propogate_type_refs(flags, (Node*)this, this->sub->type_ref(), this->sub->next->type_ref());
+		return propogate_type_refs(flags, this->sub->type_ref(), this->sub->next->type_ref());
 	}
 	else if (this->name==TUPLE){
 		auto subt=rhs?rhs->sub:nullptr;

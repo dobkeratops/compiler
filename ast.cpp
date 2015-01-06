@@ -149,7 +149,7 @@ ExprIdent::resolve_operator_dot(Scope *sc, const Type *desired, int flags, Expr 
 {
 	if (auto st=sc->find_struct_of(lhs)){
 		if (auto f=st->find_field(this)){
-			return propogate_type_refs(flags,(const Node*)this, f->type_ref(), tref);
+			return propogate_type_refs(flags, f->type_ref(), tref);
 		}
 	}
 	if (flags&R_FINAL) {
@@ -365,7 +365,7 @@ ExprLiteral::resolve_operator_dot(Scope *sc, const Type *desired, int flags, Exp
 		auto fi=getNumberInt(this->name);
 		if (auto t=lhs->type()){
 			auto elem_t = t->get_elem(fi);
-			return this->propogate_type_refs(flags,(const Node*)this, elem_t, tref);
+			return this->propogate_type_refs(flags, elem_t, tref);
 		}
 	}
 	return INCOMPLETE;

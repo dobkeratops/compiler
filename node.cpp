@@ -111,7 +111,7 @@ CgValue Node::codegen(CodeGen& cg, bool just_contents) {
 }
 
 const Type* any_not_zero(const Type* a, const Type* b){return a?a:b;}
-ResolveResult Node::propogate_type_refs(int flags,const Node*n, Type*& a,Type*& b) {
+ResolveResult Node::propogate_type_refs(int flags, Type*& a,Type*& b) {
 	::verify(a,b);
 	if (!(a || b))
 		return resolved|=ResolveResult(INCOMPLETE);
@@ -122,13 +122,13 @@ ResolveResult Node::propogate_type_refs(int flags,const Node*n, Type*& a,Type*& 
 		b=a;
 		return resolved|=ResolveResult(COMPLETE);
 	}
-	return resolved|=infer_and_cmp_types(flags,n, a,b);
+	return resolved|=infer_and_cmp_types(flags,this, a,b);
 }
 ResolveResult Node::propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b) {
 	::verify(a,b);
-	resolved|=propogate_type_refs(flags,(const Node*)n,a,b);
-	resolved|=propogate_type_refs(flags,(const Node*)n,n->type_ref(),b);
-	return resolved|=propogate_type_refs(flags,(const Node*)n,n->type_ref(),a);
+	resolved|=n->propogate_type_refs(flags,a,b);
+	resolved|=n->propogate_type_refs(flags,n->type_ref(),b);
+	return resolved|=n->propogate_type_refs(flags,n->type_ref(),a);
 }
 ResolveResult Node::propogate_type_fwd(int flags,const Type* desired,Type*& b)  {
 	::verify(desired,b);
@@ -151,15 +151,15 @@ ResolveResult Node::propogate_type_fwd(int flags,Expr* e, const Type*& a) {
 	return resolved|=e->propogate_type_fwd(flags, a, e->type_ref());
 }
 ResolveResult Node::propogate_type_expr_ref(int flags,Expr* e, Type*& a) {
-	return resolved|=propogate_type_refs(flags,e, a, e->type_ref());
+	return resolved|=e->propogate_type_refs(flags, a, e->type_ref());
 }
 
-ResolveResult Node::propogate_type_refs(int flags,const Node* n, Type*& a,Type*& b,Type*& c) {
+ResolveResult Node::propogate_type_refs(int flags,Type*& a,Type*& b,Type*& c) {
 	::verify(a,b,c);
 	int ret=COMPLETE;
-	ret|=propogate_type_refs(flags,n,a,b);
-	ret|=(c)?propogate_type_refs(flags,n,b,c):INCOMPLETE;
-	ret|=(c)?propogate_type_refs(flags,n,a,c):INCOMPLETE;
+	ret|=this->propogate_type_refs(flags,a,b);
+	ret|=(c)?this->propogate_type_refs(flags,b,c):INCOMPLETE;
+	ret|=(c)?this->propogate_type_refs(flags,a,c):INCOMPLETE;
 	return resolved|=ResolveResult(ret);
 }
 ResolveResult Node::propogate_type_fwd(int flags,const Type*& a,Type*& b,Type*& c) {
@@ -167,7 +167,7 @@ ResolveResult Node::propogate_type_fwd(int flags,const Type*& a,Type*& b,Type*& 
 	int ret=COMPLETE;
 	ret|=propogate_type_fwd(flags,a,b);
 	ret|=propogate_type_fwd(flags,a,c);
-	ret|=propogate_type_refs(flags,this,b,c);
+	ret|=propogate_type_refs(flags,b,c);
 	return resolved|=ResolveResult(ret);
 }
 

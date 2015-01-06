@@ -286,7 +286,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 		
 		if (this->body){
 			auto ret=this->body->resolve_if(sc, this->ret_type, flags);
-			propogate_type_refs(flags, (const Node*)this,this->ret_type,this->body->type_ref());
+			propogate_type_refs(flags,this->ret_type,this->body->type_ref());
 
 			dbg2(this->ret_type->dump_if(-1));
 			dbg2(this->body->type()->dump_if(-1));

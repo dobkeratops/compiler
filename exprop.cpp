@@ -78,11 +78,11 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 					error(this,"break <expression> requires else block with alternate return expression, same type. Use 'break break <expr>' for nesting");
 				}
 				if (else_block){
-					propogate_type_refs(flags,(Node*)this,rhs->type_ref(),else_block->type_ref());
+					propogate_type_refs(flags,rhs->type_ref(),else_block->type_ref());
 				}
 			}
-			propogate_type_refs(flags,(Node*)this, rhs->type_ref(),loop->type_ref());
-			propogate_type_refs(flags,(Node*)this,this->type_ref(),this->rhs->type_ref());
+			propogate_type_refs(flags, rhs->type_ref(),loop->type_ref());
+			propogate_type_refs(flags,this->type_ref(),this->rhs->type_ref());
 		}
 		return propogate_type_fwd(flags, desired, this->type_ref());
 	}
@@ -99,7 +99,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			ASSERT(dynamic_cast<Type*>(rhs))
 		}
 		lhs->set_def(v);
-		return propogate_type_refs(flags, this, v->type_ref(),type_ref());
+		return propogate_type_refs(flags, v->type_ref(),type_ref());
 	} else if (op_ident==AS){
 		resolved|=this->lhs->resolve_if(sc,nullptr,flags);
 		if (this->rhs->name==PLACEHOLDER) {
@@ -173,13 +173,13 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			
 			propogate_type_fwd(flags, desired, this->type_ref());
 //			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
-			return propogate_type_refs(flags,(const Node*)this, this->type_ref(),lhs->type_ref());
+			return propogate_type_refs(flags, this->type_ref(),lhs->type_ref());
 		}
 		else if (op_ident==DECLARE_WITH_TYPE){ // create a var, of given type,like let lhs:rhs;
 			const Type* tt=rhs?rhs->as_type():nullptr; if (!tt) tt=this->type(); if (!tt) tt=desired;
 			resolved|=lhs->resolve_if(sc, tt,flags);
 			if (!lhs->is_ident())
-				return propogate_type_refs(flags, this, lhs->type_ref(),type_ref());
+				return propogate_type_refs(flags, lhs->type_ref(),type_ref());
 			auto vname=lhs->as_name();	//todo: rvalue malarchy.
 			// todo: get this in the main parser
 			auto lhsi=expect_cast<ExprIdent>(lhs);
@@ -201,7 +201,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 				sc->try_find_struct(t);// instantiate
 			}
 			
-			return propogate_type_refs(flags, this, v->type_ref(),type_ref());
+			return propogate_type_refs(flags, v->type_ref(),type_ref());
 		}
 		else if (op_ident==ASSIGN){
 			ASSERT(this->lhs && this->rhs);
@@ -212,8 +212,8 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
 			
 			// get coersion right..
-			propogate_type_refs(flags,(Node*)this, rhs->type_ref(), lhs->type_ref());
-			propogate_type_refs(flags,(Node*)this, lhs->type_ref(), this->type_ref());
+			propogate_type_refs(flags, rhs->type_ref(), lhs->type_ref());
+			propogate_type_refs(flags, lhs->type_ref(), this->type_ref());
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
 			return propogate_type_fwd(flags, desired, type_ref());
 			//propogate_type(flags,this, type_ref(),rhs->type_ref());
@@ -273,7 +273,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	if (is_condition(op_ident)){
 		lhs->resolve_if(sc,rhs->type_ref(),flags); // comparisions take the same type on lhs/rhs
 		rhs->resolve_if(sc,lhs->type_ref(),flags);
-		propogate_type_refs(flags,(Node*)this, lhs->type_ref(),rhs->type_ref());
+		propogate_type_refs(flags, lhs->type_ref(),rhs->type_ref());
 		::verify(lhs->get_type());
 		::verify(rhs->get_type());
 		if (!this->get_type()){
@@ -289,8 +289,8 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		// defaults to same types all round.
 		resolved|=lhs->resolve_if(sc,desired,flags);
 		resolved|=rhs->resolve_if(sc,desired,flags&!R_PUT_ON_STACK);
-		propogate_type_refs(flags,this, lhs->type_ref(),type_ref());
-		propogate_type_refs(flags,this, rhs->type_ref(),type_ref());
+		propogate_type_refs(flags, lhs->type_ref(),type_ref());
+		propogate_type_refs(flags, rhs->type_ref(),type_ref());
 
 		if (flags & R_FINAL){
 			if (!lhs->type() || !rhs->type()){
