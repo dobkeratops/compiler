@@ -11,15 +11,25 @@ hack: $(SRC) all.cpp $(HEADER) foo
 test: hack
 	./hack -T
 
-debug: hack
-	./hack example.rs -tr
-
 # 'DEBUG=4' switches on ultra verbose debug trace , 
 # dumps of intermediate state during resolving 
-debug4: $(SRC) $(HEADER)
+debug4: $(SRC) all.cpp $(HEADER)
 	g++ $(SRC)  -o hack -std=c++1y -g3 -DDEBUG=4
 	./hack
 	./hack example.rs
+
+hack_dbg2: $(SRC) all.cpp $(HEADER)
+	g++ all.cpp -o hack_dbg2 -std=c++1y -g3 -DDEBUG=2
+
+debug2: hack_dbg2
+	./hack_dbg2 -T
+
+debug: hack_dbg2
+	./hack_dbg2 example.rs -tr
+
+#todo - can we find a way to syntax highlight it.
+diff:
+	git diff
 
 clean:
 	-rm ./hack

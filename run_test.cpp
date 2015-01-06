@@ -23,7 +23,43 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
-
+/*	{	"pattern infer tparams",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		enum Option<T>{
+			Some(T),None()	// todo - roll enum variant constructors
+		};
+		fn main(argc:int, argv:**char)->int{
+			let x=Some{5.0};
+			if let Some(y)=x{
+				printf("ok");
+			};
+			0
+		}
+		)===="
+		,nullptr
+	},
+ 
+	{
+		"for in loop",__FILE__,__LINE__,R"====(
+		extern"C"fn printf(s:str,...)->int;
+		enum Option<T>{
+			Some(T),None()	// todo - roll enum variant constructors
+		};
+		struct Range{
+		start:int,end:int,index:int,
+			fn Range(s:int,e:int){start=s;end=e;index=start;}
+			fn next()->Option<int>{ if index<end{let ret=index;index+=1;Some{ret}}else{None{}} }
+		};
+		fn main(argc:int, argv:**char)->int{
+			for x in Range(1,6){
+				printf("x=%d\n",x);
+			};
+			0
+		};
+		)===="
+		,"x=1\nx=2\nx=3\nx=4\nx=5\n"
+	},
+*/
 	{	"internal vtable",__FILE__,__LINE__,R"====(
 		
 		extern"C"fn printf(s:str,...)->int;
@@ -135,42 +171,7 @@ CompilerTest g_Tests[]={
 	},
 	
 
-/*	{	"pattern infer test",__FILE__,__LINE__,R"====(
-		enum Option<T>{
-			Some(T),None()	// todo - roll enum variant constructors
-		};
-		fn main(argc:int, argv:**char)->int{
-			let x=Some{5.0};
-			if let Some(y)=x{
-				printf("ok");
-			};
-			0
-		}
-		)===="
-		,nullptr
-	},
-
-	{
-		"for in loop",__FILE__,__LINE__,R"====(
-		extern"C"fn printf(s:str,...)->int;
-		enum Option<T>{
-			Some(T),None()	// todo - roll enum variant constructors
-		};
-		struct Range{
-			start:int,end:int,index:int,
-			fn Range(s:int,e:int){start=s;end=e;index=start;}
-			fn next()->Option<int>{ if index<end{let ret=index;index+=1;Some{ret}}else{None{}} }
-		};
-		fn main(argc:int, argv:**char)->int{
-			for x in Range(1,6){
-				printf("x=%d\n",x);
-			};
-			0
-		};
-		)===="
-		,"x=1\nx=2\nx=3\nx=4\nx=5\n"
-	},
- 
+/*
 	{	"inherted tparams",__FILE__,__LINE__,R"====(
 		enum Option<T>{
 			Some(T),None()	// todo - roll enum variant constructors
@@ -659,25 +660,6 @@ CompilerTest g_Tests[]={
 		)====",nullptr
 	},
 	
-	{	"type sugar",__FILE__,__LINE__,R"====(
-		struct Foo{x:int};
-		fn main(argc:int,argv:**char)->int{
-			// map these common types with typedefs.
-			//
-			let a:[int];			// __slice<int>
-			let b:[int*4];			// __array<int,4>
-			let c:[int:string];		// __dictionary<int,string>
-			let d:~str;				// __string
-			let e:~[int];			// __MyVec<int>
-			let f:~Foo;				// __unique_ptr<Foo>
-			let g:~[~Foo];			// __MyVec<__unique_ptr<Foo>>
-			//let f:?Foo;			// __option<Foo>
-			//let f:?~Foo;			// __option<__unique_ptr<Foo>>
-			0	}
-		)===="
-		,nullptr,true
-	},
-
 	{	"WIP, overloads with mixed types",__FILE__,__LINE__,R"====(
 
 		struct Vec3{ vx:float,vy:float,vz:float};
@@ -1037,7 +1019,26 @@ CompilerTest g_Tests[]={
 		nullptr,nullptr,0,nullptr,nullptr
 	}
 };
-CompilerTest g_todo[]={
+CompilerTest g_broken[]={
+	{	"type sugar",__FILE__,__LINE__,R"====(
+		struct Foo{x:int};
+		fn main(argc:int,argv:**char)->int{
+			// map these common types with typedefs.
+			//
+			let a:[int];			// __slice<int>
+			let b:[int*4];			// __array<int,4>
+			let c:[int:string];		// __dictionary<int,string>
+			let d:~str;				// __string
+			let e:~[int];			// __MyVec<int>
+			let f:~Foo;				// __unique_ptr<Foo>
+			let g:~[~Foo];			// __MyVec<__unique_ptr<Foo>>
+			//let f:?Foo;			// __option<Foo>
+			//let f:?~Foo;			// __option<__unique_ptr<Foo>>
+			0	}
+		)===="
+		,nullptr,true
+	},
+	
 	{
 		"c++ iterator for pattern:collection",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
@@ -1119,9 +1120,9 @@ CompilerTest g_todo[]={
 		)===="
 		,nullptr
 	 },
-	 
-
-	{	"trait objects TODO",__FILE__,__LINE__,R"====(
+};
+CompilerTest g_todo[]={
+	{	"trait objects ",__FILE__,__LINE__,R"====(
 		// TOD.O. part of the plan but low priority.
 		// C++ single-inheritance classes + Enums cover enough.
 		// do want to be able to instantiate a C++ style class as a trait object for rust-interop
@@ -1144,17 +1145,9 @@ CompilerTest g_todo[]={
 		}
 		fn main(argc:int,argv:**char)->int{
 			let x:Foo;
-			//should desugar:
-			// let pr={let x:*__trait_object<Render>;
-			// x.__vtable_ptr=Foo__Render__vtable;
-			// x.__data_ptr=(new Foo{..}) a i8*;
-			// x}
-			// need to adjust 'vcall' mechanism , if '__data_ptr' is found
-			// trait-object's "&Self" could actually be an i8*, which it must recast itself?
 			let pr=new Foo as *Render;
 			x.something();
 			x.render();
-			
 			0
 		}
 		)===="
