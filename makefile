@@ -29,7 +29,7 @@ debug: hack_dbg2
 
 #todo - can we find a way to syntax highlight it.
 diff:
-	git diff
+	git --no-pager diff
 
 clean:
 	-rm ./hack
