@@ -31,7 +31,7 @@ ResolveResult	ExprFor::resolve_for_sub(Scope* outer_scope,const Type* desired,in
 		newline(0);
 		else_block->dump_if(0);newline(0);
 	};
-	propogate_type_fwd(flags, (Node*)this, desired, this->type_ref());
+	propogate_type_fwd(flags, desired, this->type_ref());
 	
 	return resolved;
 }
@@ -218,7 +218,7 @@ ResolveResult ExprIf::resolve(Scope* outer_s,const Type* desired,int flags){
 				t=cb->ref_type;
 			} else
 				t=cb->struct_type;
-			return propogate_type_fwd(flags,this, t, this->type_ref());
+			return propogate_type_fwd(flags, t, this->type_ref());
 		} else {
 			propogate_type_expr_ref(flags,this, body->type_ref());
 		
@@ -322,7 +322,7 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 	auto match_sc=outer_sc->make_inner_scope(&this->scope,outer_sc->owner_fn,this);
 
 	resolved|=this->expr->resolve_if(match_sc,nullptr,flags);
-	propogate_type_fwd(flags,this, desired, this->type_ref());
+	propogate_type_fwd(flags, desired, this->type_ref());
 
 	for (auto a=this->arms; a;a=a->next ) {
 		
@@ -341,7 +341,7 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 		propogate_type_refs(flags,this, a->body->type_ref(),a->type_ref());
 		
 	}
-	return propogate_type_fwd(flags,this, desired, this->type_ref());
+	return propogate_type_fwd(flags, desired, this->type_ref());
 }
 
 void MatchArm::dump(PrinterRef depth)const{

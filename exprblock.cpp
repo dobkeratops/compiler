@@ -249,7 +249,7 @@ ResolveResult	ExprTuple::resolve(Scope* sc, const Type* desired,int flags){
 	}
 	// todo: we need to get better at filling in the gaps.
 	this->set_tuple_component_types();
-	return propogate_type_fwd(flags,(Node*)this, desired,this->type_ref());
+	return propogate_type_fwd(flags, desired,this->type_ref());
 }
 void ExprTuple::set_tuple_component_types(){
 	if (!this->get_type()) {
@@ -317,7 +317,7 @@ ResolveResult	ExprTuple::resolve_operator_dot(Scope *sc, const Type *desired, in
 		if (!elem_ts[i] && subt)
 			elem_ts[i]=(Type*)subt->clone();// inference will write to it, fill in type gaps..
 		else if (elem_ts[i] && subt){
-			propogate_type_fwd(flags, (const Node*)this, subt, elem_ts[i]);
+			propogate_type_fwd(flags, subt, elem_ts[i]);
 		}
 		Type* tmp_tref=0;
 		resolved|=argls[i]->resolve_operator_dot(sc,subt,flags,lhs, tmp_tref);
@@ -356,7 +356,7 @@ ResolveResult ExprBlock::resolve_sub(Scope* sc, const Type* desired, int flags,E
 
 	if (!this->argls.size()) {
 		if (!this->get_type()) this->set_type(new Type(this,VOID));
-		return propogate_type_fwd(flags,this, desired,this->type_ref());
+		return propogate_type_fwd(flags, desired,this->type_ref());
 	}
 	int	i_complete=-1;
 	if (!(flags & R_REVERSE_ONLY)){
@@ -507,7 +507,7 @@ ResolveResult ExprCall::resolve_call_sub(Scope* sc, const Type* desired, int fla
 			auto fnarg=ii<fnc->args.size()?fnc->args[ii]:nullptr;
 			resolved|=argls[i]->resolve_if(sc,fnarg?fnarg->type():nullptr ,flags);
 		}
-		return propogate_type_fwd(flags,this, desired,this->get_fn_call()->ret_type);
+		return propogate_type_fwd(flags, desired,this->get_fn_call()->ret_type);
 	}
 	else {
 		if (flags & R_FINAL)
@@ -556,7 +556,7 @@ ResolveResult StructInitializer::resolve(const Type* desiredType,int flags) {
 	
 #endif
 	if (si->call_expr->name==PLACEHOLDER && desiredType){
-		si->propogate_type_fwd(flags,si, desiredType,si->call_expr->type_ref());
+		si->propogate_type_fwd(flags, desiredType,si->call_expr->type_ref());
 		sd=si->call_expr->type()->def->as_struct_def();
 		if (!sd)
 			return si->resolved|INCOMPLETE;

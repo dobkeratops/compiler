@@ -84,7 +84,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			propogate_type_refs(flags,(Node*)this, rhs->type_ref(),loop->type_ref());
 			propogate_type_refs(flags,(Node*)this,this->type_ref(),this->rhs->type_ref());
 		}
-		return propogate_type_fwd(flags, this, desired, this->type_ref());
+		return propogate_type_fwd(flags, desired, this->type_ref());
 	}
 	if (op_ident==FIELD_ASSIGN){
 		error(this,"field-assign operator not handled, should only appear in struct-initializer (TODO: keyword args)");
@@ -117,7 +117,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 //			this->set_type(desired);
 //		}
 		resolved|=rhs->resolve_operator_new(sc,desired,flags, this);
-		return propogate_type_fwd(flags,this, desired, this->type_ref());
+		return propogate_type_fwd(flags, desired, this->type_ref());
 	}
 	else if (op_ident==DELETE ){
 		return rhs->resolve_if(sc,nullptr,flags);
@@ -140,8 +140,8 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 	//look for overload - infer fowards only first like C++
 	if (find_overloads(sc,desired,flags)){
 		// overloaded function was selected on inputs, but its' output may be refined!
-		propogate_type_fwd(flags,this, this->get_fn()->return_type(),this->type_ref());
-		return propogate_type_fwd(flags, this, desired, this->type_ref());
+		propogate_type_fwd(flags, this->get_fn()->return_type(),this->type_ref());
+		return propogate_type_fwd(flags, desired, this->type_ref());
 	}
 
 	if (op_ident==ASSIGN || op_ident==LET_ASSIGN || op_ident==DECLARE_WITH_TYPE) {
@@ -167,11 +167,11 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			//new_var->force_type_todo_verify(rhs_t);
 			resolved|=lhs->resolve_if(sc,rhs->type(),flags);
 			resolved|=lhs->resolve_if(sc,rhs->type(),flags);
-			propogate_type_fwd(flags, this, desired, lhs->type_ref());
-			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
+			propogate_type_fwd(flags, desired, lhs->type_ref());
+			return 	propogate_type_fwd(flags, desired, this->type_ref());
 
 			
-			propogate_type_fwd(flags, this, desired, this->type_ref());
+			propogate_type_fwd(flags, desired, this->type_ref());
 //			return 	propogate_type_fwd(flags, this, desired, this->type_ref());
 			return propogate_type_refs(flags,(const Node*)this, this->type_ref(),lhs->type_ref());
 		}
@@ -215,7 +215,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			propogate_type_refs(flags,(Node*)this, rhs->type_ref(), lhs->type_ref());
 			propogate_type_refs(flags,(Node*)this, lhs->type_ref(), this->type_ref());
 			dbg(::dump(this->lhs->type(),this->rhs->type());)
-			return propogate_type_fwd(flags,this, desired, type_ref());
+			return propogate_type_fwd(flags, desired, type_ref());
 			//propogate_type(flags,this, type_ref(),rhs->type_ref());
 			//return propogate_type(flags, this, type_ref(),lhs->type_ref());
 		} else{
@@ -241,7 +241,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		if (!this->get_type() && rhs->type()){
 			auto ptr_type=new Type(this,PTR,(Type*)rhs->type()->clone());
 			this->set_type(ptr_type);
-			return propogate_type_fwd(flags,this, desired,ptr_type);
+			return propogate_type_fwd(flags, desired,ptr_type);
 		}
 		return ret;
 	}
@@ -265,7 +265,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			} else {
 				this->set_type(rhs->type()->sub);
 			}
-			return propogate_type_fwd(flags,this, desired, this->type_ref());
+			return propogate_type_fwd(flags, desired, this->type_ref());
 		}
 		else return resolved;
 	}
@@ -281,7 +281,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 		};
 		// TODO: actually we want to ensure the result *converts* to bool
 		// compares might not return bool, they just need an operator(bool)
-		return propogate_type_fwd(flags,this,desired,this->type_ref());
+		return propogate_type_fwd(flags,desired,this->type_ref());
 	}
 	else {
 		// regular operator
@@ -305,7 +305,7 @@ ResolveResult ExprOp::resolve(Scope* sc, const Type* desired,int flags) {
 			}
 		}
 
-		return propogate_type_fwd(flags,this, desired, type_ref());
+		return propogate_type_fwd(flags, desired, type_ref());
 	}
 }
 

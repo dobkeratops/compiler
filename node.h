@@ -208,11 +208,11 @@ public:
 	// these would be extention methods if C++ had them
 	ResolveResult propogate_type_refs(int flags,const Node*n, Type*& a,Type*& b);
 	ResolveResult propogate_type_refs(int flags, Expr *n, Type*& a,Type*& b);
-	ResolveResult propogate_type_fwd(int flags,const Node* n, const Type* a,Type*& b);
+	ResolveResult propogate_type_fwd(int flags, const Type* a,Type*& b);
 	ResolveResult propogate_type_fwd(int flags,Expr* e, const Type*& a);
 	ResolveResult propogate_type_expr_ref(int flags,Expr* e, Type*& a);
 	ResolveResult propogate_type_refs(int flags,const Node* n, Type*& a,Type*& b,Type*& c);
-	ResolveResult propogate_type_fwd(int flags,const Node* n,const Type*& a,Type*& b,Type*& c);
+	ResolveResult propogate_type_fwd(int flags,const Type*& a,Type*& b,Type*& c);
 };
 // Type Parameter, actually Template Parameter as we generalize it.
 struct Expr : public Node{					// anythifng yielding a value

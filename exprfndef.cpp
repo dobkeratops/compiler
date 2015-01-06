@@ -233,10 +233,10 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 			int i=0;
 			for (auto desired_arg=args_ret->sub; desired_arg && i<this->args.size(); desired_arg=desired_arg->next,i++){
 				auto arg=this->args[i];
-				propogate_type_fwd(flags, arg, (const Type*)desired_arg,arg->type_ref() );
+				arg->propogate_type_fwd(flags, (const Type*)desired_arg,arg->type_ref() );
 			}
 			auto desired_ret=args_ret->next;
-			propogate_type_fwd(flags,this,desired_ret, this->ret_type);
+			propogate_type_fwd(flags,desired_ret, this->ret_type);
 			// inference between the whole function type backwards is done via ret_type
 		}
 	}
@@ -294,7 +294,7 @@ ResolveResult ExprFnDef::resolve_function(Scope* definer_scope, ExprStructDef* r
 
 			//			this->ret_type=ret.type;
 			
-			propogate_type_fwd(flags, (const Node*)this, this->body->type(),this->ret_type);
+			propogate_type_fwd(flags, this->body->type(),this->ret_type);
 		}
 	}
 
@@ -378,7 +378,7 @@ ResolveResult ExprFnDef::resolve_call(Scope* scope,const Type* desired,int flags
 		return resolved;
 	}
 	
-	propogate_type_fwd(flags,this, desired,this->ret_type);
+	propogate_type_fwd(flags, desired,this->ret_type);
 	
 	auto rt=this->body->resolve_if(scope,desired,flags);
 	dbprintf("resolve %s yields type:", getString(this->as_name()));if (auto t=this->body->type()) t->dump(-1);printf("\n");

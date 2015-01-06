@@ -633,7 +633,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 		ASSERT(block->def==block->call_expr->def);
 		if (call_target->resolved) {
 			Type * fnr=call_target->return_type();
-			return block->propogate_type_fwd(flags,block, desired, block->type_ref(),fnr);
+			return block->propogate_type_fwd(flags, desired, block->type_ref(),fnr);
 		}
 			// add this to the targets' list of calls.
 		int num_known_types=(desired?1:0)+num_known_arg_types(block->argls);
@@ -641,7 +641,7 @@ ResolveResult resolve_make_fn_call(Expr* receiver,ExprBlock* block/*caller*/,Sco
 		if (!(isg && num_known_types)) {
 			// concrete function: we can just take return type.
 			auto rt=fnc->return_type();
-			return block->propogate_type_fwd(flags,block, desired, rt,block->type_ref());
+			return block->propogate_type_fwd(flags, desired, rt,block->type_ref());
 		}
 		{
 			int once=false; if(!once++){

@@ -11,7 +11,7 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	if (this->type()) this->type()->rvalue=false;// identifiers are not rvalues.
 	if (this->is_placeholder()) {
 		//PLACEHOLDER type can be anything asked by environment, but can't be compiled .
-		return propogate_type_fwd(flags,this, desired,this->type_ref());
+		return propogate_type_fwd(flags, desired,this->type_ref());
 	}
 	
 	if (this->type())
@@ -19,19 +19,19 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	// depending on context we might only look for structs or functions. default is look for either.
 	if (auto sd=(flags&R_CALL)?nullptr:scope->find_struct_name_type_if(scope,this->name,this->type())) {
 		this->set_def(sd);
-		return propogate_type_fwd(flags,this, desired,this->type_ref());
+		return propogate_type_fwd(flags, desired,this->type_ref());
 	}else
 	if (auto sd=(flags&R_CALL)?nullptr:scope->find_struct_named(this->name)) {
 		this->set_def(sd);
 		if (!this->get_type()){
 			this->set_type(new Type(sd));
-			return propogate_type_fwd(flags,this, desired,this->type_ref());
+			return propogate_type_fwd(flags, desired,this->type_ref());
 		}
 	} else
 		if (auto v=scope->find_variable_rec(this->name)){ // look for scope variable..
 			v->on_stack|=flags&R_PUT_ON_STACK;
 			this->set_def(v);
-			propogate_type_fwd(flags,this, desired,v->type_ref());
+			propogate_type_fwd(flags, desired,v->type_ref());
 			return propogate_type_refs(flags,this, v->type_ref(),this->type_ref());
 		}
 	if (auto sd=scope->get_receiver()) {
@@ -46,13 +46,13 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 		//we eitehr need to pass in arguemnt informatino here *aswell*, or seperaete out the callsite case properly.
 		this->set_def(f);
 		this->set_type(f->fn_type);
-		return propogate_type_fwd(flags,this, desired, this->type_ref());
+		return propogate_type_fwd(flags, desired, this->type_ref());
 	}
 	else if (!scope->find_named_items_rec(this->name)){
 		// from an inner scope? caution here - it must count ambiguity- give lambda..
 		if (auto def=scope->find_inner_def(scope,this,this->type(),flags)){
 			this->set_struct_type(def);
-			return propogate_type_fwd(flags,this, desired,this->type_ref());
+			return propogate_type_fwd(flags, desired,this->type_ref());
 		}
 		
 		// didn't find it yet, can't do anything
@@ -282,7 +282,7 @@ ResolveResult ExprLiteral::resolve(Scope* sc , const Type* desired,int flags){
 		}
 		this->set_type(t); // one time resolve event.
 	}
-	return propogate_type_fwd(flags,this, desired,this->type_ref());
+	return propogate_type_fwd(flags, desired,this->type_ref());
 }
 size_t ExprLiteral::strlen() const{
 	if (type_id==T_CONST_STRING)
@@ -409,7 +409,7 @@ size_t ArgDef::alignment() const	{
 }//todo, 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
 ResolveResult ArgDef::resolve(Scope* sc, const Type* desired, int flags){
 	dbg_resolve("resolving arg %s\n",this->name_str());
-	propogate_type_fwd(flags,this,desired,this->type_ref());
+	propogate_type_fwd(flags,desired,this->type_ref());
 	if (this->type()){
 		this->type()->resolve_if(sc,desired,flags);
 	}

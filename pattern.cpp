@@ -70,7 +70,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 			resolved|=s->resolve_with_type(sc,rhs,flags);
 		}
 		if (rhs)
-			return propogate_type_fwd(flags, (Node*)this, rhs, this->type_ref());
+			return propogate_type_fwd(flags, rhs, this->type_ref());
 		else
 			return resolved;
 	} else if (this->name==PATTERN_BIND){
@@ -129,7 +129,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	} // else its a var of given type, or just a constant?
 	else{
 		if (rhs){
-			propogate_type_fwd(flags, (Node*)this, rhs,this->type_ref());
+			propogate_type_fwd(flags, rhs,this->type_ref());
 		}
 		dbg(dbprintf("matching pattern %s with..",str(this->name)));dbg(rhs->dump_if(-1));dbg(newline(0));
 		if (auto sd=sc->find_struct_name_type_if(sc,this->name,this->type()))
@@ -167,7 +167,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 					this->set_def(v);
 				}
 				if (rhs)
-					return propogate_type_fwd(flags, this, rhs, v->type_ref());
+					return propogate_type_fwd(flags, rhs, v->type_ref());
 				else
 					return resolved;
 			}
