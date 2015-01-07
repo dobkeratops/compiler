@@ -332,6 +332,9 @@ ExprMatch::resolve(Scope* outer_sc, const Type* desired, int flags){
 		// setup the types: expression has same type as match patterns;
 		//*dont* push the type onto the arms, because variants cast to subtypes.
 		//propogate_type(flags, (Node*)this, this->expr->type_ref(), a->pattern->type_ref());
+		dbg_tparams({dbprintf("\nmatch "); a->pattern->dump(-1);dbprintf(" with expression=");});
+		dbg_tparams(this->expr->dump(-1));
+		dbg_tparams(dbprintf("\n"));
 		resolved|=a->pattern->resolve_with_type(a->scope, this->expr->type(), flags);
 		resolved|=a->cond->resolve_if(a->scope, Type::get_bool(),flags);
 		resolved|=a->body->resolve_if(a->scope, this->type(), flags);
@@ -362,7 +365,7 @@ void MatchArm::recurse(std::function<void(Node *)> &f){
 }
 
 void ExprIfLet::dump(PrinterRef depth)const{
-	newline(depth);dbprintf("if let ");
+	newline(depth);dbprintf("<if_let> ");
 	this->arms->pattern->dump(-100);
 	dbprintf("=");
 	this->expr->dump(-100); dbprintf("{");
@@ -374,6 +377,7 @@ void ExprIfLet::dump(PrinterRef depth)const{
 		this->arms->next->body->dump(depth+1);
 		newline(depth);dbprintf("}");
 	}
+	newline(depth);dbprintf("</if_let>");
 }
 ExprIfLet::ExprIfLet(SrcPos p,Pattern* ptn, Expr* _expr, Expr* _body, Expr* _else){
 	auto iflet=this;

@@ -35,6 +35,7 @@ ResolveResult
 Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 	if (!this)
 		return ResolveResult(COMPLETE);
+	dbg_tparams({dbprintf("\n{match:");this->dump(-100);dbprintf(" vs ");rhs->dump_if(-100);dbprintf("}\n");});
 	if (this->sub){
 		0==0;
 	}
@@ -103,7 +104,9 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		
 	}
 	else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring/variant
+		dbg_tparams(if (rhs->sub){dbprintf("match, find given type=");rhs->dump(-1);newline(0);});
 		auto sd=sc->find_struct_type(this,rhs);// todo tparams from rhs, if given
+		dbg_tparams({dbprintf("found :");sd->dump(-1);dbprintf("\n");});
 		if (sd){
 			if (flags & R_FINAL) {
 				if (!this->type()->is_coercible(rhs)){
@@ -323,6 +326,7 @@ void Pattern::push_child(Pattern* newp) {
 void Pattern::dump(PrinterRef depth)const{
 	int d2=depth>=0?depth+1:depth;
 	newline(depth);
+	dbprintf("<%s>",this->kind_str());
 	if (name==TUPLE){
 	}else
 		if (name==REF){
@@ -350,4 +354,6 @@ void Pattern::dump(PrinterRef depth)const{
 		dbprintf(")");
 	}
 	if (this->type()) {dbprintf(":"); this->type()->dump_if(-1);dbprintf(" ");}
+	newline(depth);
+	dbprintf("</%s>",this->kind_str());
 }

@@ -24,6 +24,9 @@ hack_dbg2: $(SRC) all.cpp $(HEADER)
 debug2: hack_dbg2
 	./hack_dbg2 -T
 
+debug2types: hack_dbg2
+	./hack_dbg2 -Y
+
 debug: hack_dbg2
 	./hack_dbg2 example.rs -tr
 

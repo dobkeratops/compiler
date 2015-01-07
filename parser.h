@@ -16,7 +16,7 @@ void dump(MyVec<Expr*>& v);
 extern Node* g_pRoot;	// temporary hack
 // todo: plugin arch? Node::parse(), dispatch on registered keywords?
 ExprBlock*	parse_block(TokenStream& src,int close,int delim, Expr* op);
-Expr*		parse_expr(TokenStream&src);
+Expr*		parse_expr(TokenStream&src,int close=0);
 Type*		parse_type(TokenStream& src, int close,Node* owner);
 ExprFnDef*	parse_fn(TokenStream&src,ExprStructDef* owner,Type* self_t=nullptr, bool is_virtual=false);	// eg fn foo()
 ExprFnDef*	parse_closure(TokenStream&src,int close);//eg |x|{expr..} (x)->{}

@@ -44,10 +44,10 @@ void flatten_stack(Vec<SrcOp>& ops,Vec<Expr*>& vals){
 
 ExprBlock* parse_block(TokenStream&src,int close,int delim, Expr* op);
 
-Expr* parse_expr(TokenStream&src) {
+Expr* parse_expr(TokenStream&src,int close) {
 	Vec<Expr*> nodes;
 	int delim;
-	parse_block_nodes(&nodes,&delim, src,nullptr, 0,0);// TODO - retardation- its' allocating. Vec.num==1 could be inplace.
+	parse_block_nodes(&nodes,&delim, src,nullptr, close,0);// TODO - retardation- its' allocating. Vec.num==1 could be inplace.
 	ASSERT(nodes.size()==1);
 	return nodes.pop_back();
 }
@@ -1225,7 +1225,7 @@ Expr* parse_if_let(TokenStream& src){
 	iflet->arms=arm;
 	arm->pattern=parse_pattern(src,ASSIGN,0,0);
 	src.expect(ASSIGN);
-	iflet->expr=parse_block(src,OPEN_BRACE,COMMA,nullptr);
+	iflet->expr=parse_expr(src,OPEN_BRACE);//,COMMA,nullptr*/);
 	arm->body = parse_block(src,CLOSE_BRACE,SEMICOLON,nullptr);
 	// 'else' if effectively an arm with _=>{}
 	if (src.eat_if(ELSE)){

@@ -228,7 +228,7 @@ bool Type::is_equal_s(Type* other, int mode, Name self_t) {
 	}
 	return is_equal_sub(other,mode,self_t);
 }
-void Type::replace_auto_with(const Type* src) {
+void Type::infer_components_sub(const Type* src) {
 	//TODO - also for absent tparams.
 	// replace auto slots in 'this' from 'src'
 	// handle cases like auto<X,Y> == B<X,Y> ,  auto<auto,Y> = B<X,Y> ...
@@ -238,22 +238,30 @@ void Type::replace_auto_with(const Type* src) {
 	}
 	auto d=this->sub; auto s=src->sub;
 	for (; d&& s; d=d->next, s=s->next){
-		d->replace_auto_with(s);
+		d->infer_components_sub(s);
 	}
 	for (;s; s=s->next ) {
 		this->push_back((Type*)s->clone());
 	}
-
 }
+void infer_components(Type* dst, const Type* src){
+	if ((!dst->sub && src->sub) || dst->name==AUTO){
+		dst->infer_components_sub(src);
+	}
+}
+
 bool Type::is_equal_sub(Type* other,int mode,Name self_t){
 	/// TODO factor out common logic, is_coercible(),eq(),eq(,xlat)
 	if ((!this) && (!other)) return true;
 	// if its' auto[...] match contents; if its plain auto, match anything.
 
+	if (mode & TC_INFER_REV){
+		infer_components(this,other);
+	}
+	if (mode & TC_INFER_FWD){
+		infer_components(other,this);
+	}
 	if (this){
-		if (((!this->sub) || this->name==AUTO) && (mode & TC_INFER_REV)){
-			const_cast<Type*>(this)->replace_auto_with(other);
-		}
 		if (this->name==AUTO){
 			if (this->sub && other) {
 				return this->sub->is_equal(other->sub,mode);
@@ -264,8 +272,6 @@ bool Type::is_equal_sub(Type* other,int mode,Name self_t){
 		}
 	}
 	if (other){
-		if (((!other->sub) || other->name==AUTO) &&(mode & TC_INFER_FWD))
-			const_cast<Type*>(other)->replace_auto_with(this);
 		if (other->name==AUTO){
 			if (other->sub && this) return other->sub->is_equal(this->sub,mode);
 			else return true;
@@ -788,7 +794,7 @@ void dump_tparams(const MyVec<TParamDef*>& ts, const MyVec<TParamVal*>* given) {
 	bool a=false;
 	if (ts.size() && given->size()==0) return;
 	if (ts.size()==0 && given->size()==0) return;
-	dbprintf("<");
+	dbprintf("<tparams>");
 	for (int i=0; i<ts.size() || i<given->size(); i++){
 		if (a)dbprintf(",");
 		if (i<ts.size()){
@@ -799,7 +805,7 @@ void dump_tparams(const MyVec<TParamDef*>& ts, const MyVec<TParamVal*>* given) {
 		if (tv){dbprintf("=");tv->dump(-1);}
 		a=true;
 	}
-	dbprintf(">");
+	dbprintf("</tparams>");
 }
 
 

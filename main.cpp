@@ -156,6 +156,7 @@ Option g_Options[]={
 	{'e',0,B_EXECUTABLE,"compile executable"},
 	{'v',0,B_VERBOSE,"verbose mode"},
 	{'T',0,0,"run tests"},
+	{'Y',0,0,"run first test, show types only"},
 	{'h',0,0,"help"},
 	{0,0,0,0}
 };
@@ -200,7 +201,8 @@ int main(int argc, const char** argv) {
 		if (a[0]=='-'){
 			for (auto j=1; a[j];j++){
 				if (a[j]=='h') dump_help();
-				if (a[j]=='T') run_tests();
+				if (a[j]=='T') run_tests(B_AST|B_DEFS|B_TYPES|B_RUN);
+				if (a[j]=='Y') run_tests(B_AST|B_DEFS|B_TYPES,1);
 				for (auto opt=g_Options;opt->name;opt++){
 					if (opt->name==a[j]) {options&=~opt->clear;options|=opt->set;}
 				}
@@ -221,6 +223,6 @@ int main(int argc, const char** argv) {
 	if (argc<=1) {
 		dump_help();
 		dbg(printf("no sources given so running inbuilt tests.\n"));
-		dbg(run_tests());
+		dbg(run_tests(B_AST|B_DEFS|B_TYPES|B_RUN));
 	}
 }

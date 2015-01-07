@@ -83,7 +83,9 @@ struct ExprStructInit : ExprBlock{
 	ExprStructInit(){};
 	ExprStructInit(const SrcPos& p, Expr* ce):ExprBlock(p){this->call_expr=ce;};
 	CgValue compile_struct_init(CodeGen& cg,Scope *sc, RegisterName force_dst);
-	const char* kind_str() const  override		{return "struct_init";}
+	const char* kind_str() const  override		{
+		return "struct_init";
+	}
 	CgValue compile(CodeGen& cg, Scope* sc, CgValue) override;
 	Node* 	clone() const {return (Node*)clone_sub(new ExprStructInit());}
 	ResolveResult	resolve(Scope* sc, const Type* desired,int flags) override;

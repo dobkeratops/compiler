@@ -450,7 +450,7 @@ void ExprStructDef::set_variant_of(ExprStructDef* owner, int index){
 void ExprStructDef::dump(PrinterRef depth) const{
 	auto depth2=depth>=0?depth+1:depth;
 	newline(depth);
-	dbprintf("%s %s",this->kind_str(), getString(this->name));
+	dbprintf("<%s> %s",this->kind_str(), getString(this->name));
 	dump_tparams(this->tparams,&this->instanced_types);
 	if (this->inherits_type) {dbprintf(":"); this->inherits_type->dump_if(-1);}
 	if (this->args.size()){
@@ -463,6 +463,7 @@ void ExprStructDef::dump(PrinterRef depth) const{
 		dbprintf("where");
 		((Node*)this->body)->dump(depth);
 	}
+	newline(depth);dbprintf("</%s>",this->kind_str());
 }
 void ExprStructDef::dump_struct_body(int depth)const {
 	auto depth2=depth>=0?depth+1:depth;

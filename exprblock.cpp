@@ -27,9 +27,9 @@ void ExprBlock::gather_symbols(Scope* outer_sc){
 }
 void ExprBlock::dump(PrinterRef depth) const {
 	if (!this) return;
-	newline(depth);
+	newline(depth);dbprintf("<");
+	dbprintf("%s",this->kind_str());dbprintf(">");
 	auto b=this->bracket_delim();
-//	dbprintf("%s",this->kind_str());
 	this->call_expr->dump_if(-100);
 	dbprintf("%c",b[0]);
 	int i=0;
@@ -42,7 +42,8 @@ void ExprBlock::dump(PrinterRef depth) const {
 		i++;
 	}
 	newline(depth);dbprintf("%c",b[2]);
-	if (this->get_type()){dbprintf(":");this->get_type()->dump_if(-1);}
+	if (this->get_type()){dbprintf(":");this->get_type()->dump_if(-100);}
+	newline(depth);dbprintf("</");dbprintf(this->kind_str()); dbprintf(">");
 }
 
 void ExprBlock::recurse(std::function<void (Node *)>& f){

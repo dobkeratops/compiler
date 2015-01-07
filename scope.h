@@ -73,10 +73,18 @@ public:
 	Scope*			parent_within_fn(){if (!parent) return nullptr; if (parent->owner_fn!=this->owner_fn) return nullptr; return parent;}
 	void			visit_named_items(Name n,std::function<void(NamedItems* n,Scope* sc)> f,Scope* ignore=0);
 	ExprStructDef*	find_struct_sub_if(Scope* original,const Type* t){if (t) return find_struct_sub(original,t);else return nullptr;}
-	ExprStructDef*	find_inner_def(Scope* original,const Node* id,const Type* t,int flags);
+	ExprStructDef*	find_inner_def_sub(Scope* original,Name nm,const Type* t,int flags);
+	ExprStructDef* find_inner_def(Scope* original,const Node* idn, const Type* t,int flags){
+		return find_inner_def_sub(original, idn->as_name(), t, flags);
+	}
 	ExprStructDef*	find_inner_def_named(Scope* original,Node* id_name,int flags);
 
-	ExprStructDef*	find_struct_name_type_if(Scope* original,Name name,const Type* t){if (t) return find_struct_name_type(original,name,t);else return nullptr;}
+	ExprStructDef*	find_struct_name_type_if(Scope* original,Name name,const Type* t){
+		if (t)
+			return find_struct_name_type(original,name,t);
+		else
+			return nullptr;
+	}
 	ExprStructDef*	find_struct_name_type(Scope* original,Name name,const Type* t);
 	ExprStructDef*	find_struct_sub(Scope* original,const Type* t);
 	ExprStructDef*	find_struct_named(Name name);

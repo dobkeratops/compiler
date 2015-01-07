@@ -23,14 +23,15 @@ struct CompilerTest {
 // for it:=foo; x:=it,true; match x.next(){Some(v)=>x:=v, _=>break}  {$body;} else{ }
 
 CompilerTest g_Tests[]={
-/*	{	"pattern infer tparams",__FILE__,__LINE__,R"====(
+	
+	{	"pattern infer tparams",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
 		enum Option<T>{
 			Some(T),None()	// todo - roll enum variant constructors
 		};
 		fn main(argc:int, argv:**char)->int{
-			let x=Some{5.0};
-			if let Some(y)=x{
+			let x:Option<float> =Some{5.0};
+			if let Some(y)=x {
 				printf("ok");
 			};
 			0
@@ -38,7 +39,7 @@ CompilerTest g_Tests[]={
 		)===="
 		,nullptr
 	},
- 
+/*
 	{
 		"for in loop",__FILE__,__LINE__,R"====(
 		extern"C"fn printf(s:str,...)->int;
@@ -459,7 +460,7 @@ CompilerTest g_Tests[]={
 	
 	{	"enum decl/assign",__FILE__,__LINE__,R"====(
 		
-		fn"C" printf(s:str,...)->int;
+		extern"C" fn printf(s:str,...)->int;
 		enum Foo{
 			Bar{x:int,y:int},
 			Baz{x:float,y:float,z:int},
@@ -1155,15 +1156,15 @@ CompilerTest g_todo[]={
 	},
 };
 
-void run_tests(){
+void run_tests(int flags, int num_to_run){
 	int index=0;
 
-	for (auto t=g_Tests; t->name; t++,index++){
+	for (auto t=g_Tests; t->name && index<num_to_run; t++,index++){
 		char tmp[256]; sprintf(tmp,"test_%d.ll",index);
 		printf("\nRunning Test[%d]: %s\n\n",index,t->name);
 		char* output=0;
 		auto ret=
-		compile_and_run(t->source,t->name, tmp,B_AST|B_DEFS|B_TYPES|B_RUN, t->expected_output?&output:nullptr);
+		compile_and_run(t->source,t->name, tmp,flags, t->expected_output?&output:nullptr);
 		if (!t->should_fail && ret!=0) {
 			printf("\n test %s failed\n", t->name);
 			exit(-1);
@@ -1186,7 +1187,7 @@ void run_tests(){
 			free(output);
 		}
 	}
-	compile_source_file("example.rs", B_DEFS|B_TYPES|B_RUN);
-
+	if (index<num_to_run)
+		compile_source_file("example.rs", flags);
 }
 					

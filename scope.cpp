@@ -54,12 +54,12 @@ Scope* Scope::make_inner_scope(Scope** pp_scope,ExprDef* owner,Expr* sub_owner)
 #if DEBUG>=2
 		if (owner){
 			if (auto ofd=owner->as_fn_def()){
-				dbprintf("create scope in %p %s recv=%p\n",sc,ofd->name_str(),ofd->m_receiver);
+				newline(0);dbprintf("create scope in %p %s recv=%p\n",sc,ofd->name_str(),ofd->m_receiver);
 			}else{
-				dbprintf("create scope in %p %s \n",sc,owner->name_str());
+				newline(0);dbprintf("create scope in %p %s \n",sc,owner->name_str());
 			}
 		}else {
-			dbprintf("create scope %p,no 'owner'\n",sc);
+			newline(0);dbprintf("create scope %p,no 'owner'\n",sc);
 		}
 #endif
 		push_child(sc);
@@ -321,19 +321,28 @@ Variable* Scope::find_fn_variable(Name name,ExprFnDef* f){
 ExprStructDef* Scope::find_struct_name_type(Scope* original,Name nm,const Type* t){
 	if (!t->has_non_instanced_typeparams())
 		return nullptr;
-	if (auto fn=this->find_named_items_local(nm)){
-		for (auto st=fn->structs; st;st=st->next_of_name){
-			if (st->name==nm) {
-				// find with type-params...
-				if (!st->is_generic())
-					return st;
-				return st->get_instance(original, t);
+	for(int depth=0;depth<2; depth++){
+		for (auto sc=this; sc; sc=sc->parent_or_global()){
+			auto fn=sc->find_named_items_local(nm);
+			if (depth && !fn){
+				if (auto sd=sc->find_inner_def_sub(original, nm, t, 0)){
+					return sd;
+				}
+			}
+			if (fn){
+				for (auto st=fn->structs; st;st=st->next_of_name){
+					if (st->name==nm) {
+						// find with type-params...
+						if (!st->is_generic()){
+							return st;
+						}
+						return st->get_instance(original, t);
+					}
+				}
 			}
 		}
 	}
-	if (auto p=parent_or_global())
-		return p->find_struct_name_type_if(original, nm,t);
-	else return nullptr;
+	return nullptr;
 }
 ExprStructDef* Scope::find_struct_sub(Scope* original,const Type* t){
 	return find_struct_name_type(original,t->name,t);
@@ -362,17 +371,27 @@ void error_ambiguity(int flags, const Node* name_node, const Type *t,const ExprD
 	error_end(name_node);
 }
 
-ExprStructDef* Scope::find_inner_def(Scope* original,const Node* id, const Type* t,int flags){
+ExprStructDef* Scope::find_inner_def_sub(Scope* original,Name idnm, const Type* t,int flags){
 	ExprDef* r=nullptr;
 
 	for (auto sc=this; sc; sc=sc->parent_or_global()){
 		for (auto nmi=sc->named_items; nmi; nmi=nmi->next){
 			for (auto ns=nmi->structs; ns;ns=ns->next_of_name){
-				if (auto n=ns->scope->find_named_items_local(id->as_name())){
+				if (auto n=ns->scope->find_named_items_local(idnm)){
 					if (auto x=n->structs){ // TODO parameters!!!
-						if (r)
-							error_ambiguity(flags,id,t,(ExprDef*)x,r);
-						else r=x;
+						if (r){
+//							error_ambiguity(flags,idnm,t,(ExprDef*)x,r);
+							error(t,"ambiguous matches for %s, namespacing not implemented properly yet\n",str(idnm));
+						}
+						else {
+							if (t && t->sub){
+								dbg_tparams({dbprintf("!THIS IS BROKEN FOR PARAMETERIZED VARIANT!-find struct %s::%s in %s %s for type:",original->name_str(),str(idnm),ns->name_str(),x->name_str());t->dump(-1);newline(0);});
+								r=x->find_instance(original, t);
+							}
+							else {
+								r=x;
+							}
+						}
 					}
 				}
 			}
