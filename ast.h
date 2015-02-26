@@ -55,7 +55,7 @@ struct TParamDef: ExprDef{
 	void dump(PrinterRef depth)const;
 	Node* clone() const override;
 	TParamDef*	as_tparam_def() override{return this;}
-	const char* kind_str()const{return "TParamDef";}
+	const char* kind_str()const override{return "TParamDef";}
 	Type* default_or_auto()const;
 };
 
@@ -66,7 +66,7 @@ struct ExprLiteral : ExprDef {
 	int llvm_strlen;
 	
 	union  {int val_int; int val_uint; float val_float; void* val_ptr;bool val_bool; const char* val_str;int val_keyword;} u;
-	virtual const char* kind_str()const{return"lit";}
+	virtual const char* kind_str()const override{return"literal";}
 	void dump(PrinterRef depth) const;
 	ExprLiteral(bool b);
 	ExprLiteral(const SrcPos&s);
@@ -111,7 +111,7 @@ struct ArgDef :ExprDef{
 	const char* kind_str()const override;
 	~ArgDef(){}
 	Node*	clone() const override;
-	Name	as_name()const				{return this->name;}
+	Name	as_name()const override {return this->name;}
 	size_t	size()const;
 	size_t alignment() const;	//todo, 	size_t		alignment() const			{ return type()->alignment();}//todo, eval templates/other structs, consider pointers, ..
 	
@@ -129,7 +129,7 @@ struct Variable : ExprDef{
 	VarKind		kind;
 	Scope*		owner=0;
 	short capture_index;
-	const char*	kind_str(){return "variable";}
+	const char*	kind_str()const override{return "variable";}
 	bool		keep_on_stack(){return on_stack||capture_in!=0;}
 	Variable*	next_of_scope=0;	// TODO could these be unified, var is owned by capture or scope
 	Variable*	next_of_capture=0;
@@ -146,7 +146,7 @@ struct Variable : ExprDef{
 	const Variable*	as_variable() const {return this;}
 	void dump(PrinterRef depth) const;
 	CgValue		compile(CodeGen&cg, Scope* sc, CgValue input) override;
-	const char* kind_str()const{return "variable";}
+	//const char* kind_str()const{return "variable";}
 };
 
 

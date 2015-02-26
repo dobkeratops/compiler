@@ -104,8 +104,13 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 		
 	}
 	else if (this->name!=TUPLE && this->sub){ // Type(..,..,..) destructuring/variant
+		extern bool g_watch_find_struct;
 		dbg_tparams(if (rhs->sub){dbprintf("match, find given type=");rhs->dump(-1);newline(0);});
+		dbg_tparams({this->dump(0);newline(0);})
+		//dbg(g_watch_find_struct=true);
+		auto rhsins=sc->find_struct_name_type(sc, rhs, rhs); // instantiate rhs's type
 		auto sd=sc->find_struct_type(this,rhs);// todo tparams from rhs, if given
+		//dbg(g_watch_find_struct=false);
 		dbg_tparams({dbprintf("found :");sd->dump(-1);dbprintf("\n");});
 		if (sd){
 			if (flags & R_FINAL) {
@@ -135,7 +140,7 @@ Pattern::resolve_with_type(Scope* sc, const Type* rhs, int flags){
 			propogate_type_fwd(flags, rhs,this->type_ref());
 		}
 		dbg(dbprintf("matching pattern %s with..",str(this->name)));dbg(rhs->dump_if(-1));dbg(newline(0));
-		if (auto sd=sc->find_struct_name_type_if(sc,this->name,this->type()))
+		if (auto sd=sc->find_struct_name_type_if(sc,this,this->type()))
 		{
 			this->set_struct_type(sd);
 			return resolved;

@@ -39,10 +39,10 @@ struct CgValue {	// lazy-access abstraction for value-or-ref. So we can do a.m=v
 	RegisterName reg;
 	int elem=-1;     // if its a struct-in-reg
 	RegisterName addr;
-	Node*	val;		// which AST node it corresponds to
-	bool	rvalue;
+	Node*	val=0;		// which AST node it corresponds to
+	bool	rvalue=false;
 
-	const Type* type;
+	const Type* type=0;
 	int ofs;
 	//explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){elem=-1;addr=0;ofs=0;val=0;}
 	explicit CgValue(RegisterName n,const Type* t):reg(n),type(t){

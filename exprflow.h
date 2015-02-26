@@ -83,7 +83,7 @@ struct ExprForIn : ExprFor{
 /// C++ featureset extended with 2way inference can emulate match like boost variant but improved.
 struct ExprMatch : ExprFlow {
 	Scope* 	scope=0;
-	const char*		kind_str() const {return "match";}
+	const char*		kind_str() const  override{return "match";}
 	CgValue			compile(CodeGen& cg, Scope* sc,CgValue input) override;
 	ResolveResult	resolve(Scope* sc, const Type* desired, int flags);
 	Expr*		expr=0;
@@ -114,13 +114,13 @@ struct MatchArm : ExprScopeBlock {
 
 //	ResolveResult	resolve(Scope* sc, const Type* desired, int flags); doesn't have resolve method because it takes 2 inputs.
 	void		recurse(std::function<void(Node*)>& f) override;
-	const char*		kind_str() const {return "match arm";}
+	const char*		kind_str() const override {return "match_arm";}
 };
 
 struct ExprIfLet : ExprMatch{	// sugar for match 1arm. parses+prints different. eval the same
 	void		dump(PrinterRef depth)const;
 	Node*		clone() const override {return this->clone_into(new ExprIfLet);}
-	const char*		kind_str() const {return "kind str";}
+	const char*		kind_str() const override {return "if_let";}
 	ExprIfLet(){};
 	ExprIfLet(SrcPos p,Pattern* ptn, Expr* _expr, Expr* _body, Expr* _else);
 
@@ -129,7 +129,7 @@ struct ExprIfLet : ExprMatch{	// sugar for match 1arm. parses+prints different. 
 struct ExprWhileLet : ExprFor{	// from rust, alternate sugar for destructuring assignment loop.
 	//void		dump(int depth)const;
 	//Node*		clone() const override {return this->clone_into(new ExprIfLet);}
-	const char*		kind_str() const {return "kind str";}
+	const char*		kind_str() const override{return "while_let";}
 	ResolveResult	resolve(Scope* sc, const Type* desired, int flags);
 	CgValue			compile(CodeGen& cg, Scope* sc,CgValue input);
 };

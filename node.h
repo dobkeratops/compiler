@@ -19,8 +19,7 @@ struct ExprCompound;
 struct ExprArrayInit;
 
 typedef int Printer;			// todo: pass printer obj to 'dump' methods, it'll do formatting, line stuff..
-typedef int PrinterRef;
-
+typedef int PrinterRef; 
 struct Node {
 private:
 	Type* m_type=0;
@@ -111,7 +110,7 @@ public:
 	virtual ExprOp* as_op()const			{error(this,"expected op, found %s:%s",str(this->name),this->kind_str());return nullptr;}
 	virtual Name as_name()const {
 		this->dump(0);newline(0);
-		error(this,"expected named item at node %s kind=%s",str(this->name),this->kind_str());
+		error(this,"expected named item at node %s:%s",this->name_str(),this->kind_str());
 		return PLACEHOLDER;
 	};
 	bool is_ident()const{return as_ident()!=nullptr;}
@@ -196,7 +195,7 @@ public:
 #endif
 	}
 	const Type* type_if()const	{if (this)return this->type();else return nullptr;}
-	Type*& type()				{::verify(this->m_type);return this->m_type;;}
+	Type*& type()				{dbg4(::verify(this->m_type));return this->m_type;;}
 	const Type* type()const		{::verify(this->m_type);return this->m_type;}
 	void type(const Type* t)	{::verify(t);this->m_type=(Type*)t;}
 	void set_type(const Type* t);
@@ -225,7 +224,7 @@ public:
 struct ModRef : Expr{// eg mod foo;
 	ModRef(SrcPos sp,Name n){name=n;pos=sp;}
 	Node* clone()const{return new ModRef(pos,name);}
-	const char* kind_str(){return "mod_ref";}
+	const char* kind_str()const override{return "mod_ref";}
 };
 
 

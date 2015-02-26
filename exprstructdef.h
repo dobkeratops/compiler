@@ -150,7 +150,7 @@ struct EnumDef  : ExprStructDef {
 // TODO - eliminate all use of 'm_variant' and replace with methods with overrides here.
 // eg. compile_init_instance(); compile_dynamic_cast(Type*);
 struct VariantDef : ExprStructDef{
-	const char* kind_str()const{return "variant";}
+	const char* kind_str()const override{return "variant";}
 	VariantDef(SrcPos sp, Name n):ExprStructDef(sp,n){}
 	Node*	clone()const;
 };
@@ -159,7 +159,7 @@ struct VariantDef : ExprStructDef{
 struct TraitDef : ExprStructDef {
 	ImplDef* impls=0;
 	Node* clone()const;
-	const char* kind_str()const{return "trait";}
+	const char* kind_str()const override{return "trait";}
 	TraitDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
 	ResolveResult	resolve(Scope* scope, const Type* desired,int flags)override;
 	CgValue compile(CodeGen& cg, Scope* sc,CgValue input) override;
@@ -176,7 +176,7 @@ struct ImplDef : ExprStructDef {
 	ImplDef*	next_of_type=0;
 	ImplDef*	next_of_trait=0;
 	void		add_to_struct();
-	const char* kind_str()const{return "impl";}
+	const char* kind_str()const override{return "impl";}
 	void dump(PrinterRef depth) const;
 	ImplDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
 };
@@ -184,7 +184,7 @@ struct ImplDef : ExprStructDef {
 /// generalize the concepts of C++ nested structs,C++ namespaces, & Mods.
 struct ModDef : ExprStructDef {
 	Node* clone()const;
-	const char* kind_str()const{return "mod";}
+	const char* kind_str()const override{return "mod";}
 	ModDef(SrcPos sp, Name n):ExprStructDef(sp,n){};
 };
 ExprFnDef* instantiate_generic_function(ExprFnDef* srcfn,const Expr* callsite, const Name name, const MyVec<Expr*>& call_args, const Type* return_type,int flags);

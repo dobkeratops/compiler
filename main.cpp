@@ -28,7 +28,7 @@ int compile_and_run(const char *buffer, const char* filename, const char* outnam
 	
 	auto node=parse_block(src,0,SEMICOLON,nullptr);
 	g_pRoot=node;
-	Scope global(0); global.node=(ExprBlock*)node; global.global=&global;
+	Scope global(0); global.m_node=(ExprBlock*)node; global.global=&global;
 	if (flags & B_AST){
 		node->dump(0);
 	}

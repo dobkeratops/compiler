@@ -25,7 +25,7 @@ struct Type : ExprDef {
 	void set_origin(Node* t){m_origin=t;}
 	Node* get_origin()const {return m_origin;}
 	void push_back(Type* t);
-	virtual const char* kind_str()const;
+	virtual const char* kind_str()const override;
 	Type(Node* origin, Name outer, Type* inner):Type(origin,outer){ push_back(inner);}
 	Type(Node* origin, Name outer, Type* sub,Type* sub2):Type(origin,outer){ push_back(sub);push_back(sub2);}
 	Type(Node* origin, Name outer, Type* sub,Type* sub2,Type* sub3):Type(origin,outer){ push_back(sub);push_back(sub2); push_back(sub3);}

@@ -17,7 +17,7 @@ ResolveResult ExprIdent::resolve(Scope* scope,const Type* desired,int flags) {
 	if (this->type())
 		resolved|=this->type()->resolve_if(scope,desired,flags);
 	// depending on context we might only look for structs or functions. default is look for either.
-	if (auto sd=(flags&R_CALL)?nullptr:scope->find_struct_name_type_if(scope,this->name,this->type())) {
+	if (auto sd=(flags&R_CALL)?nullptr:scope->find_struct_name_type_if(scope,this,this->type())) {
 		this->set_def(sd);
 		return propogate_type_fwd(flags, desired,this->type_ref());
 	}else

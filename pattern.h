@@ -39,10 +39,10 @@ struct Pattern : Node {
 	CgValue compile_bind(CodeGen& cg, Scope* sc, CgValue input);
 	void	recurse(std::function<void(Node*)>& f);
 	void	translate_tparams(const TParamXlat& xlat);
-	const char* kind_str()const{return "pattern";}
+	const char* kind_str()const override{return "pattern";}
 	const Pattern* as_pattern()const{return this;}
 	Pattern* as_pattern(){return this;}
-	Name	as_name()const;
+	Name	as_name()const override;
 	bool	is_just_ident()const{return this->sub==nullptr;}
 	Name	as_just_name()const{if (this){return this->sub==nullptr?this->name:0;}else return 0;}
 };

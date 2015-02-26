@@ -1,10 +1,10 @@
 #include "type.h"
 void verify(const Type* a){
-	if (a){
-		ASSERT(a->name>=0 && a->name<g_Names.nextId);
-		verify(a->sub);
-		verify(a->next);
-	}
+	dbg4(if (a){)
+		dbg4(ASSERT(a->name>=0 && a->name<g_Names.nextId));
+		dbg4(verify(a->sub));
+		dbg4(verify(a->next));
+	dbg4(});
 }
 void verify(const Type* a,const Type* b){
 	verify(a);
